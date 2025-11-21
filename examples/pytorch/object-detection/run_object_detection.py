@@ -28,8 +28,8 @@ import torch
 from datasets import load_dataset
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoImageProcessor,
     AutoModelForObjectDetection,
@@ -37,12 +37,12 @@ from sarah import (
     Trainer,
     TrainingArguments,
 )
-from sarah.image_processing_utils import BatchFeature
-from sarah.image_transforms import center_to_corners_format
-from sarah.trainer import EvalPrediction
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.image_processing_utils import BatchFeature
+from transformers.image_transforms import center_to_corners_format
+from transformers.trainer import EvalPrediction
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)

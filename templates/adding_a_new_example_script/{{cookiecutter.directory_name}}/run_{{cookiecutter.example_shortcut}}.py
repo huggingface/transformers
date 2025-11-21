@@ -31,8 +31,8 @@ import datasets
 import torch
 from datasets import load_dataset
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
     AutoConfig,
@@ -45,8 +45,8 @@ from sarah import (
     default_data_collator,
     set_seed,
 )
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import send_example_telemetry
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -530,9 +530,9 @@ from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-import sarah
+import transformers
 from accelerate import Accelerator
-from sarah import (
+from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
     AutoConfig,
@@ -545,7 +545,7 @@ from sarah import (
     get_scheduler,
     set_seed,
 )
-from sarah.utils import send_example_telemetry
+from transformers.utils import send_example_telemetry
 
 
 logger = logging.getLogger(__name__)

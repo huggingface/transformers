@@ -15,8 +15,8 @@ import unittest
 
 import numpy as np
 
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -27,10 +27,10 @@ from ...test_image_processing_common import (
 if is_torch_available():
     import torch
 
-    from sarah.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
+    from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 if is_vision_available():
-    from sarah import SuperPointImageProcessor
+    from transformers import SuperPointImageProcessor
 
 
 class SuperPointImageProcessingTester:

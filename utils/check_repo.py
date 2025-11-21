@@ -41,14 +41,14 @@ from difflib import get_close_matches
 from pathlib import Path
 from typing import List, Tuple
 
-from sarah import is_flax_available, is_tf_available, is_torch_available
-from sarah.models.auto import get_values
-from sarah.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
-from sarah.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
-from sarah.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
-from sarah.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
-from sarah.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
-from sarah.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
+from transformers import is_flax_available, is_tf_available, is_torch_available
+from transformers.models.auto import get_values
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
+from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
+from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command

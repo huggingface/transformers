@@ -21,7 +21,7 @@ from pathlib import Path
 from huggingface_hub import hf_hub_download
 from requests.exceptions import HTTPError
 
-from sarah.utils import (
+from transformers.utils import (
     CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,

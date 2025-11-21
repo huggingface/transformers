@@ -48,7 +48,7 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
-from sarah import (
+from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
@@ -60,7 +60,7 @@ from sarah import (
     is_tensorboard_available,
     set_seed,
 )
-from sarah.utils import send_example_telemetry
+from transformers.utils import send_example_telemetry
 
 
 MODEL_CONFIG_CLASSES = list(FLAX_MODEL_FOR_MASKED_LM_MAPPING.keys())

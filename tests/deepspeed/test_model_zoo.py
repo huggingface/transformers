@@ -20,8 +20,8 @@ from os.path import dirname
 from parameterized import parameterized
 
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
-from sarah import is_torch_available
-from sarah.testing_utils import (
+from transformers import is_torch_available
+from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
@@ -31,7 +31,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.trainer_utils import set_seed
+from transformers.trainer_utils import set_seed
 
 
 if is_torch_available():

@@ -24,7 +24,7 @@ import re
 import tensorflow as tf
 from packaging.version import parse
 
-from sarah import (
+from transformers import (
     AutoConfig,
     AutoTokenizer,
     DataCollatorForLanguageModeling,

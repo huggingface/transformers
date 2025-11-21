@@ -4,7 +4,7 @@ import datasets
 import torch
 
 from tests.trainer.test_trainer import StoreLossCallback
-from sarah import (
+from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
@@ -13,7 +13,7 @@ from sarah import (
     TrainingArguments,
     set_seed,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_torch_dist_unique_port,

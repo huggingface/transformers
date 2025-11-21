@@ -19,9 +19,9 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 
-from sarah import ASTConfig
-from sarah.testing_utils import require_torch, require_torchaudio, slow, torch_device
-from sarah.utils import cached_property, is_torch_available, is_torchaudio_available
+from transformers import ASTConfig
+from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -32,13 +32,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import ASTForAudioClassification, ASTModel
+    from transformers import ASTForAudioClassification, ASTModel
 
 
 if is_torchaudio_available():
     import torchaudio
 
-    from sarah import ASTFeatureExtractor
+    from transformers import ASTFeatureExtractor
 
 
 class ASTModelTester:

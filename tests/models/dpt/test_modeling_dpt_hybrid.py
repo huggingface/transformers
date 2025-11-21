@@ -16,9 +16,9 @@
 
 import unittest
 
-from sarah import DPTConfig
-from sarah.file_utils import is_torch_available, is_vision_available
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers import DPTConfig
+from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -29,14 +29,14 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
-    from sarah.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import DPTImageProcessor
+    from transformers import DPTImageProcessor
 
 
 class DPTModelTester:

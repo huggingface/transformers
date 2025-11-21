@@ -14,15 +14,15 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
     AutoTokenizer,
     is_torch_available,
     is_vision_available,
 )
-from sarah.pipelines import DocumentQuestionAnsweringPipeline, pipeline
-from sarah.pipelines.document_question_answering import apply_tesseract
-from sarah.testing_utils import (
+from transformers.pipelines import DocumentQuestionAnsweringPipeline, pipeline
+from transformers.pipelines.document_question_answering import apply_tesseract
+from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_detectron2,
@@ -43,7 +43,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah.image_utils import load_image
+    from transformers.image_utils import load_image
 else:
 
     class Image:

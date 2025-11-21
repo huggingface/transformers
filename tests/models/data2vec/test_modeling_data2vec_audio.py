@@ -21,8 +21,8 @@ import numpy as np
 from datasets import load_dataset
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
-from sarah import Data2VecAudioConfig, is_torch_available
-from sarah.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers import Data2VecAudioConfig, is_torch_available
+from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -32,7 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         Data2VecAudioForAudioFrameClassification,
         Data2VecAudioForCTC,
         Data2VecAudioForSequenceClassification,
@@ -40,7 +40,7 @@ if is_torch_available():
         Data2VecAudioModel,
         Wav2Vec2Processor,
     )
-    from sarah.models.data2vec.modeling_data2vec_audio import _compute_mask_indices
+    from transformers.models.data2vec.modeling_data2vec_audio import _compute_mask_indices
 
 
 class Data2VecAudioModelTester:

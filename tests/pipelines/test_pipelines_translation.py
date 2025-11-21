@@ -16,7 +16,7 @@ import unittest
 
 import pytest
 
-from sarah import (
+from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MBart50TokenizerFast,
@@ -25,7 +25,7 @@ from sarah import (
     TranslationPipeline,
     pipeline,
 )
-from sarah.testing_utils import is_pipeline_test, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY
 

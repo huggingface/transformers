@@ -2,24 +2,5 @@ docs/source/ar/troubleshooting.md:74:ImportError: cannot import name 'ImageGPTIm
 docs/source/en/troubleshooting.md:96:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
 docs/source/ja/troubleshooting.md:92:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
 docs/source/ko/troubleshooting.md:96:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/apply_patch.py:52:    s2 = s.replace('transformers', pkg).replace('Sarah', pkg).replace('sarah', pkg)
-rename_plan/apply_patch.py:66:    t_matches = gather_matches('transformers')
-rename_plan/apply_patch.py:72:    print(f"Found {len(t_matches)} matches for 'transformers' and {len(s_matches)} for 'sarah'.")
-rename_plan/apply_patch.py:121:            src_old = ROOT / 'src' / 'transformers'
-rename_plan/apply_patch.py:128:            shim_dir = ROOT / 'src' / 'transformers'
-rename_plan/preview/proposed_changes.patch:15:- ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/proposed_changes.patch:39:- ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/proposed_changes.patch:63:- ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/proposed_changes.patch:87:- ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/proposed_changes.patch:107:-     tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
-rename_plan/preview/proposed_changes.patch:113:-     tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
-rename_plan/preview/proposed_changes.patch:125:-     tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
-rename_plan/preview/proposed_changes.patch:131:-     tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
-rename_plan/preview/transformers_matches.txt:1:docs/source/ar/troubleshooting.md:74:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/transformers_matches.txt:2:docs/source/en/troubleshooting.md:96:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/transformers_matches.txt:3:docs/source/ja/troubleshooting.md:92:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/transformers_matches.txt:4:docs/source/ko/troubleshooting.md:96:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-rename_plan/preview/transformers_matches.txt:5:tests/sagemaker/README.md:62:    tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
-rename_plan/preview/transformers_matches.txt:6:tests/sagemaker/README.md:132:    tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
 tests/sagemaker/README.md:62:    tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
 tests/sagemaker/README.md:132:    tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',

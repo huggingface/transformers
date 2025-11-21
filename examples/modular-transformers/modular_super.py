@@ -2,8 +2,8 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
-from sarah.modeling_outputs import CausalLMOutputWithPast
-from sarah.models.llama.modeling_llama import LlamaModel
+from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.models.llama.modeling_llama import LlamaModel
 
 from ...cache_utils import Cache
 

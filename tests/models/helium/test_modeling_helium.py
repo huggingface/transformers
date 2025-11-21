@@ -16,8 +16,8 @@
 
 import unittest
 
-from sarah import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
-from sarah.testing_utils import (
+from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
+from transformers.testing_utils import (
     require_read_token,
     require_torch,
     slow,
@@ -31,7 +31,7 @@ from ..gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         HeliumForCausalLM,
         HeliumForSequenceClassification,
         HeliumForTokenClassification,

@@ -1,6 +1,6 @@
 # Note that llama and cohere have different definitions for rotate_half
-from sarah.models.cohere.modeling_cohere import rotate_half  # noqa
-from sarah.models.llama.modeling_llama import LlamaAttention
+from transformers.models.cohere.modeling_cohere import rotate_half  # noqa
+from transformers.models.llama.modeling_llama import LlamaAttention
 
 
 # When following LlamaAttention dependencies, we will grab the function `rotate_half` defined

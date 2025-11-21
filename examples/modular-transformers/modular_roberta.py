@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from sarah.models.bert.modeling_bert import BertEmbeddings, BertModel
+from transformers.models.bert.modeling_bert import BertEmbeddings, BertModel
 
 
 class RobertaEmbeddings(BertEmbeddings):

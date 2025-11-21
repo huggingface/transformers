@@ -24,7 +24,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, process
 from tokenizers.models import Unigram
 from tokenizers.trainers import UnigramTrainer
 
-from sarah import AlbertTokenizerFast
+from transformers import AlbertTokenizerFast
 
 
 logger = logging.getLogger(__name__)

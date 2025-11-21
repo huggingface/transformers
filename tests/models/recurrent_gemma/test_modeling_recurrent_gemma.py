@@ -18,8 +18,8 @@ import unittest
 
 import pytest
 
-from sarah import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
-from sarah.testing_utils import (
+from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
+from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
     require_torch,
@@ -36,7 +36,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import RecurrentGemmaForCausalLM, RecurrentGemmaModel
+    from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
 
 
 class RecurrentGemmaModelTester:

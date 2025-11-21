@@ -18,8 +18,8 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah import set_seed
-from sarah.testing_utils import (
+from transformers import set_seed
+from transformers.testing_utils import (
     CaptureStderr,
     get_gpu_count,
     is_torch_available,
@@ -38,7 +38,7 @@ from sarah.testing_utils import (
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
         DynamicCache,
@@ -49,7 +49,7 @@ if is_torch_available():
         StaticCache,
         convert_and_export_with_cache,
     )
-    from sarah.utils import is_torch_greater_or_equal
+    from transformers.utils import is_torch_greater_or_equal
 
 
 @require_torch

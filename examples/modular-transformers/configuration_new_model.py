@@ -68,7 +68,7 @@ class NewModelConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
     ```python
-    >>> from sarah import NewModelModel, NewModelConfig
+    >>> from transformers import NewModelModel, NewModelConfig
     >>> # Initializing a NewModel new_model-7b style configuration
     >>> configuration = NewModelConfig()
     >>> # Initializing a model from the new_model-7b style configuration

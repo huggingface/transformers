@@ -19,9 +19,9 @@ import unittest
 from datasets import load_dataset
 from packaging import version
 
-from sarah import ViltConfig, is_torch_available, is_vision_available
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
-from sarah.utils import cached_property
+from transformers import ViltConfig, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -31,7 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         ViltForImageAndTextRetrieval,
         ViltForImagesAndTextClassification,
         ViltForMaskedLM,
@@ -39,13 +39,13 @@ if is_torch_available():
         ViltForTokenClassification,
         ViltModel,
     )
-    from sarah.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 if is_vision_available():
     import PIL
     from PIL import Image
 
-    from sarah import ViltProcessor
+    from transformers import ViltProcessor
 
 
 class ViltModelTester:

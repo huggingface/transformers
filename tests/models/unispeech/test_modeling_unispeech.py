@@ -21,8 +21,8 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 
-from sarah import UniSpeechConfig, is_torch_available
-from sarah.testing_utils import is_flaky, require_soundfile, require_torch, slow, torch_device
+from transformers import UniSpeechConfig, is_torch_available
+from transformers.testing_utils import is_flaky, require_soundfile, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         UniSpeechForCTC,
         UniSpeechForPreTraining,
         UniSpeechForSequenceClassification,

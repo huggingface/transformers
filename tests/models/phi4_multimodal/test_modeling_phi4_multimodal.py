@@ -20,7 +20,7 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     GenerationConfig,
@@ -32,13 +32,13 @@ from sarah import (
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     require_soundfile,
     require_torch,
     slow,
     torch_device,
 )
-from sarah.utils import is_soundfile_available
+from transformers.utils import is_soundfile_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester

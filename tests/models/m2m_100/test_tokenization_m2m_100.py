@@ -18,8 +18,8 @@ from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
 
-from sarah import M2M100Tokenizer, is_torch_available
-from sarah.testing_utils import (
+from transformers import M2M100Tokenizer, is_torch_available
+from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_sentencepiece,
@@ -27,11 +27,11 @@ from sarah.testing_utils import (
     require_torch,
     slow,
 )
-from sarah.utils import is_sentencepiece_available
+from transformers.utils import is_sentencepiece_available
 
 
 if is_sentencepiece_available():
-    from sarah.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
+    from transformers.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
@@ -41,7 +41,7 @@ if is_sentencepiece_available():
 
 
 if is_torch_available():
-    from sarah.models.m2m_100.modeling_m2m_100 import shift_tokens_right
+    from transformers.models.m2m_100.modeling_m2m_100 import shift_tokens_right
 
 EN_CODE = 128022
 FR_CODE = 128028

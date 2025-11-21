@@ -16,8 +16,8 @@
 
 import unittest
 
-from sarah import RobertaPreLayerNormConfig, is_torch_available
-from sarah.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers import RobertaPreLayerNormConfig, is_torch_available
+from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -28,7 +28,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         RobertaPreLayerNormForCausalLM,
         RobertaPreLayerNormForMaskedLM,
         RobertaPreLayerNormForMultipleChoice,
@@ -37,7 +37,7 @@ if is_torch_available():
         RobertaPreLayerNormForTokenClassification,
         RobertaPreLayerNormModel,
     )
-    from sarah.models.roberta_prelayernorm.modeling_roberta_prelayernorm import (
+    from transformers.models.roberta_prelayernorm.modeling_roberta_prelayernorm import (
         RobertaPreLayerNormEmbeddings,
         create_position_ids_from_input_ids,
     )

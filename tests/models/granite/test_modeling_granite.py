@@ -18,8 +18,8 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah import GraniteConfig, is_torch_available, set_seed
-from sarah.testing_utils import (
+from transformers import GraniteConfig, is_torch_available, set_seed
+from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -36,11 +36,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         GraniteForCausalLM,
         GraniteModel,
     )
-    from sarah.models.granite.modeling_granite import (
+    from transformers.models.granite.modeling_granite import (
         GraniteRotaryEmbedding,
     )
 

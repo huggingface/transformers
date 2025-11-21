@@ -16,8 +16,8 @@
 import tempfile
 import unittest
 
-from sarah import AutoConfig, AutoModelForCausalLM, AutoTokenizer, QuantoConfig
-from sarah.testing_utils import (
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, QuantoConfig
+from transformers.testing_utils import (
     require_accelerate,
     require_optimum_quanto,
     require_read_token,
@@ -25,13 +25,13 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import is_accelerate_available, is_optimum_quanto_available, is_torch_available
+from transformers.utils import is_accelerate_available, is_optimum_quanto_available, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-    from sarah import LlamaForCausalLM, LlamaTokenizer
+    from transformers import LlamaForCausalLM, LlamaTokenizer
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -39,7 +39,7 @@ if is_accelerate_available():
 if is_optimum_quanto_available():
     from optimum.quanto import QLayerNorm, QLinear
 
-    from sarah.integrations.quanto import replace_with_quanto_layers
+    from transformers.integrations.quanto import replace_with_quanto_layers
 
 
 class QuantoConfigTest(unittest.TestCase):
@@ -274,7 +274,7 @@ class QuantoQuantizationTest(unittest.TestCase):
     def test_load_from_quanto_saved(self):
         from optimum.quanto import freeze, qint4, qint8, quantize
 
-        from sarah import QuantoConfig
+        from transformers import QuantoConfig
 
         w_mapping = {"int8": qint8, "int4": qint4}
         model = AutoModelForCausalLM.from_pretrained(

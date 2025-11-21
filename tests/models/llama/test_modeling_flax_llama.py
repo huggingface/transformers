@@ -17,8 +17,8 @@ import unittest
 
 import numpy as np
 
-from sarah import LlamaConfig, is_flax_available, is_tokenizers_available
-from sarah.testing_utils import require_flax, slow
+from transformers import LlamaConfig, is_flax_available, is_tokenizers_available
+from transformers.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -26,11 +26,11 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 if is_flax_available():
     import jax.numpy as jnp
 
-    from sarah.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
+    from transformers.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
 
 
 if is_tokenizers_available():
-    from sarah import LlamaTokenizerFast
+    from transformers import LlamaTokenizerFast
 
 
 class FlaxLlamaModelTester:

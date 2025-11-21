@@ -74,7 +74,7 @@ All 3 models are available:
 #### How to use
 
 ```python
-from sarah import FSMTForConditionalGeneration, FSMTTokenizer
+from transformers import FSMTForConditionalGeneration, FSMTTokenizer
 mname = "allenai/{model_name}"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)

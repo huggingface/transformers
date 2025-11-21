@@ -19,9 +19,9 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from sarah import MobileViTConfig
-from sarah.file_utils import is_tf_available, is_vision_available
-from sarah.testing_utils import require_tf, slow
+from transformers import MobileViTConfig
+from transformers.file_utils import is_tf_available, is_vision_available
+from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -32,13 +32,13 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from sarah import TFMobileViTForImageClassification, TFMobileViTForSemanticSegmentation, TFMobileViTModel
+    from transformers import TFMobileViTForImageClassification, TFMobileViTForSemanticSegmentation, TFMobileViTModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import MobileViTImageProcessor
+    from transformers import MobileViTImageProcessor
 
 
 class TFMobileViTConfigTester(ConfigTester):

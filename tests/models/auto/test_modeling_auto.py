@@ -23,10 +23,10 @@ from pathlib import Path
 import pytest
 from huggingface_hub import Repository
 
-import sarah
-from sarah import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
-from sarah.models.auto.configuration_auto import CONFIG_MAPPING
-from sarah.testing_utils import (
+import transformers
+from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     RequestCounter,
@@ -46,7 +46,7 @@ if is_torch_available():
     import torch
     from test_module.custom_modeling import CustomModel
 
-    from sarah import (
+    from transformers import (
         AutoBackbone,
         AutoConfig,
         AutoModel,
@@ -78,7 +78,7 @@ if is_torch_available():
         TapasForQuestionAnswering,
         TimmBackbone,
     )
-    from sarah.models.auto.modeling_auto import (
+    from transformers.models.auto.modeling_auto import (
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
@@ -547,7 +547,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(counter.total_calls, 1)
 
     def test_attr_not_existing(self):
-        from sarah.models.auto.auto_factory import _LazyAutoMapping
+        from transformers.models.auto.auto_factory import _LazyAutoMapping
 
         _CONFIG_MAPPING_NAMES = OrderedDict([("bert", "BertConfig")])
         _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GhostModel")])

@@ -20,13 +20,13 @@ import unittest
 
 import numpy as np
 
-from sarah import T5Tokenizer, T5TokenizerFast
-from sarah.testing_utils import require_sentencepiece, require_torch, require_torchaudio
-from sarah.utils.import_utils import is_torchaudio_available
+from transformers import T5Tokenizer, T5TokenizerFast
+from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
+from transformers.utils.import_utils import is_torchaudio_available
 
 
 if is_torchaudio_available():
-    from sarah import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
+    from transformers import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
 
 
 global_rng = random.Random()

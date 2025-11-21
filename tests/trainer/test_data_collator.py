@@ -19,7 +19,7 @@ import unittest
 
 import numpy as np
 
-from sarah import (
+from transformers import (
     BertTokenizer,
     DataCollatorForLanguageModeling,
     DataCollatorForPermutationLanguageModeling,
@@ -33,8 +33,8 @@ from sarah import (
     is_torch_available,
     set_seed,
 )
-from sarah.testing_utils import require_tf, require_torch
-from sarah.utils import PaddingStrategy
+from transformers.testing_utils import require_tf, require_torch
+from transformers.utils import PaddingStrategy
 
 
 if is_torch_available():

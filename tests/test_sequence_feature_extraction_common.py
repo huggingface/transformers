@@ -16,8 +16,8 @@
 
 import numpy as np
 
-from sarah import BatchFeature
-from sarah.testing_utils import require_tf, require_torch
+from transformers import BatchFeature
+from transformers.testing_utils import require_tf, require_torch
 
 from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 

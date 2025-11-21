@@ -22,8 +22,8 @@ from typing import Dict, List, Optional
 
 from torch.utils.data import Dataset
 
-from sarah import Seq2SeqTrainer, is_torch_xla_available
-from sarah.trainer_utils import PredictionOutput, speed_metrics
+from transformers import Seq2SeqTrainer, is_torch_xla_available
+from transformers.trainer_utils import PredictionOutput, speed_metrics
 
 
 if is_torch_xla_available():

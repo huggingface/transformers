@@ -25,7 +25,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from sarah import AutoTokenizer
+from transformers import AutoTokenizer
 
 
 def pack_examples(tok, src_examples, tgt_examples, max_tokens=1024):

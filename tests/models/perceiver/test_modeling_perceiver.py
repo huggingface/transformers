@@ -25,8 +25,8 @@ from typing import Dict, List, Tuple
 import numpy as np
 from datasets import load_dataset
 
-from sarah import PerceiverConfig
-from sarah.testing_utils import (
+from transformers import PerceiverConfig
+from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     require_torch,
     require_torch_multi_gpu,
@@ -34,7 +34,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -45,7 +45,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import (
+    from transformers import (
         PerceiverForImageClassificationConvProcessing,
         PerceiverForImageClassificationFourier,
         PerceiverForImageClassificationLearned,
@@ -56,7 +56,7 @@ if is_torch_available():
         PerceiverModel,
         PerceiverTokenizer,
     )
-    from sarah.models.auto.modeling_auto import (
+    from transformers.models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         MODEL_FOR_MASKED_LM_MAPPING_NAMES,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
@@ -68,7 +68,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import PerceiverImageProcessor
+    from transformers import PerceiverImageProcessor
 
 
 class PerceiverModelTester:

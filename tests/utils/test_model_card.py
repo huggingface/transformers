@@ -19,7 +19,7 @@ import os
 import tempfile
 import unittest
 
-from sarah.modelcard import ModelCard, TrainingSummary
+from transformers.modelcard import ModelCard, TrainingSummary
 
 
 class ModelCardTester(unittest.TestCase):

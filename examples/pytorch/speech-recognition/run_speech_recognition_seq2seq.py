@@ -30,8 +30,8 @@ import evaluate
 import torch
 from datasets import DatasetDict, load_dataset
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForSpeechSeq2Seq,
@@ -42,9 +42,9 @@ from sarah import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from sarah.trainer_utils import get_last_checkpoint, is_main_process
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

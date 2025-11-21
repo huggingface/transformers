@@ -368,7 +368,7 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from sarah import AutoProcessor, NewTaskModelForNewTask
+        >>> from transformers import AutoProcessor, NewTaskModelForNewTask
 
         >>> model = NewTaskModelForNewTask.from_pretrained("google/NewTaskModel-test-224px-hf")
         >>> processor = AutoProcessor.from_pretrained("google/NewTaskModel-test-224px-hf")

@@ -20,9 +20,9 @@ import re
 import unittest
 from functools import lru_cache
 
-from sarah import CodeGenTokenizer, CodeGenTokenizerFast
-from sarah.models.codegen.tokenization_codegen import VOCAB_FILES_NAMES
-from sarah.testing_utils import require_tokenizers, slow
+from transformers import CodeGenTokenizer, CodeGenTokenizerFast
+from transformers.models.codegen.tokenization_codegen import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

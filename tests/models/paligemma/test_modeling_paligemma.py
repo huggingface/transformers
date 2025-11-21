@@ -18,14 +18,14 @@ import unittest
 
 import requests
 
-from sarah import (
+from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     PaliGemmaProcessor,
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     cleanup,
     require_read_token,
     require_torch,

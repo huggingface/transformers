@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import unittest
 
-from sarah import GPT2Config, is_tf_available
-from sarah.testing_utils import require_tf, require_tf2onnx, slow
+from transformers import GPT2Config, is_tf_available
+from transformers.testing_utils import require_tf, require_tf2onnx, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -29,14 +29,14 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import GPT2Tokenizer
-    from sarah.models.gpt2.modeling_tf_gpt2 import (
+    from transformers import GPT2Tokenizer
+    from transformers.models.gpt2.modeling_tf_gpt2 import (
         TFGPT2DoubleHeadsModel,
         TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
         TFGPT2Model,
     )
-    from sarah.tf_utils import shape_list
+    from transformers.tf_utils import shape_list
 
 
 class TFGPT2ModelTester:

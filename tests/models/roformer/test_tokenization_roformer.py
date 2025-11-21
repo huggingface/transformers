@@ -17,8 +17,8 @@ import tempfile
 import unittest
 from functools import lru_cache
 
-from sarah import RoFormerTokenizer, RoFormerTokenizerFast
-from sarah.testing_utils import require_rjieba, require_tokenizers
+from transformers import RoFormerTokenizer, RoFormerTokenizerFast
+from transformers.testing_utils import require_rjieba, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

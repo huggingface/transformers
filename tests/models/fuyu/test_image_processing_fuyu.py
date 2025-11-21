@@ -2,8 +2,8 @@ import unittest
 
 import numpy as np
 
-from sarah import is_torch_available, is_vision_available
-from sarah.testing_utils import (
+from transformers import is_torch_available, is_vision_available
+from transformers.testing_utils import (
     require_torch,
     require_torchvision,
     require_vision,
@@ -13,7 +13,7 @@ from sarah.testing_utils import (
 if is_torch_available() and is_vision_available():
     import torch
 
-    from sarah import FuyuImageProcessor
+    from transformers import FuyuImageProcessor
 
 if is_vision_available():
     from PIL import Image

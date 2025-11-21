@@ -16,8 +16,8 @@
 
 import unittest
 
-from sarah import IJepaConfig
-from sarah.testing_utils import (
+from transformers import IJepaConfig
+from transformers.testing_utils import (
     require_accelerate,
     require_torch,
     require_torch_accelerator,
@@ -26,7 +26,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import (
+from transformers.utils import (
     cached_property,
     is_torch_available,
     is_vision_available,
@@ -41,13 +41,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import IJepaForImageClassification, IJepaModel
+    from transformers import IJepaForImageClassification, IJepaModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import ViTImageProcessor
+    from transformers import ViTImageProcessor
 
 
 class IJepaModelTester:

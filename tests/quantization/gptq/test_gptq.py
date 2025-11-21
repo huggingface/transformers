@@ -18,8 +18,8 @@ import unittest
 
 import pytest
 
-from sarah import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GPTQConfig
-from sarah.testing_utils import (
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GPTQConfig
+from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
     require_gptq,
@@ -28,7 +28,7 @@ from sarah.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from sarah.utils import is_auto_gptq_available, is_gptqmodel_available, is_ipex_available
+from transformers.utils import is_auto_gptq_available, is_gptqmodel_available, is_ipex_available
 
 
 if is_torch_available():

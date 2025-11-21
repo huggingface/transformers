@@ -21,10 +21,10 @@ from typing import Optional
 
 import pytest
 
-from sarah import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
-from sarah.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
+from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -32,10 +32,10 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+    from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 if is_vision_available():
-    from sarah import GroundingDinoImageProcessor
+    from transformers import GroundingDinoImageProcessor
 
 
 @require_torch

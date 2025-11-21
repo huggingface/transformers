@@ -1,6 +1,6 @@
 import torch
 
-from sarah.models.llama.modeling_llama import LlamaModel
+from transformers.models.llama.modeling_llama import LlamaModel
 
 
 def rotate_half(x):

@@ -19,8 +19,8 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah import FSMTForConditionalGeneration, FSMTTokenizer
-from sarah.testing_utils import get_tests_dir, require_torch, slow, torch_device
+from transformers import FSMTForConditionalGeneration, FSMTTokenizer
+from transformers.testing_utils import get_tests_dir, require_torch, slow, torch_device
 from utils import calculate_bleu
 
 

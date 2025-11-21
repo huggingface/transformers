@@ -19,8 +19,8 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from sarah import StableLmConfig, is_torch_available, set_seed
-from sarah.testing_utils import (
+from transformers import StableLmConfig, is_torch_available, set_seed
+from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -37,14 +37,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         AutoTokenizer,
         StableLmForCausalLM,
         StableLmForSequenceClassification,
         StableLmForTokenClassification,
         StableLmModel,
     )
-    from sarah.models.stablelm.modeling_stablelm import StableLmRotaryEmbedding
+    from transformers.models.stablelm.modeling_stablelm import StableLmRotaryEmbedding
 
 
 # Copied from transformers.tests.models.persimmon.test_modeling_persimmon.PersimmonModelTester with Persimmon -> StableLm

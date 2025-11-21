@@ -18,9 +18,9 @@ from __future__ import annotations
 
 import unittest
 
-from sarah import AlbertConfig, is_tf_available
-from sarah.models.auto import get_values
-from sarah.testing_utils import require_tf, slow
+from transformers import AlbertConfig, is_tf_available
+from transformers.models.auto import get_values
+from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -30,8 +30,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import TF_MODEL_FOR_PRETRAINING_MAPPING
-    from sarah.models.albert.modeling_tf_albert import (
+    from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
+    from transformers.models.albert.modeling_tf_albert import (
         TFAlbertForMaskedLM,
         TFAlbertForMultipleChoice,
         TFAlbertForPreTraining,

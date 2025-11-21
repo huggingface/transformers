@@ -19,8 +19,8 @@ import unittest
 
 import pytest
 
-from sarah import GPT2Config, is_torch_available
-from sarah.testing_utils import (
+from transformers import GPT2Config, is_torch_available
+from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         GPT2DoubleHeadsModel,
         GPT2ForQuestionAnswering,
         GPT2ForSequenceClassification,

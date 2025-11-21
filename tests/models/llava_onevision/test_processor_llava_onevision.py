@@ -16,14 +16,14 @@ import shutil
 import tempfile
 import unittest
 
-from sarah.testing_utils import require_av, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_av, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import (
+    from transformers import (
         AutoProcessor,
         LlavaOnevisionImageProcessor,
         LlavaOnevisionProcessor,

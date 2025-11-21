@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from sarah import (
+from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
@@ -27,7 +27,7 @@ from sarah import (
     is_torch_available,
     pipeline,
 )
-from sarah.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 
 if is_torch_available():

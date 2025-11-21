@@ -16,8 +16,8 @@
 
 import unittest
 
-from sarah import SegformerConfig, is_torch_available, is_vision_available
-from sarah.testing_utils import require_torch, slow, torch_device
+from transformers import SegformerConfig, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -27,18 +27,18 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         SegformerForImageClassification,
         SegformerForSemanticSegmentation,
         SegformerModel,
     )
-    from sarah.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+    from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import SegformerImageProcessor
+    from transformers import SegformerImageProcessor
 
 
 class SegformerConfigTester(ConfigTester):

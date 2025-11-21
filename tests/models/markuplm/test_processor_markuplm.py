@@ -19,23 +19,23 @@ import tempfile
 import unittest
 from typing import List
 
-from sarah import (
+from transformers import (
     MarkupLMProcessor,
     MarkupLMTokenizer,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
 )
-from sarah.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
-from sarah.testing_utils import require_bs4, require_tokenizers, require_torch, slow
-from sarah.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_bs4_available, is_tokenizers_available
+from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow
+from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_bs4_available, is_tokenizers_available
 
 
 if is_bs4_available():
-    from sarah import MarkupLMFeatureExtractor
+    from transformers import MarkupLMFeatureExtractor
 
 if is_tokenizers_available():
-    from sarah import MarkupLMTokenizerFast
+    from transformers import MarkupLMTokenizerFast
 
 
 @require_bs4

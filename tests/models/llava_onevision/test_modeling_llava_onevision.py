@@ -21,14 +21,14 @@ import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AutoProcessor,
     LlavaOnevisionConfig,
     LlavaOnevisionForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,

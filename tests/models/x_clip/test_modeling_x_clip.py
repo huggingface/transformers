@@ -22,9 +22,9 @@ import unittest
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from sarah import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
-from sarah.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -41,11 +41,11 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import XCLIPModel, XCLIPTextModel, XCLIPVisionModel
+    from transformers import XCLIPModel, XCLIPTextModel, XCLIPVisionModel
 
 
 if is_vision_available():
-    from sarah import XCLIPProcessor
+    from transformers import XCLIPProcessor
 
 
 class XCLIPVisionModelTester:

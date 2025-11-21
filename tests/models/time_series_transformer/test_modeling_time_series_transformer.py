@@ -21,8 +21,8 @@ import unittest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from sarah import is_torch_available
-from sarah.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers import is_torch_available
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -34,12 +34,12 @@ TOLERANCE = 1e-4
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         TimeSeriesTransformerConfig,
         TimeSeriesTransformerForPrediction,
         TimeSeriesTransformerModel,
     )
-    from sarah.models.time_series_transformer.modeling_time_series_transformer import (
+    from transformers.models.time_series_transformer.modeling_time_series_transformer import (
         TimeSeriesTransformerDecoder,
         TimeSeriesTransformerEncoder,
     )

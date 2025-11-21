@@ -7,7 +7,7 @@ import tensorflow as tf
 from datasets import load_dataset
 from packaging.version import parse
 
-from sarah import AutoTokenizer, TFAutoModelForSequenceClassification
+from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 
 try:

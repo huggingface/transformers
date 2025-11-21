@@ -5,7 +5,7 @@ from typing import List
 
 from ltp import LTP
 
-from sarah import BertTokenizer
+from transformers import BertTokenizer
 
 
 def _is_chinese_char(cp):

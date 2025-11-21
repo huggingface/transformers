@@ -19,9 +19,9 @@ import pickle
 import unittest
 from functools import lru_cache
 
-from sarah import AutoTokenizer
-from sarah.models.bert.tokenization_bert import BertTokenizer
-from sarah.models.bert_japanese.tokenization_bert_japanese import (
+from transformers import AutoTokenizer
+from transformers.models.bert.tokenization_bert import BertTokenizer
+from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
     CharacterTokenizer,
@@ -30,7 +30,7 @@ from sarah.models.bert_japanese.tokenization_bert_japanese import (
     SudachiTokenizer,
     WordpieceTokenizer,
 )
-from sarah.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi_projection
+from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi_projection
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

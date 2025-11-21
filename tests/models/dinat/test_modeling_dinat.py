@@ -17,9 +17,9 @@
 import collections
 import unittest
 
-from sarah import DinatConfig
-from sarah.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
-from sarah.utils import cached_property, is_torch_available, is_vision_available
+from transformers import DinatConfig
+from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -31,12 +31,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import DinatBackbone, DinatForImageClassification, DinatModel
+    from transformers import DinatBackbone, DinatForImageClassification, DinatModel
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import AutoImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class DinatModelTester:

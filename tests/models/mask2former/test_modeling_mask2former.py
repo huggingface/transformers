@@ -19,9 +19,9 @@ import unittest
 import numpy as np
 
 from tests.test_modeling_common import floats_tensor
-from sarah import Mask2FormerConfig, is_torch_available, is_vision_available
-from sarah.pytorch_utils import is_torch_greater_or_equal_than_2_4
-from sarah.testing_utils import (
+from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
+from transformers.testing_utils import (
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -31,7 +31,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import cached_property
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
@@ -41,10 +41,10 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import Mask2FormerForUniversalSegmentation, Mask2FormerModel
+    from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
     if is_vision_available():
-        from sarah import Mask2FormerImageProcessor
+        from transformers import Mask2FormerImageProcessor
 
 if is_vision_available():
     from PIL import Image

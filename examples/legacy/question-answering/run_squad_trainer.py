@@ -21,8 +21,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
     AutoTokenizer,
@@ -32,8 +32,8 @@ from sarah import (
     Trainer,
     TrainingArguments,
 )
-from sarah import SquadDataTrainingArguments as DataTrainingArguments
-from sarah.trainer_utils import is_main_process
+from transformers import SquadDataTrainingArguments as DataTrainingArguments
+from transformers.trainer_utils import is_main_process
 
 
 logger = logging.getLogger(__name__)

@@ -16,9 +16,9 @@
 
 import unittest
 
-from sarah import MobileViTConfig
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
-from sarah.utils import cached_property, is_torch_available, is_vision_available
+from transformers import MobileViTConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -28,13 +28,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import MobileViTForImageClassification, MobileViTForSemanticSegmentation, MobileViTModel
+    from transformers import MobileViTForImageClassification, MobileViTForSemanticSegmentation, MobileViTModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import MobileViTImageProcessor
+    from transformers import MobileViTImageProcessor
 
 
 class MobileViTConfigTester(ConfigTester):

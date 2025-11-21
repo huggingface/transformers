@@ -30,7 +30,7 @@ from datasets import load_dataset
 from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
 from huggingface_hub import Repository, create_repo, hf_api, upload_folder
 
-from sarah import (
+from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
@@ -42,13 +42,13 @@ from sarah import (
     PreTrainedTokenizerFast,
     logging,
 )
-from sarah.feature_extraction_utils import FeatureExtractionMixin
-from sarah.file_utils import is_tf_available, is_torch_available
-from sarah.image_processing_utils import BaseImageProcessor
-from sarah.models.auto.configuration_auto import AutoConfig, model_type_to_module_name
-from sarah.models.fsmt import configuration_fsmt
-from sarah.processing_utils import ProcessorMixin, transformers_module
-from sarah.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.feature_extraction_utils import FeatureExtractionMixin
+from transformers.file_utils import is_tf_available, is_torch_available
+from transformers.image_processing_utils import BaseImageProcessor
+from transformers.models.auto.configuration_auto import AutoConfig, model_type_to_module_name
+from transformers.models.fsmt import configuration_fsmt
+from transformers.processing_utils import ProcessorMixin, transformers_module
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
 # make sure tokenizer plays nice with multiprocessing
@@ -862,7 +862,7 @@ def upload_model(model_dir, organization, token):
 def build_composite_models(config_class, output_dir):
     import tempfile
 
-    from sarah import (
+    from transformers import (
         BertConfig,
         BertLMHeadModel,
         BertModel,

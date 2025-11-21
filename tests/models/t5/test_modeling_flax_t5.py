@@ -17,8 +17,8 @@ import unittest
 
 import numpy as np
 
-from sarah import is_flax_available
-from sarah.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+from transformers import is_flax_available
+from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -39,8 +39,8 @@ if is_flax_available():
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
 
-    from sarah import FLAX_MODEL_MAPPING, ByT5Tokenizer, T5Config, T5Tokenizer
-    from sarah.models.t5.modeling_flax_t5 import (
+    from transformers import FLAX_MODEL_MAPPING, ByT5Tokenizer, T5Config, T5Tokenizer
+    from transformers.models.t5.modeling_flax_t5 import (
         FlaxT5EncoderModel,
         FlaxT5ForConditionalGeneration,
         FlaxT5Model,

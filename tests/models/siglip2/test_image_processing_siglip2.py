@@ -18,8 +18,8 @@ import unittest
 
 import requests
 
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -30,11 +30,11 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import Siglip2ImageProcessor
+    from transformers import Siglip2ImageProcessor
 
 
 if is_torchvision_available():
-    from sarah import Siglip2ImageProcessorFast
+    from transformers import Siglip2ImageProcessorFast
 
 
 class Siglip2ImageProcessingTester:

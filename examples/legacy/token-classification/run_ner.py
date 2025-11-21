@@ -27,8 +27,8 @@ from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from torch import nn
 from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
     AutoTokenizer,
@@ -39,7 +39,7 @@ from sarah import (
     TrainingArguments,
     set_seed,
 )
-from sarah.trainer_utils import is_main_process
+from transformers.trainer_utils import is_main_process
 
 
 logger = logging.getLogger(__name__)

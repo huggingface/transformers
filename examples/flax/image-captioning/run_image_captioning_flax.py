@@ -45,15 +45,15 @@ from huggingface_hub import HfApi
 from PIL import Image
 from tqdm import tqdm
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
     FlaxVisionEncoderDecoderModel,
     HfArgumentParser,
     is_tensorboard_available,
 )
-from sarah.utils import is_offline_mode, send_example_telemetry
+from transformers.utils import is_offline_mode, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)

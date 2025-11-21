@@ -31,8 +31,8 @@ from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 from torch import nn
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoImageProcessor,
     AutoModelForSemanticSegmentation,
@@ -41,9 +41,9 @@ from sarah import (
     TrainingArguments,
     default_data_collator,
 )
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 """ Finetuning any 🤗 Transformers model supported by AutoModelForSemanticSegmentation for semantic segmentation leveraging the Trainer API."""

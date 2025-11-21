@@ -23,8 +23,8 @@ from typing import Dict, Optional
 import numpy as np
 from utils_multiple_choice import MultipleChoiceDataset, Split, processors
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
@@ -35,7 +35,7 @@ from sarah import (
     TrainingArguments,
     set_seed,
 )
-from sarah.trainer_utils import is_main_process
+from transformers.trainer_utils import is_main_process
 
 
 logger = logging.getLogger(__name__)

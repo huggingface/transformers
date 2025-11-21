@@ -19,9 +19,9 @@ import unittest
 
 import requests
 
-from sarah import VitPoseBackboneConfig, VitPoseConfig
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
-from sarah.utils import cached_property, is_torch_available, is_vision_available
+from transformers import VitPoseBackboneConfig, VitPoseConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -30,13 +30,13 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from sarah import VitPoseForPoseEstimation
+    from transformers import VitPoseForPoseEstimation
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import VitPoseImageProcessor
+    from transformers import VitPoseImageProcessor
 
 
 class VitPoseModelTester:

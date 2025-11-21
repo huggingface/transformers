@@ -36,18 +36,18 @@ from torch.utils.data import DataLoader
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from tqdm.auto import tqdm
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoImageProcessor,
     AutoModelForObjectDetection,
     SchedulerType,
     get_scheduler,
 )
-from sarah.image_processing_utils import BatchFeature
-from sarah.image_transforms import center_to_corners_format
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.image_processing_utils import BatchFeature
+from transformers.image_transforms import center_to_corners_format
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

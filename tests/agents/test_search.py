@@ -15,7 +15,7 @@
 
 import unittest
 
-from sarah import load_tool
+from transformers import load_tool
 
 from .test_tools_common import ToolTesterMixin
 

@@ -20,8 +20,8 @@ import unittest
 
 import timeout_decorator  # noqa
 
-from sarah import MvpConfig, is_torch_available
-from sarah.testing_utils import (
+from transformers import MvpConfig, is_torch_available
+from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -29,7 +29,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import cached_property
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -40,7 +40,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         MvpForCausalLM,
         MvpForConditionalGeneration,
         MvpForQuestionAnswering,
@@ -48,7 +48,7 @@ if is_torch_available():
         MvpModel,
         MvpTokenizer,
     )
-    from sarah.models.mvp.modeling_mvp import MvpDecoder, MvpEncoder, shift_tokens_right
+    from transformers.models.mvp.modeling_mvp import MvpDecoder, MvpEncoder, shift_tokens_right
 
 
 def prepare_mvp_inputs_dict(

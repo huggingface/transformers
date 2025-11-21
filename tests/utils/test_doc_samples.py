@@ -19,8 +19,8 @@ import unittest
 from pathlib import Path
 from typing import List, Union
 
-import sarah
-from sarah.testing_utils import require_tf, require_torch, slow
+import transformers
+from transformers.testing_utils import require_tf, require_torch, slow
 
 
 logger = logging.getLogger()

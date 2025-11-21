@@ -10,7 +10,7 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import nn
 
-from sarah.utils import add_start_docstrings
+from transformers.utils import add_start_docstrings
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -680,7 +680,7 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from sarah import AutoProcessor, Multimodal2VisionModel
+        >>> from transformers import AutoProcessor, Multimodal2VisionModel
 
         >>> model = Multimodal2VisionModel.from_pretrained("openai/multimodal2-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/multimodal2-vit-base-patch32")

@@ -77,7 +77,7 @@ All four models are available:
 #### How to use
 
 ```python
-from sarah import FSMTForConditionalGeneration, FSMTTokenizer
+from transformers import FSMTForConditionalGeneration, FSMTTokenizer
 mname = "facebook/wmt19-{src_lang}-{tgt_lang}"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)

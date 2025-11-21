@@ -19,7 +19,7 @@ import unittest
 
 import requests
 
-from sarah import (
+from transformers import (
     AriaConfig,
     AriaForConditionalGeneration,
     AriaTextConfig,
@@ -28,8 +28,8 @@ from sarah import (
     is_torch_available,
     is_vision_available,
 )
-from sarah.models.idefics3 import Idefics3VisionConfig
-from sarah.testing_utils import (
+from transformers.models.idefics3 import Idefics3VisionConfig
+from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_vision,

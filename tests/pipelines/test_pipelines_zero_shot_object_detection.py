@@ -14,13 +14,13 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
     ZeroShotObjectDetectionPipeline,
     is_vision_available,
     pipeline,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_tf,

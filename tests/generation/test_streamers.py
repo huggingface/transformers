@@ -20,15 +20,15 @@ from unittest.mock import patch
 
 import pytest
 
-from sarah import (
+from transformers import (
     AsyncTextIteratorStreamer,
     AutoTokenizer,
     TextIteratorStreamer,
     TextStreamer,
     is_torch_available,
 )
-from sarah.testing_utils import CaptureStdout, require_torch, torch_device
-from sarah.utils.logging import _get_library_root_logger
+from transformers.testing_utils import CaptureStdout, require_torch, torch_device
+from transformers.utils.logging import _get_library_root_logger
 
 from ..test_modeling_common import ids_tensor
 
@@ -36,7 +36,7 @@ from ..test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from sarah import AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM
 
 
 @require_torch

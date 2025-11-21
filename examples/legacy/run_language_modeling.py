@@ -29,8 +29,8 @@ from typing import Optional
 
 from torch.utils.data import ConcatDataset
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     CONFIG_MAPPING,
     MODEL_WITH_LM_HEAD_MAPPING,
     AutoConfig,
@@ -48,7 +48,7 @@ from sarah import (
     TrainingArguments,
     set_seed,
 )
-from sarah.trainer_utils import is_main_process
+from transformers.trainer_utils import is_main_process
 
 
 logger = logging.getLogger(__name__)

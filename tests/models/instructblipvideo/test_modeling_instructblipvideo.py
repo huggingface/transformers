@@ -23,14 +23,14 @@ import pytest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     CONFIG_MAPPING,
     InstructBlipVideoConfig,
     InstructBlipVideoProcessor,
     InstructBlipVideoQFormerConfig,
     InstructBlipVideoVisionConfig,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_torch,
@@ -39,7 +39,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import is_torch_available
+from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -55,7 +55,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import InstructBlipVideoForConditionalGeneration, InstructBlipVideoVisionModel
+    from transformers import InstructBlipVideoForConditionalGeneration, InstructBlipVideoVisionModel
 
 
 class InstructBlipVideoVisionModelTester:

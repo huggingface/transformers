@@ -33,8 +33,8 @@ import tensorflow as tf
 from datasets import load_dataset
 from PIL import Image
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
     HfArgumentParser,
@@ -44,8 +44,8 @@ from sarah import (
     TFVisionTextDualEncoderModel,
     create_optimizer,
 )
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)

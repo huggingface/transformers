@@ -23,8 +23,8 @@ import numpy as np
 import pandas as pd
 from parameterized import parameterized
 
-from sarah import AddedToken
-from sarah.models.tapas.tokenization_tapas import (
+from transformers import AddedToken
+from transformers.models.tapas.tokenization_tapas import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
     TapasTokenizer,
@@ -33,7 +33,7 @@ from sarah.models.tapas.tokenization_tapas import (
     _is_punctuation,
     _is_whitespace,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     require_pandas,
     require_tensorflow_probability,
     require_tokenizers,
@@ -145,7 +145,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_tensorflow_probability
     @slow
     def test_tf_encode_plus_sent_to_model(self):
-        from sarah import TF_MODEL_MAPPING, TOKENIZER_MAPPING
+        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
 
@@ -1047,7 +1047,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
-        from sarah import MODEL_MAPPING, TOKENIZER_MAPPING
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 

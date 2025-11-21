@@ -36,7 +36,7 @@ from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commit
 from packaging import version
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AutoFeatureExtractor,
     AutoImageProcessor,
     AutoProcessor,
@@ -53,8 +53,8 @@ from sarah import (
     logging,
     set_seed,
 )
-from sarah.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
-from sarah.testing_utils import (
+from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
+from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
     USER,
@@ -108,9 +108,9 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
-from sarah.training_args import OptimizerNames
-from sarah.utils import (
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
+from transformers.training_args import OptimizerNames
+from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -122,7 +122,7 @@ from sarah.utils import (
     is_torchao_available,
     is_torchdistx_available,
 )
-from sarah.utils.hp_naming import TrialShortNamer
+from transformers.utils.hp_naming import TrialShortNamer
 
 
 if torch_device == "hpu":
@@ -137,8 +137,8 @@ if is_torch_available():
     from torch import nn
     from torch.utils.data import IterableDataset
 
-    import sarah.optimization
-    from sarah import (
+    import transformers.optimization
+    from transformers import (
         AutoModelForCausalLM,
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
@@ -153,7 +153,7 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
-    from sarah.trainer_pt_utils import AcceleratorConfig
+    from transformers.trainer_pt_utils import AcceleratorConfig
 
     if is_safetensors_available():
         import safetensors.torch
@@ -1209,7 +1209,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     def test_adafactor_lr_none(self):
         # test the special case where lr=None, since Trainer can't not have lr_scheduler
 
-        from sarah.optimization import Adafactor, AdafactorSchedule
+        from transformers.optimization import Adafactor, AdafactorSchedule
 
         train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1799,7 +1799,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with patch("transformers.models.llama.modeling_llama"):
             from liger_kernel.transformers import LigerRMSNorm, liger_rotary_pos_emb
 
-            from sarah.models.llama import modeling_llama
+            from transformers.models.llama import modeling_llama
 
             config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
             tiny_llama = LlamaForCausalLM(config)

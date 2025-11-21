@@ -16,8 +16,8 @@
 
 import unittest
 
-from sarah import RoFormerConfig, is_torch_available
-from sarah.testing_utils import require_torch, slow, torch_device
+from transformers import RoFormerConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -27,7 +27,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         RoFormerForCausalLM,
         RoFormerForMaskedLM,
         RoFormerForMultipleChoice,
@@ -36,7 +36,7 @@ if is_torch_available():
         RoFormerForTokenClassification,
         RoFormerModel,
     )
-    from sarah.models.roformer.modeling_roformer import (
+    from transformers.models.roformer.modeling_roformer import (
         RoFormerSelfAttention,
         RoFormerSinusoidalPositionalEmbedding,
     )

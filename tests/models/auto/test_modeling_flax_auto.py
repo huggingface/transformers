@@ -14,16 +14,16 @@
 
 import unittest
 
-from sarah import AutoConfig, AutoTokenizer, BertConfig, TensorType, is_flax_available
-from sarah.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, slow
+from transformers import AutoConfig, AutoTokenizer, BertConfig, TensorType, is_flax_available
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, slow
 
 
 if is_flax_available():
     import jax
 
-    from sarah.models.auto.modeling_flax_auto import FlaxAutoModel
-    from sarah.models.bert.modeling_flax_bert import FlaxBertModel
-    from sarah.models.roberta.modeling_flax_roberta import FlaxRobertaModel
+    from transformers.models.auto.modeling_flax_auto import FlaxAutoModel
+    from transformers.models.bert.modeling_flax_bert import FlaxBertModel
+    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel
 
 
 @require_flax

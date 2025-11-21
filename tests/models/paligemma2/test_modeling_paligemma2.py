@@ -19,13 +19,13 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     require_torch,
     torch_device,
 )

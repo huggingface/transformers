@@ -19,11 +19,11 @@ import unittest
 from packaging import version
 from parameterized import parameterized
 
-from sarah import OlmoConfig, is_torch_available, set_seed
-from sarah.generation.configuration_utils import GenerationConfig
-from sarah.models.auto.tokenization_auto import AutoTokenizer
-from sarah.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
-from sarah.testing_utils import (
+from transformers import OlmoConfig, is_torch_available, set_seed
+from transformers.generation.configuration_utils import GenerationConfig
+from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
+from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
     slow,
@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         OlmoForCausalLM,
         OlmoModel,
     )
@@ -333,7 +333,7 @@ class OlmoIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        from sarah.integrations.executorch import (
+        from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
         )

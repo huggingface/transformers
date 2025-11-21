@@ -20,8 +20,8 @@ from io import BytesIO
 import requests
 from PIL import Image
 
-from sarah import is_torch_available
-from sarah.testing_utils import (
+from transformers import is_torch_available
+from transformers.testing_utils import (
     cleanup,
     require_torch_gpu,
     slow,
@@ -32,7 +32,7 @@ from sarah.testing_utils import (
 if is_torch_available():
     import torch
 
-    from sarah import ShieldGemma2ForImageClassification, ShieldGemma2Processor
+    from transformers import ShieldGemma2ForImageClassification, ShieldGemma2Processor
 
 
 @slow

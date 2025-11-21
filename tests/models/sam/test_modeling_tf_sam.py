@@ -22,9 +22,9 @@ import unittest
 import numpy as np
 import requests
 
-from sarah import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
-from sarah.testing_utils import require_tf, slow
-from sarah.utils import is_tf_available, is_vision_available
+from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
+from transformers.testing_utils import require_tf, slow
+from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor
@@ -34,8 +34,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import SamProcessor, TFSamModel, TFSamVisionModel
-    from sarah.modeling_tf_utils import keras
+    from transformers import SamProcessor, TFSamModel, TFSamVisionModel
+    from transformers.modeling_tf_utils import keras
 
 if is_vision_available():
     from PIL import Image

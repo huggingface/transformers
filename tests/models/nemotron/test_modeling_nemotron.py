@@ -20,8 +20,8 @@ import unittest
 
 import pytest
 
-from sarah import NemotronConfig, is_torch_available
-from sarah.testing_utils import (
+from transformers import NemotronConfig, is_torch_available
+from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_read_token,
@@ -40,7 +40,7 @@ from ...test_configuration_common import ConfigTester
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         AutoTokenizer,
         NemotronForCausalLM,
         NemotronForQuestionAnswering,

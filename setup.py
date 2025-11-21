@@ -55,8 +55,8 @@ To create the package for pypi.
    pip install -i https://testpypi.python.org/pypi transformers
 
    Check you can run the following commands:
-   python -c "from sarah import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
-   python -c "from sarah import *"
+   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
+   python -c "from transformers import *"
    python utils/check_build.py --check_lib
 
    If making a patch release, double check the bug you are patching is indeed resolved.
@@ -213,7 +213,7 @@ deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] f
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
 #
-# python -c 'import sys; from sarah.dependency_versions_table import deps; \
+# python -c 'import sys; from transformers.dependency_versions_table import deps; \
 # print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets
 #
 # Just pass the desired package names to that script as it's shown with 2 packages above.
@@ -222,7 +222,7 @@ deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] f
 #
 # You can then feed this for example to `pip`:
 #
-# pip install -U $(python -c 'import sys; from sarah.dependency_versions_table import deps; \
+# pip install -U $(python -c 'import sys; from transformers.dependency_versions_table import deps; \
 # print(" ".join([deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
 #
 

@@ -26,8 +26,8 @@ from typing import Optional
 import numpy as np
 from datasets import load_dataset, load_metric
 
-import sarah
-from sarah import (  # Trainer,; TrainingArguments,
+import transformers
+from transformers import (  # Trainer,; TrainingArguments,
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -40,10 +40,10 @@ from sarah import (  # Trainer,; TrainingArguments,
 )
 
 # Will import SageMaker Model parallelism specific Trainer
-from sarah.sagemaker import SageMakerTrainer as Trainer
-from sarah.sagemaker import SageMakerTrainingArguments as TrainingArguments
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import check_min_version
+from transformers.sagemaker import SageMakerTrainer as Trainer
+from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

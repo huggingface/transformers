@@ -22,8 +22,8 @@ import unittest
 from functools import lru_cache
 from typing import Tuple
 
-from sarah import AddedToken, BatchEncoding, PerceiverTokenizer
-from sarah.utils import cached_property, is_tf_available, is_torch_available
+from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
+from transformers.utils import cached_property, is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

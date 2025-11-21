@@ -20,8 +20,8 @@ import shutil
 import tempfile
 import unittest
 
-from sarah import AutoTokenizer, LlamaTokenizerFast, PreTrainedTokenizerFast
-from sarah.testing_utils import require_tokenizers
+from transformers import AutoTokenizer, LlamaTokenizerFast, PreTrainedTokenizerFast
+from transformers.testing_utils import require_tokenizers
 
 from ..test_tokenization_common import TokenizerTesterMixin
 
@@ -247,7 +247,7 @@ class TokenizerVersioningTest(unittest.TestCase):
         self.assertIn("huggingface", json_tokenizer["model"]["vocab"])
 
         # Testing an older version by monkey-patching the version in the module it's used.
-        import sarah as old_transformers
+        import transformers as old_transformers
 
         old_transformers.tokenization_utils_base.__version__ = "3.0.0"
         old_tokenizer = old_transformers.models.auto.AutoTokenizer.from_pretrained(repo)

@@ -14,8 +14,8 @@
 # limitations under the License.
 import unittest
 
-from sarah import XLMRobertaTokenizer, is_torch_available
-from sarah.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers import XLMRobertaTokenizer, is_torch_available
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -26,7 +26,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         XmodConfig,
         XmodForCausalLM,
         XmodForMaskedLM,
@@ -36,7 +36,7 @@ if is_torch_available():
         XmodForTokenClassification,
         XmodModel,
     )
-    from sarah.models.xmod.modeling_xmod import XmodEmbeddings, create_position_ids_from_input_ids
+    from transformers.models.xmod.modeling_xmod import XmodEmbeddings, create_position_ids_from_input_ids
 
 
 class XmodModelTester:

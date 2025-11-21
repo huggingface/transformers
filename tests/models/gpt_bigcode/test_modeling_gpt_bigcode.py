@@ -17,8 +17,8 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah import GPTBigCodeConfig, is_torch_available
-from sarah.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers import GPTBigCodeConfig, is_torch_available
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -29,14 +29,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         GPT2TokenizerFast,
         GPTBigCodeForCausalLM,
         GPTBigCodeForSequenceClassification,
         GPTBigCodeForTokenClassification,
         GPTBigCodeModel,
     )
-    from sarah.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
+    from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
 
 
 class GPTBigCodeModelTester:

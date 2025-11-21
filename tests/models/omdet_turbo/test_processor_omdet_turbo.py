@@ -19,9 +19,9 @@ import unittest
 
 import pytest
 
-from sarah import AutoProcessor, CLIPTokenizerFast, OmDetTurboProcessor
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import AutoProcessor, CLIPTokenizerFast, OmDetTurboProcessor
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -32,10 +32,10 @@ IMAGE_STD = [58.395, 57.12, 57.375]
 if is_torch_available():
     import torch
 
-    from sarah.models.omdet_turbo.modeling_omdet_turbo import OmDetTurboObjectDetectionOutput
+    from transformers.models.omdet_turbo.modeling_omdet_turbo import OmDetTurboObjectDetectionOutput
 
 if is_vision_available():
-    from sarah import DetrImageProcessor
+    from transformers import DetrImageProcessor
 
 
 @require_torch

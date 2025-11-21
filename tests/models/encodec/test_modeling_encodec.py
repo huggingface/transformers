@@ -23,8 +23,8 @@ import unittest
 import numpy as np
 from datasets import Audio, load_dataset
 
-from sarah import AutoProcessor, EncodecConfig
-from sarah.testing_utils import (
+from transformers import AutoProcessor, EncodecConfig
+from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     slow,
@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import EncodecFeatureExtractor, EncodecModel
+    from transformers import EncodecFeatureExtractor, EncodecModel
 
 
 def prepare_inputs_dict(

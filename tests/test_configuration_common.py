@@ -19,8 +19,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from sarah import is_torch_available
-from sarah.utils import direct_transformers_import
+from transformers import is_torch_available
+from transformers.utils import direct_transformers_import
 
 from .utils.test_configuration_utils import config_common_kwargs
 

@@ -18,15 +18,15 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
-from sarah import AlbertForMaskedLM
-from sarah.testing_utils import require_torch
-from sarah.utils import ModelOutput, is_torch_available
+from transformers import AlbertForMaskedLM
+from transformers.testing_utils import require_torch
+from transformers.utils import ModelOutput, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-    from sarah.pytorch_utils import is_torch_greater_or_equal_than_2_2
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
 
 
 @dataclass

@@ -22,10 +22,10 @@ import unittest
 
 import numpy as np
 
-from sarah import is_tf_available, is_vision_available
-from sarah.models.auto import get_values
-from sarah.testing_utils import require_tf, slow
-from sarah.utils import cached_property
+from transformers import is_tf_available, is_vision_available
+from transformers.models.auto import get_values
+from transformers.testing_utils import require_tf, slow
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -35,7 +35,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import (
+    from transformers import (
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -50,7 +50,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import LayoutLMv3ImageProcessor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 class TFLayoutLMv3ModelTester:

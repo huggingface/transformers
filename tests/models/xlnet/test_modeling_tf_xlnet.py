@@ -20,8 +20,8 @@ import inspect
 import random
 import unittest
 
-from sarah import XLNetConfig, is_tf_available
-from sarah.testing_utils import require_tf, slow
+from transformers import XLNetConfig, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -31,7 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah.models.xlnet.modeling_tf_xlnet import (
+    from transformers.models.xlnet.modeling_tf_xlnet import (
         TFXLNetForMultipleChoice,
         TFXLNetForQuestionAnsweringSimple,
         TFXLNetForSequenceClassification,

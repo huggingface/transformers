@@ -25,7 +25,7 @@ from typing import List
 
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AddedToken,
     LayoutLMv3TokenizerFast,
     SpecialTokensMixin,
@@ -33,8 +33,8 @@ from sarah import (
     is_torch_available,
     logging,
 )
-from sarah.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES, LayoutLMv3Tokenizer
-from sarah.testing_utils import (
+from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES, LayoutLMv3Tokenizer
+from transformers.testing_utils import (
     require_pandas,
     require_tf,
     require_tokenizers,
@@ -1184,7 +1184,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
-        from sarah import MODEL_MAPPING, TOKENIZER_MAPPING
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 
@@ -2382,7 +2382,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_tf
     @slow
     def test_tf_encode_plus_sent_to_model(self):
-        from sarah import TF_MODEL_MAPPING, TOKENIZER_MAPPING
+        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
 

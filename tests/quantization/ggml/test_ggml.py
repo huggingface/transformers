@@ -17,15 +17,15 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
-from sarah.testing_utils import (
+from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers.testing_utils import (
     require_gguf,
     require_read_token,
     require_torch_gpu,
     slow,
     torch_device,
 )
-from sarah.utils import is_gguf_available, is_torch_available
+from transformers.utils import is_gguf_available, is_torch_available
 
 
 if is_torch_available():

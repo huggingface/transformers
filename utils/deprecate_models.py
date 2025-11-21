@@ -16,8 +16,8 @@ from custom_init_isort import sort_imports_in_all_inits
 from git import Repo
 from packaging import version
 
-from sarah import CONFIG_MAPPING, logging
-from sarah import __version__ as current_version
+from transformers import CONFIG_MAPPING, logging
+from transformers import __version__ as current_version
 
 
 REPO_PATH = Path(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))

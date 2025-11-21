@@ -16,13 +16,13 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     AutoProcessor,
     Mistral3Config,
     is_bitsandbytes_available,
     is_torch_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_read_token,
@@ -41,13 +41,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         Mistral3ForConditionalGeneration,
     )
 
 
 if is_bitsandbytes_available():
-    from sarah import BitsAndBytesConfig
+    from transformers import BitsAndBytesConfig
 
 
 class Mistral3VisionText2TextModelTester:

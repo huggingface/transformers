@@ -16,9 +16,9 @@
 
 import unittest
 
-from sarah import GPTNeoXJapaneseConfig, is_torch_available
-from sarah.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
-from sarah.testing_utils import require_torch, slow, torch_device
+from transformers import GPTNeoXJapaneseConfig, is_torch_available
+from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -29,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseModel
+    from transformers import GPTNeoXJapaneseForCausalLM, GPTNeoXJapaneseModel
 
 
 class GPTNeoXJapaneseModelTester:

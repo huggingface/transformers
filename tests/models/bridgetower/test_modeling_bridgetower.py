@@ -16,15 +16,15 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     BridgeTowerConfig,
     BridgeTowerTextConfig,
     BridgeTowerVisionConfig,
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
-from sarah.utils import cached_property
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -40,7 +40,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         BridgeTowerForContrastiveLearning,
         BridgeTowerForImageAndTextRetrieval,
         BridgeTowerForMaskedLM,
@@ -50,7 +50,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import BridgeTowerProcessor
+    from transformers import BridgeTowerProcessor
 
 
 class BridgeTowerTextModelTester:

@@ -14,14 +14,14 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     TextGenerationPipeline,
     logging,
     pipeline,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     CaptureLogger,
     is_pipeline_test,
     require_accelerate,
@@ -254,7 +254,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_small_chat_model_with_dataset_pt(self):
         from torch.utils.data import Dataset
 
-        from sarah.pipelines.pt_utils import KeyDataset
+        from transformers.pipelines.pt_utils import KeyDataset
 
         class MyDataset(Dataset):
             data = [
@@ -293,7 +293,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_chat_model_with_iterator_pt(self):
-        from sarah.pipelines.pt_utils import PipelineIterator
+        from transformers.pipelines.pt_utils import PipelineIterator
 
         text_generator = pipeline(
             task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"

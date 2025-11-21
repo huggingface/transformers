@@ -7,9 +7,9 @@ import torch.nn.functional as F
 from accelerate import init_empty_weights
 from huggingface_hub import HfApi
 
-from sarah import AutoModelForCausalLM, AutoTokenizer
-from sarah.quantizers import HfQuantizer, get_module_from_name, register_quantization_config, register_quantizer
-from sarah.utils.quantization_config import QuantizationConfigMixin
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.quantizers import HfQuantizer, get_module_from_name, register_quantization_config, register_quantizer
+from transformers.utils.quantization_config import QuantizationConfigMixin
 
 
 # Implement INT8 Symmetric Linear layer

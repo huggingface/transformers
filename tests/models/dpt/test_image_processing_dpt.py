@@ -19,8 +19,8 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from sarah.file_utils import is_torch_available, is_vision_available
-from sarah.testing_utils import require_torch, require_vision
+from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,7 +31,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import DPTImageProcessor
+    from transformers import DPTImageProcessor
 
 
 class DPTImageProcessingTester:

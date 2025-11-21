@@ -46,8 +46,8 @@ from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_ke
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     AutoConfig,
@@ -56,7 +56,7 @@ from sarah import (
     HfArgumentParser,
     is_tensorboard_available,
 )
-from sarah.utils import is_offline_mode, send_example_telemetry
+from transformers.utils import is_offline_mode, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)

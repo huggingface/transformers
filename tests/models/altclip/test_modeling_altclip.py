@@ -22,9 +22,9 @@ import unittest
 import numpy as np
 import requests
 
-from sarah import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -41,7 +41,7 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-    from sarah import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
+    from transformers import AltCLIPModel, AltCLIPTextModel, AltCLIPVisionModel
 
 if is_vision_available():
     from PIL import Image

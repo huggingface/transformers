@@ -16,10 +16,10 @@ import os
 import unittest
 from functools import lru_cache
 
-from sarah import BartTokenizer, BartTokenizerFast, BatchEncoding
-from sarah.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
-from sarah.testing_utils import require_tokenizers, require_torch
-from sarah.utils import cached_property
+from transformers import BartTokenizer, BartTokenizerFast, BatchEncoding
+from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_tokenizers, require_torch
+from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors, use_cache_if_possible
 

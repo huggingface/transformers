@@ -20,14 +20,14 @@ import unittest
 
 from datasets import load_dataset
 
-from sarah import SegGptConfig
-from sarah.testing_utils import (
+from transformers import SegGptConfig
+from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from sarah.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -38,12 +38,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import SegGptForImageSegmentation, SegGptModel
-    from sarah.models.seggpt.modeling_seggpt import SegGptLoss
+    from transformers import SegGptForImageSegmentation, SegGptModel
+    from transformers.models.seggpt.modeling_seggpt import SegGptLoss
 
 
 if is_vision_available():
-    from sarah import SegGptImageProcessor
+    from transformers import SegGptImageProcessor
 
 
 class SegGptModelTester:

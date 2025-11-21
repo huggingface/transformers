@@ -19,8 +19,8 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torchvision_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -28,12 +28,12 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from PIL import Image
 
-    from sarah import LlavaImageProcessor
+    from transformers import LlavaImageProcessor
 
     if is_torchvision_available():
         from torchvision.transforms import functional as F
 
-        from sarah import LlavaImageProcessorFast
+        from transformers import LlavaImageProcessorFast
 
 
 class LlavaImageProcessingTester:

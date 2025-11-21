@@ -19,8 +19,8 @@ import unittest
 
 import numpy as np
 
-from sarah import OPTConfig, is_tf_available
-from sarah.testing_utils import require_sentencepiece, require_tf, slow
+from transformers import OPTConfig, is_tf_available
+from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -30,7 +30,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import GPT2Tokenizer, TFOPTForCausalLM, TFOPTModel
+    from transformers import GPT2Tokenizer, TFOPTForCausalLM, TFOPTModel
 
 
 def prepare_opt_inputs_dict(config, input_ids, attention_mask=None, head_mask=None):

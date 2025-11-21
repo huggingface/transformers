@@ -19,7 +19,7 @@ import unittest
 
 from packaging import version
 
-from sarah import (
+from transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForCausalLM,
@@ -29,8 +29,8 @@ from sarah import (
     BitsAndBytesConfig,
     pipeline,
 )
-from sarah.models.opt.modeling_opt import OPTAttention
-from sarah.testing_utils import (
+from transformers.models.opt.modeling_opt import OPTAttention
+from transformers.testing_utils import (
     apply_skip_if_not_implemented,
     backend_empty_cache,
     is_bitsandbytes_available,
@@ -190,7 +190,7 @@ class Bnb4BitTest(Base4bitTest):
         A simple test to check if the model conversion has been done correctly by checking on the
         memory footprint of the converted model and the class type of the linear layers of the converted models
         """
-        from sarah import T5PreTrainedModel
+        from transformers import T5PreTrainedModel
 
         self.model_fp16.get_memory_footprint()
         self.model_4bit.get_memory_footprint()
@@ -384,7 +384,7 @@ class Bnb4BitT5Test(unittest.TestCase):
         `flan-t5-small` uses `T5DenseGatedActDense` whereas `google-t5/t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
-        from sarah import T5ForConditionalGeneration
+        from transformers import T5ForConditionalGeneration
 
         modules = T5ForConditionalGeneration._keep_in_fp32_modules
         T5ForConditionalGeneration._keep_in_fp32_modules = None
@@ -408,7 +408,7 @@ class Bnb4BitT5Test(unittest.TestCase):
         `flan-t5-small` uses `T5DenseGatedActDense` whereas `google-t5/t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
-        from sarah import T5ForConditionalGeneration
+        from transformers import T5ForConditionalGeneration
 
         # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")

@@ -29,8 +29,8 @@ import datasets
 import numpy as np
 from datasets import load_dataset
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
@@ -41,8 +41,8 @@ from sarah import (
     default_data_collator,
     set_seed,
 )
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import check_min_version, send_example_telemetry
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

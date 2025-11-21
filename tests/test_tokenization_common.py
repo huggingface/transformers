@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AlbertTokenizer,
     AlbertTokenizerFast,
     BertTokenizer,
@@ -49,7 +49,7 @@ from sarah import (
     is_torch_available,
     logging,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     check_json_file_has_correct_format,
     get_tests_dir,
     require_jinja,
@@ -60,7 +60,7 @@ from sarah.testing_utils import (
     run_test_in_subprocess,
     slow,
 )
-from sarah.tokenization_utils import AddedToken
+from transformers.tokenization_utils import AddedToken
 
 
 if is_torch_available():
@@ -69,7 +69,7 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from sarah import PretrainedConfig, PreTrainedModel, TFPreTrainedModel
+    from transformers import PretrainedConfig, PreTrainedModel, TFPreTrainedModel
 
 
 def use_cache_if_possible(func):
@@ -3045,7 +3045,7 @@ class TokenizerTesterMixin:
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
-        from sarah import MODEL_MAPPING, TOKENIZER_MAPPING
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 
@@ -3094,7 +3094,7 @@ class TokenizerTesterMixin:
     @require_tf
     @slow
     def test_tf_encode_plus_sent_to_model(self):
-        from sarah import TF_MODEL_MAPPING, TOKENIZER_MAPPING
+        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
 
@@ -3129,7 +3129,7 @@ class TokenizerTesterMixin:
     @require_torch
     @slow
     def test_np_encode_plus_sent_to_model(self):
-        from sarah import MODEL_MAPPING, TOKENIZER_MAPPING
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
 

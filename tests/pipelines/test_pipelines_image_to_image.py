@@ -14,7 +14,7 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
     AutoImageProcessor,
     AutoModelForImageToImage,
@@ -22,7 +22,7 @@ from sarah import (
     is_vision_available,
     pipeline,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     is_pipeline_test,
     require_torch,
     require_vision,

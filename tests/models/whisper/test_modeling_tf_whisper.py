@@ -24,8 +24,8 @@ import unittest
 
 import numpy as np
 
-from sarah import GenerationConfig, WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
-from sarah.testing_utils import (
+from transformers import GenerationConfig, WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
+from transformers.testing_utils import (
     is_tf_available,
     require_read_token,
     require_tf,
@@ -33,8 +33,8 @@ from sarah.testing_utils import (
     run_test_in_subprocess,
     slow,
 )
-from sarah.utils import cached_property
-from sarah.utils.import_utils import is_datasets_available
+from transformers.utils import cached_property
+from transformers.utils.import_utils import is_datasets_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -49,8 +49,8 @@ if is_datasets_available():
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import TFWhisperForConditionalGeneration, TFWhisperModel, set_seed
-    from sarah.models.whisper.modeling_tf_whisper import (
+    from transformers import TFWhisperForConditionalGeneration, TFWhisperModel, set_seed
+    from transformers.models.whisper.modeling_tf_whisper import (
         TFWhisperDecoder,
         TFWhisperEncoder,
         sinusoidal_embedding_init,

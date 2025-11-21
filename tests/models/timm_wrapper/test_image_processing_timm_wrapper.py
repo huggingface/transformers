@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from sarah.testing_utils import require_torch, require_torchvision, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():
@@ -28,7 +28,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import TimmWrapperConfig, TimmWrapperImageProcessor
+    from transformers import TimmWrapperConfig, TimmWrapperImageProcessor
 
 
 @require_torch

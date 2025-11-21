@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from sarah import TrainingArguments
+from transformers import TrainingArguments
 
 
 class TestTrainingArguments(unittest.TestCase):

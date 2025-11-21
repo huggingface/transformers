@@ -22,7 +22,7 @@ class MyNewModel2Config(PretrainedConfig):
             Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GemmaModel`]
     ```python
-    >>> from sarah import GemmaModel, GemmaConfig
+    >>> from transformers import GemmaModel, GemmaConfig
     >>> # Initializing a Gemma gemma-7b style configuration
     >>> configuration = GemmaConfig()
     >>> # Initializing a model from the gemma-7b style configuration

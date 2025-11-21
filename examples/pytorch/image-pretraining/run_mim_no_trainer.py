@@ -30,8 +30,8 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
 from tqdm.auto import tqdm
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     CONFIG_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
@@ -41,8 +41,8 @@ from sarah import (
     SchedulerType,
     get_scheduler,
 )
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 """ Pre-training a 🤗 Transformers model for simple masked image modeling (SimMIM)

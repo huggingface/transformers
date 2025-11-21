@@ -19,13 +19,13 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AutoProcessor,
     AyaVisionConfig,
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     cleanup,
     require_read_token,
     require_torch,
@@ -43,7 +43,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         AyaVisionForConditionalGeneration,
     )
 

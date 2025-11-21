@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import pytest
 
-from sarah.audio_utils import (
+from transformers.audio_utils import (
     amplitude_to_db,
     amplitude_to_db_batch,
     chroma_filter_bank,
@@ -31,7 +31,7 @@ from sarah.audio_utils import (
     spectrogram_batch,
     window_function,
 )
-from sarah.testing_utils import is_librosa_available, require_librosa
+from transformers.testing_utils import is_librosa_available, require_librosa
 
 
 if is_librosa_available():

@@ -17,9 +17,9 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from sarah import MBartConfig, is_flax_available
-from sarah.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
-from sarah.utils import cached_property
+from transformers import MBartConfig, is_flax_available
+from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+from transformers.utils import cached_property
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -35,8 +35,8 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
 
-    from sarah import AutoTokenizer
-    from sarah.models.mbart.modeling_flax_mbart import (
+    from transformers import AutoTokenizer
+    from transformers.models.mbart.modeling_flax_mbart import (
         FlaxMBartForConditionalGeneration,
         FlaxMBartForQuestionAnswering,
         FlaxMBartForSequenceClassification,

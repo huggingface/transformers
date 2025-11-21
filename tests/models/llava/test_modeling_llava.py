@@ -19,7 +19,7 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AutoProcessor,
     AutoTokenizer,
     LlavaConfig,
@@ -27,7 +27,7 @@ from sarah import (
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,

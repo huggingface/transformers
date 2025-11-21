@@ -18,14 +18,14 @@ import unittest
 
 import pytest
 
-from sarah import WhisperTokenizer, is_speech_available
-from sarah.testing_utils import require_sentencepiece, require_torch, require_torchaudio
+from transformers import WhisperTokenizer, is_speech_available
+from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
 from .test_feature_extraction_whisper import floats_list
 
 
 if is_speech_available():
-    from sarah import WhisperFeatureExtractor, WhisperProcessor
+    from transformers import WhisperFeatureExtractor, WhisperProcessor
 
 
 TRANSCRIBE = 50358

@@ -20,16 +20,16 @@ import unittest
 
 import pytest
 
-from sarah import BertTokenizer, BertTokenizerFast
-from sarah.models.bert.tokenization_bert import VOCAB_FILES_NAMES
-from sarah.testing_utils import require_vision
-from sarah.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
+from transformers import BertTokenizer, BertTokenizerFast
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_vision
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import ChineseCLIPImageProcessor, ChineseCLIPProcessor
+    from transformers import ChineseCLIPImageProcessor, ChineseCLIPProcessor
 
 
 @require_vision

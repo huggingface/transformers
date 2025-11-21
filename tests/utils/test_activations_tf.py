@@ -16,14 +16,14 @@ import unittest
 
 import numpy as np
 
-from sarah import is_tf_available
-from sarah.testing_utils import require_tf
+from transformers import is_tf_available
+from transformers.testing_utils import require_tf
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah.activations_tf import get_tf_activation
+    from transformers.activations_tf import get_tf_activation
 
 
 @require_tf

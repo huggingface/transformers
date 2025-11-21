@@ -8,9 +8,9 @@ import tensorflow as tf
 from datasets import load_dataset
 from tqdm import tqdm
 
-from sarah import AutoTokenizer, TFAutoModelForSequenceClassification
-from sarah.modeling_tf_utils import keras
-from sarah.utils import is_sagemaker_dp_enabled
+from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+from transformers.modeling_tf_utils import keras
+from transformers.utils import is_sagemaker_dp_enabled
 
 
 if os.environ.get("SDP_ENABLED") or is_sagemaker_dp_enabled():

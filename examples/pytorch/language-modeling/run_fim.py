@@ -36,8 +36,8 @@ import numpy as np
 import torch
 from datasets import load_dataset
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
@@ -50,11 +50,11 @@ from sarah import (
     is_torch_xla_available,
     set_seed,
 )
-from sarah.integrations import is_deepspeed_zero3_enabled
-from sarah.testing_utils import CaptureLogger
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.integrations import is_deepspeed_zero3_enabled
+from transformers.testing_utils import CaptureLogger
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

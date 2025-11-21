@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import unittest
 
-from sarah import LEDConfig, is_tf_available
-from sarah.testing_utils import require_tf, slow
+from transformers import LEDConfig, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -29,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import TFLEDForConditionalGeneration, TFLEDModel
+    from transformers import TFLEDForConditionalGeneration, TFLEDModel
 
 
 @require_tf

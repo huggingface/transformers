@@ -20,8 +20,8 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from sarah import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
-from sarah.testing_utils import (
+from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
+from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
@@ -29,7 +29,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import cached_property
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -46,8 +46,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
-    from sarah.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
+    from transformers import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
+    from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
 
 if is_vision_available():
     from PIL import Image

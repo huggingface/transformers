@@ -20,7 +20,7 @@ import pytest
 import requests
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
     MllamaConfig,
@@ -29,9 +29,9 @@ from sarah import (
     is_torch_available,
     is_vision_available,
 )
-from sarah.cache_utils import Cache
-from sarah.models.mllama.configuration_mllama import MllamaTextConfig
-from sarah.testing_utils import (
+from transformers.cache_utils import Cache
+from transformers.models.mllama.configuration_mllama import MllamaTextConfig
+from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_read_token,

@@ -17,8 +17,8 @@
 import tempfile
 import unittest
 
-from sarah import is_torch_available, logging
-from sarah.testing_utils import (
+from transformers import is_torch_available, logging
+from transformers.testing_utils import (
     CaptureLogger,
     require_deterministic_for_xpu,
     require_torch,
@@ -40,7 +40,7 @@ if is_torch_available():
     import numpy as np
     import torch
 
-    from sarah import (
+    from transformers import (
         AutoConfig,
         AutoTokenizer,
         BartForCausalLM,
@@ -56,7 +56,7 @@ if is_torch_available():
         RobertaForCausalLM,
         RobertaModel,
     )
-    from sarah.modeling_outputs import BaseModelOutput
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 @require_torch

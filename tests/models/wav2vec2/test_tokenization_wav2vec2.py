@@ -25,14 +25,14 @@ from functools import lru_cache
 
 import numpy as np
 
-from sarah import (
+from transformers import (
     AddedToken,
     Wav2Vec2Config,
     Wav2Vec2CTCTokenizer,
     Wav2Vec2Tokenizer,
 )
-from sarah.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
-from sarah.testing_utils import require_torch, slow
+from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
+from transformers.testing_utils import require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
@@ -656,7 +656,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
         # pred_ids correspond to the following code
         # ```
-        #        from sarah import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
+        #        from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
         #        from datasets import load_dataset
         #        import datasets
         #        import torch

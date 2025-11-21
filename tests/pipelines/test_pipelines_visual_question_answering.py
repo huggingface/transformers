@@ -16,9 +16,9 @@ import unittest
 
 from datasets import load_dataset
 
-from sarah import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
-from sarah.pipelines import pipeline
-from sarah.testing_utils import (
+from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
+from transformers.pipelines import pipeline
+from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
@@ -36,7 +36,7 @@ from .test_pipelines_common import ANY
 if is_torch_available():
     import torch
 
-    from sarah.pipelines.pt_utils import KeyDataset
+    from transformers.pipelines.pt_utils import KeyDataset
 
 
 if is_vision_available():

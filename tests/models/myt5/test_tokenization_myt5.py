@@ -15,9 +15,9 @@
 import binascii
 import unittest
 
-from sarah import MyT5Tokenizer
-from sarah.testing_utils import slow
-from sarah.utils import is_tf_available, is_torch_available
+from transformers import MyT5Tokenizer
+from transformers.testing_utils import slow
+from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

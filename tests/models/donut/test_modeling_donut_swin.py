@@ -17,9 +17,9 @@
 import collections
 import unittest
 
-from sarah import DonutSwinConfig
-from sarah.testing_utils import require_torch, slow, torch_device
-from sarah.utils import is_torch_available
+from transformers import DonutSwinConfig
+from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import DonutSwinModel
+    from transformers import DonutSwinModel
 
 
 class DonutSwinModelTester:

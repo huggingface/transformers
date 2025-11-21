@@ -23,8 +23,8 @@ import pytest
 import requests
 from parameterized import parameterized
 
-from sarah import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
-from sarah.testing_utils import (
+from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
+from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -35,7 +35,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -53,7 +53,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import (
+    from transformers import (
         Blip2ForConditionalGeneration,
         Blip2ForImageTextRetrieval,
         Blip2Model,
@@ -66,7 +66,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import Blip2Processor
+    from transformers import Blip2Processor
 
 
 class Blip2VisionModelTester:

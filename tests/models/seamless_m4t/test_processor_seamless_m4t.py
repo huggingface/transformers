@@ -16,12 +16,12 @@ import shutil
 import tempfile
 import unittest
 
-from sarah import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
-from sarah.models.seamless_m4t import (
+from transformers import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
+from transformers.models.seamless_m4t import (
     SeamlessM4TTokenizer,
     SeamlessM4TTokenizerFast,
 )
-from sarah.testing_utils import require_torch
+from transformers.testing_utils import require_torch
 
 from .test_feature_extraction_seamless_m4t import floats_list
 

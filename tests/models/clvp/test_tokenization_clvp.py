@@ -20,7 +20,7 @@ import unittest
 from functools import lru_cache
 from typing import List
 
-from sarah import ClvpTokenizer
+from transformers import ClvpTokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin, slow, use_cache_if_possible
 

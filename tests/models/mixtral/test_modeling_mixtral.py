@@ -18,8 +18,8 @@ import unittest
 
 import pytest
 
-from sarah import MixtralConfig, is_torch_available
-from sarah.testing_utils import (
+from transformers import MixtralConfig, is_torch_available
+from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         MixtralForCausalLM,
         MixtralForQuestionAnswering,
         MixtralForSequenceClassification,

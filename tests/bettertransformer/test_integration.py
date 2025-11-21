@@ -16,8 +16,8 @@
 import tempfile
 import unittest
 
-from sarah import AutoModelForSeq2SeqLM, AutoTokenizer
-from sarah.testing_utils import (
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers.testing_utils import (
     is_torch_available,
     require_optimum,
     require_torch,

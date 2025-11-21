@@ -22,13 +22,13 @@ import warnings
 from huggingface_hub import HfFolder, create_pull_request
 from parameterized import parameterized
 
-from sarah import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
+from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-from sarah.generation import (
+from transformers.generation import (
     ClassifierFreeGuidanceLogitsProcessor,
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -56,7 +56,7 @@ from sarah.generation import (
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
     WatermarkLogitsProcessor,
 )
-from sarah.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, torch_device
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, torch_device
 
 
 class GenerationConfigTest(unittest.TestCase):

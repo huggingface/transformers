@@ -19,8 +19,8 @@ import unittest
 
 import pytest
 
-from sarah import AutoTokenizer, JetMoeConfig, is_torch_available
-from sarah.testing_utils import (
+from transformers import AutoTokenizer, JetMoeConfig, is_torch_available
+from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
     require_torch,
@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         JetMoeForCausalLM,
         JetMoeForSequenceClassification,
         JetMoeModel,

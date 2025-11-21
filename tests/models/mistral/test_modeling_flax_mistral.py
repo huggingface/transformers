@@ -17,8 +17,8 @@ import unittest
 
 import numpy as np
 
-from sarah import MistralConfig, is_flax_available, is_tokenizers_available
-from sarah.testing_utils import require_flax, slow
+from transformers import MistralConfig, is_flax_available, is_tokenizers_available
+from transformers.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -26,14 +26,14 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 if is_flax_available():
     import jax.numpy as jnp
 
-    from sarah.models.mistral.modeling_flax_mistral import (
+    from transformers.models.mistral.modeling_flax_mistral import (
         FlaxMistralForCausalLM,
         FlaxMistralModel,
     )
 
 
 if is_tokenizers_available():
-    from sarah import LlamaTokenizerFast
+    from transformers import LlamaTokenizerFast
 
 
 class FlaxMistralModelTester:

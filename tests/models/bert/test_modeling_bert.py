@@ -18,9 +18,9 @@ import unittest
 
 from packaging import version
 
-from sarah import AutoTokenizer, BertConfig, is_torch_available
-from sarah.models.auto import get_values
-from sarah.testing_utils import (
+from transformers import AutoTokenizer, BertConfig, is_torch_available
+from transformers.models.auto import get_values
+from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
     require_torch_accelerator,
@@ -37,7 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         BertForMaskedLM,
         BertForMultipleChoice,

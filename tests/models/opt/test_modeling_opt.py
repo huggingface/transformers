@@ -20,8 +20,8 @@ import unittest
 
 import timeout_decorator  # noqa
 
-from sarah import OPTConfig, is_torch_available
-from sarah.testing_utils import (
+from transformers import OPTConfig, is_torch_available
+from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -38,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         GPT2Tokenizer,
         OPTForCausalLM,
         OPTForQuestionAnswering,

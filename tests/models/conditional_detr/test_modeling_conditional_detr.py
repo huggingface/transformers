@@ -18,9 +18,9 @@ import inspect
 import math
 import unittest
 
-from sarah import ConditionalDetrConfig, ResNetConfig, is_torch_available, is_vision_available
-from sarah.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
-from sarah.utils import cached_property
+from transformers import ConditionalDetrConfig, ResNetConfig, is_torch_available, is_vision_available
+from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -30,7 +30,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         ConditionalDetrForObjectDetection,
         ConditionalDetrForSegmentation,
         ConditionalDetrModel,
@@ -40,7 +40,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import ConditionalDetrImageProcessor
+    from transformers import ConditionalDetrImageProcessor
 
 
 class ConditionalDetrModelTester:

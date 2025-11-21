@@ -9,12 +9,12 @@ from unittest.mock import patch
 
 import numpy as np
 
-from sarah import BartTokenizer
-from sarah.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from sarah.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
-from sarah.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
-from sarah.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
-from sarah.utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
+from transformers import BartTokenizer
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
+from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
+from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
 
 
 if is_tf_available() and is_datasets_available() and is_faiss_available():
@@ -22,7 +22,7 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
     import tensorflow as tf
     from datasets import Dataset
 
-    from sarah import (
+    from transformers import (
         AutoConfig,
         RagConfig,
         RagRetriever,
@@ -33,7 +33,7 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
         TFRagSequenceForGeneration,
         TFRagTokenForGeneration,
     )
-    from sarah.modeling_tf_outputs import TFBaseModelOutput
+    from transformers.modeling_tf_outputs import TFBaseModelOutput
 
 from ..bart.test_modeling_tf_bart import TFBartModelTester
 from ..dpr.test_modeling_tf_dpr import TFDPRModelTester

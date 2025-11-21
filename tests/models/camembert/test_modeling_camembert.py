@@ -15,8 +15,8 @@
 
 import unittest
 
-from sarah import is_torch_available
-from sarah.testing_utils import (
+from transformers import is_torch_available
+from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -29,7 +29,7 @@ from sarah.testing_utils import (
 if is_torch_available():
     import torch
 
-    from sarah import CamembertModel
+    from transformers import CamembertModel
 
 
 @require_torch

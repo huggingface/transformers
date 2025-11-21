@@ -1,6 +1,6 @@
 import sys
 
-from sarah import AutoTokenizer
+from transformers import AutoTokenizer
 
 
 dataset = sys.argv[1]

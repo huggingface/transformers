@@ -38,7 +38,7 @@ except (ModuleNotFoundError, ImportError):
             "`pip install tf-keras`."
         )
 
-from sarah.testing_utils import TestCasePlus, get_gpu_count, slow
+from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
 
 
 SRC_DIRS = [

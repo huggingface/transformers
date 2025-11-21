@@ -23,8 +23,8 @@ import numpy as np
 from datasets import Audio, load_dataset
 from pytest import mark
 
-from sarah import AutoFeatureExtractor, MimiConfig
-from sarah.testing_utils import (
+from transformers import AutoFeatureExtractor, MimiConfig
+from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
     require_flash_attn,
@@ -41,7 +41,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_torch_available():
     import torch
 
-    from sarah import MimiModel
+    from transformers import MimiModel
 
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.prepare_inputs_dict

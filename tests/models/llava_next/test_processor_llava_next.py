@@ -17,17 +17,17 @@ import unittest
 
 import torch
 
-from sarah import AutoProcessor, LlamaTokenizerFast, LlavaNextProcessor
-from sarah.testing_utils import (
+from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextProcessor
+from transformers.testing_utils import (
     require_vision,
 )
-from sarah.utils import is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import LlavaNextImageProcessor
+    from transformers import LlavaNextImageProcessor
 
 
 @require_vision

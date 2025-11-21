@@ -14,7 +14,7 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     BatchEncoding,
@@ -23,7 +23,7 @@ from sarah import (
     SeamlessM4TTokenizerFast,
     is_torch_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
     require_sentencepiece,
@@ -38,7 +38,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():
-    from sarah.models.m2m_100.modeling_m2m_100 import shift_tokens_right
+    from transformers.models.m2m_100.modeling_m2m_100 import shift_tokens_right
 
 EN_CODE = 256047
 RO_CODE = 256145

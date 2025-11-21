@@ -21,7 +21,7 @@ import unittest
 
 import pytest
 
-from sarah import (
+from transformers import (
     BarkCausalModel,
     BarkCoarseConfig,
     BarkConfig,
@@ -29,12 +29,12 @@ from sarah import (
     BarkSemanticConfig,
     is_torch_available,
 )
-from sarah.models.bark.generation_configuration_bark import (
+from transformers.models.bark.generation_configuration_bark import (
     BarkCoarseGenerationConfig,
     BarkFineGenerationConfig,
     BarkSemanticGenerationConfig,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_fp16,
@@ -42,7 +42,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import cached_property
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -53,7 +53,7 @@ from ..encodec.test_modeling_encodec import EncodecModelTester
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         BarkCoarseModel,
         BarkFineModel,
         BarkModel,

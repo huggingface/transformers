@@ -22,10 +22,10 @@ import unittest
 import numpy as np
 import requests
 
-from sarah import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
-from sarah.models.auto import get_values
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
+from transformers.models.auto import get_values
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -42,7 +42,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import (
+    from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ChineseCLIPModel,
         ChineseCLIPTextModel,
@@ -53,7 +53,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import ChineseCLIPProcessor
+    from transformers import ChineseCLIPProcessor
 
 
 class ChineseCLIPTextModelTester:

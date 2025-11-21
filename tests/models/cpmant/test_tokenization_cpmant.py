@@ -16,8 +16,8 @@
 import os
 import unittest
 
-from sarah.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
-from sarah.testing_utils import require_jieba, tooslow
+from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
+from transformers.testing_utils import require_jieba, tooslow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

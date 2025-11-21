@@ -41,8 +41,8 @@ from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoTokenizer,
     FlaxAutoModelForSequenceClassification,
@@ -51,7 +51,7 @@ from sarah import (
     TrainingArguments,
     is_tensorboard_available,
 )
-from sarah.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)

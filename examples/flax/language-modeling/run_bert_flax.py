@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 import jax
 import numpy as np
 
-from sarah import BertConfig, FlaxBertModel
+from transformers import BertConfig, FlaxBertModel
 
 
 parser = ArgumentParser()

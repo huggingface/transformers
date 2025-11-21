@@ -16,15 +16,15 @@ import shutil
 import tempfile
 import unittest
 
-from sarah import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, LlavaProcessor
-from sarah.testing_utils import require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import AutoProcessor, AutoTokenizer, LlamaTokenizerFast, LlavaProcessor
+from transformers.testing_utils import require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import CLIPImageProcessor
+    from transformers import CLIPImageProcessor
 
 if is_torch_available:
     pass

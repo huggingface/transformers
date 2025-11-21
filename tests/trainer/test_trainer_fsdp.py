@@ -14,8 +14,8 @@
 
 from typing import Dict
 
-from sarah import is_torch_available
-from sarah.testing_utils import (
+from transformers import is_torch_available
+from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
@@ -34,7 +34,7 @@ if is_torch_available():
     import torch.distributed
     import torch.utils.data
 
-    from sarah import (
+    from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
         DataCollatorForSeq2Seq,

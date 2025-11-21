@@ -21,7 +21,7 @@ from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
 from packaging import version
 
-from sarah import (
+from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -30,7 +30,7 @@ from sarah import (
     TrainingArguments,
     logging,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
     require_peft,
@@ -40,7 +40,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
@@ -524,7 +524,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         Simple test that tests the basic usage of PEFT model + pipeline
         """
-        from sarah import pipeline
+        from transformers import pipeline
 
         for adapter_id, base_model_id in zip(self.peft_test_model_ids, self.transformers_test_model_ids):
             peft_pipe = pipeline("text-generation", adapter_id)

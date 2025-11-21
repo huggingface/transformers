@@ -4,17 +4,17 @@ import unittest
 
 import torch
 
-from sarah import GemmaTokenizer
-from sarah.models.colpali.processing_colpali import ColPaliProcessor
-from sarah.testing_utils import get_tests_dir, require_torch, require_vision
-from sarah.utils import is_vision_available
-from sarah.utils.dummy_vision_objects import SiglipImageProcessor
+from transformers import GemmaTokenizer
+from transformers.models.colpali.processing_colpali import ColPaliProcessor
+from transformers.testing_utils import get_tests_dir, require_torch, require_vision
+from transformers.utils import is_vision_available
+from transformers.utils.dummy_vision_objects import SiglipImageProcessor
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import (
+    from transformers import (
         ColPaliProcessor,
         PaliGemmaProcessor,
         SiglipImageProcessor,

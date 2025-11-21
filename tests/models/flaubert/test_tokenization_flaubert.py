@@ -18,9 +18,9 @@ import json
 import os
 import unittest
 
-from sarah import FlaubertTokenizer
-from sarah.models.flaubert.tokenization_flaubert import VOCAB_FILES_NAMES
-from sarah.testing_utils import slow
+from transformers import FlaubertTokenizer
+from transformers.models.flaubert.tokenization_flaubert import VOCAB_FILES_NAMES
+from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

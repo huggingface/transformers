@@ -19,8 +19,8 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah import PersimmonConfig, is_torch_available, set_seed
-from sarah.testing_utils import (
+from transformers import PersimmonConfig, is_torch_available, set_seed
+from transformers.testing_utils import (
     backend_empty_cache,
     require_bitsandbytes,
     require_torch,
@@ -39,14 +39,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         AutoTokenizer,
         PersimmonForCausalLM,
         PersimmonForSequenceClassification,
         PersimmonForTokenClassification,
         PersimmonModel,
     )
-    from sarah.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding
+    from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding
 
 
 # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Persimmon

@@ -37,16 +37,16 @@ from torch.utils.data import DataLoader
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from tqdm import tqdm
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoImageProcessor,
     AutoModelForUniversalSegmentation,
     SchedulerType,
     get_scheduler,
 )
-from sarah.image_processing_utils import BatchFeature
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.image_processing_utils import BatchFeature
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)

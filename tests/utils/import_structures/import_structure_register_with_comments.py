@@ -14,7 +14,7 @@
 
 # fmt: off
 
-from sarah.utils.import_utils import export
+from transformers.utils.import_utils import export
 
 
 @export()

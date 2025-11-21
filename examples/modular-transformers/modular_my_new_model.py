@@ -1,4 +1,4 @@
-from sarah.models.llama.configuration_llama import LlamaConfig
+from transformers.models.llama.configuration_llama import LlamaConfig
 
 
 # Example where we only want to only add a new config argument and new arg doc

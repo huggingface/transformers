@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from sarah import (
+from transformers import (
     DefaultFlowCallback,
     EarlyStoppingCallback,
     IntervalStrategy,
@@ -31,12 +31,12 @@ from sarah import (
     TrainingArguments,
     is_torch_available,
 )
-from sarah.testing_utils import require_torch
-from sarah.trainer_callback import ExportableState
+from transformers.testing_utils import require_torch
+from transformers.trainer_callback import ExportableState
 
 
 if is_torch_available():
-    from sarah.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
+    from transformers.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
 
     from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
 

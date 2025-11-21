@@ -22,10 +22,10 @@ from typing import Optional
 import numpy as np
 import requests
 
-from sarah import SmolVLMProcessor
-from sarah.models.auto.processing_auto import AutoProcessor
-from sarah.testing_utils import require_av, require_torch, require_vision
-from sarah.utils import is_vision_available
+from transformers import SmolVLMProcessor
+from transformers.models.auto.processing_auto import AutoProcessor
+from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 

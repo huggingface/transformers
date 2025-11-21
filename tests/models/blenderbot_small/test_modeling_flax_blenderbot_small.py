@@ -17,8 +17,8 @@ import unittest
 import numpy as np
 import timeout_decorator  # noqa
 
-from sarah import BlenderbotSmallConfig, is_flax_available
-from sarah.testing_utils import require_flax, slow
+from transformers import BlenderbotSmallConfig, is_flax_available
+from transformers.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -34,7 +34,7 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
 
-    from sarah.models.blenderbot_small.modeling_flax_blenderbot_small import (
+    from transformers.models.blenderbot_small.modeling_flax_blenderbot_small import (
         FlaxBlenderbotSmallForConditionalGeneration,
         FlaxBlenderbotSmallModel,
         shift_tokens_right,

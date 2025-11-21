@@ -25,16 +25,16 @@ import pytest
 import requests
 from parameterized import parameterized
 
-from sarah import AutoModelForImageTextToText, AutoProcessor, Kosmos2Config
-from sarah.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
-from sarah.testing_utils import (
+from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Config
+from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2TextConfig, Kosmos2VisionConfig
+from transformers.testing_utils import (
     IS_ROCM_SYSTEM,
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from sarah.utils import (
+from transformers.utils import (
     is_torch_available,
     is_vision_available,
 )
@@ -54,7 +54,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import Kosmos2ForConditionalGeneration, Kosmos2Model
+    from transformers import Kosmos2ForConditionalGeneration, Kosmos2Model
 
 
 if is_vision_available():

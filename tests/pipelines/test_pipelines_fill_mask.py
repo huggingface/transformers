@@ -15,9 +15,9 @@
 import gc
 import unittest
 
-from sarah import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
-from sarah.pipelines import PipelineException
-from sarah.testing_utils import (
+from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
+from transformers.pipelines import PipelineException
+from transformers.testing_utils import (
     backend_empty_cache,
     is_pipeline_test,
     is_torch_available,

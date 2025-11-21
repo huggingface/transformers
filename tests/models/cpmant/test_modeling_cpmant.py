@@ -16,7 +16,7 @@
 
 import unittest
 
-from sarah.testing_utils import is_torch_available, require_torch, tooslow
+from transformers.testing_utils import is_torch_available, require_torch, tooslow
 
 from ...generation.test_utils import torch_device
 from ...test_configuration_common import ConfigTester
@@ -27,7 +27,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         CpmAntConfig,
         CpmAntForCausalLM,
         CpmAntModel,

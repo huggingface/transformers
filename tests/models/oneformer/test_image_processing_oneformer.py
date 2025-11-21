@@ -21,8 +21,8 @@ import unittest
 
 import numpy as np
 
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,9 +31,9 @@ if is_torch_available():
     import torch
 
     if is_vision_available():
-        from sarah import OneFormerImageProcessor
-        from sarah.models.oneformer.image_processing_oneformer import binary_mask_to_rle, prepare_metadata
-        from sarah.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
+        from transformers import OneFormerImageProcessor
+        from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle, prepare_metadata
+        from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
 
 if is_vision_available():
     from PIL import Image

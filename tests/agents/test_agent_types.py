@@ -18,9 +18,9 @@ import unittest
 import uuid
 from pathlib import Path
 
-from sarah.agents.agent_types import AgentAudio, AgentImage, AgentText
-from sarah.testing_utils import get_tests_dir, require_soundfile, require_torch, require_vision
-from sarah.utils import is_soundfile_available, is_torch_available, is_vision_available
+from transformers.agents.agent_types import AgentAudio, AgentImage, AgentText
+from transformers.testing_utils import get_tests_dir, require_soundfile, require_torch, require_vision
+from transformers.utils import is_soundfile_available, is_torch_available, is_vision_available
 
 
 if is_torch_available():

@@ -36,8 +36,8 @@ from huggingface_hub import HfApi, hf_hub_download
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoConfig,
     AutoImageProcessor,
     AutoModelForSemanticSegmentation,
@@ -45,8 +45,8 @@ from sarah import (
     default_data_collator,
     get_scheduler,
 )
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

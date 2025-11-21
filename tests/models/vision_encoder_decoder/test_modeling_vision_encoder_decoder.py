@@ -21,8 +21,8 @@ from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 from packaging import version
 
-from sarah import DonutProcessor, NougatProcessor, TrOCRProcessor
-from sarah.testing_utils import (
+from transformers import DonutProcessor, NougatProcessor, TrOCRProcessor
+from transformers.testing_utils import (
     require_levenshtein,
     require_nltk,
     require_sentencepiece,
@@ -33,7 +33,7 @@ from sarah.testing_utils import (
     to_2tuple,
     torch_device,
 )
-from sarah.utils import (
+from transformers.utils import (
     cached_property,
     is_torch_available,
     is_vision_available,
@@ -55,7 +55,7 @@ if is_torch_available():
     import numpy as np
     import torch
 
-    from sarah import (
+    from transformers import (
         AutoTokenizer,
         BartForCausalLM,
         BertLMHeadModel,
@@ -69,14 +69,14 @@ if is_torch_available():
         VisionEncoderDecoderModel,
         ViTModel,
     )
-    from sarah.modeling_outputs import BaseModelOutput
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 if is_vision_available():
     import PIL
     from PIL import Image
 
-    from sarah import ViTImageProcessor
+    from transformers import ViTImageProcessor
 
 
 @require_torch

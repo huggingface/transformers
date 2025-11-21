@@ -18,8 +18,8 @@ import tempfile
 import unittest
 
 from tests.test_tokenization_common import AddedToken, TokenizerTesterMixin
-from sarah import RemBertTokenizer, RemBertTokenizerFast
-from sarah.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
+from transformers import RemBertTokenizer, RemBertTokenizerFast
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
 
 
 SENTENCEPIECE_UNDERLINE = "▁"

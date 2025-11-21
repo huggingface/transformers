@@ -2,9 +2,9 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from sarah import AutoConfig, TFGPT2LMHeadModel, is_keras_nlp_available, is_tf_available
-from sarah.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
-from sarah.testing_utils import require_keras_nlp, require_tf, slow
+from transformers import AutoConfig, TFGPT2LMHeadModel, is_keras_nlp_available, is_tf_available
+from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
+from transformers.testing_utils import require_keras_nlp, require_tf, slow
 
 
 if is_tf_available():
@@ -12,7 +12,7 @@ if is_tf_available():
 
 
 if is_keras_nlp_available():
-    from sarah.models.gpt2 import TFGPT2Tokenizer
+    from transformers.models.gpt2 import TFGPT2Tokenizer
 
 
 TOKENIZER_CHECKPOINTS = ["openai-community/gpt2"]

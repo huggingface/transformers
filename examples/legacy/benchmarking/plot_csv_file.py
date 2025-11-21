@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import ScalarFormatter
 
-from sarah import HfArgumentParser
+from transformers import HfArgumentParser
 
 
 def list_field(default=None, metadata=None):

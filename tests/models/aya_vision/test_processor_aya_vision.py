@@ -18,9 +18,9 @@ import tempfile
 import unittest
 from typing import Optional
 
-from sarah import AutoProcessor, AutoTokenizer, AyaVisionProcessor
-from sarah.testing_utils import require_read_token, require_torch, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import AutoProcessor, AutoTokenizer, AyaVisionProcessor
+from transformers.testing_utils import require_read_token, require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -30,7 +30,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from sarah import GotOcr2ImageProcessor
+    from transformers import GotOcr2ImageProcessor
 
 
 @require_read_token

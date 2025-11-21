@@ -17,9 +17,9 @@ import unittest
 
 import numpy as np
 
-from sarah.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import Gemma3ImageProcessor
+    from transformers import Gemma3ImageProcessor
 
     if is_torchvision_available():
-        from sarah import Gemma3ImageProcessorFast
+        from transformers import Gemma3ImageProcessorFast
 
 
 class Gemma3ImageProcessingTester:

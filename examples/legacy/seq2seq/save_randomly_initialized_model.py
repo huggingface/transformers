@@ -15,7 +15,7 @@
 
 import fire
 
-from sarah import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
 
 
 def save_randomly_initialized_version(config_name: str, save_dir: str, **config_kwargs):

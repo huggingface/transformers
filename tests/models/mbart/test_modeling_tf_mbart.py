@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import unittest
 
-from sarah import AutoTokenizer, MBartConfig, is_tf_available
-from sarah.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
-from sarah.utils import cached_property
+from transformers import AutoTokenizer, MBartConfig, is_tf_available
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -29,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import TFAutoModelForSeq2SeqLM, TFMBartForConditionalGeneration, TFMBartModel
+    from transformers import TFAutoModelForSeq2SeqLM, TFMBartForConditionalGeneration, TFMBartModel
 
 
 @require_tf

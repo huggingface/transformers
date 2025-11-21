@@ -19,8 +19,8 @@ import unittest
 
 import numpy as np
 
-from sarah.testing_utils import require_torch, require_torch_gpu, require_torchvision, require_vision, slow
-from sarah.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torch_gpu, require_torchvision, require_vision, slow
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,10 +31,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import DetrImageProcessor
+    from transformers import DetrImageProcessor
 
     if is_torchvision_available():
-        from sarah import DetrImageProcessorFast
+        from transformers import DetrImageProcessorFast
 
 
 class DetrImageProcessingTester:

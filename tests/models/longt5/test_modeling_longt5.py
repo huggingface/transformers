@@ -18,10 +18,10 @@ import copy
 import tempfile
 import unittest
 
-from sarah import LongT5Config, is_torch_available
-from sarah.models.auto import get_values
-from sarah.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
-from sarah.utils import cached_property
+from transformers import LongT5Config, is_torch_available
+from transformers.models.auto import get_values
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -33,7 +33,7 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from sarah import (
+    from transformers import (
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         AutoTokenizer,
         LongT5EncoderModel,

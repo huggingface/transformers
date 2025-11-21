@@ -17,22 +17,22 @@ import importlib
 import io
 import unittest
 
-import sarah
+import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
-from sarah import *  # noqa F406
-from sarah.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, require_tf, require_torch
-from sarah.utils import ContextManagers, find_labels, is_flax_available, is_tf_available, is_torch_available
+from transformers import *  # noqa F406
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, require_tf, require_torch
+from transformers.utils import ContextManagers, find_labels, is_flax_available, is_tf_available, is_torch_available
 
 
 if is_torch_available():
-    from sarah import BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification
+    from transformers import BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification
 
 if is_tf_available():
-    from sarah import TFBertForPreTraining, TFBertForQuestionAnswering, TFBertForSequenceClassification
+    from transformers import TFBertForPreTraining, TFBertForQuestionAnswering, TFBertForSequenceClassification
 
 if is_flax_available():
-    from sarah import FlaxBertForPreTraining, FlaxBertForQuestionAnswering, FlaxBertForSequenceClassification
+    from transformers import FlaxBertForPreTraining, FlaxBertForQuestionAnswering, FlaxBertForSequenceClassification
 
 
 MODEL_ID = DUMMY_UNKNOWN_IDENTIFIER

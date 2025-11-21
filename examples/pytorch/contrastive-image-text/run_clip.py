@@ -36,8 +36,8 @@ from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoImageProcessor,
     AutoModel,
     AutoTokenizer,
@@ -46,9 +46,9 @@ from sarah import (
     TrainingArguments,
     set_seed,
 )
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)

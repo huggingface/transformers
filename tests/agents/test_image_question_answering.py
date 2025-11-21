@@ -16,8 +16,8 @@
 import unittest
 from pathlib import Path
 
-from sarah import is_vision_available, load_tool
-from sarah.testing_utils import get_tests_dir
+from transformers import is_vision_available, load_tool
+from transformers.testing_utils import get_tests_dir
 
 from .test_tools_common import ToolTesterMixin
 

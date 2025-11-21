@@ -23,7 +23,7 @@ from datasets import load_dataset
 from huggingface_hub import ImageSegmentationOutputElement
 from huggingface_hub.utils import insecure_hashlib
 
-from sarah import (
+from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
@@ -36,7 +36,7 @@ from sarah import (
     is_vision_available,
     pipeline,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,

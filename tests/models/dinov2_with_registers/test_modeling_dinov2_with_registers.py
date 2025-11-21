@@ -16,14 +16,14 @@
 
 import unittest
 
-from sarah import Dinov2WithRegistersConfig
-from sarah.testing_utils import (
+from transformers import Dinov2WithRegistersConfig
+from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from sarah.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import (
+    from transformers import (
         Dinov2WithRegistersBackbone,
         Dinov2WithRegistersForImageClassification,
         Dinov2WithRegistersModel,
@@ -45,7 +45,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from sarah import AutoImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class Dinov2WithRegistersModelTester:

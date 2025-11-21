@@ -17,13 +17,13 @@
 import inspect
 import unittest
 
-from sarah import SwiftFormerConfig
-from sarah.testing_utils import (
+from transformers import SwiftFormerConfig
+from transformers.testing_utils import (
     require_tf,
     require_vision,
     slow,
 )
-from sarah.utils import cached_property, is_tf_available, is_vision_available
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -33,14 +33,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import TFSwiftFormerForImageClassification, TFSwiftFormerModel
-    from sarah.modeling_tf_utils import keras
+    from transformers import TFSwiftFormerForImageClassification, TFSwiftFormerModel
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import ViTImageProcessor
+    from transformers import ViTImageProcessor
 
 
 class TFSwiftFormerModelTester:

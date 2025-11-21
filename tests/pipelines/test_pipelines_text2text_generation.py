@@ -14,14 +14,14 @@
 
 import unittest
 
-from sarah import (
+from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     Text2TextGenerationPipeline,
     pipeline,
 )
-from sarah.testing_utils import is_pipeline_test, require_tf, require_torch
-from sarah.utils import is_torch_available
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+from transformers.utils import is_torch_available
 
 from .test_pipelines_common import ANY
 

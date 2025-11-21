@@ -15,7 +15,7 @@
 import unittest
 from typing import List, Optional, Tuple, Union
 
-from sarah.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):

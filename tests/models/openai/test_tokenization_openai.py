@@ -18,9 +18,9 @@ import json
 import os
 import unittest
 
-from sarah import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
-from sarah.models.openai.tokenization_openai import VOCAB_FILES_NAMES
-from sarah.testing_utils import require_ftfy, require_spacy, require_tokenizers
+from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from transformers.models.openai.tokenization_openai import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_ftfy, require_spacy, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

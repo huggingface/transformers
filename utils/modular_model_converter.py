@@ -28,8 +28,8 @@ from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
 
-from sarah import logging
-from sarah.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
+from transformers import logging
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
 
 logger = logging.get_logger(__name__)

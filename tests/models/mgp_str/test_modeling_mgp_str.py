@@ -18,9 +18,9 @@ import unittest
 
 import requests
 
-from sarah import MgpstrConfig
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import MgpstrConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -31,13 +31,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import MgpstrForSceneTextRecognition, MgpstrModel
+    from transformers import MgpstrForSceneTextRecognition, MgpstrModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import MgpstrProcessor
+    from transformers import MgpstrProcessor
 
 
 class MgpstrModelTester:

@@ -24,16 +24,16 @@ from typing import Optional
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from sarah.models.auto.processing_auto import processor_class_from_name
-from sarah.processing_utils import Unpack
-from sarah.testing_utils import (
+from transformers.models.auto.processing_auto import processor_class_from_name
+from transformers.processing_utils import Unpack
+from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_av,
     require_librosa,
     require_torch,
     require_vision,
 )
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 
 global_rng = random.Random()

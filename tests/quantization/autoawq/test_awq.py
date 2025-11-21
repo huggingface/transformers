@@ -17,8 +17,8 @@ import gc
 import tempfile
 import unittest
 
-from sarah import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
-from sarah.testing_utils import (
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
+from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
     require_auto_awq,
@@ -29,7 +29,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_accelerate_available, is_torch_available
 
 
 if is_torch_available():
@@ -138,7 +138,7 @@ class AwqTest(unittest.TestCase):
         """
         from awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
 
-        from sarah.integrations.awq import replace_with_awq_linear
+        from transformers.integrations.awq import replace_with_awq_linear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
@@ -402,7 +402,7 @@ class AwqFusedTest(unittest.TestCase):
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
     def test_generation_llava_fused(self):
-        from sarah import pipeline
+        from transformers import pipeline
 
         quantization_config = AwqConfig(do_fuse=True, fuse_max_seq_len=2048)
 

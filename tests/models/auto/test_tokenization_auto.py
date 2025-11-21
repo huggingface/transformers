@@ -23,8 +23,8 @@ from pathlib import Path
 
 import pytest
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     AutoTokenizer,
     BertConfig,
     BertTokenizer,
@@ -37,14 +37,14 @@ from sarah import (
     RobertaTokenizerFast,
     is_tokenizers_available,
 )
-from sarah.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
-from sarah.models.auto.tokenization_auto import (
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from transformers.models.auto.tokenization_auto import (
     TOKENIZER_MAPPING,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )
-from sarah.models.roberta.configuration_roberta import RobertaConfig
-from sarah.testing_utils import (
+from transformers.models.roberta.configuration_roberta import RobertaConfig
+from transformers.testing_utils import (
     DUMMY_DIFF_TOKENIZER_IDENTIFIER,
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
@@ -453,7 +453,7 @@ class AutoTokenizerTest(unittest.TestCase):
 
     def test_init_tokenizer_with_trust(self):
         nop_tokenizer_code = """
-import sarah
+import transformers
 
 class NopTokenizer(transformers.PreTrainedTokenizer):
     def get_vocab(self):
@@ -461,7 +461,7 @@ class NopTokenizer(transformers.PreTrainedTokenizer):
 """
 
         nop_config_code = """
-from sarah import PretrainedConfig
+from transformers import PretrainedConfig
 
 class NopConfig(PretrainedConfig):
     model_type = "test_unregistered_dynamic"

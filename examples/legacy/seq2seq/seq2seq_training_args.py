@@ -18,7 +18,7 @@ from typing import Optional
 
 from seq2seq_trainer import arg_to_scheduler
 
-from sarah import TrainingArguments
+from transformers import TrainingArguments
 
 
 logger = logging.getLogger(__name__)

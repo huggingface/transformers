@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 
-from sarah import LlavaConfig
+from transformers import LlavaConfig
 
 
 class LlavaConfigTest(unittest.TestCase):

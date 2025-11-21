@@ -16,8 +16,8 @@
 
 import unittest
 
-from sarah.testing_utils import require_torch, require_vision, slow
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -25,7 +25,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from PIL import Image
 
-    from sarah import AutoProcessor, Owlv2ForObjectDetection, Owlv2ImageProcessor
+    from transformers import AutoProcessor, Owlv2ForObjectDetection, Owlv2ImageProcessor
 
 if is_torch_available():
     import torch

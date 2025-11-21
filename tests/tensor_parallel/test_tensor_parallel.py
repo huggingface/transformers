@@ -16,8 +16,8 @@ import subprocess
 import tempfile
 import textwrap
 
-from sarah import is_torch_available
-from sarah.testing_utils import (
+from transformers import is_torch_available
+from transformers.testing_utils import (
     TestCasePlus,
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
@@ -53,7 +53,7 @@ class TestTensorParallel(TestCasePlus):
             """
             import torch
             import os
-            from sarah import AutoModelForCausalLM, AutoTokenizer
+            from transformers import AutoModelForCausalLM, AutoTokenizer
 
             model_id = "JackFram/llama-68m"
 

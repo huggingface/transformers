@@ -19,9 +19,9 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from sarah import Speech2TextConfig
-from sarah.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
-from sarah.utils import cached_property, is_tf_available
+from transformers import Speech2TextConfig
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.utils import cached_property, is_tf_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
@@ -31,7 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration, TFSpeech2TextModel
+    from transformers import Speech2TextProcessor, TFSpeech2TextForConditionalGeneration, TFSpeech2TextModel
 
 
 def prepare_speech_to_text_inputs_dict(

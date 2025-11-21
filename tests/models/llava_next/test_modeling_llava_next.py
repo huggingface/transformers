@@ -20,14 +20,14 @@ import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from sarah import (
+from transformers import (
     AutoProcessor,
     LlavaNextConfig,
     LlavaNextForConditionalGeneration,
     is_torch_available,
     is_vision_available,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -48,7 +48,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from sarah.models.llava_next.modeling_llava_next import image_size_to_num_patches
+    from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
 
 
 if is_vision_available():

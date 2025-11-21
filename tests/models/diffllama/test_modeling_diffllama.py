@@ -22,8 +22,8 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from sarah import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
-from sarah.testing_utils import (
+from transformers import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
     require_bitsandbytes,
@@ -46,14 +46,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         DiffLlamaForCausalLM,
         DiffLlamaForQuestionAnswering,
         DiffLlamaForSequenceClassification,
         DiffLlamaForTokenClassification,
         DiffLlamaModel,
     )
-    from sarah.models.diffllama.modeling_diffllama import (
+    from transformers.models.diffllama.modeling_diffllama import (
         DiffLlamaRotaryEmbedding,
     )
 

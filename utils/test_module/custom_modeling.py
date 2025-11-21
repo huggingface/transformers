@@ -1,6 +1,6 @@
 import torch
 
-from sarah import PreTrainedModel
+from transformers import PreTrainedModel
 
 from .custom_configuration import CustomConfig, NoSuperInitConfig
 

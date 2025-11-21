@@ -21,15 +21,15 @@ from collections.abc import Mapping
 
 from parameterized import parameterized
 
-from sarah import GemmaTokenizer, ShieldGemma2Processor
-from sarah.testing_utils import get_tests_dir, require_vision
-from sarah.utils import is_vision_available
+from transformers import GemmaTokenizer, ShieldGemma2Processor
+from transformers.testing_utils import get_tests_dir, require_vision
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import Gemma3ImageProcessor
+    from transformers import Gemma3ImageProcessor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 

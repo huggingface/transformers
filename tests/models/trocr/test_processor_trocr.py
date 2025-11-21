@@ -5,19 +5,19 @@ import unittest
 
 import pytest
 
-from sarah.models.xlm_roberta.tokenization_xlm_roberta import VOCAB_FILES_NAMES
-from sarah.testing_utils import (
+from transformers.models.xlm_roberta.tokenization_xlm_roberta import VOCAB_FILES_NAMES
+from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_vision,
 )
-from sarah.utils import is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import TrOCRProcessor, ViTImageProcessor, XLMRobertaTokenizerFast
+    from transformers import TrOCRProcessor, ViTImageProcessor, XLMRobertaTokenizerFast
 
 
 @require_sentencepiece

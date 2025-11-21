@@ -17,8 +17,8 @@
 import unittest
 from typing import List, Tuple
 
-from sarah import CanineConfig, is_torch_available
-from sarah.testing_utils import require_torch, slow, torch_device
+from transformers import CanineConfig, is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
@@ -28,7 +28,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         CanineForMultipleChoice,
         CanineForQuestionAnswering,
         CanineForSequenceClassification,

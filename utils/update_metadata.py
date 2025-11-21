@@ -40,7 +40,7 @@ import pandas as pd
 from datasets import Dataset
 from huggingface_hub import hf_hub_download, upload_folder
 
-from sarah.utils import direct_transformers_import
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command

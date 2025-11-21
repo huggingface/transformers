@@ -40,8 +40,8 @@ import tensorflow as tf
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     CONFIG_MAPPING,
     CONFIG_NAME,
     TF2_WEIGHTS_NAME,
@@ -55,8 +55,8 @@ from sarah import (
     create_optimizer,
     set_seed,
 )
-from sarah.utils import send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)

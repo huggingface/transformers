@@ -18,14 +18,14 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from sarah import HieraConfig
-from sarah.testing_utils import (
+from transformers import HieraConfig
+from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from sarah.utils import (
+from transformers.utils import (
     cached_property,
     is_torch_available,
     is_vision_available,
@@ -41,12 +41,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import HieraBackbone, HieraForImageClassification, HieraForPreTraining, HieraModel
+    from transformers import HieraBackbone, HieraForImageClassification, HieraForPreTraining, HieraModel
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import AutoImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class HieraModelTester:

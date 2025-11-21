@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from sarah import (
+from transformers import (
     AutoModelForSeq2SeqLM,
     BertTokenizer,
     DataCollatorForSeq2Seq,
@@ -22,8 +22,8 @@ from sarah import (
     Seq2SeqTrainingArguments,
     T5Tokenizer,
 )
-from sarah.testing_utils import TestCasePlus, require_sentencepiece, require_torch, slow
-from sarah.utils import is_datasets_available
+from transformers.testing_utils import TestCasePlus, require_sentencepiece, require_torch, slow
+from transformers.utils import is_datasets_available
 
 
 if is_datasets_available():

@@ -23,14 +23,14 @@ import unittest
 import numpy as np
 from pytest import mark
 
-from sarah import (
+from transformers import (
     EncodecConfig,
     MusicgenMelodyConfig,
     MusicgenMelodyDecoderConfig,
     PretrainedConfig,
     T5Config,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     is_torch_available,
     is_torchaudio_available,
     require_flash_attn,
@@ -43,7 +43,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import cached_property
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -54,7 +54,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         MusicgenMelodyForCausalLM,
         MusicgenMelodyForConditionalGeneration,
         MusicgenMelodyModel,
@@ -62,7 +62,7 @@ if is_torch_available():
     )
 
 if is_torchaudio_available():
-    from sarah import MusicgenMelodyProcessor
+    from transformers import MusicgenMelodyProcessor
 
 
 def _config_zero_init(config):

@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin
 
@@ -27,7 +27,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin
 if is_vision_available():
     from PIL import Image
 
-    from sarah import Idefics2ImageProcessor
+    from transformers import Idefics2ImageProcessor
 
 
 if is_torch_available():

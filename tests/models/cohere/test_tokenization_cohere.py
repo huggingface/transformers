@@ -17,8 +17,8 @@ import copy
 import unittest
 from functools import lru_cache
 
-from sarah import CohereTokenizerFast
-from sarah.testing_utils import require_jinja, require_tokenizers, require_torch_multi_gpu
+from transformers import CohereTokenizerFast
+from transformers.testing_utils import require_jinja, require_tokenizers, require_torch_multi_gpu
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

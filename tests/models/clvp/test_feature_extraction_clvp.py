@@ -22,15 +22,15 @@ import unittest
 import numpy as np
 from datasets import Audio, load_dataset
 
-from sarah import ClvpFeatureExtractor
-from sarah.testing_utils import (
+from transformers import ClvpFeatureExtractor
+from transformers.testing_utils import (
     check_json_file_has_correct_format,
     cleanup,
     require_torch,
     slow,
     torch_device,
 )
-from sarah.utils.import_utils import is_torch_available
+from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 

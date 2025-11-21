@@ -20,8 +20,8 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from sarah import ChameleonConfig, is_torch_available, is_vision_available, set_seed
-from sarah.testing_utils import (
+from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
     require_torch,
@@ -41,7 +41,7 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         ChameleonForConditionalGeneration,
         ChameleonModel,
         ChameleonProcessor,

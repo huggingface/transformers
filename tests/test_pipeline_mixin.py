@@ -38,8 +38,8 @@ from huggingface_hub import (
     ZeroShotImageClassificationInput,
 )
 
-from sarah.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
-from sarah.pipelines import (
+from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+from transformers.pipelines import (
     AudioClassificationPipeline,
     AutomaticSpeechRecognitionPipeline,
     DepthEstimationPipeline,
@@ -51,7 +51,7 @@ from sarah.pipelines import (
     VideoClassificationPipeline,
     ZeroShotImageClassificationPipeline,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     is_pipeline_test,
     require_av,
     require_pytesseract,
@@ -60,7 +60,7 @@ from sarah.testing_utils import (
     require_torch_or_tf,
     require_vision,
 )
-from sarah.utils import direct_transformers_import, logging
+from transformers.utils import direct_transformers_import, logging
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests

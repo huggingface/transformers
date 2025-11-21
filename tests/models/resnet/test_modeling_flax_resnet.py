@@ -15,9 +15,9 @@
 import inspect
 import unittest
 
-from sarah import ResNetConfig, is_flax_available
-from sarah.testing_utils import require_flax, slow
-from sarah.utils import cached_property, is_vision_available
+from transformers import ResNetConfig, is_flax_available
+from transformers.testing_utils import require_flax, slow
+from transformers.utils import cached_property, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
@@ -27,12 +27,12 @@ if is_flax_available():
     import jax
     import jax.numpy as jnp
 
-    from sarah.models.resnet.modeling_flax_resnet import FlaxResNetForImageClassification, FlaxResNetModel
+    from transformers.models.resnet.modeling_flax_resnet import FlaxResNetForImageClassification, FlaxResNetModel
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import AutoImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class FlaxResNetModelTester:

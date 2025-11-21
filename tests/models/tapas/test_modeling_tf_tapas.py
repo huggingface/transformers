@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from sarah import (
+from transformers import (
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_MASKED_LM_MAPPING,
     TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
@@ -35,9 +35,9 @@ from sarah import (
     TapasTokenizer,
     is_tf_available,
 )
-from sarah.models.auto import get_values
-from sarah.testing_utils import require_tensorflow_probability, require_tf, slow
-from sarah.utils import cached_property
+from transformers.models.auto import get_values
+from transformers.testing_utils import require_tensorflow_probability, require_tf, slow
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -47,13 +47,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import (
+    from transformers import (
         TFTapasForMaskedLM,
         TFTapasForQuestionAnswering,
         TFTapasForSequenceClassification,
         TFTapasModel,
     )
-    from sarah.models.tapas.modeling_tf_tapas import (
+    from transformers.models.tapas.modeling_tf_tapas import (
         IndexMap,
         ProductIndexMap,
         flatten,

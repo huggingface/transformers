@@ -32,7 +32,7 @@ from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
-from sarah import (
+from transformers import (
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
@@ -42,14 +42,14 @@ from sarah import (
     logging,
     set_seed,
 )
-from sarah.integrations import HfDeepSpeedConfig
-from sarah.integrations.deepspeed import (
+from transformers.integrations import HfDeepSpeedConfig
+from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
-from sarah.models.auto import get_values
-from sarah.models.auto.modeling_auto import (
+from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES,
     MODEL_FOR_BACKBONE_MAPPING_NAMES,
@@ -72,7 +72,7 @@ from sarah.models.auto.modeling_auto import (
     MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     CaptureLogger,
     hub_retry,
     is_flaky,
@@ -95,7 +95,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import (
+from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
@@ -105,7 +105,7 @@ from sarah.utils import (
     is_torch_fx_available,
     is_torch_sdpa_available,
 )
-from sarah.utils.generic import ContextManagers
+from transformers.utils.generic import ContextManagers
 
 from .generation.test_utils import GenerationTesterMixin
 
@@ -121,13 +121,13 @@ if is_torch_available():
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
-    from sarah import MODEL_MAPPING, AdaptiveEmbedding
-    from sarah.cache_utils import Cache, DynamicCache
-    from sarah.modeling_utils import load_state_dict, no_init_weights
-    from sarah.pytorch_utils import id_tensor_storage
+    from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers.cache_utils import Cache, DynamicCache
+    from transformers.modeling_utils import load_state_dict, no_init_weights
+    from transformers.pytorch_utils import id_tensor_storage
 
 if is_torch_fx_available():
-    from sarah.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
+    from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
 
 if is_deepspeed_available():
     import deepspeed
@@ -173,7 +173,7 @@ def _mock_all_init_weights(self):
     if self.config.pruned_heads:
         self.prune_heads(self.config.pruned_heads)
 
-    import sarah.modeling_utils
+    import transformers.modeling_utils
 
     if transformers.modeling_utils._init_weights:
         for module in self.modules():

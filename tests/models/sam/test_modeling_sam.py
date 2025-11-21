@@ -19,9 +19,9 @@ import unittest
 
 import requests
 
-from sarah import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from sarah.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
-from sarah.utils import is_torch_available, is_vision_available
+from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
+from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import SamModel, SamProcessor, SamVisionModel
+    from transformers import SamModel, SamProcessor, SamVisionModel
 
 
 if is_vision_available():

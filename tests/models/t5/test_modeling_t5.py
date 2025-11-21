@@ -20,10 +20,10 @@ import pickle
 import tempfile
 import unittest
 
-from sarah import T5Config, is_torch_available
-from sarah.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
-from sarah.pytorch_utils import is_torch_greater_or_equal_than_2_4
-from sarah.testing_utils import (
+from transformers import T5Config, is_torch_available
+from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
+from transformers.testing_utils import (
     cleanup,
     require_accelerate,
     require_sentencepiece,
@@ -33,7 +33,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import cached_property, is_torch_fx_available
+from transformers.utils import cached_property, is_torch_fx_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -42,14 +42,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_fx_available():
-    from sarah.utils.fx import symbolic_trace
+    from transformers.utils.fx import symbolic_trace
 
 
 if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    from sarah import (
+    from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
         T5EncoderModel,
@@ -1710,7 +1710,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest("This test requires torch >= 2.4 to run.")
 
-        from sarah.integrations.executorch import Seq2SeqLMEncoderExportableModule
+        from transformers.integrations.executorch import Seq2SeqLMEncoderExportableModule
 
         model_id = "google-t5/t5-small"
         device = "cpu"
@@ -1746,8 +1746,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest("This test requires torch >= 2.4 to run.")
 
-        from sarah import AutoModelForSeq2SeqLM, T5ForConditionalGeneration
-        from sarah.integrations.executorch import Seq2SeqLMDecoderExportableModuleWithStaticCache
+        from transformers import AutoModelForSeq2SeqLM, T5ForConditionalGeneration
+        from transformers.integrations.executorch import Seq2SeqLMDecoderExportableModuleWithStaticCache
 
         model_id = "google-t5/t5-small"
 
@@ -1807,8 +1807,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         if not is_torch_greater_or_equal_than_2_4:
             self.skipTest("This test requires torch >= 2.4 to run.")
 
-        from sarah import AutoModelForSeq2SeqLM, AutoTokenizer, T5ForConditionalGeneration
-        from sarah.integrations.executorch import Seq2SeqLMExportableModule
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, T5ForConditionalGeneration
+        from transformers.integrations.executorch import Seq2SeqLMExportableModule
 
         device = "cpu"
         batch_size = 1

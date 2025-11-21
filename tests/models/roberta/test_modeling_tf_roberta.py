@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import unittest
 
-from sarah import RobertaConfig, is_tf_available
-from sarah.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers import RobertaConfig, is_tf_available
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -30,7 +30,7 @@ if is_tf_available():
     import numpy
     import tensorflow as tf
 
-    from sarah.models.roberta.modeling_tf_roberta import (
+    from transformers.models.roberta.modeling_tf_roberta import (
         TFRobertaForCausalLM,
         TFRobertaForMaskedLM,
         TFRobertaForMultipleChoice,

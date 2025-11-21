@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 
-from sarah.models.bert.modeling_bert import BertModel
+from transformers.models.bert.modeling_bert import BertModel
 
 from ...modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 

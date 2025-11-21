@@ -26,7 +26,7 @@ from unittest import mock
 
 from accelerate.utils import write_basic_config
 
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
     run_command,

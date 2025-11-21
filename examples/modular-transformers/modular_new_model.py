@@ -1,6 +1,6 @@
 # Example where we only want to overwrite the defaults of an init
 
-from sarah.models.gemma.configuration_gemma import GemmaConfig
+from transformers.models.gemma.configuration_gemma import GemmaConfig
 
 
 class NewModelConfig(GemmaConfig):

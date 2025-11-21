@@ -21,9 +21,9 @@ from typing import Optional
 
 import numpy as np
 
-from sarah import MllamaProcessor
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_vision_available
+from transformers import MllamaProcessor
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 

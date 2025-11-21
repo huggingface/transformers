@@ -2,7 +2,7 @@ import time
 
 import torch
 
-from sarah import AutoModel, AutoTokenizer, pipeline
+from transformers import AutoModel, AutoTokenizer, pipeline
 
 
 test_sentence = 'Do you [MASK] the muffin man?'

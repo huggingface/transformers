@@ -1,6 +1,6 @@
 # Note that zamba does not have the `apply_rotary_pos_emb` function!
-from sarah.models.llama.modeling_llama import apply_rotary_pos_emb
-from sarah.models.zamba.modeling_zamba import ZambaAttention
+from transformers.models.llama.modeling_llama import apply_rotary_pos_emb
+from transformers.models.zamba.modeling_zamba import ZambaAttention
 
 
 # When following ZambaAttention dependencies, the function `apply_rotary_pos_emb` is not present

@@ -19,11 +19,11 @@ import os
 import unittest
 from functools import lru_cache
 
-from sarah.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import (
+from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import (
     VOCAB_FILES_NAMES,
     GPTNeoXJapaneseTokenizer,
 )
-from sarah.testing_utils import require_tokenizers, slow
+from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

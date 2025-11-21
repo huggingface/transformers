@@ -20,9 +20,9 @@ import os
 import unittest
 from functools import lru_cache
 
-from sarah import AddedToken, Qwen2Tokenizer, Qwen2TokenizerFast
-from sarah.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES, bytes_to_unicode
-from sarah.testing_utils import require_tokenizers, slow
+from transformers import AddedToken, Qwen2Tokenizer, Qwen2TokenizerFast
+from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES, bytes_to_unicode
+from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 

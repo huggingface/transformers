@@ -22,9 +22,9 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from pytest import mark
 
-from sarah import VideoMAEConfig
-from sarah.models.auto import get_values
-from sarah.testing_utils import (
+from transformers import VideoMAEConfig
+from transformers.models.auto import get_values
+from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
@@ -33,7 +33,7 @@ from sarah.testing_utils import (
     slow,
     torch_device,
 )
-from sarah.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -44,7 +44,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from sarah import (
+    from transformers import (
         MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
         VideoMAEForPreTraining,
         VideoMAEForVideoClassification,
@@ -53,7 +53,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from sarah import VideoMAEImageProcessor
+    from transformers import VideoMAEImageProcessor
 
 
 class VideoMAEModelTester:

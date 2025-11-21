@@ -18,10 +18,10 @@ import unittest
 
 import requests
 
-from sarah import Dinov2Config, PromptDepthAnythingConfig
-from sarah.file_utils import is_torch_available, is_vision_available
-from sarah.pytorch_utils import is_torch_greater_or_equal_than_2_4
-from sarah.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers import Dinov2Config, PromptDepthAnythingConfig
+from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -31,13 +31,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import PromptDepthAnythingForDepthEstimation
+    from transformers import PromptDepthAnythingForDepthEstimation
 
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import AutoImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class PromptDepthAnythingModelTester:

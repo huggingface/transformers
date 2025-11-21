@@ -20,8 +20,8 @@ import unittest
 
 import numpy as np
 
-from sarah.testing_utils import require_torch, require_vision, slow
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
@@ -29,12 +29,12 @@ from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProc
 if is_torch_available():
     import torch
 
-    from sarah.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+    from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 if is_vision_available():
     from PIL import Image
 
-    from sarah import GroundingDinoImageProcessor
+    from transformers import GroundingDinoImageProcessor
 
 
 class GroundingDinoImageProcessingTester:

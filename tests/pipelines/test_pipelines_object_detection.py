@@ -17,7 +17,7 @@ import unittest
 import datasets
 from huggingface_hub import ObjectDetectionOutputElement
 
-from sarah import (
+from transformers import (
     MODEL_FOR_OBJECT_DETECTION_MAPPING,
     AutoFeatureExtractor,
     AutoModelForObjectDetection,
@@ -25,7 +25,7 @@ from sarah import (
     is_vision_available,
     pipeline,
 )
-from sarah.testing_utils import (
+from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,

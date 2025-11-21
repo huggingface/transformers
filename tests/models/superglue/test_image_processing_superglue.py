@@ -15,8 +15,8 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -28,10 +28,10 @@ if is_torch_available():
     import numpy as np
     import torch
 
-    from sarah.models.superglue.modeling_superglue import KeypointMatchingOutput
+    from transformers.models.superglue.modeling_superglue import KeypointMatchingOutput
 
 if is_vision_available():
-    from sarah import SuperGlueImageProcessor
+    from transformers import SuperGlueImageProcessor
 
 
 def random_array(size):

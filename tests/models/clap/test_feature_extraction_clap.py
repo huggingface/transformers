@@ -21,10 +21,10 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from sarah import ClapFeatureExtractor
-from sarah.testing_utils import require_torch, require_torchaudio
-from sarah.trainer_utils import set_seed
-from sarah.utils.import_utils import is_torch_available
+from transformers import ClapFeatureExtractor
+from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.trainer_utils import set_seed
+from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 

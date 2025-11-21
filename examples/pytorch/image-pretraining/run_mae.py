@@ -24,8 +24,8 @@ from datasets import load_dataset
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
 from torchvision.transforms.functional import InterpolationMode
 
-import sarah
-from sarah import (
+import transformers
+from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
@@ -33,9 +33,9 @@ from sarah import (
     ViTMAEConfig,
     ViTMAEForPreTraining,
 )
-from sarah.trainer_utils import get_last_checkpoint
-from sarah.utils import check_min_version, send_example_telemetry
-from sarah.utils.versions import require_version
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
 
 """ Pre-training a 🤗 ViT model as an MAE (masked autoencoder), as proposed in https://arxiv.org/abs/2111.06377."""

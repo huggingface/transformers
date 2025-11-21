@@ -18,8 +18,8 @@ import unittest
 
 from parameterized import parameterized
 
-from sarah import AutoTokenizer, DynamicCache, GPTNeoXConfig, is_torch_available, set_seed
-from sarah.testing_utils import require_torch, slow, torch_device
+from transformers import AutoTokenizer, DynamicCache, GPTNeoXConfig, is_torch_available, set_seed
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -30,14 +30,14 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from sarah import (
+    from transformers import (
         GPTNeoXForCausalLM,
         GPTNeoXForQuestionAnswering,
         GPTNeoXForSequenceClassification,
         GPTNeoXForTokenClassification,
         GPTNeoXModel,
     )
-    from sarah.models.gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
+    from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 
 
 class GPTNeoXModelTester:

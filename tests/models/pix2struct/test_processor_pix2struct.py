@@ -17,14 +17,14 @@ import unittest
 
 import pytest
 
-from sarah.testing_utils import require_torch, require_vision
-from sarah.utils import is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from sarah import (
+    from transformers import (
         AutoProcessor,
         Pix2StructImageProcessor,
         Pix2StructProcessor,

@@ -23,7 +23,7 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
-from sarah.testing_utils import HfDoctestModule, HfDocTestParser
+from transformers.testing_utils import HfDoctestModule, HfDocTestParser
 
 
 NOT_DEVICE_TESTS = {
@@ -94,13 +94,13 @@ def pytest_collection_modifyitems(items):
 
 
 def pytest_addoption(parser):
-    from sarah.testing_utils import pytest_addoption_shared
+    from transformers.testing_utils import pytest_addoption_shared
 
     pytest_addoption_shared(parser)
 
 
 def pytest_terminal_summary(terminalreporter):
-    from sarah.testing_utils import pytest_terminal_summary_main
+    from transformers.testing_utils import pytest_terminal_summary_main
 
     make_reports = terminalreporter.config.getoption("--make-reports")
     if make_reports:

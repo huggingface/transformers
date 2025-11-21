@@ -14,8 +14,8 @@
 
 import unittest
 
-from sarah import BigBirdConfig, is_flax_available
-from sarah.testing_utils import require_flax, slow
+from transformers import BigBirdConfig, is_flax_available
+from transformers.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -23,7 +23,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 if is_flax_available():
     import jax
 
-    from sarah.models.big_bird.modeling_flax_big_bird import (
+    from transformers.models.big_bird.modeling_flax_big_bird import (
         FlaxBigBirdForCausalLM,
         FlaxBigBirdForMaskedLM,
         FlaxBigBirdForMultipleChoice,

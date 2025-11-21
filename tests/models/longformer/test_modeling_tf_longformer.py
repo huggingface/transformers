@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import unittest
 
-from sarah import is_tf_available
-from sarah.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers import is_tf_available
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -29,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from sarah import (
+    from transformers import (
         LongformerConfig,
         TFLongformerForMaskedLM,
         TFLongformerForMultipleChoice,
@@ -38,8 +38,8 @@ if is_tf_available():
         TFLongformerForTokenClassification,
         TFLongformerModel,
     )
-    from sarah.models.longformer.modeling_tf_longformer import TFLongformerSelfAttention
-    from sarah.tf_utils import shape_list
+    from transformers.models.longformer.modeling_tf_longformer import TFLongformerSelfAttention
+    from transformers.tf_utils import shape_list
 
 
 class TFLongformerModelTester:
