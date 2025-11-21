@@ -684,7 +684,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        split_special_tokens: bool = False,
+        split_special_tokens: Optional[bool] = None,
         **kwargs,
     ) -> BatchEncoding:
         # Input validation (from _call_one)
@@ -758,6 +758,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             padding_side=padding_side,
         )
 
+        # Use self.split_special_tokens as default if not explicitly provided
+        if split_special_tokens is None:
+            split_special_tokens = self.split_special_tokens
+        
         if self._tokenizer.encode_special_tokens != split_special_tokens:
             self._tokenizer.encode_special_tokens = split_special_tokens
 
