@@ -73,6 +73,7 @@ def load_config_from_checkpoint(input_path: Path) -> NanoChatConfig:
             "num_attention_heads": model_config.get("n_head", 6),
             "num_key_value_heads": model_config.get("n_kv_head"),
             "max_position_embeddings": model_config.get("sequence_len", 2048),
+            "intermediate_size": model_config.get("intermediate_size", model_config.get("n_embd", 768) * 4),
         }
 
         # Try to load existing config.json for additional parameters
