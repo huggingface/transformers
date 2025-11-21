@@ -841,7 +841,6 @@ class AwqConfig(GPTQConfig):
 
         self.zero_point = zero_point
         self.version = version
-        self.exllama_config = exllama_config
         self.modules_to_not_convert = modules_to_not_convert
 
         super().__init__(bits=bits, group_size=group_size, backend=backend, **kwargs)
@@ -894,17 +893,7 @@ class AwqConfig(GPTQConfig):
                     f"You current version of `gptqmodel` does not support awq, "
                     f"please upgrade `gptqmodel` package to at least {MIN_GPTQMODEL_SUPPORT_AWQ_VERSION}."
                 )
-
-            if self.exllama_config is None:
-                self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
-            else:
-                if "version" not in self.exllama_config:
-                    raise ValueError("`exllama_config` needs to have a `version` key.")
-                elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                    exllama_version = self.exllama_config["version"]
-                    raise ValueError(
-                        f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                    )
+                
 
     def get_loading_attributes(self):
         attributes_dict = copy.deepcopy(self.__dict__)
