@@ -107,8 +107,6 @@ _import_structure = {
     "generation": [
         "AsyncTextIteratorStreamer",
         "CompileConfig",
-        "ContinuousBatchingManager",
-        "ContinuousMixin",
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
@@ -385,6 +383,8 @@ else:
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "ClassifierFreeGuidanceLogitsProcessor",
+            "ContinuousBatchingManager",
+            "ContinuousMixin",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
