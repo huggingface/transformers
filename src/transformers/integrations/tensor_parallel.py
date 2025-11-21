@@ -173,21 +173,20 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
         return tp_plan[module_name]
     return None
 
-
-str_to_dtype = {
-    "BOOL": torch.bool,
-    "U8": torch.uint8,
-    "I8": torch.int8,
-    "I16": torch.int16,
-    "F16": torch.float16,
-    "BF16": torch.bfloat16,
-    "I32": torch.int32,
-    "F32": torch.float32,
-    "F64": torch.float64,
-    "I64": torch.int64,
-    "F8_E4M3": torch.float8_e4m3fn,
-}
-
+if is_torch_available():
+    str_to_dtype = {
+        "BOOL": torch.bool,
+        "U8": torch.uint8,
+        "I8": torch.int8,
+        "I16": torch.int16,
+        "F16": torch.float16,
+        "BF16": torch.bfloat16,
+        "I32": torch.int32,
+        "F32": torch.float32,
+        "F64": torch.float64,
+        "I64": torch.int64,
+        "F8_E4M3": torch.float8_e4m3fn,
+    }
 
 def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     """

@@ -167,6 +167,7 @@ class HfQuantizer(ABC):
 
     def param_element_size(self, model: "PreTrainedModel", param_name: str) -> float:
         "Return the element size (in bytes) for `param_name`."
+        from .quantizers_utils import get_parameter_or_buffer
         if self.param_needs_quantization(model, param_name):
             from accelerate.utils import CustomDtype
 
@@ -179,15 +180,7 @@ class HfQuantizer(ABC):
             # The value passed is actually not used when the method is overriden
             if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
                 return mapping[custom_dtype]
-        if hasattr(model, "get_parameter_or_buffer"):
-            return model.get_parameter_or_buffer(param_name).element_size()
-        elif hasattr(model, "get_parameter"):
-            try:
-                return model.get_parameter(param_name).element_size()
-            except AttributeError:
-                return model.get_buffer(param_name).element_size()
-        else:
-            raise ValueError(f"Model {model.__class__.__name__} does not have a get_parameter_or_buffer method")
+        return get_parameter_or_buffer(model, param_name).element_size()
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
