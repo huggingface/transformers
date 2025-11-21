@@ -148,6 +148,4 @@ class AwqQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # AWQ supports PEFT fine-tuning from version 0.2.0
-        MIN_AWQ_VERSION_FOR_PEFT = "0.2.0"
-        return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)
+        return version.parse(importlib.metadata.version("gptqmodel")) >= version.parse(5.0.0)
