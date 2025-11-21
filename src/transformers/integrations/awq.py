@@ -131,22 +131,22 @@ def replace_with_awq_linear(
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         if quantization_config.version == AWQLinearVersion.GEMM:
-            from gptqmodel.quantization.awq.modules.linear.gemm import WQLinear_GEMM
+            from gptqmodel.nn_modules.qlinear.awq_gemm import AwqGEMMQuantLinear
 
-            target_cls = WQLinear_GEMM
+            target_cls = AwqGEMMQuantLinear
         elif quantization_config.version == AWQLinearVersion.GEMV:
-            from gptqmodel.quantization.awq.modules.linear.gemv import WQLinear_GEMV
+            from gptqmodel.nn_modules.qlinear.awq_gemv import AwqGEMVQuantLinear
 
-            target_cls = WQLinear_GEMV
+            target_cls = AwqGEMVQuantLinear
         elif quantization_config.version == AWQLinearVersion.EXLLAMA:
             if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
-                from gptqmodel.quantization.awq.modules.linear.exllama import WQLinear_Exllama
+                from gptqmodel.nn_modules.qlinear.awq_exllama import AwqExllamaQuantLinear
 
-                target_cls = WQLinear_Exllama
+                target_cls = AwqExllamaQuantLinear
             elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
-                from gptqmodel.quantization.awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
+                from gptqmodel.nn_modules.qlinear.awq_exllamav2 import AwqExllamaV2QuantLinear
 
-                target_cls = WQLinear_ExllamaV2
+                target_cls = AwqExllamaV2QuantLinear
             else:
                 raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
         elif quantization_config.version == AWQLinearVersion.IPEX:
@@ -172,12 +172,15 @@ def replace_with_awq_linear(
                 out_features = module.out_features
 
                 model._modules[name] = target_cls(
-                    w_bit=quantization_config.bits,
+                    bits=quantization_config.bits,
+                    sym=quantization_config.sym,
+                    desc_act=quantization_config.desc_act,
                     group_size=quantization_config.group_size,
                     in_features=in_features,
                     out_features=out_features,
                     bias=module.bias is not None,
                     dev=module.weight.device,
+                    register_buffers=True,
                 )
                 has_been_replaced = True
 

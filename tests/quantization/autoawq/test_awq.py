@@ -150,8 +150,8 @@ class AwqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model has been converted properly
         """
-        from gptqmodel.quantization.awq.modules.linear import WQLinear_GEMM, WQLinear_GEMV
-
+        from gptqmodel.nn_modules.qlinear.awq_gemm import AwqGEMMQuantLinear
+        from gptqmodel.nn_modules.qlinear.awq_gemv import AwqGEMVQuantLinear
         from transformers.integrations.awq import replace_with_awq_linear
 
         model_id = "facebook/opt-350m"
@@ -169,7 +169,7 @@ class AwqTest(unittest.TestCase):
         model, _ = replace_with_awq_linear(model, quantization_config=quantization_config)
         nb_awq_linear = 0
         for module in model.modules():
-            if isinstance(module, (WQLinear_GEMM, WQLinear_GEMV)):
+            if isinstance(module, (AwqGEMMQuantLinear, AwqGEMVQuantLinear)):
                 nb_awq_linear += 1
 
         self.assertEqual(nb_linears, nb_awq_linear)
@@ -183,7 +183,7 @@ class AwqTest(unittest.TestCase):
         )
         nb_awq_linear = 0
         for module in model.modules():
-            if isinstance(module, (WQLinear_GEMM, WQLinear_GEMV)):
+            if isinstance(module, (AwqGEMMQuantLinear, AwqGEMVQuantLinear)):
                 nb_awq_linear += 1
 
         self.assertEqual(nb_linears - 1, nb_awq_linear)
