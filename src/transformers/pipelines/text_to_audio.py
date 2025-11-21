@@ -165,7 +165,8 @@ class TextToAudioPipeline(Pipeline):
             kwargs = new_kwargs
 
         preprocessor = self.processor if self.processor is not None else self.tokenizer
-        if self.model.config.model_type == "musicgen":
+        if self.model.config.model_type in ["musicgen"]:
+            # Fallback to legacy models that prefer tokenizer
             preprocessor = self.tokenizer
 
         if isinstance(text, Chat):
