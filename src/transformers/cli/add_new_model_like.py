@@ -23,12 +23,6 @@ from typing import Annotated, Any
 
 import typer
 
-from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
-from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
-from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
-from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
-from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 from ..utils import is_libcst_available
 from .add_fast_image_processor import add_fast_image_processor
 
@@ -128,6 +122,13 @@ class ModelInfos:
     """
 
     def __init__(self, lowercase_name: str):
+        from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
+        from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+        from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+        from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+        from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
+        from ..models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
+
         # Just to make sure it's indeed lowercase
         self.lowercase_name = lowercase_name.lower().replace(" ", "_").replace("-", "_")
         if self.lowercase_name not in CONFIG_MAPPING_NAMES:
@@ -676,6 +677,8 @@ def get_user_input():
     """
     Ask the user for the necessary inputs to add the new model.
     """
+    from transformers.models.auto.configuration_auto import MODEL_NAMES_MAPPING
+
     model_types = list(MODEL_NAMES_MAPPING.keys())
 
     # Get old model type

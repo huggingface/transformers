@@ -19,7 +19,6 @@ from transformers.cli.add_fast_image_processor import add_fast_image_processor
 from transformers.cli.add_new_model_like import add_new_model_like
 from transformers.cli.chat import Chat, ChatCommand
 from transformers.cli.download import download
-from transformers.cli.run import run
 from transformers.cli.serve import Serve
 from transformers.cli.system import env, version
 
@@ -31,7 +30,6 @@ app.command()(add_new_model_like)
 app.command(name="chat", cls=ChatCommand)(Chat)
 app.command()(download)
 app.command()(env)
-app.command()(run)
 app.command(name="serve")(Serve)
 app.command()(version)
 
