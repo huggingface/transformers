@@ -603,6 +603,11 @@ class Trainer:
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )
 
+        # Override for Sequence Parallelism: SP computes its own good_tokens count, so skip num_items_in_batch calculation
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            self.model_accepts_loss_kwargs = False
+
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
         self.compute_metrics = compute_metrics
@@ -2163,6 +2168,22 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
+    def get_sp_size(self) -> int:
+        """Get the sequence parallel size"""
+        if getattr(self.accelerator, "parallelism_config", None) is None:
+            return 1
+        else:
+            pc = self.accelerator.parallelism_config
+            return pc.sp_size
+
+    def get_cp_size(self) -> int:
+        """Get the context parallel size"""
+        if getattr(self.accelerator, "parallelism_config", None) is None:
+            return 1
+        else:
+            pc = self.accelerator.parallelism_config
+            return pc.cp_size
+
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
@@ -2180,8 +2201,19 @@ class Trainer:
     def get_total_train_batch_size(self, args) -> int:
         """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
 
-        Note: Only considers DP and TP (dp_world_size = world_size // tp_size)."""
-        dp_world_size = args.world_size // self.get_tp_size()
+        Accounts for all parallelism dimensions: TP, CP, and SP.
+
+        Formula: dp_world_size = world_size // (tp_size * cp_size * sp_size)
+
+        Where:
+        - TP (Tensor Parallelism): Model layers split across GPUs
+        - CP (Context Parallelism): Sequences split using Ring Attention (FSDP2)
+        - SP (Sequence Parallelism): Sequences split using ALST/Ulysses (DeepSpeed)
+
+        All dimensions are separate and multiplicative: world_size = dp_size * tp_size * cp_size * sp_size
+        """
+
+        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size()
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def _inner_training_loop(
@@ -2304,6 +2336,11 @@ class Trainer:
                 )
         else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
+
+        # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
@@ -3639,23 +3676,30 @@ class Trainer:
             getattr(self.accelerator, "parallelism_config", None) is not None
             and self.accelerator.parallelism_config.cp_enabled
         ):
-            if hasattr(model, "config"):
-                if model.config._attn_implementation != "sdpa":
-                    raise ValueError(
-                        f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
-                    )
+            if self.accelerator.parallelism_config.cp_backend == "torch":
+                if hasattr(model, "config"):
+                    if model.config._attn_implementation != "sdpa":
+                        raise ValueError(
+                            f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
+                        )
+
+                if "shift_labels" not in inputs:
+                    logger.warning_once("Shift labels not found in the inputs, shifting manually")
+                    if "labels" in inputs:
+                        _ignore_index = -100
+                        labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
+                        inputs["shift_labels"] = labels[:, 1:].contiguous()
+
+            # note: we don't do anything for accelerator.parallelism_config.sp_backend == "deepspeed" since:
+            # - accelerator.parallelism_config performs the `model.config._attn_implementation` checks already and it supports more than `dspa`
+            # - UlyssesSPDataLoaderAdapter called from Accelerate performs the `shift_label` creation - must not interfere
+            # - position_ids generation should be done by HF Trainer if it wasn't done by the user
 
             if "position_ids" not in inputs:
                 logger.warning_once("Position IDs not found in the inputs, generating manually")
                 inputs["position_ids"] = torch.arange(
                     inputs["input_ids"].size(1), device=inputs["input_ids"].device
                 ).expand(inputs["input_ids"].size(0), -1)
-            if "shift_labels" not in inputs:
-                logger.warning_once("Shift labels not found in the inputs, shifting manually")
-                if "labels" in inputs:
-                    _ignore_index = -100
-                    labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
-                    inputs["shift_labels"] = labels[:, 1:].contiguous()
 
             buffers = []
             buffer_seq_dims = []
@@ -3824,6 +3868,10 @@ class Trainer:
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            return self._deepspeed_sp_compute_loss(model, inputs, return_outputs, pc)
+
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
@@ -3877,6 +3925,55 @@ class Trainer:
 
         return (loss, outputs) if return_outputs else loss
 
+    def _deepspeed_sp_compute_loss(self, model, inputs, return_outputs, pc):
+        """
+        How the loss is computed by Trainer under sequence parallelism with sp_backend=="deepspeed" and sp_size>1.
+        Performs weighted loss aggregation across SP ranks, accounting for varying numbers of valid tokens per rank
+        (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
+
+        Args:
+            model (`nn.Module`):
+                The model to compute the loss for.
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
+                The input data for the model. Must include "shift_labels" key.
+            return_outputs (`bool`, *optional*, defaults to `False`):
+                Whether to return the model outputs along with the loss.
+            pc (`accelerate.parallelism_config.ParallelismConfig`):
+                self.accelerator.parallelism_config object (not None)
+
+        Returns:
+            The loss of the model along with its output if return_outputs was set to True
+        """
+
+        unwrapped_model = self.accelerator.unwrap_model(model)
+
+        outputs = model(**inputs)
+        shift_labels = inputs["shift_labels"]
+        loss = unwrapped_model.loss_function(
+            logits=outputs.logits,
+            labels=None,
+            shift_labels=shift_labels,
+            vocab_size=unwrapped_model.config.vocab_size,
+        )
+
+        sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
+        sp_world_size = pc.sp_size
+        # differentiable weighted per-shard-loss aggregation across ranks
+        losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+        # special dealing with SFT that has prompt tokens that aren't used in loss computation
+        good_tokens = (shift_labels != -100).view(-1).sum()
+        good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+        # Skip ranks with zero valid tokens
+        total_loss = sum(
+            losses_per_rank[rank] * good_tokens_per_rank[rank]
+            for rank in range(sp_world_size)
+            if good_tokens_per_rank[rank] > 0
+        )
+        total_good_tokens = sum(good_tokens_per_rank)
+        loss = total_loss / max(total_good_tokens, 1)
+
+        return (loss, outputs) if return_outputs else loss
+
     def is_local_process_zero(self) -> bool:
         """
         Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
@@ -3917,7 +4014,9 @@ class Trainer:
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
         elif getattr(self.accelerator, "parallelism_config", None) is not None:
-            if self.accelerator.should_save_model:
+            # DeepSpeed SP already handles checkpoint saving below, so skip manual save in that case
+            pc = getattr(self.accelerator, "parallelism_config")
+            if self.accelerator.should_save_model and not (pc.sp_enabled and pc.sp_backend == "deepspeed"):
                 self._save(output_dir)
         # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
         elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
@@ -4986,9 +5085,10 @@ class Trainer:
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
-            if not is_accelerate_available("1.10.1"):
+            min_accelerate_version = "1.12.0"
+            if not is_accelerate_available(min_accelerate_version):
                 raise ImportError(
-                    "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
+                    f"ParallelismConfig requires accelerate>={min_accelerate_version}). Please upgrade accelerate to use this feature."
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
@@ -5181,6 +5281,11 @@ class Trainer:
         # If max_steps is negative, we use the number of epochs to determine the number of total steps later
         epoch_based = max_steps < 0
         len_dataloader = len(dataloader) if has_length(dataloader) else None
+
+        # Account for Sequence Parallelism (SP) dataloader adapter's effect
+        sp_size = self.get_sp_size()
+        if sp_size > 1 and len_dataloader is not None:
+            len_dataloader = len_dataloader * sp_size
 
         # Case 2: We have a dataloader length and can extrapolate
         if len_dataloader is not None:
