@@ -359,7 +359,10 @@ class WeightConverter(WeightTransform):
         return collected_tensors, misc
 
 
-GLOBAL_WORKERS = min(16, (os.cpu_count() or 8) * 2)  # NVMe: 8-16; HDD/NFS: 2-4
+# For I/O bound operations (i.e. here reading files), it is better to have fewer threads, e.g. 4 is a good default.
+# Having too many is actually harming performances quite a lot, i.e. using 16 can sometimes lead to taking TWICE
+# as much time to load the same model
+GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
 def _materialize_copy(tensor, device=None, dtype=None):
