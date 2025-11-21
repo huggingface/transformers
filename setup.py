@@ -76,7 +76,7 @@ from setuptools import Command, find_packages, setup
 
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
-stale_egg_info = Path(__file__).parent / "transformers.egg-info"
+stale_egg_info = Path(__file__).parent / "sarah.egg-info"
 if stale_egg_info.exists():
     print(
         (
@@ -210,7 +210,7 @@ _deps = [
 # some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
-# since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
+# since we save this data in src/sarah/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
 #
 # python -c 'import sys; from transformers.dependency_versions_table import deps; \
@@ -240,7 +240,7 @@ class DepsTableUpdateCommand(Command):
     description = "build runtime dependency table"
     user_options = [
         # format: (long option, short option, description).
-        ("dep-table-update", None, "updates src/transformers/dependency_versions_table.py"),
+        ("dep-table-update", None, "updates src/sarah/dependency_versions_table.py"),
     ]
 
     def initialize_options(self):
@@ -260,7 +260,7 @@ class DepsTableUpdateCommand(Command):
             "}",
             "",
         ]
-        target = "src/transformers/dependency_versions_table.py"
+        target = "src/sarah/dependency_versions_table.py"
         print(f"updating {target}")
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
