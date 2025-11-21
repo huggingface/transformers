@@ -35,13 +35,12 @@ from ..utils.generic import GeneralInterface
 
 logger = logging.get_logger(__name__)
 
-# Cache this result has it's a C FFI call which can be pretty time-consuming
 if is_torch_available():
+    # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
 
-
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+    if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
 def initialize_tensor_parallelism(
