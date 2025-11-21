@@ -2339,10 +2339,41 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.smart_apply(self._initialize_weights)
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
-        """
+        r"""
         Return the expanded tied weight keys (in case they contain modules or regex patterns) for only the current
         model, or recursively for all submodels if `all_submodels=True` (i.e. it will re-check the config values for all
         submodels).
+
+        For almost all models, we only require to tie the embeddings, so the model has an internal property
+        `_tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}`. In this case, the mapping is already
+        "expanded", i.e. it already contains full parameters, and this function will simply return a copy of the property.
+        For more complex patterns, e.g. for `DFineForObjectDetection`, we have the following attribute
+        ```
+        _tied_weights_keys = {
+            r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+            r"class_embed.(?![0])\d+": "class_embed.0",
+            "model.decoder.class_embed": "class_embed",
+            "model.decoder.bbox_embed": "bbox_embed",
+        }
+        ```
+        In this case, the function looks up all the model's parameters and buffers, and matches all the params,
+        returning the following:
+        ```
+        {
+            'bbox_embed.1.layers.0.bias': 'bbox_embed.0.layers.0.bias',
+            'bbox_embed.1.layers.0.weight': 'bbox_embed.0.layers.0.weight',
+            'bbox_embed.1.layers.1.bias': 'bbox_embed.0.layers.1.bias',
+            'bbox_embed.1.layers.1.weight': 'bbox_embed.0.layers.1.weight',
+            'bbox_embed.1.layers.2.bias': 'bbox_embed.0.layers.2.bias',
+            'bbox_embed.1.layers.2.weight': 'bbox_embed.0.layers.2.weight',
+            'bbox_embed.2.layers.0.bias': 'bbox_embed.0.layers.0.bias',
+            'bbox_embed.2.layers.0.weight': 'bbox_embed.0.layers.0.weight',
+            'bbox_embed.2.layers.1.bias': 'bbox_embed.0.layers.1.bias',
+            'bbox_embed.2.layers.1.weight': 'bbox_embed.0.layers.1.weight',
+            ...
+        }
+        ```
+        i.e. all the parameters matching the regex and modules patterns in `_tied_weights_keys`
         """
         if all_submodels:
             expanded_tied_weights = {}
@@ -2406,52 +2437,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def tie_weights(self, missing_keys: Optional[set[str]] = None, recompute_mapping: bool = True):
         """
-        If set in the config, tie the weights between the input embeddings and the output embeddings,
-        and the encoder and decoder. This relies on the `_tied_weights_keys` dict.
-
-        This is very sensible! For many reasons and especially this one:
-        ```python
-        from torch import nn
-        import torch
-        class MyClass(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.proj = nn.Linear(8,8)
-                self.bias = nn.Parameter(torch.empty(8))
-                self.proj.bias = self.bias
-
-        c = MyClass()
-        print(list(c.named_parameters()))
-        ```
-        That's for a parameter, for a module, it will just remove the ones that are "shared" (that makes sense) and overwrite getattr for it.
-
-        ```python
-        from torch import nn
-        import torch
-        class Decoder(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.embedding = nn.Embedding(8,8)
-
-        class Encoder(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.embedding = nn.Embedding(8,8)
-
-        class EncoderDecoder(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.encoder = Encoder()
-                self.decoder = Decoder()
-                self.encoder.embedding = self.decoder.embedding # setattr is convenient
-
-        c = EncoderDecoder()
-        print(list(c.named_parameters()))
-        ```
-        Thus the order of the keys matters. If you tie `self.decoder.embedding` you can no longer tie anything inside it.
-
-        If you call this function, it will always tie. There is only 1 tricky case, if all weights are missing, you still want to mention that
-        the ones you tied were missing.
+        Tie the model weights. If `recompute_mapping=False` (default when called internally), it will rely on the
+        `model.all_tied_weights_keys` attribute, containing the `{target: source}` mapping for the tied params.
+        If `recompute_mapping=True`, it will re-check all internal submodels and their config to determine the params
+        that need to be tied.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
         if not recompute_mapping:
