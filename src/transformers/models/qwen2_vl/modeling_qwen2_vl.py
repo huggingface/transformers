@@ -1163,7 +1163,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             video_features is None or inputs_embeds[special_video_mask].numel() == video_features.numel(),
             lambda: f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}",
         )
-
         return special_image_mask, special_video_mask
 
     @auto_docstring
