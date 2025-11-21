@@ -2432,7 +2432,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 or len(target_params) % len(source_params) != 0
             ):
                 raise ValueError(
-                    f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
+                    f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. "
+                    f"We found {source_params} to tie into {target_params}"
                 )
             # we cycle source as it should be dispatch in many target if regex
             for target_n, source_n in zip(target_params, cycle(source_params)):
