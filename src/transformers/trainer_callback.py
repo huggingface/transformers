@@ -24,7 +24,7 @@ from typing import Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
+from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -69,7 +69,7 @@ class TrainerState:
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
-        log_history (`List[Dict[str, float]]`, *optional*):
+        log_history (`list[dict[str, float]]`, *optional*):
             The list of logs done since the beginning of training.
         best_metric (`float`, *optional*):
             When tracking the best model, the value of the best metric encountered so far.
@@ -88,7 +88,7 @@ class TrainerState:
         is_hyper_param_search (`bool`, *optional*, defaults to `False`):
             Whether we are in the process of a hyper parameter search using Trainer.hyperparameter_search. This will
             impact the way data will be logged in TensorBoard.
-        stateful_callbacks (`List[StatefulTrainerCallback]`, *optional*):
+        stateful_callbacks (`list[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
             Relevant callbacks should implement a `state` and `from_state` function.
     """
@@ -111,8 +111,8 @@ class TrainerState:
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
     trial_name: Optional[str] = None
-    trial_params: dict[str, Union[str, float, int, bool]] = None
-    stateful_callbacks: list["TrainerCallback"] = None
+    trial_params: Optional[dict[str, Union[str, float, int, bool]]] = None
+    stateful_callbacks: Optional[list["TrainerCallback"]] = None
 
     def __post_init__(self):
         if self.log_history is None:
@@ -172,15 +172,14 @@ class TrainerState:
         Stores the initial training references needed in `self`
         """
         if trainer.hp_name is not None and trainer._trial is not None:
-            # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
+            # use self._trial because the Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
             # parameter to Train when using DDP.
             self.trial_name = trainer.hp_name(trainer._trial)
         self.trial_params = None
         if trial is not None:
             from transformers.integrations import hp_params
 
-            assignments = trial.assignments if trainer.hp_search_backend == HPSearchBackend.SIGOPT else trial
-            self.trial_params = hp_params(assignments)
+            self.trial_params = hp_params(trial)
 
         self.max_steps = max_steps
         self.num_train_epochs = num_train_epochs
@@ -309,8 +308,6 @@ class TrainerCallback:
             The object that is returned to the [`Trainer`] and can be used to make some decisions.
         model ([`PreTrainedModel`] or `torch.nn.Module`):
             The model being trained.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data. This is deprecated in favour of `processing_class`.
         processing_class ([`PreTrainedTokenizer` or `BaseImageProcessor` or `ProcessorMixin` or `FeatureExtractionMixin`]):
             The processing class used for encoding the data. Can be a tokenizer, a processor, an image processor or a feature extractor.
         optimizer (`torch.optim.Optimizer`):
@@ -321,11 +318,11 @@ class TrainerCallback:
             The current dataloader used for training.
         eval_dataloader (`torch.utils.data.DataLoader`, *optional*):
             The current dataloader used for evaluation.
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics computed by the last evaluation phase.
 
             Those are only accessible in the event `on_evaluate`.
-        logs  (`Dict[str, float]`):
+        logs  (`dict[str, float]`):
             The values to log.
 
             Those are only accessible in the event `on_log`.
@@ -351,93 +348,78 @@ class TrainerCallback:
         """
         Event called at the end of the initialization of the [`Trainer`].
         """
-        pass
 
     def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the beginning of training.
         """
-        pass
 
     def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the end of training.
         """
-        pass
 
     def on_epoch_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the beginning of an epoch.
         """
-        pass
 
     def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the end of an epoch.
         """
-        pass
 
     def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the beginning of a training step. If using gradient accumulation, one training step might take
         several inputs.
         """
-        pass
 
     def on_pre_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called before the optimizer step but after gradient clipping. Useful for monitoring gradients.
         """
-        pass
 
     def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after the optimizer step but before gradients are zeroed out. Useful for monitoring gradients.
         """
-        pass
 
     def on_substep_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the end of an substep during gradient accumulation.
         """
-        pass
 
     def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called at the end of a training step. If using gradient accumulation, one training step might take
         several inputs.
         """
-        pass
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after an evaluation phase.
         """
-        pass
 
     def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics, **kwargs):
         """
         Event called after a successful prediction.
         """
-        pass
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after a checkpoint save.
         """
-        pass
 
     def on_log(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after logging the last logs.
         """
-        pass
 
     def on_prediction_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after a prediction step.
         """
-        pass
 
 
 class CallbackHandler(TrainerCallback):

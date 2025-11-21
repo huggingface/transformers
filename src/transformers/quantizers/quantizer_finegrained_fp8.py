@@ -1,9 +1,6 @@
-import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Optional
 
-from packaging import version
-
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -32,7 +29,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        if not is_torch_available() or version.parse(importlib.metadata.version("torch")) < version.parse("2.1.0"):
+        if not is_torch_available():
             raise ImportError(
                 "Using fp8 quantization requires torch >= 2.1.0"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
@@ -41,28 +38,24 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting into FP8 weights from tf/flax weights is currently not supported, "
-                "please make sure the weights are in PyTorch format."
-            )
+        if not (torch.cuda.is_available() or is_torch_xpu_available()):
+            raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed for FP8 quantization.")
+        if torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+            if (major < 8) or (major == 8 and minor < 9):
+                raise ValueError(
+                    "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
+                    f", actual = `{major}.{minor}`"
+                )
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
-        if (major < 8) or (major == 8 and minor < 9):
-            raise ValueError(
-                "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
-                f", actual = `{major}.{minor}`"
-            )
-
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
-                "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
-                "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
+                "You have loaded an FP8 model on CPU and have a CUDA or XPU device available, make sure to set "
+                "your model on a GPU or XPU device in order to run your model. To remove this warning, "
+                "pass device_map = 'cuda' or 'xpu'. "
             )
         elif device_map is not None:
             if (
@@ -76,29 +69,37 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the cpu/disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info("Setting torch_dtype to torch.float32 as no torch_dtype was specified in from_pretrained")
-            torch_dtype = torch.float32
-        return torch_dtype
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("Setting dtype to torch.float32 as no dtype was specified in from_pretrained")
+            dtype = torch.float32
+        return dtype
 
+    # TODO: make this into a `ConversionType` ops -> potentially requires all weights on all ranks
+    # depending on the layer type (moe -> no if ep)
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        **kwargs,
     ):
-        """
-        Quantizes weights to FP8 format using Block-wise quantization
-        """
-        from accelerate.utils import set_module_tensor_to_device
+        from ..integrations.finegrained_fp8 import FP8Linear
+        from ..modeling_utils import _load_parameter_into_model
 
-        set_module_tensor_to_device(model, param_name, target_device, param_value)
-
+        # Sanity checks
         module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, FP8Linear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                return
+                # if tensor_name == "weight_scale_inv":
+                #     raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+
+        param_value = param_value.to(target_device)
 
         # Get FP8 min/max values
         fp8_min = torch.finfo(torch.float8_e4m3fn).min
@@ -134,44 +135,35 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Reshape scale to match the number of blocks
         scale = scale.reshape(scale_orig_shape).squeeze().reciprocal()
 
-        module._buffers[tensor_name] = quantized_param.to(target_device)
-        module._buffers["weight_scale_inv"] = scale.to(target_device)
+        # Load into the model
+        _load_parameter_into_model(model, param_name, quantized_param)
+        _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: Dict[str, Any],
-        **kwargs,
-    ):
-        from ..integrations.finegrained_fp8 import FP8Linear
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        from ..integrations.finegrained_fp8 import FP8Expert, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-
-        if isinstance(module, FP8Linear):
+        if isinstance(module, (FP8Linear, FP8Expert)):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale_inv":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
+        # takes 2 fucking seconds
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
+        # while this one is 81ms :)
         model = replace_with_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
@@ -180,10 +172,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import FP8Linear
 
         not_missing_keys = []
@@ -198,9 +187,47 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                         not_missing_keys.append(missing)
         return [k for k in missing_keys if k not in not_missing_keys]
 
+    # NOTE: TP is applied before quantization so this is only to add hooks.
+    # Quantization is incompatible with DTensors, so we have to anyway have
+    # gathers! But it should be model independant -> figure out where to put
+    # the gather and that's it.
+    def update_tp_plan(self, config):
+        if "Qwen3" in config.__class__.__name__:
+            text_plan = {
+                "layers.*.self_attn.q_proj.weight": "local_colwise",
+                "layers.*.self_attn.q_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.k_proj.weight": "local_colwise",
+                "layers.*.self_attn.k_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.v_proj.weight": "local_colwise",
+                "layers.*.self_attn.v_proj.weight_scale_inv": "local_colwise",
+                "layers.*.self_attn.o_proj.weight": "local_rowwise",
+                "layers.*.self_attn.o_proj.weight_scale_inv": "local_rowwise",
+                "layers.*.self_attn": "gather",
+                "layers.*.mlp.gate_proj.weight": "local_colwise",
+                "layers.*.mlp.gate_proj.weight_scale_inv": "local_colwise",
+                "layers.*.mlp.up_proj.weight": "local_colwise",
+                "layers.*.mlp.up_proj.weight_scale_inv": "local_colwise",
+                "layers.*.mlp.down_proj.weight": "local_rowwise",
+                "layers.*.mlp.down_proj.weight_scale_inv": "local_rowwise",
+                "layers.*.mlp": "gather",
+            }
+
+            config.base_model_tp_plan = text_plan
+
+        return config
+
     def is_serializable(self, safe_serialization=None):
         return True
 
     @property
     def is_trainable(self) -> bool:
         return False
+
+    def get_accelerator_warm_up_factor(self):
+        # Pre-processing is done cleanly, so we can allocate everything here
+        return 2
+
+    def get_quantize_ops(self):
+        from ..integrations.finegrained_fp8 import Fp8Quantize
+
+        return Fp8Quantize(self)

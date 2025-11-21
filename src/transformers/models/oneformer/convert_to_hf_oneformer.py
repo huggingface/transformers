@@ -18,10 +18,11 @@
 import os
 import sys
 from argparse import ArgumentParser
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
-from typing import Any, Dict, Iterator, List, Set, Tuple
+from typing import Any
 
 import requests
 import torch
@@ -50,7 +51,7 @@ from transformers.models.oneformer.processing_oneformer import OneFormerProcesso
 from transformers.utils import logging
 
 
-StateDict = Dict[str, Tensor]
+StateDict = dict[str, Tensor]
 
 logging.set_verbosity_info()
 logger = logging.get_logger()
@@ -59,14 +60,14 @@ torch.manual_seed(0)
 
 
 class TrackedStateDict:
-    def __init__(self, to_track: Dict):
+    def __init__(self, to_track: dict):
         """This class "tracks" a python dictionary by keeping track of which item is accessed.
 
         Args:
             to_track (Dict): The dictionary we wish to track
         """
         self.to_track = to_track
-        self._seen: Set[str] = set()
+        self._seen: set[str] = set()
 
     def __getitem__(self, key: str) -> Any:
         return self.to_track[key]
@@ -75,16 +76,16 @@ class TrackedStateDict:
         self._seen.add(key)
         self.to_track[key] = item
 
-    def diff(self) -> List[str]:
+    def diff(self) -> list[str]:
         """This method returns a set difference between the keys in the tracked state dict and the one we have access so far.
         This is an effective method to check if we have update all the keys
 
         Returns:
-            List[str]: List of keys not yet updated
+            list[str]: List of keys not yet updated
         """
         return set(self.to_track.keys()) - self._seen
 
-    def copy(self) -> Dict:
+    def copy(self) -> dict:
         # proxy the call to the internal dictionary
         return self.to_track.copy()
 
@@ -242,7 +243,7 @@ class OriginalOneFormerCheckpointToOursConverter:
         self.original_model = original_model
         self.config = config
 
-    def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
+    def pop_all(self, renamed_keys: list[tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
@@ -921,18 +922,18 @@ class OriginalOneFormerCheckpointToOursConverter:
         return oneformer
 
     @staticmethod
-    def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[Tuple[object, Path, Path]]:
-        checkpoints: List[Path] = checkpoints_dir.glob("**/*.pth")
+    def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[tuple[object, Path, Path]]:
+        checkpoints: list[Path] = checkpoints_dir.glob("**/*.pth")
 
         for checkpoint in checkpoints:
-            logger.info(f"💪 Converting {checkpoint.stem}")
+            logger.info(f"Converting {checkpoint.stem}")
             # find associated config file
             config: Path = config_dir / f"{checkpoint.stem}.yaml"
 
             yield config, checkpoint
 
 
-def post_process_sem_seg_output(outputs: OneFormerForUniversalSegmentationOutput, target_size: Tuple[int, int]):
+def post_process_sem_seg_output(outputs: OneFormerForUniversalSegmentationOutput, target_size: tuple[int, int]):
     # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
     class_queries_logits = outputs.class_queries_logits
     # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
@@ -1053,7 +1054,7 @@ def test(
             "The segmentation image is not the same."
         )
 
-        logger.info("✅ Test passed!")
+        logger.info("Test passed!")
 
 
 def get_name(checkpoint_file: Path):
@@ -1174,7 +1175,7 @@ if __name__ == "__main__":
         )
 
         model_name = get_name(checkpoint_file)
-        logger.info(f"🪄 Saving {model_name}")
+        logger.info(f"Saving {model_name}")
 
         processor.save_pretrained(save_directory / model_name)
         oneformer_for_universal_segmentation.save_pretrained(save_directory / model_name)

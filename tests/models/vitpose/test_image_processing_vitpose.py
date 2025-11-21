@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -206,8 +205,8 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             boxes=boxes,
             return_tensors="pt",
             input_data_format="channels_last",
-            image_mean=0,
-            image_std=1,
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
         ).pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (len(boxes[0]), *expected_output_image_shape))
@@ -219,8 +218,8 @@ class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             boxes=boxes,
             return_tensors="pt",
             input_data_format="channels_last",
-            image_mean=0,
-            image_std=1,
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
         ).pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
         self.assertEqual(

@@ -360,7 +360,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=batch_size,
 ...     per_device_eval_batch_size=batch_size,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
@@ -386,7 +386,7 @@ def compute_metrics(eval_pred):
 
 **評価に関する注意事項**:
 
-[VideoMAE 論文](https://arxiv.org/abs/2203.12602) では、著者は次の評価戦略を使用しています。彼らはテスト ビデオからのいくつかのクリップでモデルを評価し、それらのクリップにさまざまなクロップを適用して、合計スコアを報告します。ただし、単純さと簡潔さを保つために、このチュートリアルではそれを考慮しません。
+[VideoMAE 論文](https://huggingface.co/papers/2203.12602) では、著者は次の評価戦略を使用しています。彼らはテスト ビデオからのいくつかのクリップでモデルを評価し、それらのクリップにさまざまなクロップを適用して、合計スコアを報告します。ただし、単純さと簡潔さを保つために、このチュートリアルではそれを考慮しません。
 
 また、サンプルをまとめてバッチ処理するために使用される `collat​​e_fn` を定義します。各バッチは、`pixel_values` と `labels` という 2 つのキーで構成されます。
 

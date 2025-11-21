@@ -14,38 +14,39 @@
 # limitations under the License.
 """FSMT configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DecoderConfig(PretrainedConfig):
+class DecoderConfig(PreTrainedConfig):
     r"""
     Configuration class for FSMT's decoder specific things. note: this is a private helper class
     """
 
     model_type = "fsmt_decoder"
 
-    def __init__(self, vocab_size=0, bos_token_id=0):
-        super().__init__()
+    def __init__(self, vocab_size=0, bos_token_id=0, is_encoder_decoder=True, **kwargs):
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.bos_token_id = bos_token_id
+        self.is_encoder_decoder = is_encoder_decoder
 
 
-class FSMTConfig(PretrainedConfig):
+class FSMTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to instantiate a FSMT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the FSMT
     [facebook/wmt19-en-ru](https://huggingface.co/facebook/wmt19-en-ru) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        langs (`List[str]`):
+        langs (`list[str]`):
             A list with source language and target_language (e.g., ['en', 'ru']).
         src_vocab_size (`int`):
             Vocabulary size of the encoder. Defines the number of different tokens that can be represented by the
@@ -133,6 +134,7 @@ class FSMTConfig(PretrainedConfig):
 
     model_type = "fsmt"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    sub_configs = {"decoder": DecoderConfig}
 
     # update the defaults from config file
     def __init__(
@@ -187,7 +189,12 @@ class FSMTConfig(PretrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
-        self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
+        self.decoder = DecoderConfig(
+            vocab_size=tgt_vocab_size,
+            bos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            num_hidden_layers=encoder_layers,
+        )
         if "decoder" in common_kwargs:
             del common_kwargs["decoder"]
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 HuggingFace Inc..
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ def get_results(output_dir):
     results = {}
     path = os.path.join(output_dir, "all_results.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             results = json.load(f)
     else:
         raise ValueError(f"can't find {path}")
@@ -56,7 +55,6 @@ class TorchXLAExamplesTests(TestCasePlus):
             ./examples/pytorch/text-classification/run_glue.py
             --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
             --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
             --do_train

@@ -1,17 +1,14 @@
-import importlib.metadata
 import inspect
-import warnings
-from copy import deepcopy
+from collections import defaultdict
 from inspect import signature
+from typing import Optional
 
-from packaging import version
-
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import (
     get_available_devices,
     is_accelerate_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_multi_backend_available,
-    is_ipex_available,
     is_torch_available,
     logging,
 )
@@ -19,6 +16,8 @@ from ..utils import (
 
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
+
+if is_torch_available():
     import torch
     import torch.nn as nn
 
@@ -28,124 +27,107 @@ if is_accelerate_available():
     import accelerate
     from accelerate import init_empty_weights
     from accelerate.hooks import add_hook_to_module, remove_hook_from_module
-    from accelerate.utils import find_tied_parameters
 
 logger = logging.get_logger(__name__)
 
 
-def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, quantized_stats=None):
-    """
-    A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
-    `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
-    function is adapted from `set_module_tensor_to_device` function from accelerate that is adapted to support the
-    class `Int8Params` from `bitsandbytes`.
+class Bnb4bitQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
 
-    Args:
-        module (`torch.nn.Module`):
-            The module in which the tensor we want to move lives.
-        tensor_name (`str`):
-            The full name of the parameter/buffer.
-        device (`int`, `str` or `torch.device`):
-            The device on which to set the tensor.
-        value (`torch.Tensor`, *optional*):
-            The value of the tensor (useful when going from the meta device to any other device).
-        quantized_stats (`dict[str, Any]`, *optional*):
-            Dict with items for either 4-bit or 8-bit serialization
-    """
-    # Recurse if needed
-    if "." in tensor_name:
-        splits = tensor_name.split(".")
-        for split in splits[:-1]:
-            new_module = getattr(module, split)
-            if new_module is None:
-                raise ValueError(f"{module} has no attribute {split}.")
-            module = new_module
-        tensor_name = splits[-1]
+    def convert(
+        self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys=None, **kwargs
+    ) -> dict[str, torch.Tensor]:
+        """
+        we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
+        """
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
 
-    if tensor_name not in module._parameters and tensor_name not in module._buffers:
-        raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
-    is_buffer = tensor_name in module._buffers
-    old_value = getattr(module, tensor_name)
+        full_name = target_key
+        # update param name to get the weights instead of the quantized stats
+        target_key = self.hf_quantizer.get_param_name(target_key)
+        module, _ = get_module_from_name(model, target_key)
 
-    if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
-        raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
-
-    prequantized_loading = quantized_stats is not None
-    if is_buffer or not is_bitsandbytes_available():
-        is_8bit = False
-        is_4bit = False
-    else:
-        is_4bit = hasattr(bnb.nn, "Params4bit") and isinstance(module._parameters[tensor_name], bnb.nn.Params4bit)
-        is_8bit = isinstance(module._parameters[tensor_name], bnb.nn.Int8Params)
-
-    if is_8bit or is_4bit:
-        param = module._parameters[tensor_name]
-        if param.device.type != "cuda":
-            if value is None:
-                new_value = old_value.to(device)
-            elif isinstance(value, torch.Tensor):
-                new_value = value.to("cpu")
-            else:
-                new_value = torch.tensor(value, device="cpu")
-
+        if not self.hf_quantizer.pre_quantized:
             # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
-            if issubclass(module.source_cls, Conv1D) and not prequantized_loading:
-                new_value = new_value.T
-
-            kwargs = old_value.__dict__
-
-            if prequantized_loading != (new_value.dtype in (torch.int8, torch.uint8)):
-                raise ValueError(
-                    f"Value dtype `{new_value.dtype}` is not compatible with parameter quantization status."
-                )
-
-            if is_8bit:
-                is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
-                    "0.37.2"
-                )
-                if new_value.dtype in (torch.int8, torch.uint8) and not is_8bit_serializable:
-                    raise ValueError(
-                        "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
-                        "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
-                    )
-                new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(device)
-                if prequantized_loading:
-                    setattr(new_value, "SCB", quantized_stats["SCB"].to(device))
-            elif is_4bit:
-                if prequantized_loading:
-                    is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-                        "0.41.3"
-                    )
-                    if new_value.dtype in (torch.int8, torch.uint8) and not is_4bit_serializable:
-                        raise ValueError(
-                            "Detected 4-bit weights but the version of bitsandbytes is not compatible with 4-bit serialization. "
-                            "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
-                        )
-                    new_value = bnb.nn.Params4bit.from_prequantized(
-                        data=new_value,
-                        quantized_stats=quantized_stats,
-                        requires_grad=False,
-                        device=device,
-                        **kwargs,
-                    )
-                else:
-                    new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(device)
-            module._parameters[tensor_name] = new_value
-
-    else:
-        if value is None:
-            new_value = old_value.to(device)
-        elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
+            if issubclass(module.source_cls, Conv1D):
+                value = value.T
+            old_value = model.get_parameter_or_buffer(target_key)
+            new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
+            # remove missing keys that were create when initializing Params4bit
+            for key in new_value.quant_state.as_dict(packed=True).keys():
+                missing_keys.discard(f"{full_name}.{key}")
+            return {target_key: new_value}
         else:
-            new_value = torch.tensor(value, device=device)
+            module_name = target_key.rsplit(".", 1)[0]
+            # Save the states for later quantization when they are all gathered
+            if not hasattr(self.hf_quantizer, "param_quant_stats"):
+                self.hf_quantizer.param_quant_stats = defaultdict(dict)
+            self.hf_quantizer.param_quant_stats[module_name].update({full_name: value})
+            missing_keys.discard(full_name)
+            # We are ready for quantization in this case (note, the +1 is for the weight itself)
+            if len(self.hf_quantizer.param_quant_stats[module_name]) == len(self.hf_quantizer.bnb_keys) + 1:
+                weight = self.hf_quantizer.param_quant_stats[module_name].pop(f"{module_name}.weight")
+                new_value = bnb.nn.Params4bit.from_prequantized(
+                    data=weight,
+                    quantized_stats=self.hf_quantizer.param_quant_stats[module_name],
+                    requires_grad=False,
+                    device=value.device,
+                    module=module,
+                )
+                del self.hf_quantizer.param_quant_stats[module_name]
+                return {target_key: new_value}
+            return {}
 
-        if is_buffer:
-            module._buffers[tensor_name] = new_value
+
+class Bnb8bitQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys=None, **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        module, tensor_name = get_module_from_name(model, target_key)
+        module_name = target_key.rsplit(".", 1)[0]
+
+        if not self.hf_quantizer.pre_quantized:
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D):
+                value = value.T
+            value_device = value.device
+            kwargs = getattr(module, tensor_name).__dict__
+            kwargs.pop("SCB", None)
+            new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
+            missing_keys.discard(f"{module_name}.weight_format")
+            missing_keys.discard(f"{module_name}.SCB")
+            return {target_key: new_value}
         else:
-            new_value = nn.Parameter(new_value, requires_grad=old_value.requires_grad)
-            module._parameters[tensor_name] = new_value
+            missing_keys.discard(target_key)
+            # useless key that gets saved for no reason
+            if tensor_name.endswith("weight_format"):
+                return {}
+            # Save the states for later quantization when they are all gathered
+            if not hasattr(self.hf_quantizer, "param_quant_stats"):
+                self.hf_quantizer.param_quant_stats = defaultdict(dict)
+            self.hf_quantizer.param_quant_stats[module_name].update({target_key: value})
+            # We are ready for quantization in this case (SCB and the weight)
+            if len(self.hf_quantizer.param_quant_stats[module_name]) == 2:
+                weight = self.hf_quantizer.param_quant_stats[module_name].pop(f"{module_name}.weight")
+                kwargs = getattr(module, "weight").__dict__
+                weight_device = weight.device
+                new_value = bnb.nn.Int8Params(weight.to("cpu"), requires_grad=False, **kwargs).to(weight_device)
+                setattr(new_value, "SCB", self.hf_quantizer.param_quant_stats[module_name][f"{module_name}.SCB"])
+                del self.hf_quantizer.param_quant_stats[module_name]
+                # sometimes, weight_format is not saved so we need to remove it from missing keys ...
+                missing_keys.discard(f"{module_name}.weight_format")
+                return {f"{module_name}.weight": new_value}
+            return {}
 
 
 def _replace_with_bnb_linear(
@@ -154,18 +136,19 @@ def _replace_with_bnb_linear(
     current_key_name=None,
     quantization_config=None,
     has_been_replaced=False,
+    pre_quantized=False,
 ):
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
         current_key_name.append(name)
 
-        if (isinstance(module, nn.Linear) or isinstance(module, Conv1D)) and name not in modules_to_not_convert:
+        if (isinstance(module, (nn.Linear, Conv1D))) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             current_key_name_str = ".".join(current_key_name)
             if not any(
@@ -179,13 +162,18 @@ def _replace_with_bnb_linear(
                         out_features = module.out_features
 
                     if quantization_config.quantization_method() == "llm_int8":
-                        model._modules[name] = bnb.nn.Linear8bitLt(
+                        new_module = bnb.nn.Linear8bitLt(
                             in_features,
                             out_features,
                             module.bias is not None,
                             has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
                             threshold=quantization_config.llm_int8_threshold,
                         )
+                        # hack to create the correct keys in the state dict with the right dtype
+                        new_module.weight.SCB = torch.empty(1, dtype=torch.float32)
+                        if pre_quantized:
+                            new_module.weight.data = new_module.weight.data.to(dtype=torch.int8)
+                        model._modules[name] = new_module
                         has_been_replaced = True
                     else:
                         if (
@@ -199,7 +187,7 @@ def _replace_with_bnb_linear(
                                 if "quant_storage" in list(signature(bnb.nn.Linear4bit).parameters)
                                 else {}
                             )
-                            model._modules[name] = bnb.nn.Linear4bit(
+                            new_module = bnb.nn.Linear4bit(
                                 in_features,
                                 out_features,
                                 module.bias is not None,
@@ -208,6 +196,30 @@ def _replace_with_bnb_linear(
                                 quant_type=quantization_config.bnb_4bit_quant_type,
                                 **extra_kwargs,
                             )
+                            from bitsandbytes.functional import QuantState
+
+                            # hack to create the correct keys in the state dict with the right dtype
+                            absmax_dtype = (
+                                torch.uint8 if quantization_config.bnb_4bit_use_double_quant else torch.float32
+                            )
+                            new_module.weight.quant_state = QuantState(
+                                absmax=torch.empty(1, dtype=absmax_dtype),
+                                code=torch.empty(1, dtype=torch.float32),
+                                shape=(1,),
+                                offset=torch.empty(1),
+                                quant_type=quantization_config.bnb_4bit_quant_type,
+                                state2=QuantState(
+                                    absmax=torch.empty(1, dtype=torch.float32),
+                                    code=torch.empty(1, dtype=torch.float32),
+                                )
+                                if quantization_config.bnb_4bit_use_double_quant
+                                else None,
+                            )
+                            if pre_quantized:
+                                # this is kind of an edge case when supporting both loading and quantization ...
+                                # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
+                                new_module.weight.data = new_module.weight.data.to(dtype=torch.uint8)
+                            model._modules[name] = new_module
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later
                     model._modules[name].source_cls = type(module)
@@ -220,13 +232,16 @@ def _replace_with_bnb_linear(
                 current_key_name,
                 quantization_config,
                 has_been_replaced=has_been_replaced,
+                pre_quantized=pre_quantized,
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
 
 
-def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+def replace_with_bnb_linear(
+    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False
+):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `LLM.int8():
@@ -244,10 +259,10 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`list[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
@@ -258,7 +273,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     """
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     model, has_been_replaced = _replace_with_bnb_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config
+        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized
     )
 
     if not has_been_replaced:
@@ -267,76 +282,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
-
     return model
-
-
-# For backward compatibility
-def replace_8bit_linear(*args, **kwargs):
-    warnings.warn(
-        "`replace_8bit_linear` will be deprecated in a future version, please use `replace_with_bnb_linear` instead",
-        FutureWarning,
-    )
-    return replace_with_bnb_linear(*args, **kwargs)
-
-
-# For backward compatiblity
-def set_module_8bit_tensor_to_device(*args, **kwargs):
-    warnings.warn(
-        "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead",
-        FutureWarning,
-    )
-    return set_module_quantized_tensor_to_device(*args, **kwargs)
-
-
-def get_keys_to_not_convert(model):
-    r"""
-    An utility function to get the key of the module to keep in full precision if any For example for CausalLM modules
-    we may want to keep the lm_head in full precision for numerical stability reasons. For other architectures, we want
-    to keep the tied weights of the model. The function will return a list of the keys of the modules to not convert in
-    int8.
-
-    Parameters:
-    model (`torch.nn.Module`):
-        Input model
-    """
-    # Create a copy of the model and tie the weights, then
-    # check if it contains tied weights
-    tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
-    tied_model.tie_weights()
-
-    tied_params = find_tied_parameters(tied_model)
-    # For compatibility with Accelerate < 0.18
-    if isinstance(tied_params, dict):
-        tied_keys = sum(list(tied_params.values()), []) + list(tied_params.keys())
-    else:
-        tied_keys = sum(tied_params, [])
-    has_tied_params = len(tied_keys) > 0
-
-    # If there is not tied weights, we want to keep the lm_head（output_embedding) in full precision
-    if not has_tied_params:
-        output_emb = model.get_output_embeddings()
-        if output_emb is not None:
-            list_last_module = [name for name, module in model.named_modules() if id(module) == id(output_emb)]
-            return list_last_module
-
-    # otherwise, no tied weights, no output embedding defined, simply keep the last module in full precision
-    list_modules = list(model.named_parameters())
-    list_last_module = [list_modules[-1][0]]
-    # add last module together with tied weights
-    intersection = set(list_last_module) - set(tied_keys)
-    list_untouched = list(set(tied_keys)) + list(intersection)
-
-    # remove ".weight" from the keys
-    names_to_remove = [".weight", ".bias"]
-    filtered_module_names = []
-    for name in list_untouched:
-        for name_to_remove in names_to_remove:
-            if name_to_remove in name:
-                name = name.replace(name_to_remove, "")
-        filtered_module_names.append(name)
-
-    return filtered_module_names
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
@@ -383,7 +329,7 @@ def _create_accelerate_new_hook(old_hook):
     old_hook_attr = old_hook.__dict__
     filtered_old_hook_attr = {}
     old_hook_init_signature = inspect.signature(old_hook_cls.__init__)
-    for k in old_hook_attr.keys():
+    for k in old_hook_attr:
         if k in old_hook_init_signature.parameters:
             filtered_old_hook_attr[k] = old_hook_attr[k]
     new_hook = old_hook_cls(**filtered_old_hook_attr)
@@ -403,7 +349,7 @@ def _dequantize_and_replace(
     some performance drop compared to the original model before quantization - use it only for specific usecases
     such as QLoRA adapters merging.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     quant_method = quantization_config.quantization_method()
 
@@ -482,80 +428,23 @@ def dequantize_and_replace(
     return model
 
 
-def _validate_bnb_multi_backend_availability(raise_exception):
+def validate_bnb_backend_availability(raise_exception=False):
+    """
+    Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
+    """
     import bitsandbytes as bnb
 
     bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
     available_devices = set(get_available_devices())
 
-    if available_devices == {"cpu"} and not is_ipex_available():
-        from importlib.util import find_spec
-
-        if find_spec("intel_extension_for_pytorch"):
-            logger.warning(
-                "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
-            )
-
-        available_devices = frozenset(
-            [device for device in available_devices if device != "cpu"]
-        )  # Only Intel CPU is supported by BNB at the moment
-
     if not available_devices.intersection(bnb_supported_devices):
         if raise_exception:
-            bnb_supported_devices_with_info = set(  # noqa: C401
-                '"cpu" (needs an Intel CPU and intel_extension_for_pytorch installed and compatible with the PyTorch version)'
-                if device == "cpu"
-                else device
-                for device in bnb_supported_devices
-            )
             err_msg = (
-                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices_with_info}`. "
-                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
+                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices}`. "
+                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation"
             )
-
-            logger.error(err_msg)
             raise RuntimeError(err_msg)
 
-        logger.warning("No supported devices found for bitsandbytes multi-backend.")
+        logger.warning("No supported devices found for bitsandbytes")
         return False
-
-    logger.debug("Multi-backend validation successful.")
     return True
-
-
-def _validate_bnb_cuda_backend_availability(raise_exception):
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    if not torch.cuda.is_available():
-        log_msg = (
-            "CUDA is required but not available for bitsandbytes. Please consider installing the multi-platform enabled version of bitsandbytes, which is currently a work in progress. "
-            "Please check currently supported platforms and installation instructions at https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
-        )
-        if raise_exception:
-            logger.error(log_msg)
-            raise RuntimeError(log_msg)
-
-        logger.warning(log_msg)
-        return False
-
-    logger.debug("CUDA backend validation successful.")
-    return True
-
-
-def validate_bnb_backend_availability(raise_exception=False):
-    """
-    Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
-    """
-    if not is_bitsandbytes_available():
-        if importlib.util.find_spec("bitsandbytes") and version.parse(
-            importlib.metadata.version("bitsandbytes")
-        ) < version.parse("0.43.1"):
-            return _validate_bnb_cuda_backend_availability(raise_exception)
-        return False
-
-    if is_bitsandbytes_multi_backend_available():
-        return _validate_bnb_multi_backend_availability(raise_exception)
-    return _validate_bnb_cuda_backend_availability(raise_exception)

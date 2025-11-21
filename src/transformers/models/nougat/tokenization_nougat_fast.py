@@ -19,13 +19,11 @@ Fast tokenizer class for Nougat.
 import re
 from functools import partial
 from multiprocessing import Pool
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
-from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-from transformers.utils import add_end_docstrings
 
 from ...utils import is_levenshtein_available, is_nltk_available, logging, requires_backends
 
@@ -38,16 +36,6 @@ if is_nltk_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-INIT_TOKENIZER_DOCSTRING += """
-        tokenizer_object ([`tokenizers.Tokenizer`]):
-            A [`tokenizers.Tokenizer`] object from 🤗 tokenizers to instantiate from. See [Using tokenizers from 🤗
-            tokenizers](../fast_tokenizers) for more information.
-        tokenizer_file ([`str`]):
-            A path to a local JSON file representing a previously serialized [`tokenizers.Tokenizer`] object from 🤗
-            tokenizers.
-"""
 
 
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
@@ -68,15 +56,15 @@ def markdown_compatible(text: str) -> str:
     """
     # equation tag
     # Replace lines that start with a pattern like (decimal) \[some text\] with \[[some text] \tag{decimal}\].
-    text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
+    text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.MULTILINE)
     # Replace lines that start with a pattern like \[some text\] (decimal)  with \[[some text] \tag{decimal}\].
-    text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
+    text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.MULTILINE)
     # Replace lines that start with a pattern like \[some text\] (digits) \[another text\]  with \[[some text] \tag{digits}\] [another text].
     text = re.sub(
         r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\) (\\\[.+?\\\])$",
         r"\[\1 \\tag{\2}\] \3",
         text,
-        flags=re.M,
+        flags=re.MULTILINE,
     )
     # multi line
     text = text.replace(r"\. ", ". ")
@@ -90,7 +78,7 @@ def markdown_compatible(text: str) -> str:
         text,
     )
     # algorithms
-    text = re.sub(r"```\s*(.+?)\s*```", r"```\n\1\n```", text, flags=re.S)
+    text = re.sub(r"```\s*(.+?)\s*```", r"```\n\1\n```", text, flags=re.DOTALL)
 
     return text
 
@@ -131,7 +119,7 @@ def normalize_list_like_lines(generation):
             if not rest:
                 continue
             # Infer current nesting level based on detected numbering
-            if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.I | re.M):
+            if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.IGNORECASE | re.MULTILINE):
                 level = potential_numeral.count(".")
 
             replacement += (
@@ -254,17 +242,17 @@ def get_slices(lines, clean_lines):
     - The slice is less than 200 characters long.
     - The slice is more than 3 characters long.
     - The slice does not start with "[MISSING_PAGE".
-    - The slice is either the same as the next slice or the ratio of the two in terms of Levensthein distance is
+    - The slice is either the same as the next slice or the ratio of the two in terms of Levenshtein distance is
       greater than 0.9.
 
     Args:
-        lines (`List[str]`):
+        lines (`list[str]`):
             The list of lines containing the text.
-        clean_lines (`List[str]`):
+        clean_lines (`list[str]`):
             A cleaned version of the text (without numbers).
 
     Returns:
-        `List[tuple]`: A list of tuples representing the start and end indices of text slices.
+        `list[tuple]`: A list of tuples representing the start and end indices of text slices.
     """
     indices = np.zeros(len(lines))
     for i in range(len(lines) - 1):
@@ -358,7 +346,6 @@ def remove_slice_from_lines(lines, clean_text, slice) -> str:
     return to_delete.strip()
 
 
-@add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class NougatTokenizerFast(PreTrainedTokenizerFast):
     """
     Fast tokenizer for Nougat (backed by HuggingFace tokenizers library).
@@ -376,7 +363,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             contains everything needed to load the tokenizer.
 
         clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
-            Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
+            Whether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
             spaces.
 
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
@@ -477,7 +464,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         generation = generation.replace("\\end{tabular} \\end{table}", "\\end{tabular}\n\\end{table}")
         generation = generation.replace("\\end{table} Tab", "\\end{table}\nTab")
 
-        generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.M)
+        generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.MULTILINE)
 
         # Remove left-aligned empty LaTeX tabular blocks.
         generation = generation.replace(r"\begin{tabular}{l l}  & \\ \end{tabular}", "")
@@ -505,7 +492,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         generation = generation.replace("\n* [leftmargin=*]\n", "\n")
         # Remove lines with markdown headings starting with #, with numerals,
         # and possibly roman numerals with trailing spaces and newlines
-        generation = re.sub(r"^#+ (?:[\d+\.]+|[ixv\.]+)?\s*(?:$|\n\s*)", "", generation, flags=re.M)
+        generation = re.sub(r"^#+ (?:[\d+\.]+|[ixv\.]+)?\s*(?:$|\n\s*)", "", generation, flags=re.MULTILINE)
         # most likely hallucinated titles
         lines = generation.split("\n")
         if lines[-1].startswith("#") and lines[-1].lstrip("#").startswith(" ") and len(lines) > 1:
@@ -516,9 +503,9 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         # Reference corrections
         generation = self.remove_hallucinated_references(generation)
         # Remove lines starting with asterisks and numbers like "*[1]" and followed by capital letters and periods (ie too long references)
-        generation = re.sub(r"^\* \[\d+\](\s?[A-W]\.+\s?){10,}.*$", "", generation, flags=re.M)
+        generation = re.sub(r"^\* \[\d+\](\s?[A-W]\.+\s?){10,}.*$", "", generation, flags=re.MULTILINE)
         # Remove empty brackets after a reference number in brackets. *[12][]ABC will become *[12]ABC
-        generation = re.sub(r"^(\* \[\d+\])\[\](.*)$", r"\1\2", generation, flags=re.M)
+        generation = re.sub(r"^(\* \[\d+\])\[\](.*)$", r"\1\2", generation, flags=re.MULTILINE)
         # Remove single characters before or after 2 new lines
         generation = re.sub(r"(^\w\n\n|\n\n\w$)", "", generation)
         # pmc math artifact correction
@@ -570,9 +557,9 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         # Remove lines containing "S.A.B." one or more times. Was included in Nougat's code.
         generation = re.sub(r"(\*\*S\. A\. B\.\*\*\n+){2,}", "", generation)
         # Remove markdown-style headers that are incomplete or empty on multiple lines.
-        generation = re.sub(r"^#+( [\[\d\w])?$", "", generation, flags=re.M)
+        generation = re.sub(r"^#+( [\[\d\w])?$", "", generation, flags=re.MULTILINE)
         # Remove lines with just one period.
-        generation = re.sub(r"^\.\s*$", "", generation, flags=re.M)
+        generation = re.sub(r"^\.\s*$", "", generation, flags=re.MULTILINE)
         # Replace instances of three or more newlines with just two newlines.
         generation = re.sub(r"\n{3,}", "\n\n", generation)
         if fix_markdown:
@@ -582,10 +569,10 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 
     def post_process_generation(
         self,
-        generation: Union[str, List[str]],
+        generation: Union[str, list[str]],
         fix_markdown: bool = True,
         num_workers: Optional[int] = None,
-    ) -> Union[str, List[str]]:
+    ) -> Union[str, list[str]]:
         """
         Postprocess a generated text or a list of generated texts.
 
@@ -594,7 +581,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         Postprocessing is quite slow so it is recommended to use multiprocessing to speed up the process.
 
         Args:
-            generation (Union[str, List[str]]):
+            generation (Union[str, list[str]]):
                 The generated text or a list of generated texts.
             fix_markdown (`bool`, *optional*, defaults to `True`):
                 Whether to perform Markdown formatting fixes.
@@ -603,7 +590,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
                 parallel).
 
         Returns:
-            Union[str, List[str]]: The postprocessed text or list of postprocessed texts.
+            Union[str, list[str]]: The postprocessed text or list of postprocessed texts.
         """
         requires_backends(self, ["nltk", "levenshtein"])
 

@@ -16,7 +16,7 @@
 Feature extractor class for Whisper
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -49,9 +49,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, *optional*, defaults to 160):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
+            The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
         n_fft (`int`, *optional*, defaults to 400):
             Size of the Fourier transform.
@@ -105,7 +105,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def _np_extract_fbank_features(self, waveform_batch: np.array, device: str) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform_batch: np.ndarray, device: str) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
@@ -135,7 +135,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec_batch = np.array(log_spec_batch)
         return log_spec_batch
 
-    def _torch_extract_fbank_features(self, waveform: np.array, device: str = "cpu") -> np.ndarray:
+    def _torch_extract_fbank_features(self, waveform: np.ndarray, device: str = "cpu") -> np.ndarray:
         """
         Compute the log-mel spectrogram of the audio using PyTorch's GPU-accelerated STFT implementation with batching,
         yielding results similar to cpu computing with 1e-5 tolerance.
@@ -169,8 +169,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+        input_values: list[np.ndarray], attention_mask: list[np.ndarray], padding_value: float = 0.0
+    ) -> list[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
@@ -191,7 +191,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -204,12 +204,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         return_token_timestamps: Optional[bool] = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch for
-        the STFT computation if available, otherwise a slower NumPy based one.
+        """Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch
+        for the STFT computation if available, otherwise a slower NumPy based one.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -220,6 +219,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -232,19 +236,24 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 bugs.
 
                 </Tip>
+            padding (`str` or [`~utils.PaddingStrategy`], *optional*, defaults to `'max_length'`):
+                Activates and controls padding. Accepts the following values:
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
+                - `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence is
+                  provided).
+                - `'max_length'` (default): Pad to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided.
+                - `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
+            max_length (`int`, *optional*):
+                Controls the maximum length to use by one of the truncation/padding parameters.
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
+                If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            padding_value (`float`, *optional*, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
             do_normalize (`bool`, *optional*, defaults to `False`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
@@ -252,8 +261,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
             return_token_timestamps (`bool`, *optional*, defaults to `None`):
+                Deprecated. Use `return_attention_mask` instead from which the number of frames can be inferred.
+
                 Whether or not to return the number of frames of the input raw_speech.
                 These num_frames can be used by the model to compute word level timestamps.
+            **kwargs: Not supported by WhisperFeatureExtractor.__call__() and ignored.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -316,7 +328,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
         input_features = extract_fbank_features(input_features[0], device)
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
         else:
@@ -324,9 +336,19 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if return_attention_mask:
             # rescale from sample (48000) to feature (3000)
-            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+            rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+            # The STFT computation produces L//hop_length + 1 frames, but we skip the last frame (see `_torch_extract_fbank_features`).
+            # This means we need to trim the rescaled attention mask to match the actual number of frames (L//hop_length) when the input length
+            # is not perfectly divisible by the hop length.
+            if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
+                rescaled_attention_mask = rescaled_attention_mask[:, :-1]
+            padded_inputs["attention_mask"] = rescaled_attention_mask
 
         if return_token_timestamps is not None:
+            logger.warning_once(
+                f"`return_token_timestamps` is deprecated for {self.__class__.__name__} and will be removed in Transformers v5. Use `return_attention_mask` instead, as the number of frames can be inferred from it."
+            )
             padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:

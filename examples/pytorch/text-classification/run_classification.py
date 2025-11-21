@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "accelerate >= 0.12.0",
+#     "datasets >= 1.8.0",
+#     "sentencepiece != 0.1.92",
+#     "scipy",
+#     "scikit-learn",
+#     "protobuf",
+#     "torch >= 1.3",
+#     "evaluate",
+# ]
+# ///
+
 """Finetuning the library models for text classification."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
@@ -21,7 +35,7 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 import datasets
 import evaluate
@@ -41,13 +55,12 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -236,7 +249,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -256,7 +269,7 @@ class ModelArguments:
     )
 
 
-def get_label_list(raw_dataset, split="train") -> List[str]:
+def get_label_list(raw_dataset, split="train") -> list[str]:
     """Get the list of labels from a multi-label dataset"""
 
     if isinstance(raw_dataset[split]["label"][0], list):
@@ -282,10 +295,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_classification", model_args, data_args)
-
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -306,25 +315,10 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
-
-    # Detecting last checkpoint.
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -364,7 +358,7 @@ def main():
             else:
                 raise ValueError("Need either a dataset name or a test file for `do_predict`.")
 
-        for key in data_files.keys():
+        for key in data_files:
             logger.info(f"load a local file for {key}: {data_files[key]}")
 
         if data_args.train_file.endswith(".csv"):
@@ -408,13 +402,13 @@ def main():
         raw_datasets.pop(data_args.test_split_name)
 
     if data_args.remove_columns is not None:
-        for split in raw_datasets.keys():
+        for split in raw_datasets:
             for column in data_args.remove_columns.split(","):
                 logger.info(f"removing column {column} from split {split}")
                 raw_datasets[split] = raw_datasets[split].remove_columns(column)
 
     if data_args.label_column_name is not None and data_args.label_column_name != "label":
-        for key in raw_datasets.keys():
+        for key in raw_datasets:
             raw_datasets[key] = raw_datasets[key].rename_column(data_args.label_column_name, "label")
 
     # Trying to have good defaults here, don't hesitate to tweak to your needs.
@@ -430,7 +424,7 @@ def main():
         label_list = None
         num_labels = 1
         # regression requires float as label type, let's cast it if needed
-        for split in raw_datasets.keys():
+        for split in raw_datasets:
             if raw_datasets[split].features["label"].dtype not in ["float32", "float64"]:
                 logger.warning(
                     f"Label type for {split} set to float32, was {raw_datasets[split].features['label'].dtype}"
@@ -537,7 +531,7 @@ def main():
         model.config.id2label = {id: label for label, id in label_to_id.items()}
     elif not is_regression:  # classification, but not training
         logger.info("using label infos in the model config")
-        logger.info("label2id: {}".format(model.config.label2id))
+        logger.info(f"label2id: {model.config.label2id}")
         label_to_id = model.config.label2id
     else:  # regression
         label_to_id = None
@@ -549,7 +543,7 @@ def main():
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
-    def multi_labels_to_ids(labels: List[str]) -> List[float]:
+    def multi_labels_to_ids(labels: list[str]) -> list[float]:
         ids = [0.0] * len(label_to_id)  # BCELoss requires float as target type
         for label in labels:
             ids[label_to_id[label]] = 1.0
@@ -683,8 +677,6 @@ def main():
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         metrics = train_result.metrics
         max_train_samples = (
@@ -735,7 +727,7 @@ def main():
                     else:
                         item = label_list[item]
                         writer.write(f"{index}\t{item}\n")
-        logger.info("Predict results saved at {}".format(output_predict_file))
+        logger.info(f"Predict results saved at {output_predict_file}")
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
 
     if training_args.push_to_hub:

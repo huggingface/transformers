@@ -18,7 +18,7 @@ Utility that checks whether the copies defined in the library match the original
 - The list of models in the main README.md matches the ones in the localized READMEs,
 - Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
 
-This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
+This also checks the list of models in the README is complete (has all models) and adds a line to complete if there is
 a model missing.
 
 Use from the root of the repo with:
@@ -42,7 +42,6 @@ import os
 import re
 import subprocess
 from collections import OrderedDict
-from typing import List, Optional, Tuple, Union
 
 from transformers.utils import direct_transformers_import
 
@@ -53,12 +52,6 @@ TRANSFORMERS_PATH = "src/transformers"
 MODEL_TEST_PATH = "tests/models"
 PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
-
-# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
-FULL_COPIES = {
-    "examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-    "examples/flax/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-}
 
 
 LOCALIZED_READMES = {
@@ -104,7 +97,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_ja.md": {
-        "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
+        "start_prompt": "🤗 Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
             "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
@@ -253,7 +246,7 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
         raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
 
 
-def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
+def find_block_end(lines: list[str], start_index: int, indent: int) -> int:
     """
     Find the end of the class/func block starting at `start_index` in a source code (defined by `lines`).
 
@@ -282,8 +275,8 @@ def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
 
 
 def split_code_into_blocks(
-    lines: List[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
-) -> List[Tuple[str, int, int]]:
+    lines: list[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
+) -> list[tuple[str, int, int]]:
     """
     Split the class/func block starting at `start_index` in a source code (defined by `lines`) into *inner blocks*.
 
@@ -390,8 +383,8 @@ def split_code_into_blocks(
 
 
 def find_code_in_transformers(
-    object_name: str, base_path: str = None, return_indices: bool = False
-) -> Union[str, Tuple[List[str], int, int]]:
+    object_name: str, base_path: str | None = None, return_indices: bool = False
+) -> str | tuple[list[str], int, int]:
     """
     Find and return the source code of an object.
 
@@ -420,7 +413,7 @@ def find_code_in_transformers(
 
     # Detail: the `Copied from` statement is originally designed to work with the last part of `TRANSFORMERS_PATH`,
     # (which is `transformers`). The same should be applied for `MODEL_TEST_PATH`. However, its last part is `models`
-    # (to only check and search in it) which is a bit confusing. So we keep the copied statement staring with
+    # (to only check and search in it) which is a bit confusing. So we keep the copied statement starting with
     # `tests.models.` and change it to `tests` here.
     if base_path == MODEL_TEST_PATH:
         base_path = "tests"
@@ -491,7 +484,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: dict | None = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -510,7 +503,7 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
         code (`str`):
             The object's code.
         code_splits (`List[Tuple[str, int, int]]`):
-            `code` splitted into blocks. See `split_code_into_blocks`.
+            `code` split into blocks. See `split_code_into_blocks`.
     """
     if buffer is None:
         buffer = {}
@@ -587,7 +580,7 @@ def stylify(code: str) -> str:
     return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
 
 
-def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int]:
+def check_codes_match(observed_code: str, theoretical_code: str) -> int | None:
     """
     Checks if two version of a code match with the exception of the class/function name.
 
@@ -638,7 +631,9 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
         diff_index += 1
 
 
-def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = None) -> Optional[List[Tuple[str, int]]]:
+def is_copy_consistent(
+    filename: str, overwrite: bool = False, buffer: dict | None = None
+) -> list[tuple[str, int]] | None:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -729,8 +724,8 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
 
         # Below, we change some names in `theoretical_code_blocks` and `observed_code_blocks`. These mappings map the
         # original names to the modified names: this is used to restore the original order of the code blocks.
-        name_mappings_1 = {k: k for k in theoretical_code_blocks.keys()}
-        name_mappings_2 = {k: k for k in observed_code_blocks.keys()}
+        name_mappings_1 = {k: k for k in theoretical_code_blocks}
+        name_mappings_2 = {k: k for k in observed_code_blocks}
 
         # Update code blocks' name and content:
         #   If `"# Ignore copy"` is found in a block of the observed code:
@@ -801,8 +796,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
         orig_idx = -1
         observed_code = ""
         for name, code in observed_code_blocks.items():
-            if code.endswith("\n"):
-                code = code[:-1]
+            code = code.removesuffix("\n")
             for code_line in code.split("\n"):
                 orig_idx += 1
                 if code_line.strip() and not name.startswith(("_ignored_existing_block_", "_ignored_new_block_")):
@@ -831,7 +825,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
     return diffs
 
 
-def check_copies(overwrite: bool = False, file: str = None):
+def check_copies(overwrite: bool = False, file: str | None = None):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
     READMEs are consistent.
@@ -855,37 +849,6 @@ def check_copies(overwrite: bool = False, file: str = None):
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite, buffer)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
-    if not overwrite and len(diffs) > 0:
-        diff = "\n".join(diffs)
-        raise Exception(
-            "Found the following copy inconsistencies:\n"
-            + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
-        )
-
-
-def check_full_copies(overwrite: bool = False):
-    """
-    Check the files that are full copies of others (as indicated in `FULL_COPIES`) are copy-consistent.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    diffs = []
-    for target, source in FULL_COPIES.items():
-        with open(source, "r", encoding="utf-8") as f:
-            source_code = f.read()
-        with open(target, "r", encoding="utf-8") as f:
-            target_code = f.read()
-        if source_code != target_code:
-            if overwrite:
-                with open(target, "w", encoding="utf-8") as f:
-                    print(f"Replacing the content of {target} by the one of {source}.")
-                    f.write(source_code)
-            else:
-                diffs.append(f"- {target}: copy does not match {source}.")
-
     if not overwrite and len(diffs) > 0:
         diff = "\n".join(diffs)
         raise Exception(
@@ -934,7 +897,7 @@ def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
     return "".join(result)
 
 
-def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> Tuple[bool, str]:
+def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> tuple[bool, str]:
     """
     Compare the model list from the main README to the one in a localized README.
 
@@ -1021,7 +984,7 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
-    return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
+    return readmes_match, "\n".join(x[1] for x in sorted_index) + "\n"
 
 
 # Map a model name with the name it has in the README for the check_readme check
@@ -1038,6 +1001,7 @@ SPECIAL_MODEL_NAMES = {
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
     "SAM": "Segment Anything",
+    "SAM_HQ": "Segment Anything High Quality",
     "ViT": "Vision Transformer (ViT)",
 }
 
@@ -1075,4 +1039,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite, args.file)
-    check_full_copies(args.fix_and_overwrite)

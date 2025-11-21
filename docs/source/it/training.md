@@ -69,8 +69,6 @@ Se vuoi, puoi creare un sottoinsieme più piccolo del dataset per il fine-tuning
 
 ## Addestramento
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di addestramento. L'API [`Trainer`] supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation e mixed precision.
@@ -148,81 +146,11 @@ Poi metti a punto il modello richiamando [`~transformers.Trainer.train`]:
 ```py
 >>> trainer.train()
 ```
-</pt>
-<tf>
-<a id='keras'></a>
-
-<Youtube id="rnTGBy2ax1c"/>
-
-I modelli 🤗 Transformers supportano anche l'addestramento in TensorFlow usando l'API di Keras.
-
-### Convertire dataset nel formato per TensorFlow
-
-Il [`DefaultDataCollator`] assembla tensori in lotti su cui il modello si addestrerà. Assicurati di specificare di restituire tensori per TensorFlow in `return_tensors`:
-
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-
-<Tip>
-
-[`Trainer`] usa [`DataCollatorWithPadding`] in maniera predefinita in modo da non dover specificare esplicitamente un collettore di dati.
-
-</Tip>
-
-Successivamente, converti i datasets tokenizzati in TensorFlow datasets con il metodo [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.to_tf_dataset). Specifica il tuo input in `columns` e le tue etichette in `label_cols`:
-
-```py
->>> tf_train_dataset = small_train_dataset.to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
-...     shuffle=True,
-...     collate_fn=data_collator,
-...     batch_size=8,
-... )
-
->>> tf_validation_dataset = small_eval_dataset.to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
-...     shuffle=False,
-...     collate_fn=data_collator,
-...     batch_size=8,
-... )
-```
-
-### Compilazione e addestramento
-
-Carica un modello TensorFlow col numero atteso di etichette:
-
-```py
->>> import tensorflow as tf
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
-```
-
-Poi compila e fai il fine-tuning del tuo modello usando [`fit`](https://keras.io/api/models/model_training_apis/) come faresti con qualsiasi altro modello di Keras:
-
-```py
->>> model.compile(
-...     optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),
-...     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-...     metrics=tf.metrics.SparseCategoricalAccuracy(),
-... )
-
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3)
-```
-</tf>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## Addestramento in PyTorch nativo
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`] si occupa del ciclo di addestramento e ti consente di mettere a punto un modello con una sola riga di codice. Per chi preferisse scrivere un proprio ciclo di addestramento personale, puoi anche fare il fine-tuning di un modello 🤗 Transformers in PyTorch nativo.
@@ -362,8 +290,6 @@ Proprio come è necessario aggiungere una funzione di valutazione del [`Trainer`
 
 >>> metric.compute()
 ```
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 
@@ -373,4 +299,4 @@ Per altri esempi sul fine-tuning, fai riferimento a:
 
 - [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) include scripts per addestrare compiti comuni di NLP in PyTorch e TensorFlow.
 
-- [🤗 Transformers Notebooks](notebooks) contiene diversi notebooks su come mettere a punto un modello per compiti specifici in PyTorch e TensorFlow.
+- [🤗 Transformers Notebooks](https://github.com/huggingface/notebooks) contiene diversi notebooks su come mettere a punto un modello per compiti specifici in PyTorch e TensorFlow.

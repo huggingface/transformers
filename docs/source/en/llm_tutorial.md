@@ -20,9 +20,14 @@ rendered properly in your Markdown viewer.
 
 Text generation is the most popular application for large language models (LLMs). A LLM is trained to generate the next word (token) given some initial text (prompt) along with its own generated outputs up to a predefined length or when it reaches an end-of-sequence (`EOS`) token.
 
-In Transformers, the [`~GenerationMixin.generate`] API handles text generation, and it is available for all models with generative capabilities.
+In Transformers, the [`~GenerationMixin.generate`] API handles text generation, and it is available for all models with generative capabilities. This guide will show you the basics of text generation with [`~GenerationMixin.generate`] and some common pitfalls to avoid.
 
-This guide will show you the basics of text generation with [`~GenerationMixin.generate`] and some common pitfalls to avoid.
+> [!TIP]
+> You can also chat with a model directly from the command line. ([reference](./conversations.md#transformers))
+>
+> ```shell
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
+> ```
 
 ## Default generate
 
@@ -31,6 +36,7 @@ Before you begin, it's helpful to install [bitsandbytes](https://hf.co/docs/bits
 ```bash
 !pip install -U transformers bitsandbytes
 ```
+
 Bitsandbytes supports multiple backends in addition to CUDA-based GPUs. Refer to the multi-backend installation [guide](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend) to learn more.
 
 Load a LLM with [`~PreTrainedModel.from_pretrained`] and add the following two parameters to reduce the memory requirements.
@@ -52,7 +58,7 @@ Tokenize your input, and set the [`~PreTrainedTokenizer.padding_side`] parameter
 
 ```py
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", padding_side="left")
-model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
+model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to(model.device)
 ```
 
 Pass the inputs to [`~GenerationMixin.generate`] to generate tokens, and [`~PreTrainedTokenizer.batch_decode`] the generated tokens back to text.
@@ -80,14 +86,18 @@ GenerationConfig {
 }
 ```
 
-You can customize [`~GenerationMixin.generate`] by overriding the parameters and values in [`GenerationConfig`]. Some of the most commonly adjusted parameters are [max_new_tokens](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.max_new_tokens), [num_beams](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.num_beams), [do_sample](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.do_sample), and [num_return_sequences](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.num_return_sequences).
+You can customize [`~GenerationMixin.generate`] by overriding the parameters and values in [`GenerationConfig`]. See [this section below](#common-options) for commonly adjusted parameters.
 
 ```py
 # enable beam search sampling strategy
 model.generate(**inputs, num_beams=4, do_sample=True)
 ```
 
-[`~GenerationMixin.generate`] can also be extended with external libraries or custom code. The `logits_processor` parameter accepts custom [`LogitsProcessor`] instances for manipulating the next token probability distribution. `stopping_criteria` supports custom [`StoppingCriteria`] to stop text generation. Check out the [logits-processor-zoo](https://github.com/NVIDIA/logits-processor-zoo) for more examples of external [`~GenerationMixin.generate`]-compatible extensions.
+[`~GenerationMixin.generate`] can also be extended with external libraries or custom code:
+
+1. the `logits_processor` parameter accepts custom [`LogitsProcessor`] instances for manipulating the next token probability distribution;
+2. the `stopping_criteria` parameters supports custom [`StoppingCriteria`] to stop text generation;
+3. other custom generation methods can be loaded through the `custom_generate` flag ([docs](generation_strategies.md/#custom-decoding-methods)).
 
 Refer to the [Generation strategies](./generation_strategies) guide to learn more about search, sampling, and decoding strategies.
 
@@ -134,6 +144,19 @@ outputs = model.generate(**inputs, generation_config=generation_config)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ```
 
+## Common Options
+
+[`~GenerationMixin.generate`] is a powerful tool that can be heavily customized. This can be daunting for a new users. This section contains a list of popular generation options that you can define in most text generation tools in Transformers: [`~GenerationMixin.generate`], [`GenerationConfig`], `pipelines`, the `chat` CLI, ...
+
+| Option name | Type | Simplified description |
+|---|---|---|
+| `max_new_tokens` | `int` | Controls the maximum generation length. Be sure to define it, as it usually defaults to a small value. |
+| `do_sample` | `bool` | Defines whether generation will sample the next token (`True`), or is greedy instead (`False`). Most use cases should set this flag to `True`. Check [this guide](./generation_strategies) for more information. |
+| `temperature` | `float` | How unpredictable the next selected token will be. High values (`>0.8`) are good for creative tasks, low values (e.g. `<0.4`) for tasks that require "thinking". Requires `do_sample=True`. |
+| `num_beams` | `int` | When set to `>1`, activates the beam search algorithm. Beam search is good on input-grounded tasks. Check [this guide](./generation_strategies) for more information. |
+| `repetition_penalty` | `float` | Set it to `>1.0` if you're seeing the model repeat itself often. Larger values apply a larger penalty. |
+| `eos_token_id` | `list[int]` | The token(s) that will cause generation to stop. The default value is usually good, but you can specify a different token. |
+
 ## Pitfalls
 
 The section below covers some common issues you may encounter during text generation and how to solve them.
@@ -143,7 +166,7 @@ The section below covers some common issues you may encounter during text genera
 [`~GenerationMixin.generate`] returns up to 20 tokens by default unless otherwise specified in a models [`GenerationConfig`]. It is highly recommended to manually set the number of generated tokens with the [`max_new_tokens`] parameter to control the output length. [Decoder-only](https://hf.co/learn/nlp-course/chapter1/6?fw=pt) models returns the initial prompt along with the generated tokens.
 
 ```py
-model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
+model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to(model.device)
 ```
 
 <hfoptions id="output-length">
@@ -174,7 +197,7 @@ The default decoding strategy in [`~GenerationMixin.generate`] is *greedy search
 For example, enable a [multinomial sampling](./generation_strategies#multinomial-sampling) strategy to generate more diverse outputs. Refer to the [Generation strategy](./generation_strategies) guide for more decoding strategies.
 
 ```py
-model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to("cuda")
+model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to(model.device)
 ```
 
 <hfoptions id="decoding">
@@ -206,7 +229,7 @@ Inputs need to be padded if they don't have the same length. But LLMs aren't tra
 ```py
 model_inputs = tokenizer(
     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-).to("cuda")
+).to(model.device)
 generated_ids = model.generate(**model_inputs)
 tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 33333333333'
@@ -220,7 +243,7 @@ tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", padding_s
 tokenizer.pad_token = tokenizer.eos_token
 model_inputs = tokenizer(
     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-).to("cuda")
+).to(model.device)
 generated_ids = model.generate(**model_inputs)
 tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 3, 4, 5, 6,'
@@ -236,11 +259,11 @@ Some models and tasks expect a certain input prompt format, and if the format is
 For example, a chat model expects the input as a [chat template](./chat_templating). Your prompt should include a `role` and `content` to indicate who is participating in the conversation. If you try to pass your prompt as a single string, the model doesn't always return the expected output.
 
 ```py
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-alpha")
 model = AutoModelForCausalLM.from_pretrained(
-    "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", load_in_4bit=True
+    "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 )
 ```
 
@@ -249,7 +272,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ```py
 prompt = """How many cats does it take to change a light bulb? Reply as a pirate."""
-model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 input_length = model_inputs.input_ids.shape[1]
 generated_ids = model.generate(**model_inputs, max_new_tokens=50)
 print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])
@@ -267,7 +290,7 @@ messages = [
     },
     {"role": "user", "content": "How many cats does it take to change a light bulb?"},
 ]
-model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to("cuda")
+model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 input_length = model_inputs.shape[1]
 generated_ids = model.generate(model_inputs, do_sample=True, max_new_tokens=50)
 print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])

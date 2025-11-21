@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-CLVP (Contrastive Language-Voice Pretrained Transformer) モデルは、James Betker によって [Better speech synthesis through scaling](https://arxiv.org/abs/2305.07243) で提案されました。
+CLVP (Contrastive Language-Voice Pretrained Transformer) モデルは、James Betker によって [Better speech synthesis through scaling](https://huggingface.co/papers/2305.07243) で提案されました。
 
 論文の要約は次のとおりです。
 
@@ -70,7 +70,6 @@ CLVP (Contrastive Language-Voice Pretrained Transformer) モデルは、James Be
 ## ClvpConfig
 
 [[autodoc]] ClvpConfig
-    - from_sub_model_configs
 
 ## ClvpEncoderConfig
 

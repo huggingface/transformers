@@ -14,7 +14,10 @@
 # limitations under the License.
 """Moshi model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,13 +25,13 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MoshiDepthConfig(PretrainedConfig):
+class MoshiDepthConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiDepthDecoder`]. It is used to instantiate a
     Moshi depth decoder model according to the specified arguments, defining the Moshi depth decoder config.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -47,8 +50,8 @@ class MoshiDepthConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `num_attention_heads`.
         audio_vocab_size (`int`, *optional*, defaults to 2048):
             Vocabulary size of the audio part of model. Defines the number of different tokens that can be
             represented by the `audio_codes` passed when calling the Moshi models.
@@ -78,7 +81,7 @@ class MoshiDepthConfig(PretrainedConfig):
             Whether to tie weight embeddings
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
 
     Example:
@@ -146,15 +149,15 @@ class MoshiDepthConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class MoshiConfig(PretrainedConfig):
+class MoshiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
     Moshi model according to the specified arguments, defining the audio encoder, Moshi depth decoder and Moshi decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Moshiko model,
     e.g. [kmhf/hf-moshiko](https://huggingface.co/kmhf/hf-moshiko)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -171,16 +174,18 @@ class MoshiConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `num_attention_heads`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `num_attention_heads`.
         audio_vocab_size (`int`, *optional*):
             Vocabulary size of the audio part of model. Defines the number of different tokens that can be
             represented by the `audio_codes` passed when calling the Moshi models.
         max_position_embeddings (`int`, *optional*, defaults to 3000):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
@@ -204,9 +209,9 @@ class MoshiConfig(PretrainedConfig):
             Whether to tie weight embeddings
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
-                - **depth__config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **depth__config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the depth decoder config.
 
 
@@ -236,28 +241,28 @@ class MoshiConfig(PretrainedConfig):
 
     model_type = "moshi"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"audio_encoder_config": AutoConfig}
+    sub_configs = {"audio_encoder_config": AutoConfig, "depth_decoder_config": MoshiDepthConfig}
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        audio_vocab_size=None,
-        max_position_embeddings=3000,
-        rope_theta=10000.0,
-        hidden_act="silu",
-        head_dim=None,
-        initializer_range=0.02,
-        use_cache=True,
-        sliding_window=3000,
-        attention_dropout=0.0,
-        ffn_dim=22528,
-        rms_norm_eps=1e-8,
-        num_codebooks=8,
-        tie_word_embeddings=False,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 4096,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        audio_vocab_size: Optional[int] = None,
+        max_position_embeddings: Optional[int] = 3000,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        hidden_act: Optional[str] = "silu",
+        head_dim: Optional[int] = None,
+        initializer_range: Optional[float] = 0.02,
+        use_cache: Optional[bool] = True,
+        sliding_window: Optional[int] = 3000,
+        attention_dropout: Optional[float] = 0.0,
+        ffn_dim: Optional[int] = 22528,
+        rms_norm_eps: Optional[int] = 1e-8,
+        num_codebooks: Optional[int] = 8,
+        tie_word_embeddings: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -266,7 +271,6 @@ class MoshiConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
         self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
         self.hidden_act = hidden_act
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.initializer_range = initializer_range
@@ -278,6 +282,14 @@ class MoshiConfig(PretrainedConfig):
         self.ffn_dim = ffn_dim
         self.rms_norm_eps = rms_norm_eps
         self.num_codebooks = num_codebooks
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         audio_encoder_config = kwargs.pop("audio_encoder_config", {})
         audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")
@@ -314,7 +326,7 @@ class MoshiConfig(PretrainedConfig):
     @classmethod
     def from_audio_encoder_config(
         cls,
-        audio_encoder_config: PretrainedConfig,
+        audio_encoder_config: PreTrainedConfig,
         **kwargs,
     ):
         r"""

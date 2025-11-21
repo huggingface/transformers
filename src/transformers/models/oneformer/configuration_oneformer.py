@@ -14,18 +14,18 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from typing import Dict, Optional
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class OneFormerConfig(PretrainedConfig):
+class OneFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
     OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -33,11 +33,11 @@ class OneFormerConfig(PretrainedConfig):
     [shi-labs/oneformer_ade20k_swin_tiny](https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny) architecture
     trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`):
+        backbone_config (`PreTrainedConfig`, *optional*, defaults to `SwinConfig`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -74,7 +74,7 @@ class OneFormerConfig(PretrainedConfig):
         importance_sample_ratio (`float`, *optional*, defaults to 0.75):
             Ratio of points that are sampled via importance sampling.
         init_std (`float`, *optional*, defaults to 0.02):
-            Standard deviation for normal intialization.
+            Standard deviation for normal initialization.
         init_xavier_std (`float`, *optional*, defaults to 1.0):
             Standard deviation for xavier uniform initialization.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -146,15 +146,16 @@ class OneFormerConfig(PretrainedConfig):
     """
 
     model_type = "oneformer"
+    sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {"hidden_size": "hidden_dim"}
 
     def __init__(
         self,
-        backbone_config: Optional[Dict] = None,
+        backbone_config: Optional[dict] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[Dict] = None,
+        backbone_kwargs: Optional[dict] = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,

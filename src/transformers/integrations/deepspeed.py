@@ -170,12 +170,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
         # total_num_steps - will get set in trainer_config_finalize
 
-        # fp16
-        if args.fp16 or args.fp16_full_eval:
-            fp16_backend = "apex" if args.fp16_backend == "apex" else "amp"
-        else:
-            fp16_backend = None
-
         if args.save_on_each_node:
             # deepspeed uses shared storage by default. Let's override this setting if save_on_each_node == True
             self.config["checkpoint"] = self.config.get("checkpoint", {})
@@ -183,26 +177,16 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match(
-            "fp16.enabled",
-            ((args.fp16 or args.fp16_full_eval) and fp16_backend == "amp"),
-            "fp16|fp16_full_eval+fp16_backend(amp)",
-        )
-
-        # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
-        # ZeRO features
-        self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
-        self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
-
+        self.fill_match("fp16.enabled", (args.fp16 or args.fp16_full_eval), "fp16|fp16_full_eval")
         self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_true("bf16.enabled"):
             self._dtype = torch.bfloat16
-        elif self.is_false("fp16.enabled"):
-            self._dtype = torch.float32
-        else:
+        elif self.is_true("fp16.enabled"):
             self._dtype = torch.float16
+        else:
+            self._dtype = torch.float32
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
@@ -221,17 +205,20 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         hidden_size_auto_keys = [x for x in hidden_size_based_keys if self.is_auto(x)]
 
         if len(hidden_size_auto_keys) > 0:
-            if hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-            elif hasattr(model.config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.hidden_sizes)
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
-                hidden_size = model.config.text_config.hidden_size
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.text_config.hidden_sizes)
-            else:
+            hidden_size = None
+            if hasattr(model, "config"):
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                    hidden_size = model.config.text_config.hidden_size
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.text_config.hidden_sizes)
+
+            if hidden_size is None:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
                     "therefore it's not possible to automatically fill out the following `auto` entries "
@@ -327,13 +314,14 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
-        if is_deepspeed_zero3_enabled() and len([key for key in state_dict if key.startswith(prefix)]) > 0:
+        if is_deepspeed_zero3_enabled():
             import deepspeed
 
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
+            params_to_gather = [named_parameters[k] for k in named_parameters if k in state_dict]
+
             if len(params_to_gather) > 0:
                 # because zero3 puts placeholders in model params, this context
                 # manager gathers (unpartitions) the params of the current layer, then loads from
@@ -369,11 +357,6 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     optimizer = None
     if "optimizer" in config:
-        if args.adafactor:
-            raise ValueError(
-                "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
-                "Only one optimizer can be configured."
-            )
         optimizer = DummyOptim(params=model_parameters)
     else:
         if hf_deepspeed_config.is_offload():
@@ -458,11 +441,16 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
         model_parameters = None
     else:
         trainer.optimizer = None  # important for when deepspeed_init is used as re-init
-        tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 0)
-        if tp_size > 1:
+        deepspeed_tp_size = hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+        if deepspeed_tp_size > 1:
             import deepspeed
 
-            model = deepspeed.tp_model_init(model=model, tp_size=tp_size, dtype=hf_deepspeed_config.dtype())
+            model = deepspeed.tp_model_init(
+                model=model,
+                tp_size=deepspeed_tp_size,
+                dtype=hf_deepspeed_config.dtype(),
+                config=hf_deepspeed_config.config,
+            )
         model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         optimizer, lr_scheduler = deepspeed_optim_sched(
             trainer, hf_deepspeed_config, args, num_training_steps, model_parameters

@@ -18,19 +18,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class MoonshineConfig(PretrainedConfig):
+class MoonshineConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoonshineModel`]. It is used to instantiate a Moonshine
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Moonshine
     [UsefulSensors/moonshine-tiny](https://huggingface.co/UsefulSensors/moonshine-tiny).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32768):
@@ -53,16 +55,16 @@ class MoonshineConfig(PretrainedConfig):
             `encoder_num_key_value_heads=encoder_num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `encoder_num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         decoder_num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `decoder_num_key_value_heads=decoder_num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `decoder_num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `decoder_num_attention_heads`.
         pad_head_dim_to_multiple_of (`int`, *optional*):
             Pad head dimension in encoder and decoder to the next multiple of this value. Necessary for using certain
@@ -81,45 +83,10 @@ class MoonshineConfig(PretrainedConfig):
             the task.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         partial_rotary_factor (`float`, *optional*, defaults to 0.9):
             Percentage of the query and keys which will have rotary embedding.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
@@ -158,30 +125,29 @@ class MoonshineConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32768,
-        hidden_size=288,
-        intermediate_size=1152,
-        encoder_num_hidden_layers=6,
-        decoder_num_hidden_layers=6,
-        encoder_num_attention_heads=8,
-        decoder_num_attention_heads=8,
-        encoder_num_key_value_heads=None,
-        decoder_num_key_value_heads=None,
-        pad_head_dim_to_multiple_of=None,
-        encoder_hidden_act="gelu",
-        decoder_hidden_act="silu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        decoder_start_token_id=1,
-        use_cache=True,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        partial_rotary_factor=0.9,
-        is_encoder_decoder=True,
-        attention_bias=False,
-        attention_dropout=0.0,
-        bos_token_id=1,
-        eos_token_id=2,
+        vocab_size: Optional[int] = 32768,
+        hidden_size: Optional[int] = 288,
+        intermediate_size: Optional[int] = 1152,
+        encoder_num_hidden_layers: Optional[int] = 6,
+        decoder_num_hidden_layers: Optional[int] = 6,
+        encoder_num_attention_heads: Optional[int] = 8,
+        decoder_num_attention_heads: Optional[int] = 8,
+        encoder_num_key_value_heads: Optional[int] = None,
+        decoder_num_key_value_heads: Optional[int] = None,
+        pad_head_dim_to_multiple_of: Optional[int] = None,
+        encoder_hidden_act: Optional[str] = "gelu",
+        decoder_hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 512,
+        initializer_range: Optional[float] = 0.02,
+        decoder_start_token_id: Optional[int] = 1,
+        use_cache: Optional[bool] = True,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        partial_rotary_factor: Optional[float] = 0.9,
+        is_encoder_decoder: Optional[bool] = True,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -208,16 +174,18 @@ class MoonshineConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
-
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,

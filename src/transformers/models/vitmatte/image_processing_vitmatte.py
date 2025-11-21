@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ViTMatte."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -28,15 +28,20 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
+
+
+class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 class VitMatteImageProcessor(BaseImageProcessor):
@@ -53,30 +58,31 @@ class VitMatteImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to make the width and height divisible by `size_divisibility`. Can be overridden
+            Whether to pad the image to make the width and height divisible by `size_divisor`. Can be overridden
             by the `do_pad` parameter in the `preprocess` method.
-        size_divisibility (`int`, *optional*, defaults to 32):
+        size_divisor (`int`, *optional*, defaults to 32):
             The width and height of the image will be padded to be divisible by this number.
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = VitMatteImageProcessorKwargs
 
     def __init__(
         self,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = True,
-        size_divisibility: int = 32,
+        size_divisor: int = 32,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -86,12 +92,13 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self.size_divisibility = size_divisibility
+        size_divisibility = kwargs.get("size_divisibility")
+        self.size_divisor = size_divisibility if size_divisibility is not None else size_divisor
 
     def pad_image(
         self,
         image: np.ndarray,
-        size_divisibility: int = 32,
+        size_divisor: int = 32,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -99,7 +106,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            size_divisibility (`int`, *optional*, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
@@ -118,8 +125,8 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
-        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        pad_height = 0 if height % size_divisor == 0 else size_divisor - height % size_divisor
+        pad_width = 0 if width % size_divisor == 0 else size_divisor - width % size_divisor
         if pad_width + pad_height > 0:
             padding = ((0, pad_height), (0, pad_width))
             image = pad(image, padding=padding, data_format=data_format, input_data_format=input_data_format)
@@ -137,10 +144,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
-        size_divisibility: Optional[int] = None,
+        size_divisor: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -160,21 +167,19 @@ class VitMatteImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image.
-            size_divisibility (`int`, *optional*, defaults to `self.size_divisibility`):
+            size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
                 The size divisibility to pad the image to if `do_pad` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -193,30 +198,22 @@ class VitMatteImageProcessor(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        size_divisibility = size_divisibility if size_divisibility is not None else self.size_divisibility
+        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
 
-        images = make_list_of_images(images)
-        trimaps = make_list_of_images(trimaps, expected_ndims=2)
+        images = make_flat_list_of_images(images)
+        trimaps = make_flat_list_of_images(trimaps, expected_ndims=2)
 
         if not valid_images(trimaps):
-            raise ValueError(
-                "Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid trimap type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisibility,
         )
 
         # All transformations expect numpy arrays.
@@ -250,13 +247,15 @@ class VitMatteImageProcessor(BaseImageProcessor):
             ]
 
         # concatenate images and trimaps
+        axis = -1 if input_data_format == ChannelDimension.LAST else 0
         images = [
-            np.concatenate([image, np.expand_dims(trimap, axis=-1)], axis=-1) for image, trimap in zip(images, trimaps)
+            np.concatenate([image, np.expand_dims(trimap, axis=axis)], axis=axis)
+            for image, trimap in zip(images, trimaps)
         ]
 
         if do_pad:
             images = [
-                self.pad_image(image, size_divisibility=size_divisibility, input_data_format=input_data_format)
+                self.pad_image(image, size_divisor=size_divisor, input_data_format=input_data_format)
                 for image in images
             ]
 

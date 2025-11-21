@@ -20,6 +20,7 @@ import inspect
 import re
 import textwrap
 import types
+from collections import OrderedDict
 
 
 def get_docstring_indentation_level(func):
@@ -94,15 +95,6 @@ PT_RETURN_INTRODUCTION = r"""
 """
 
 
-TF_RETURN_INTRODUCTION = r"""
-    Returns:
-        [`{full_output_type}`] or `tuple(tf.Tensor)`: A [`{full_output_type}`] or a tuple of `tf.Tensor` (if
-        `return_dict=False` is passed or when `config.return_dict=False`) comprising various elements depending on the
-        configuration ([`{config_class}`]) and inputs.
-
-"""
-
-
 def _get_indent(t):
     """Returns the indentation in the first line of t"""
     search = re.search(r"^(\s*)\S", t)
@@ -135,31 +127,40 @@ def _convert_output_args_doc(output_args_doc):
     return "\n".join(blocks)
 
 
-def _prepare_output_docstrings(output_type, config_class, min_indent=None):
+def _prepare_output_docstrings(output_type, config_class, min_indent=None, add_intro=True):
     """
     Prepares the return part of the docstring using `output_type`.
     """
     output_docstring = output_type.__doc__
-
-    # Remove the head of the docstring to keep the list of args only
-    lines = output_docstring.split("\n")
-    i = 0
-    while i < len(lines) and re.search(r"^\s*(Args|Parameters):\s*$", lines[i]) is None:
-        i += 1
-    if i < len(lines):
-        params_docstring = "\n".join(lines[(i + 1) :])
-        params_docstring = _convert_output_args_doc(params_docstring)
-    else:
-        raise ValueError(
-            f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has "
-            "docstring and contain either `Args` or `Parameters`."
-        )
+    params_docstring = None
+    if output_docstring is not None:
+        # Remove the head of the docstring to keep the list of args only
+        lines = output_docstring.split("\n")
+        i = 0
+        while i < len(lines) and re.search(r"^\s*(Args|Parameters):\s*$", lines[i]) is None:
+            i += 1
+        if i < len(lines):
+            params_docstring = "\n".join(lines[(i + 1) :])
+            params_docstring = _convert_output_args_doc(params_docstring)
+        elif add_intro:
+            raise ValueError(
+                f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has "
+                "docstring and contain either `Args` or `Parameters`."
+            )
 
     # Add the return introduction
-    full_output_type = f"{output_type.__module__}.{output_type.__name__}"
-    intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
-    intro = intro.format(full_output_type=full_output_type, config_class=config_class)
-    result = intro + params_docstring
+    if add_intro:
+        full_output_type = f"{output_type.__module__}.{output_type.__name__}"
+        intro = PT_RETURN_INTRODUCTION.format(full_output_type=full_output_type, config_class=config_class)
+    else:
+        full_output_type = str(output_type)
+        intro = f"\nReturns:\n    `{full_output_type}`"
+        if params_docstring is not None:
+            intro += ":\n"
+
+    result = intro
+    if params_docstring is not None:
+        result += params_docstring
 
     # Apply minimum indent if necessary
     if min_indent is not None:
@@ -412,7 +413,7 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -438,7 +439,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -473,7 +474,7 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -509,7 +510,7 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -538,7 +539,7 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     >>> from datasets import load_dataset
     >>> import torch
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
+    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
     >>> dataset = dataset.sort("id")
     >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -573,7 +574,7 @@ PT_VISION_BASE_MODEL_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
+    >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -598,7 +599,7 @@ PT_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> import torch
     >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
+    >>> dataset = load_dataset("huggingface/cats-image")
     >>> image = dataset["test"]["image"][0]
 
     >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
@@ -635,443 +636,357 @@ PT_SAMPLE_DOCSTRINGS = {
 }
 
 
-TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
+TEXT_TO_AUDIO_SPECTROGRAM_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-    >>> import tensorflow as tf
+    >>> from transformers import AutoProcessor, {model_class}, SpeechT5HifiGan
 
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
     >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> inputs = tokenizer(
-    ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="tf"
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
+    >>> vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
+    >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
+
+    >>> # generate speech
+    >>> speech = model.generate(inputs["input_ids"], speaker_embeddings=speaker_embeddings, vocoder=vocoder)
+    ```
+"""
+
+
+TEXT_TO_AUDIO_WAVEFORM_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import AutoProcessor, {model_class}
+
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
+    >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
+
+    >>> # generate speech
+    >>> speech = model(inputs["input_ids"])
+    ```
+"""
+
+
+AUDIO_FRAME_CLASSIFICATION_SAMPLE = PT_SPEECH_FRAME_CLASS_SAMPLE
+
+
+AUDIO_XVECTOR_SAMPLE = PT_SPEECH_XVECTOR_SAMPLE
+
+
+IMAGE_TO_TEXT_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from PIL import Image
+    >>> import requests
+    >>> from transformers import AutoProcessor, {model_class}
+
+    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
+
+    >>> inputs = processor(images=image, return_tensors="pt")
+
+    >>> outputs = model(**inputs)
+    ```
+"""
+
+
+DEPTH_ESTIMATION_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from transformers import AutoImageProcessor, {model_class}
+    >>> import torch
+    >>> from PIL import Image
+    >>> import requests
+
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
+
+    >>> processor = AutoImageProcessor.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    >>> model.to(device)
+
+    >>> # prepare image for the model
+    >>> inputs = processor(images=image, return_tensors="pt").to(device)
+
+    >>> with torch.no_grad():
+    ...     outputs = model(**inputs)
+
+    >>> # interpolate to original size
+    >>> post_processed_output = processor.post_process_depth_estimation(
+    ...     outputs, [(image.height, image.width)],
     ... )
-
-    >>> logits = model(**inputs).logits
-    >>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
-
-    >>> # Note that tokens are classified rather then input words which means that
-    >>> # there might be more predicted token classes than words.
-    >>> # Multiple token classes might account for the same word
-    >>> predicted_tokens_classes = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
-    >>> predicted_tokens_classes
-    {expected_output}
-    ```
-
-    ```python
-    >>> labels = predicted_token_class_ids
-    >>> loss = tf.math.reduce_mean(model(**inputs, labels=labels).loss)
-    >>> round(float(loss), 2)
-    {expected_loss}
+    >>> predicted_depth = post_processed_output[0]["predicted_depth"]
     ```
 """
 
-TF_QUESTION_ANSWERING_SAMPLE = r"""
+
+VIDEO_CLASSIFICATION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-    >>> import tensorflow as tf
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-
-    >>> inputs = tokenizer(question, text, return_tensors="tf")
-    >>> outputs = model(**inputs)
-
-    >>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
-    >>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
-
-    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-    >>> tokenizer.decode(predict_answer_tokens)
-    {expected_output}
-    ```
-
-    ```python
-    >>> # target is "nice puppet"
-    >>> target_start_index = tf.constant([{qa_target_start_index}])
-    >>> target_end_index = tf.constant([{qa_target_end_index}])
-
-    >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
-    >>> loss = tf.math.reduce_mean(outputs.loss)
-    >>> round(float(loss), 2)
-    {expected_loss}
     ```
 """
 
-TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
+
+ZERO_SHOT_OBJECT_DETECTION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-    >>> import tensorflow as tf
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-
-    >>> logits = model(**inputs).logits
-
-    >>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
-    >>> model.config.id2label[predicted_class_id]
-    {expected_output}
-    ```
-
-    ```python
-    >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
-    >>> num_labels = len(model.config.id2label)
-    >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
-
-    >>> labels = tf.constant(1)
-    >>> loss = model(**inputs, labels=labels).loss
-    >>> round(float(loss), 2)
-    {expected_loss}
     ```
 """
 
-TF_MASKED_LM_SAMPLE = r"""
+
+IMAGE_TO_IMAGE_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-    >>> import tensorflow as tf
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
-    >>> logits = model(**inputs).logits
-
-    >>> # retrieve index of {mask}
-    >>> mask_token_index = tf.where((inputs.input_ids == tokenizer.mask_token_id)[0])
-    >>> selected_logits = tf.gather_nd(logits[0], indices=mask_token_index)
-
-    >>> predicted_token_id = tf.math.argmax(selected_logits, axis=-1)
-    >>> tokenizer.decode(predicted_token_id)
-    {expected_output}
-    ```
-
-    ```python
-    >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
-    >>> # mask labels of non-{mask} tokens
-    >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
-
-    >>> outputs = model(**inputs, labels=labels)
-    >>> round(float(outputs.loss), 2)
-    {expected_loss}
     ```
 """
 
-TF_BASE_MODEL_SAMPLE = r"""
+
+IMAGE_FEATURE_EXTRACTION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-    >>> import tensorflow as tf
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-    >>> outputs = model(inputs)
-
-    >>> last_hidden_states = outputs.last_hidden_state
     ```
 """
 
-TF_MULTIPLE_CHOICE_SAMPLE = r"""
+
+DOCUMENT_QUESTION_ANSWERING_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-    >>> import tensorflow as tf
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-    >>> choice0 = "It is eaten with a fork and a knife."
-    >>> choice1 = "It is eaten while held in the hand."
-
-    >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors="tf", padding=True)
-    >>> inputs = {{k: tf.expand_dims(v, 0) for k, v in encoding.items()}}
-    >>> outputs = model(inputs)  # batch size is 1
-
-    >>> # the linear classifier still needs to be trained
-    >>> logits = outputs.logits
     ```
 """
 
-TF_CAUSAL_LM_SAMPLE = r"""
+
+NEXT_SENTENCE_PREDICTION_SAMPLE = r"""
     Example:
 
     ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-    >>> import tensorflow as tf
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-    >>> outputs = model(inputs)
-    >>> logits = outputs.logits
     ```
 """
 
-TF_SPEECH_BASE_MODEL_SAMPLE = r"""
+
+MULTIPLE_CHOICE_SAMPLE = PT_MULTIPLE_CHOICE_SAMPLE
+
+
+PRETRAINING_SAMPLE = r"""
     Example:
 
     ```python
+    ```
+"""
+MASK_GENERATION_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+VISUAL_QUESTION_ANSWERING_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+TEXT_GENERATION_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+IMAGE_CLASSIFICATION_SAMPLE = PT_VISION_SEQ_CLASS_SAMPLE
+
+
+IMAGE_SEGMENTATION_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+FILL_MASK_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+OBJECT_DETECTION_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+QUESTION_ANSWERING_SAMPLE = PT_QUESTION_ANSWERING_SAMPLE
+
+
+TEXT2TEXT_GENERATION_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+TEXT_CLASSIFICATION_SAMPLE = PT_SEQUENCE_CLASSIFICATION_SAMPLE
+
+
+TABLE_QUESTION_ANSWERING_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+TOKEN_CLASSIFICATION_SAMPLE = PT_TOKEN_CLASSIFICATION_SAMPLE
+
+
+AUDIO_CLASSIFICATION_SAMPLE = PT_SPEECH_SEQ_CLASS_SAMPLE
+
+
+AUTOMATIC_SPEECH_RECOGNITION_SAMPLE = PT_SPEECH_CTC_SAMPLE
+
+
+ZERO_SHOT_IMAGE_CLASSIFICATION_SAMPLE = r"""
+    Example:
+
+    ```python
+    ```
+"""
+
+
+IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE = r"""
+    Example:
+
+    ```python
+    >>> from PIL import Image
+    >>> import requests
     >>> from transformers import AutoProcessor, {model_class}
-    >>> from datasets import load_dataset
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
-    >>> dataset = dataset.sort("id")
-    >>> sampling_rate = dataset.features["audio"].sampling_rate
-
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
     >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
 
-    >>> # audio file is decoded on the fly
-    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="tf")
-    >>> outputs = model(**inputs)
+    >>> messages = [
+    ...     {{
+    ...         "role": "user", "content": [
+    ...             {{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}},
+    ...             {{"type": "text", "text": "Where is the cat standing?"}},
+    ...         ]
+    ...     }},
+    ... ]
 
-    >>> last_hidden_states = outputs.last_hidden_state
-    >>> list(last_hidden_states.shape)
-    {expected_output}
+    >>> inputs = processor.apply_chat_template(
+    ...     messages,
+    ...     tokenize=True,
+    ...     return_dict=True,
+    ...     return_tensors="pt",
+    ...     add_generation_prompt=True
+    ... )
+    >>> # Generate
+    >>> generate_ids = model.generate(**inputs)
+    >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
     ```
 """
 
-TF_SPEECH_CTC_SAMPLE = r"""
-    Example:
 
-    ```python
-    >>> from transformers import AutoProcessor, {model_class}
-    >>> from datasets import load_dataset
-    >>> import tensorflow as tf
+PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
+    [
+        ("text-to-audio-spectrogram", TEXT_TO_AUDIO_SPECTROGRAM_SAMPLE),
+        ("text-to-audio-waveform", TEXT_TO_AUDIO_WAVEFORM_SAMPLE),
+        ("automatic-speech-recognition", AUTOMATIC_SPEECH_RECOGNITION_SAMPLE),
+        ("audio-frame-classification", AUDIO_FRAME_CLASSIFICATION_SAMPLE),
+        ("audio-classification", AUDIO_CLASSIFICATION_SAMPLE),
+        ("audio-xvector", AUDIO_XVECTOR_SAMPLE),
+        ("image-text-to-text", IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE),
+        ("image-to-text", IMAGE_TO_TEXT_SAMPLE),
+        ("visual-question-answering", VISUAL_QUESTION_ANSWERING_SAMPLE),
+        ("depth-estimation", DEPTH_ESTIMATION_SAMPLE),
+        ("video-classification", VIDEO_CLASSIFICATION_SAMPLE),
+        ("zero-shot-image-classification", ZERO_SHOT_IMAGE_CLASSIFICATION_SAMPLE),
+        ("image-classification", IMAGE_CLASSIFICATION_SAMPLE),
+        ("zero-shot-object-detection", ZERO_SHOT_OBJECT_DETECTION_SAMPLE),
+        ("object-detection", OBJECT_DETECTION_SAMPLE),
+        ("image-segmentation", IMAGE_SEGMENTATION_SAMPLE),
+        ("image-to-image", IMAGE_TO_IMAGE_SAMPLE),
+        ("image-feature-extraction", IMAGE_FEATURE_EXTRACTION_SAMPLE),
+        ("text-generation", TEXT_GENERATION_SAMPLE),
+        ("table-question-answering", TABLE_QUESTION_ANSWERING_SAMPLE),
+        ("document-question-answering", DOCUMENT_QUESTION_ANSWERING_SAMPLE),
+        ("question-answering", QUESTION_ANSWERING_SAMPLE),
+        ("text2text-generation", TEXT2TEXT_GENERATION_SAMPLE),
+        ("next-sentence-prediction", NEXT_SENTENCE_PREDICTION_SAMPLE),
+        ("multiple-choice", MULTIPLE_CHOICE_SAMPLE),
+        ("text-classification", TEXT_CLASSIFICATION_SAMPLE),
+        ("token-classification", TOKEN_CLASSIFICATION_SAMPLE),
+        ("fill-mask", FILL_MASK_SAMPLE),
+        ("mask-generation", MASK_GENERATION_SAMPLE),
+        ("pretraining", PRETRAINING_SAMPLE),
+    ]
+)
 
-    >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation", trust_remote_code=True)
-    >>> dataset = dataset.sort("id")
-    >>> sampling_rate = dataset.features["audio"].sampling_rate
-
-    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> # audio file is decoded on the fly
-    >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="tf")
-    >>> logits = model(**inputs).logits
-    >>> predicted_ids = tf.math.argmax(logits, axis=-1)
-
-    >>> # transcribe speech
-    >>> transcription = processor.batch_decode(predicted_ids)
-    >>> transcription[0]
-    {expected_output}
-    ```
-
-    ```python
-    >>> inputs["labels"] = processor(text=dataset[0]["text"], return_tensors="tf").input_ids
-
-    >>> # compute loss
-    >>> loss = model(**inputs).loss
-    >>> round(float(loss), 2)
-    {expected_loss}
-    ```
-"""
-
-TF_VISION_BASE_MODEL_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoImageProcessor, {model_class}
-    >>> from datasets import load_dataset
-
-    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
-    >>> image = dataset["test"]["image"][0]
-
-    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = image_processor(image, return_tensors="tf")
-    >>> outputs = model(**inputs)
-
-    >>> last_hidden_states = outputs.last_hidden_state
-    >>> list(last_hidden_states.shape)
-    {expected_output}
-    ```
-"""
-
-TF_VISION_SEQ_CLASS_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoImageProcessor, {model_class}
-    >>> import tensorflow as tf
-    >>> from datasets import load_dataset
-
-    >>> dataset = load_dataset("huggingface/cats-image", trust_remote_code=True)
-    >>> image = dataset["test"]["image"][0]
-
-    >>> image_processor = AutoImageProcessor.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = image_processor(image, return_tensors="tf")
-    >>> logits = model(**inputs).logits
-
-    >>> # model predicts one of the 1000 ImageNet classes
-    >>> predicted_label = int(tf.math.argmax(logits, axis=-1))
-    >>> print(model.config.id2label[predicted_label])
-    {expected_output}
-    ```
-"""
-
-TF_SAMPLE_DOCSTRINGS = {
-    "SequenceClassification": TF_SEQUENCE_CLASSIFICATION_SAMPLE,
-    "QuestionAnswering": TF_QUESTION_ANSWERING_SAMPLE,
-    "TokenClassification": TF_TOKEN_CLASSIFICATION_SAMPLE,
-    "MultipleChoice": TF_MULTIPLE_CHOICE_SAMPLE,
-    "MaskedLM": TF_MASKED_LM_SAMPLE,
-    "LMHead": TF_CAUSAL_LM_SAMPLE,
-    "BaseModel": TF_BASE_MODEL_SAMPLE,
-    "SpeechBaseModel": TF_SPEECH_BASE_MODEL_SAMPLE,
-    "CTC": TF_SPEECH_CTC_SAMPLE,
-    "VisionBaseModel": TF_VISION_BASE_MODEL_SAMPLE,
-    "ImageClassification": TF_VISION_SEQ_CLASS_SAMPLE,
-}
-
-
-FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-
-    >>> outputs = model(**inputs)
-    >>> logits = outputs.logits
-    ```
-"""
-
-FLAX_QUESTION_ANSWERING_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-    >>> inputs = tokenizer(question, text, return_tensors="jax")
-
-    >>> outputs = model(**inputs)
-    >>> start_scores = outputs.start_logits
-    >>> end_scores = outputs.end_logits
-    ```
-"""
-
-FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-
-    >>> outputs = model(**inputs)
-    >>> logits = outputs.logits
-    ```
-"""
-
-FLAX_MASKED_LM_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="jax")
-
-    >>> outputs = model(**inputs)
-    >>> logits = outputs.logits
-    ```
-"""
-
-FLAX_BASE_MODEL_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="jax")
-    >>> outputs = model(**inputs)
-
-    >>> last_hidden_states = outputs.last_hidden_state
-    ```
-"""
-
-FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-    >>> choice0 = "It is eaten with a fork and a knife."
-    >>> choice1 = "It is eaten while held in the hand."
-
-    >>> encoding = tokenizer([prompt, prompt], [choice0, choice1], return_tensors="jax", padding=True)
-    >>> outputs = model(**{{k: v[None, :] for k, v in encoding.items()}})
-
-    >>> logits = outputs.logits
-    ```
-"""
-
-FLAX_CAUSAL_LM_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer, {model_class}
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
-    >>> outputs = model(**inputs)
-
-    >>> # retrieve logts for next token
-    >>> next_token_logits = outputs.logits[:, -1]
-    ```
-"""
-
-FLAX_SAMPLE_DOCSTRINGS = {
-    "SequenceClassification": FLAX_SEQUENCE_CLASSIFICATION_SAMPLE,
-    "QuestionAnswering": FLAX_QUESTION_ANSWERING_SAMPLE,
-    "TokenClassification": FLAX_TOKEN_CLASSIFICATION_SAMPLE,
-    "MultipleChoice": FLAX_MULTIPLE_CHOICE_SAMPLE,
-    "MaskedLM": FLAX_MASKED_LM_SAMPLE,
-    "BaseModel": FLAX_BASE_MODEL_SAMPLE,
-    "LMHead": FLAX_CAUSAL_LM_SAMPLE,
-}
+# Ordered dict to look for more specialized model mappings first
+# before falling back to the more generic ones.
+MODELS_TO_PIPELINE = OrderedDict(
+    [
+        # Audio
+        ("MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "text-to-audio-spectrogram"),
+        ("MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "text-to-audio-waveform"),
+        ("MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES", "automatic-speech-recognition"),
+        ("MODEL_FOR_CTC_MAPPING_NAMES", "automatic-speech-recognition"),
+        ("MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES", "audio-frame-classification"),
+        ("MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES", "audio-classification"),
+        ("MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "audio-xvector"),
+        # Vision
+        ("MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "image-text-to-text"),
+        ("MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "image-to-text"),
+        ("MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES", "visual-question-answering"),
+        ("MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "depth-estimation"),
+        ("MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "video-classification"),
+        ("MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES", "zero-shot-image-classification"),
+        ("MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES", "image-classification"),
+        ("MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES", "zero-shot-object-detection"),
+        ("MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "object-detection"),
+        ("MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "image-segmentation"),
+        ("MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES", "image-to-image"),
+        ("MODEL_FOR_IMAGE_MAPPING_NAMES", "image-feature-extraction"),
+        # Text/tokens
+        ("MODEL_FOR_CAUSAL_LM_MAPPING_NAMES", "text-generation"),
+        ("MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES", "table-question-answering"),
+        ("MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES", "document-question-answering"),
+        ("MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES", "question-answering"),
+        ("MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES", "text2text-generation"),
+        ("MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES", "next-sentence-prediction"),
+        ("MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES", "multiple-choice"),
+        ("MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES", "text-classification"),
+        ("MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES", "token-classification"),
+        ("MODEL_FOR_MASKED_LM_MAPPING_NAMES", "fill-mask"),
+        ("MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "mask-generation"),
+        ("MODEL_FOR_PRETRAINING_MAPPING_NAMES", "pretraining"),
+    ]
+)
 
 
 def filter_outputs_from_example(docstring, **kwargs):
@@ -1108,12 +1023,7 @@ def add_code_sample_docstrings(
         # model_class defaults to function's class if not specified otherwise
         model_class = fn.__qualname__.split(".")[0] if model_cls is None else model_cls
 
-        if model_class[:2] == "TF":
-            sample_docstrings = TF_SAMPLE_DOCSTRINGS
-        elif model_class[:4] == "Flax":
-            sample_docstrings = FLAX_SAMPLE_DOCSTRINGS
-        else:
-            sample_docstrings = PT_SAMPLE_DOCSTRINGS
+        sample_docstrings = PT_SAMPLE_DOCSTRINGS
 
         # putting all kwargs for docstrings in a dict to be used
         # with the `.format(**doc_kwargs)`. Note that string might

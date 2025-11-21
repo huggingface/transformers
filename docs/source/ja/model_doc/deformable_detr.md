@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-変形可能 DETR モデルは、Xizhou Zhu、Weijie Su、Lewei Lu、Bin Li、Xiaogang Wang, Jifeng Dai によって [Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://arxiv.org/abs/2010.04159) で提案されました
+変形可能 DETR モデルは、Xizhou Zhu、Weijie Su、Lewei Lu、Bin Li、Xiaogang Wang, Jifeng Dai によって [Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://huggingface.co/papers/2010.04159) で提案されました
 変形可能な DETR は、参照周囲の少数の主要なサンプリング ポイントのみに注目する新しい変形可能なアテンション モジュールを利用することにより、収束の遅さの問題と元の [DETR](detr) の制限された特徴の空間解像度を軽減します。
 
 論文の要約は次のとおりです。
@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deformable_detr_architecture.png"
 alt="描画" width="600"/>
 
-<small> 変形可能な DETR アーキテクチャ。 <a href="https://arxiv.org/abs/2010.04159">元の論文</a>から抜粋。</small>
+<small> 変形可能な DETR アーキテクチャ。 <a href="https://huggingface.co/papers/2010.04159">元の論文</a>から抜粋。</small>
 
 このモデルは、[nielsr](https://huggingface.co/nielsr) によって提供されました。元のコードは [ここ](https://github.com/fundamentalvision/Deformable-DETR) にあります。
 
@@ -52,12 +52,6 @@ Deformable DETR の使用を開始するのに役立つ公式 Hugging Face お�
 
 [[autodoc]] DeformableDetrImageProcessor
     - preprocess
-    - post_process_object_detection
-
-## DeformableDetrFeatureExtractor
-
-[[autodoc]] DeformableDetrFeatureExtractor
-    - __call__
     - post_process_object_detection
 
 ## DeformableDetrConfig

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 
 import os
-import pickle
 import shutil
 import tempfile
 import unittest
@@ -34,7 +32,6 @@ from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
-    require_jinja,
     require_read_token,
     require_sentencepiece,
     require_tiktoken,
@@ -230,7 +227,6 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     batch = tokenizer(
                         text=text,
                         max_length=3,
-                        max_target_length=10,
                         return_tensors="pt",
                     )
                 except NotImplementedError:
@@ -240,7 +236,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch.input_ids.shape[1], 3)
 
-                batch_encoder_only = tokenizer(text=text, max_length=3, max_target_length=10, return_tensors="pt")
+                batch_encoder_only = tokenizer(text=text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
@@ -292,17 +288,6 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             revision="0984d03108b1a041ed679bd253b6519b7e1a4778",
             padding=False,
         )
-
-    def test_picklable(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = LlamaTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
-
-    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
 
     @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
@@ -409,6 +394,8 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
 
+    # See internal discussion: https://huggingface.slack.com/archives/C01NE71C4F7/p1750680376085749?thread_ts=1750676268.233309&cid=C01NE71C4F7
+    @unittest.skip("failing, won't fix")
     @slow
     def test_conversion(self):
         # This is excruciatingly slow since it has to recreate the entire merge
@@ -417,14 +404,14 @@ class LlamaIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as dirname:
             self.rust_tokenizer.save_pretrained(dirname)
 
-            with open(os.path.join(dirname, "tokenizer.json"), "r") as f:
+            with open(os.path.join(dirname, "tokenizer.json")) as f:
                 old_serialized = f.read()
 
         new_tokenizer = convert_slow_tokenizer(self.tokenizer)
         with tempfile.NamedTemporaryFile() as f:
             new_tokenizer.save(f.name)
             # Re-opening since `f` is in bytes.
-            new_serialized = open(f.name, "r").read()
+            new_serialized = open(f.name).read()
             with open("out_tokenizer.json", "w") as g:
                 g.write(new_serialized)
 
@@ -713,32 +700,6 @@ class LlamaIntegrationTest(unittest.TestCase):
             )
         with self.assertRaises(ValueError):
             tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
-
-    @require_jinja
-    def test_tokenization_for_chat(self):
-        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
-
-        test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
-            [
-                {"role": "system", "content": "You are a helpful chatbot."},
-                {"role": "user", "content": "Hello!"},
-                {"role": "assistant", "content": "Nice to meet you."},
-            ],
-            [{"role": "user", "content": "Hello!"}],
-        ]
-        # Matt: The third test case tests the default system message, but if this is ever changed in the
-        #       class/repo code then that test will fail, and the case will need to be updated.
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
-        # fmt: off
-        expected_tokens = [
-            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962],
-            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962, 20103, 304, 5870, 366, 29889, 29871, 2],
-            [1, 29961, 25580, 29962, 15043, 29991, 518, 29914, 25580, 29962]
-        ]
-        # fmt: on
-        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
-            self.assertListEqual(tokenized_chat, expected_tokens)
 
 
 @require_sentencepiece

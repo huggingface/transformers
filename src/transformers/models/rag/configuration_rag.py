@@ -14,13 +14,13 @@
 # limitations under the License.
 """RAG model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""
-    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PretrainedConfig`] and
-    can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PreTrainedConfig`] and
+    can be used to control the model outputs. Read the documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         title_sep (`str`, *optional*, defaults to  `" / "`):
@@ -77,9 +77,9 @@ RAG_CONFIG_DOC = r"""
 
 
 @add_start_docstrings(RAG_CONFIG_DOC)
-class RagConfig(PretrainedConfig):
+class RagConfig(PreTrainedConfig):
     model_type = "rag"
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(
         self,
@@ -126,7 +126,7 @@ class RagConfig(PretrainedConfig):
         )
         if "question_encoder" not in kwargs or "generator" not in kwargs:
             raise ValueError(
-                f"A configuraton of type {self.model_type} cannot be instantiated because "
+                f"A configuration of type {self.model_type} cannot be instantiated because "
                 f"both `question_encoder` and `generator` sub-configurations were not passed, only {kwargs}"
             )
         question_encoder_config = kwargs.pop("question_encoder")
@@ -166,13 +166,13 @@ class RagConfig(PretrainedConfig):
 
         self.use_cache = use_cache
 
-        if self.forced_eos_token_id is None:
+        if forced_eos_token_id is None:
             self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)
 
     @classmethod
     def from_question_encoder_generator_configs(
-        cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
-    ) -> PretrainedConfig:
+        cls, question_encoder_config: PreTrainedConfig, generator_config: PreTrainedConfig, **kwargs
+    ) -> PreTrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
         decoder model configuration.

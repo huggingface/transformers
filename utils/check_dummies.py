@@ -37,7 +37,6 @@ python utils/check_dummies.py --fix_and_overwrite
 import argparse
 import os
 import re
-from typing import Dict, List, Optional
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -73,7 +72,7 @@ def {0}(*args, **kwargs):
 """
 
 
-def find_backend(line: str) -> Optional[str]:
+def find_backend(line: str) -> str | None:
     """
     Find one (or multiple) backend in a code line of the init.
 
@@ -92,7 +91,7 @@ def find_backend(line: str) -> Optional[str]:
     return "_and_".join(backends)
 
 
-def read_init() -> Dict[str, List[str]]:
+def read_init() -> dict[str, list[str]]:
     """
     Read the init and extract backend-specific objects.
 
@@ -156,7 +155,7 @@ def create_dummy_object(name: str, backend_name: str) -> str:
         return DUMMY_CLASS.format(name, backend_name)
 
 
-def create_dummy_files(backend_specific_objects: Optional[Dict[str, List[str]]] = None) -> Dict[str, str]:
+def create_dummy_files(backend_specific_objects: dict[str, list[str]] | None = None) -> dict[str, str]:
     """
     Create the content of the dummy files.
 
@@ -199,8 +198,7 @@ def check_dummies(overwrite: bool = False):
     # Locate actual dummy modules and read their content.
     path = os.path.join(PATH_TO_TRANSFORMERS, "utils")
     dummy_file_paths = {
-        backend: os.path.join(path, f"dummy_{short_names.get(backend, backend)}_objects.py")
-        for backend in dummy_files.keys()
+        backend: os.path.join(path, f"dummy_{short_names.get(backend, backend)}_objects.py") for backend in dummy_files
     }
 
     actual_dummies = {}
@@ -212,7 +210,7 @@ def check_dummies(overwrite: bool = False):
             actual_dummies[backend] = ""
 
     # Compare actual with what they should be.
-    for backend in dummy_files.keys():
+    for backend in dummy_files:
         if dummy_files[backend] != actual_dummies[backend]:
             if overwrite:
                 print(

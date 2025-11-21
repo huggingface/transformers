@@ -60,17 +60,45 @@ You will see it prints "I just entered the attention computation" as many times 
 
 ## Dynamically switching attention function
 
-You could dynamically change the model's attention function as well, by overriding the `config._attn_implementation` field:
+You could dynamically change the model's attention function as well:
 
 ```python
 # Back to use original sdpa implementation
-model.config._attn_implementation = "sdpa"
+model.set_attn_implementation("sdpa")
 
 model(torch.ones(1, 5, dtype=int))
 ```
 
 and it will stop printing the statements, as it now uses the `sdpa` attention.  
 This allows to quickly change an attention function, without needing to reload the model!
+
+## Different attention per backbone in multimodal models
+
+For multimodal models different attention functions may work better for each backbone module. For example, some vision backbones perform better in fp32, but are incompatible with FlashAttention. To continue using FlashAttention while keeping the vision encoder in fp32, create a dict and map each config to an attention implementation as shown below.
+
+```python
+from transformers import AutoModelForImageTextToText
+
+model_id = "facebook/chameleon-7b"
+
+attention_implementation_per_backbone = {"vision_config": "sdpa", "text_config": "flash_attention_2"}
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation=attention_implementation_per_backbone)
+
+# NOTE: keys in the attention implementation have to be the same as the sub-config names
+for key in attention_implementation_per_backbone:
+    assert key in model.config.sub_configs, f"Invalid key in `attention_implementation`"
+
+# You can omit certain backbones - the default attention function (SDPA) will be used
+# This is equivalent to the previous example
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation={"text_config": "flash_attention_2"})
+
+
+# Set the same attention implementation for all backbones with single string, same as in non-multimodal models
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation="eager")
+
+# Alternatively use a dict with an empty key for global configuration
+model = AutoModelForImageTextToText.from_pretrained(model_id, attn_implementation={"": "eager"})
+```
 
 ## What about new args needed in my custom attention function?
 
@@ -92,7 +120,7 @@ def custom_attention(
     a_new_kwargs = None,  # You can now add as many kwargs as you need
     another_new_kwargs = None,  # You can now add as many kwargs as you need
     **kwargs,  # You need to accept **kwargs as models will pass other args
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]
     ...  # do your magic!
     return attn_output, attn_weights  # attn_weights are optional here
 
@@ -108,7 +136,7 @@ If in doubt about what args/kwargs a given model sends to the attention function
 ## Accessing current available implementations
 
 Most of the time, you will simply need to `register` a new function. If, however, you need to access an existing one,
-and/or perform a few checks, the prefered way is to use the global `ALL_ATTENTION_FUNCTIONS`. It behaves the same way you
+and/or perform a few checks, the preferred way is to use the global `ALL_ATTENTION_FUNCTIONS`. It behaves the same way you
 would expect from a usual Python dictionary:
 
 ```python
@@ -126,3 +154,43 @@ would expect from a usual Python dictionary:
 # You can also globally `register` a new function directly on it
 >>> ALL_ATTENTION_FUNCTIONS.register("new_func", new_func)
 ```
+
+## Attention Mask Interface
+
+Having a new attention function may mean that you need a new format of attention mask to decide what key and value tokens
+the query tokens should attend to. This is now possible with the `AttentionMaskInterface`! It works in the same way as
+the `AttentionInterface`:
+
+```python
+from transformers import AttentionMaskInterface
+from transformers.masking_utils import sdpa_mask
+import torch
+
+def my_new_sdpa_mask(*args, **kwargs):
+    print("I just entered the attention mask computation")
+    return sdpa_mask(*args, **kwargs)
+
+AttentionMaskInterface.register("my_new_sdpa_mask", my_new_sdpa_mask)
+```
+
+The reason you have to register it is because we need to automatically correct your mask format based on the attention implementation (for example, flex attention uses a BlockMask format, while sdpa uses a 4D tensor).
+By default, if you do not register an attention mask function along with your attention function, mask creation will be skipped
+and `attention_mask=None` will be passed along to the Attention layers.
+
+The default signature of the attention mask functions is the following:
+
+```python
+def custom_attention_mask(
+    batch_size: int,  # required arg
+    cache_position: torch.Tensor,  # required arg
+    kv_length: int,  # required arg
+    kv_offset: int = 0,  # required arg
+    mask_function: Callable = causal_mask_function,  # required arg
+    attention_mask: Optional[torch.Tensor] = None,  # required arg
+    **kwargs,  # a few additional args may be passed as kwargs, especially the model's config is always passed
+) -> Optional[torch.Tensor]:
+```
+
+It mostly works thanks to the `mask_function`, which is a `Callable` in the form of [torch's mask_mod functions](https://pytorch.org/blog/flexattention/), taking 4 indices as input and returning a boolean to indicate if this position should take part in the attention computation.
+
+If you cannot use the `mask_function` to create your mask for some reason, you can try to work around it by doing something similar to our [torch export workaround](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/executorch.py).

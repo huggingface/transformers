@@ -14,25 +14,22 @@
 # limitations under the License.
 """LongT5 model configuration"""
 
-from typing import Mapping
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxSeq2SeqConfigWithPast
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class LongT5Config(PretrainedConfig):
+class LongT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongT5Model`] or a [`FlaxLongT5Model`]. It is
+    This is the configuration class to store the configuration of a [`LongT5Model`]. It is
     used to instantiate a LongT5 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the LongT5
     [google/long-t5-local-base](https://huggingface.co/google/long-t5-local-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
@@ -54,7 +51,7 @@ class LongT5Config(PretrainedConfig):
         local_radius (`int`, *optional*, defaults to 127)
             Number of tokens to the left/right for each token to locally self-attend in a local attention mechanism.
         global_block_size (`int`, *optional*, defaults to 16)
-            Lenght of blocks an input sequence is divided into for a global token representation. Used only for
+            Length of blocks an input sequence is divided into for a global token representation. Used only for
             `encoder_attention_type = "transient-global"`.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
@@ -152,29 +149,4 @@ class LongT5Config(PretrainedConfig):
         )
 
 
-class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = {
-            "input_ids": {0: "batch", 1: "encoder_sequence"},
-            "attention_mask": {0: "batch", 1: "encoder_sequence"},
-        }
-        if self.use_past:
-            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 13
-
-
-__all__ = ["LongT5Config", "LongT5OnnxConfig"]
+__all__ = ["LongT5Config"]

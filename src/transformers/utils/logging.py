@@ -20,23 +20,22 @@ import sys
 import threading
 from logging import (
     CRITICAL,  # NOQA
-    DEBUG,  # NOQA
-    ERROR,  # NOQA
+    DEBUG,
+    ERROR,
     FATAL,  # NOQA
-    INFO,  # NOQA
+    INFO,
     NOTSET,  # NOQA
     WARN,  # NOQA
-    WARNING,  # NOQA
+    WARNING,
 )
 from logging import captureWarnings as _captureWarnings
-from typing import Optional
 
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
 
 
 _lock = threading.Lock()
-_default_handler: Optional[logging.Handler] = None
+_default_handler: logging.Handler | None = None
 
 log_levels = {
     "detail": logging.DEBUG,  # will also print filename and line number
@@ -101,7 +100,7 @@ def _configure_library_root_logger() -> None:
             _default_handler.setFormatter(formatter)
 
         is_ci = os.getenv("CI") is not None and os.getenv("CI").upper() in {"1", "ON", "YES", "TRUE"}
-        library_root_logger.propagate = True if is_ci else False
+        library_root_logger.propagate = is_ci
 
 
 def _reset_library_root_logger() -> None:
@@ -144,7 +143,7 @@ def captureWarnings(capture):
     _captureWarnings(capture)
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """
     Return a logger with the specified name.
 
@@ -307,7 +306,7 @@ def warning_advice(self, *args, **kwargs):
     This method is identical to `logger.warning()`, but if env var TRANSFORMERS_NO_ADVISORY_WARNINGS=1 is set, this
     warning will not be printed
     """
-    no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS", False)
+    no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS")
     if no_advisory_warnings:
         return
     self.warning(*args, **kwargs)
@@ -392,7 +391,6 @@ tqdm = _tqdm_cls()
 
 def is_progress_bar_enabled() -> bool:
     """Return a boolean indicating whether tqdm progress bars are enabled."""
-    global _tqdm_active
     return bool(_tqdm_active)
 
 

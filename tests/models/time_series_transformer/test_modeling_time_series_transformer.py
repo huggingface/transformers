@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -181,10 +181,8 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
     )
     pipeline_model_mapping = {"feature-extraction": TimeSeriesTransformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
-    test_torchscript = False
     test_inputs_embeds = False
 
     def setUp(self):
@@ -207,7 +205,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -247,9 +245,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
                 [
                     "future_observed_mask",
                     "decoder_attention_mask",
-                    "head_mask",
-                    "decoder_head_mask",
-                    "cross_attn_head_mask",
                     "encoder_outputs",
                     "past_key_values",
                     "output_hidden_states",
@@ -260,9 +255,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
                 if "future_observed_mask" in arg_names
                 else [
                     "decoder_attention_mask",
-                    "head_mask",
-                    "decoder_head_mask",
-                    "cross_attn_head_mask",
                     "encoder_outputs",
                     "past_key_values",
                     "output_hidden_states",
@@ -286,7 +278,8 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -481,6 +474,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
 
 def prepare_batch(filename="train-batch.pt"):
     file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
+    check_torch_load_is_safe()
     batch = torch.load(file, map_location=torch_device, weights_only=True)
     return batch
 

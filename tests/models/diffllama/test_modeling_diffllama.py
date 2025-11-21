@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +19,8 @@ import unittest
 
 import pytest
 from packaging import version
-from parameterized import parameterized
 
-from transformers import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, DiffLlamaConfig, StaticCache, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
@@ -31,8 +29,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -52,9 +48,6 @@ if is_torch_available():
         DiffLlamaForSequenceClassification,
         DiffLlamaForTokenClassification,
         DiffLlamaModel,
-    )
-    from transformers.models.diffllama.modeling_diffllama import (
-        DiffLlamaRotaryEmbedding,
     )
 
 
@@ -199,9 +192,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -220,12 +210,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_diffllama_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -282,104 +266,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = DiffLlamaModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = DiffLlamaModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    def test_model_rope_scaling(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        original_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
-        for new_position in range(0, long_input_length, scaling_factor):
-            original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(ntk_cos_short, original_cos_short)
-        torch.testing.assert_close(ntk_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
     def test_model_loading_old_rope_configs(self):
         def _reinitialize_config(base_config, new_kwargs):
             # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
@@ -394,27 +280,27 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         original_model(**model_inputs)
 
         # from a config with the expected rope configuration -> ✅
-        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
+        config = _reinitialize_config(base_config, {"rope_parameters": {"rope_type": "linear", "factor": 10.0}})
         original_model = DiffLlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
-        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
+        config = _reinitialize_config(base_config, {"rope_parameters": {"type": "linear", "factor": 10.0}})
         original_model = DiffLlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
         config = _reinitialize_config(
-            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
+            base_config, {"rope_parameters": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
         )
-        self.assertTrue(config.rope_scaling["type"] == "linear")
-        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
+        self.assertTrue(config.rope_parameters["type"] == "linear")
+        self.assertTrue(config.rope_parameters["rope_type"] == "linear")
         original_model = DiffLlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
+            config = _reinitialize_config(base_config, {"rope_parameters": {"rope_type": "linear", "factor": -999.0}})
             original_model = DiffLlamaForCausalLM(config).to(torch_device)
             original_model(**model_inputs)
             self.assertEqual(len(logs.output), 1)
@@ -423,7 +309,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
             config = _reinitialize_config(
-                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
+                base_config, {"rope_parameters": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
             )
             original_model = DiffLlamaForCausalLM(config).to(torch_device)
             original_model(**model_inputs)
@@ -432,10 +318,12 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
         with self.assertRaises(KeyError):
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
+            config = _reinitialize_config(
+                base_config, {"rope_parameters": {"rope_type": "linear"}}
+            )  # missing "factor"
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @require_read_token
@@ -446,7 +334,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         model = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map={"": 0},
         )
 
@@ -464,7 +352,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         model = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map={"": 0},
             attn_implementation="flash_attention_2",
         )
@@ -475,7 +363,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertListEqual(output_native, output_fa_2)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
@@ -489,8 +377,8 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 model.save_pretrained(tmp_dir)
 
                 new_model = DiffLlamaForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
-                ).to("cuda")
+                    tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
+                ).to(torch_device)
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
 
@@ -502,7 +390,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 if not has_flash:
                     raise ValueError("The flash model should have flash attention layers")
 
-    @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
@@ -514,16 +401,14 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         model_sdpa = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
+            dtype=torch.float16,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
+            dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -566,16 +451,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
 @require_torch_accelerator
 class DiffLlamaIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
@@ -583,6 +458,7 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_read_token
+    @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
@@ -608,7 +484,7 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             "kajuma/DiffLlama-0.3B-handcut", pad_token="</s>", padding_side="right"
         )
         model = DiffLlamaForCausalLM.from_pretrained(
-            "kajuma/DiffLlama-0.3B-handcut", device_map=torch_device, torch_dtype=torch.float16
+            "kajuma/DiffLlama-0.3B-handcut", device_map=torch_device, dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -645,7 +521,7 @@ class Mask4DTestHard(unittest.TestCase):
         model_name = "kajuma/DiffLlama-0.3B-handcut"
         self.model_dtype = torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = DiffLlamaForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
+        self.model = DiffLlamaForCausalLM.from_pretrained(model_name, dtype=self.model_dtype).to(torch_device)
 
     def get_test_data(self):
         template = "my favorite {}"
@@ -777,13 +653,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=self.model.dtype,
-        )
+        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         padded_attention_mask = torch.nn.functional.pad(
             input=mask_shared_prefix,
@@ -825,13 +695,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=self.model.dtype,
-        )
+        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         # forward run for the first part of input
         part_a = 3  # split point

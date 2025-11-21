@@ -22,6 +22,7 @@ Notebook to get the original logits: https://colab.research.google.com/drive/1QD
 import argparse
 import os
 import re
+from typing import Optional
 
 import requests
 import torch
@@ -160,7 +161,7 @@ def get_config(model_name):
     return config
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -207,7 +208,7 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
     )
 
     print("Converting model...")
-    original_state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
+    original_state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["state_dict"]
     all_keys = list(original_state_dict.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
@@ -264,7 +265,7 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
     pixel_values = image_processor(images=image, boxes=boxes, return_tensors="pt").pixel_values
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
-    original_pixel_values = torch.load(filepath, map_location="cpu")["img"]
+    original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)["img"]
     # we allow for a small difference in the pixel values due to the original repository using cv2
     assert torch.allclose(pixel_values, original_pixel_values, atol=1e-1)
 
@@ -409,7 +410,9 @@ def main():
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to store the converted model."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     parser.add_argument(
         "--check_logits", action="store_false", help="Whether or not to verify the logits of the converted model."

@@ -2,12 +2,11 @@
 import datetime
 import platform
 import subprocess
-from typing import Optional, Tuple, Union
 
 import numpy as np
 
 
-def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
+def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.ndarray:
     """
     Helper function to read an audio file through ffmpeg.
     """
@@ -50,8 +49,8 @@ def ffmpeg_microphone(
     sampling_rate: int,
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
-    ffmpeg_input_device: Optional[str] = None,
-    ffmpeg_additional_args: Optional[list[str]] = None,
+    ffmpeg_input_device: str | None = None,
+    ffmpeg_additional_args: list[str] | None = None,
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. The default input device will be used unless another
@@ -134,11 +133,11 @@ def ffmpeg_microphone(
 def ffmpeg_microphone_live(
     sampling_rate: int,
     chunk_length_s: float,
-    stream_chunk_s: Optional[int] = None,
-    stride_length_s: Optional[Union[Tuple[float, float], float]] = None,
+    stream_chunk_s: int | None = None,
+    stride_length_s: tuple[float, float] | float | None = None,
     format_for_conversion: str = "f32le",
-    ffmpeg_input_device: Optional[str] = None,
-    ffmpeg_additional_args: Optional[list[str]] = None,
+    ffmpeg_input_device: str | None = None,
+    ffmpeg_additional_args: list[str] | None = None,
 ):
     """
     Helper function to read audio from a microphone using ffmpeg. This will output `partial` overlapping chunks starting
@@ -173,7 +172,7 @@ def ffmpeg_microphone_live(
     Return:
         A generator yielding dictionaries of the following form
 
-        `{"sampling_rate": int, "raw": np.array(), "partial" bool}` With optionally a `"stride" (int, int)` key if
+        `{"sampling_rate": int, "raw": np.ndarray, "partial" bool}` With optionally a `"stride" (int, int)` key if
         `stride_length_s` is defined.
 
         `stride` and `raw` are all expressed in `samples`, and `partial` is a boolean saying if the current yield item
@@ -226,7 +225,7 @@ def ffmpeg_microphone_live(
         yield item
 
 
-def chunk_bytes_iter(iterator, chunk_len: int, stride: Tuple[int, int], stream: bool = False):
+def chunk_bytes_iter(iterator, chunk_len: int, stride: tuple[int, int], stream: bool = False):
     """
     Reads raw bytes from an iterator and does chunks of length `chunk_len`. Optionally adds `stride` to each chunks to
     get overlaps. `stream` is used to return partial results even if a full `chunk_len` is not yet available.

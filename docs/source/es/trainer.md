@@ -363,29 +363,6 @@ use_cpu: false
 
 </hfoption>
 
-<hfoption id="Tensor Parallelism with PyTorch 2">
-
-```yml
-compute_environment: LOCAL_MACHINE
-tp_config:
-  tp_size: 4
-distributed_type: TP
-downcast_bf16: 'no'
-machine_rank: 0
-main_training_function: main
-mixed_precision: 'no'
-num_machines: 1
-num_processes: 4
-rdzv_backend: static
-same_network: true
-tpu_env: []
-tpu_use_cluster: false
-tpu_use_sudo: false
-use_cpu: false
-
-```
-
-</hfoption>
 </hfoptions>
 
 El comando [`accelerate_launch`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-launch) es la forma recomendada de lanzar tu script de entrenamiento en un sistema distribuido con Accelerate y [`Trainer`] con los parámetros especificados en `config_file.yaml`. Este archivo se guarda en la carpeta de caché de Accelerate y se carga automáticamente cuando ejecutas `accelerate_launch`.
@@ -404,7 +381,6 @@ accelerate launch \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 También puedes especificar los parámetros del archivo config_file.yaml directamente en la línea de comandos:
@@ -427,7 +403,6 @@ accelerate launch --num_processes=2 \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 Consulta el tutorial [Lanzamiento de tus scripts con Accelerate](https://huggingface.co/docs/accelerate/basic_tutorials/launch) para obtener más información sobre `accelerate_launch` y las configuraciones personalizadas.

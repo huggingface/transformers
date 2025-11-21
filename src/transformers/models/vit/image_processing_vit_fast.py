@@ -15,7 +15,6 @@
 """Fast Image processor class for ViT."""
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
 )
 from ...image_utils import (
@@ -24,14 +23,11 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...utils import (
-    add_start_docstrings,
+    auto_docstring,
 )
 
 
-@add_start_docstrings(
-    "Constructs a fast ViT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class ViTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN

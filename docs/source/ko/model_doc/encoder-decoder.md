@@ -20,11 +20,11 @@ rendered properly in your Markdown viewer.
 
 [`EncoderDecoderModel`]은 사전 학습된 자동 인코딩(autoencoding) 모델을 인코더로, 사전 학습된 자가 회귀(autoregressive) 모델을 디코더로 활용하여 시퀀스-투-시퀀스(sequence-to-sequence) 모델을 초기화하는 데 이용됩니다.
 
-사전 학습된 체크포인트를 활용해 시퀀스-투-시퀀스 모델을 초기화하는 것이 시퀀스 생성(sequence generation) 작업에 효과적이라는 점이 Sascha Rothe, Shashi Narayan, Aliaksei Severyn의 논문 [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://arxiv.org/abs/1907.12461)에서 입증되었습니다.
+사전 학습된 체크포인트를 활용해 시퀀스-투-시퀀스 모델을 초기화하는 것이 시퀀스 생성(sequence generation) 작업에 효과적이라는 점이 Sascha Rothe, Shashi Narayan, Aliaksei Severyn의 논문 [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://huggingface.co/papers/1907.12461)에서 입증되었습니다.
 
 [`EncoderDecoderModel`]이 학습/미세 조정된 후에는 다른 모델과 마찬가지로 저장/불러오기가 가능합니다. 자세한 사용법은 예제를 참고하세요.
 
-이 아키텍처의 한 가지 응용 사례는 두 개의 사전 학습된 [`BertModel`]을 각각 인코더와 디코더로 활용하여 요약 모델(summarization model)을 구축하는 것입니다. 이는 Yang Liu와 Mirella Lapata의 논문 [Text Summarization with Pretrained Encoders](https://arxiv.org/abs/1908.08345)에서 제시된 바 있습니다.
+이 아키텍처의 한 가지 응용 사례는 두 개의 사전 학습된 [`BertModel`]을 각각 인코더와 디코더로 활용하여 요약 모델(summarization model)을 구축하는 것입니다. 이는 Yang Liu와 Mirella Lapata의 논문 [Text Summarization with Pretrained Encoders](https://huggingface.co/papers/1908.08345)에서 제시된 바 있습니다.
 
 ## 모델 설정에서 `EncoderDecoderModel`을 무작위 초기화하기[[Randomly initializing `EncoderDecoderModel` from model configurations.]]
 
@@ -136,8 +136,6 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
 
 [[autodoc]] EncoderDecoderConfig
 
-<frameworkcontent>
-<pt>
 
 ## EncoderDecoderModel
 
@@ -145,23 +143,3 @@ nearly 800 thousand customers were affected by the shutoffs. the aim is to reduc
     - forward
     - from_encoder_decoder_pretrained
 
-</pt>
-<tf>
-
-## TFEncoderDecoderModel
-
-[[autodoc]] TFEncoderDecoderModel
-    - call
-    - from_encoder_decoder_pretrained
-
-</tf>
-<jax>
-
-## FlaxEncoderDecoderModel
-
-[[autodoc]] FlaxEncoderDecoderModel
-    - __call__
-    - from_encoder_decoder_pretrained
-
-</jax>
-</frameworkcontent>

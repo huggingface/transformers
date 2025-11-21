@@ -3,9 +3,9 @@ import types
 
 import numpy as np
 
+from ..generation import GenerationConfig
 from ..utils import (
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
     requires_backends,
 )
@@ -20,14 +20,6 @@ if is_torch_available():
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     )
 
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import (
-        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
-        TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
-    )
-
 
 class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
     """
@@ -37,9 +29,9 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
     def __call__(self, table=None, query=None, **kwargs):
         # Returns tqa_pipeline_inputs of shape:
         # [
-        #   {"table": pd.DataFrame, "query": List[str]},
+        #   {"table": pd.DataFrame, "query": list[str]},
         #   ...,
-        #   {"table": pd.DataFrame, "query" : List[str]}
+        #   {"table": pd.DataFrame, "query" : list[str]}
         # ]
         requires_backends(self, "pandas")
         import pandas as pd
@@ -88,6 +80,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in
     PyTorch.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -116,20 +112,26 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
     default_input_names = "table,query"
 
-    def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    _pipeline_calls_generate = True
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
+
+    def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), **kwargs):
+        super().__init__(**kwargs)
         self._args_parser = args_parser
 
-        if self.framework == "tf":
-            mapping = TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
-            mapping.update(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
-        else:
-            mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
-            mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
+        mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
+        mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
         self.check_model_type(mapping)
 
-        self.aggregate = bool(getattr(self.model.config, "aggregation_labels", None)) and bool(
-            getattr(self.model.config, "num_aggregation_labels", None)
+        self.aggregate = getattr(self.model.config, "aggregation_labels", None) and getattr(
+            self.model.config, "num_aggregation_labels", None
         )
         self.type = "tapas" if hasattr(self.model.config, "aggregation_labels") else None
 
@@ -141,130 +143,67 @@ class TableQuestionAnsweringPipeline(Pipeline):
         Inference used for models that need to process sequences in a sequential fashion, like the SQA models which
         handle conversational query related to a table.
         """
-        if self.framework == "pt":
-            all_logits = []
-            all_aggregations = []
-            prev_answers = None
-            batch_size = inputs["input_ids"].shape[0]
+        all_logits = []
+        all_aggregations = []
+        prev_answers = None
+        batch_size = inputs["input_ids"].shape[0]
 
-            input_ids = inputs["input_ids"].to(self.device)
-            attention_mask = inputs["attention_mask"].to(self.device)
-            token_type_ids = inputs["token_type_ids"].to(self.device)
-            token_type_ids_example = None
+        input_ids = inputs["input_ids"].to(self.device)
+        attention_mask = inputs["attention_mask"].to(self.device)
+        token_type_ids = inputs["token_type_ids"].to(self.device)
+        token_type_ids_example = None
 
-            for index in range(batch_size):
-                # If sequences have already been processed, the token type IDs will be created according to the previous
-                # answer.
-                if prev_answers is not None:
-                    prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
-                    model_labels = np.zeros_like(prev_labels_example.cpu().numpy())  # shape (seq_len,)
+        for index in range(batch_size):
+            # If sequences have already been processed, the token type IDs will be created according to the previous
+            # answer.
+            if prev_answers is not None:
+                prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
+                model_labels = np.zeros_like(prev_labels_example.cpu().numpy())  # shape (seq_len,)
 
-                    token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
-                    for i in range(model_labels.shape[0]):
-                        segment_id = token_type_ids_example[:, 0].tolist()[i]
-                        col_id = token_type_ids_example[:, 1].tolist()[i] - 1
-                        row_id = token_type_ids_example[:, 2].tolist()[i] - 1
-
-                        if row_id >= 0 and col_id >= 0 and segment_id == 1:
-                            model_labels[i] = int(prev_answers[(col_id, row_id)])
-
-                    token_type_ids_example[:, 3] = torch.from_numpy(model_labels).type(torch.long).to(self.device)
-
-                input_ids_example = input_ids[index]
-                attention_mask_example = attention_mask[index]  # shape (seq_len,)
                 token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
-                outputs = self.model(
-                    input_ids=input_ids_example.unsqueeze(0),
-                    attention_mask=attention_mask_example.unsqueeze(0),
-                    token_type_ids=token_type_ids_example.unsqueeze(0),
-                )
-                logits = outputs.logits
-
-                if self.aggregate:
-                    all_aggregations.append(outputs.logits_aggregation)
-
-                all_logits.append(logits)
-
-                dist_per_token = torch.distributions.Bernoulli(logits=logits)
-                probabilities = dist_per_token.probs * attention_mask_example.type(torch.float32).to(
-                    dist_per_token.probs.device
-                )
-
-                coords_to_probs = collections.defaultdict(list)
-                for i, p in enumerate(probabilities.squeeze().tolist()):
+                for i in range(model_labels.shape[0]):
                     segment_id = token_type_ids_example[:, 0].tolist()[i]
-                    col = token_type_ids_example[:, 1].tolist()[i] - 1
-                    row = token_type_ids_example[:, 2].tolist()[i] - 1
-                    if col >= 0 and row >= 0 and segment_id == 1:
-                        coords_to_probs[(col, row)].append(p)
+                    col_id = token_type_ids_example[:, 1].tolist()[i] - 1
+                    row_id = token_type_ids_example[:, 2].tolist()[i] - 1
 
-                prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
+                    if row_id >= 0 and col_id >= 0 and segment_id == 1:
+                        model_labels[i] = int(prev_answers[(col_id, row_id)])
 
-            logits_batch = torch.cat(tuple(all_logits), 0)
+                token_type_ids_example[:, 3] = torch.from_numpy(model_labels).type(torch.long).to(self.device)
 
-            return (logits_batch,) if not self.aggregate else (logits_batch, torch.cat(tuple(all_aggregations), 0))
-        else:
-            all_logits = []
-            all_aggregations = []
-            prev_answers = None
-            batch_size = inputs["input_ids"].shape[0]
+            input_ids_example = input_ids[index]
+            attention_mask_example = attention_mask[index]  # shape (seq_len,)
+            token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
+            outputs = self.model(
+                input_ids=input_ids_example.unsqueeze(0),
+                attention_mask=attention_mask_example.unsqueeze(0),
+                token_type_ids=token_type_ids_example.unsqueeze(0),
+            )
+            logits = outputs.logits
 
-            input_ids = inputs["input_ids"]
-            attention_mask = inputs["attention_mask"]
-            token_type_ids = inputs["token_type_ids"].numpy()
-            token_type_ids_example = None
+            if self.aggregate:
+                all_aggregations.append(outputs.logits_aggregation)
 
-            for index in range(batch_size):
-                # If sequences have already been processed, the token type IDs will be created according to the previous
-                # answer.
-                if prev_answers is not None:
-                    prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
-                    model_labels = np.zeros_like(prev_labels_example, dtype=np.int32)  # shape (seq_len,)
+            all_logits.append(logits)
 
-                    token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
-                    for i in range(model_labels.shape[0]):
-                        segment_id = token_type_ids_example[:, 0].tolist()[i]
-                        col_id = token_type_ids_example[:, 1].tolist()[i] - 1
-                        row_id = token_type_ids_example[:, 2].tolist()[i] - 1
+            dist_per_token = torch.distributions.Bernoulli(logits=logits)
+            probabilities = dist_per_token.probs * attention_mask_example.type(torch.float32).to(
+                dist_per_token.probs.device
+            )
 
-                        if row_id >= 0 and col_id >= 0 and segment_id == 1:
-                            model_labels[i] = int(prev_answers[(col_id, row_id)])
+            coords_to_probs = collections.defaultdict(list)
+            for i, p in enumerate(probabilities.squeeze().tolist()):
+                segment_id = token_type_ids_example[:, 0].tolist()[i]
+                col = token_type_ids_example[:, 1].tolist()[i] - 1
+                row = token_type_ids_example[:, 2].tolist()[i] - 1
+                if col >= 0 and row >= 0 and segment_id == 1:
+                    coords_to_probs[(col, row)].append(p)
 
-                    token_type_ids_example[:, 3] = model_labels
+            prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
 
-                input_ids_example = input_ids[index]
-                attention_mask_example = attention_mask[index]  # shape (seq_len,)
-                token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
-                outputs = self.model(
-                    input_ids=np.expand_dims(input_ids_example, axis=0),
-                    attention_mask=np.expand_dims(attention_mask_example, axis=0),
-                    token_type_ids=np.expand_dims(token_type_ids_example, axis=0),
-                )
-                logits = outputs.logits
+        logits_batch = torch.cat(tuple(all_logits), 0)
 
-                if self.aggregate:
-                    all_aggregations.append(outputs.logits_aggregation)
-
-                all_logits.append(logits)
-
-                probabilities = tf.math.sigmoid(tf.cast(logits, tf.float32)) * tf.cast(
-                    attention_mask_example, tf.float32
-                )
-
-                coords_to_probs = collections.defaultdict(list)
-                token_type_ids_example = token_type_ids_example
-                for i, p in enumerate(tf.squeeze(probabilities).numpy().tolist()):
-                    segment_id = token_type_ids_example[:, 0].tolist()[i]
-                    col = token_type_ids_example[:, 1].tolist()[i] - 1
-                    row = token_type_ids_example[:, 2].tolist()[i] - 1
-                    if col >= 0 and row >= 0 and segment_id == 1:
-                        coords_to_probs[(col, row)].append(p)
-
-                prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
-
-            logits_batch = tf.concat(tuple(all_logits), 0)
-
-            return (logits_batch,) if not self.aggregate else (logits_batch, tf.concat(tuple(all_aggregations), 0))
+        return (logits_batch,) if not self.aggregate else (logits_batch, torch.cat(tuple(all_aggregations), 0))
 
     def __call__(self, *args, **kwargs):
         r"""
@@ -305,7 +244,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             table (`pd.DataFrame` or `Dict`):
                 Pandas DataFrame or dictionary that will be converted to a DataFrame containing all the table values.
                 See above for an example of dictionary.
-            query (`str` or `List[str]`):
+            query (`str` or `list[str]`):
                 Query or list of queries that will be sent to the model alongside the table.
             sequential (`bool`, *optional*, defaults to `False`):
                 Whether to do inference sequentially or as a batch. Batching is faster, but models like SQA require the
@@ -337,8 +276,8 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
             - **answer** (`str`) -- The answer of the query given the table. If there is an aggregator, the answer will
               be preceded by `AGGREGATOR >`.
-            - **coordinates** (`List[Tuple[int, int]]`) -- Coordinates of the cells of the answers.
-            - **cells** (`List[str]`) -- List of strings made up of the answer cell values.
+            - **coordinates** (`list[tuple[int, int]]`) -- Coordinates of the cells of the answers.
+            - **cells** (`list[str]`) -- List of strings made up of the answer cell values.
             - **aggregator** (`str`) -- If the model has an aggregator, this returns the aggregator.
         """
         pipeline_inputs = self._args_parser(*args, **kwargs)
@@ -359,15 +298,15 @@ class TableQuestionAnsweringPipeline(Pipeline):
         if sequential is not None:
             forward_params["sequential"] = sequential
 
-        if self.assistant_model is not None:
+        if getattr(self, "assistant_model", None) is not None:
             forward_params["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
+        if getattr(self, "assistant_tokenizer", None) is not None:
             forward_params["tokenizer"] = self.tokenizer
             forward_params["assistant_tokenizer"] = self.assistant_tokenizer
 
         return preprocess_params, forward_params, {}
 
-    def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
+    def preprocess(self, pipeline_input, padding=True, truncation=None):
         if truncation is None:
             if self.type == "tapas":
                 truncation = "drop_rows_to_fit"
@@ -379,7 +318,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             raise ValueError("table is empty")
         if query is None or query == "":
             raise ValueError("query is empty")
-        inputs = self.tokenizer(table, query, return_tensors=self.framework, truncation=truncation, padding=padding)
+        inputs = self.tokenizer(table, query, return_tensors="pt", truncation=truncation, padding=padding)
         inputs["table"] = table
         return inputs
 
@@ -436,7 +375,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
                 answers.append(answer)
             if len(answer) == 0:
-                raise PipelineException("Empty answer")
+                raise PipelineException("Table question answering", self.model.name_or_path, "Empty answer")
         else:
             answers = [{"answer": answer} for answer in self.tokenizer.batch_decode(outputs, skip_special_tokens=True)]
 

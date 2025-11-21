@@ -14,16 +14,16 @@
 # limitations under the License.
 """FastSpeech2Conformer model configuration"""
 
-from typing import Dict
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FastSpeech2ConformerConfig(PretrainedConfig):
+class FastSpeech2ConformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to
     instantiate a FastSpeech2Conformer model according to the specified arguments, defining the model architecture.
@@ -31,8 +31,8 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     FastSpeech2Conformer [espnet/fastspeech2_conformer](https://huggingface.co/espnet/fastspeech2_conformer)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 384):
@@ -142,11 +142,13 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             speaker id embedding layer.
         num_languages (`int`, *optional*):
             Number of languages. If set to > 1, assume that the language ids will be provided as the input and use the
-            languge id embedding layer.
+            language id embedding layer.
         speaker_embed_dim (`int`, *optional*):
             Speaker embedding dimension. If set to > 0, assume that speaker_embedding will be provided as the input.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Specifies whether the model is an encoder-decoder.
+        convolution_bias (`bool`, *optional*, defaults to `True`):
+            Specifies whether to use bias in convolutions of the conformer's convolution module.
 
     Example:
 
@@ -224,6 +226,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         num_languages=None,
         speaker_embed_dim=None,
         is_encoder_decoder=True,
+        convolution_bias=True,
         **kwargs,
     ):
         if positionwise_conv_kernel_size % 2 == 0:
@@ -318,6 +321,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.speaker_embed_dim = speaker_embed_dim
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
         self.is_encoder_decoder = is_encoder_decoder
+        self.convolution_bias = convolution_bias
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
@@ -325,7 +329,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         )
 
 
-class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
+class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerHifiGanModel`]. It is used to
     instantiate a FastSpeech2Conformer HiFi-GAN vocoder model according to the specified arguments, defining the model
@@ -333,26 +337,26 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     FastSpeech2Conformer
     [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         model_in_dim (`int`, *optional*, defaults to 80):
             The number of frequency bins in the input log-mel spectrogram.
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the upsampling network.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 2, 2]`):
+        upsample_rates (`tuple[int]` or `list[int]`, *optional*, defaults to `[8, 8, 2, 2]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the upsampling network. The
             length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*.
-        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[16, 16, 4, 4]`):
+        upsample_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[16, 16, 4, 4]`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the upsampling network. The
             length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
             *upsample_rates*.
-        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+        resblock_kernel_sizes (`tuple[int]` or `list[int]`, *optional*, defaults to `[3, 7, 11]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the multi-receptive field
             fusion (MRF) module.
-        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
             A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
             multi-receptive field fusion (MRF) module.
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -405,7 +409,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
+class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerWithHifiGan`]. It is used to
     instantiate a `FastSpeech2ConformerWithHifiGanModel` model according to the specified sub-models configurations,
@@ -416,8 +420,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     FastSpeech2ConformerHifiGan
     [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan) architectures.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         model_config (`typing.Dict`, *optional*):
@@ -459,8 +463,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
 
     def __init__(
         self,
-        model_config: Dict = None,
-        vocoder_config: Dict = None,
+        model_config: Optional[dict] = None,
+        vocoder_config: Optional[dict] = None,
         **kwargs,
     ):
         if model_config is None:

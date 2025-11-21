@@ -15,40 +15,21 @@
 """PyTorch SwiftFormer model."""
 
 import collections.abc
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2CLS
-from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-    ImageClassifierOutputWithNoAttention,
-)
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from .configuration_swiftformer import SwiftFormerConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "SwiftFormerConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "MBZUAI/swiftformer-xs"
-_EXPECTED_OUTPUT_SHAPE = [1, 220, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "MBZUAI/swiftformer-xs"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 class SwiftFormerPatchEmbedding(nn.Module):
@@ -83,11 +64,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -110,7 +86,7 @@ class SwiftFormerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class SwiftFormerEmbeddings(nn.Module):
@@ -321,7 +297,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         return x
 
 
-class SwiftFormerStage(nn.Module):
+class SwiftFormerStage(GradientCheckpointingLayer):
     """
     A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
     `SwiftFormerEncoderBlock`.
@@ -405,58 +381,36 @@ class SwiftFormerEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class SwiftFormerPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = SwiftFormerConfig
+    config: SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwiftFormerEncoderBlock"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Conv2d, nn.Linear)):
-            nn.init.trunc_normal_(module.weight, std=0.02)
+            init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-        elif isinstance(module, (nn.LayerNorm)):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+                init.constant_(module.bias, 0)
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
+            init.constant_(module.bias, 0)
+            init.constant_(module.weight, 1.0)
+        elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
+            init.ones_(module.layer_scale)
+        elif isinstance(module, SwiftFormerEncoderBlock):
+            if self.config.use_layer_scale:
+                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
+        elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
+            init.normal_(module.w_g)
 
 
-SWIFTFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SwiftFormerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SWIFTFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare SwiftFormer Model transformer outputting raw hidden-states without any specific head on top.",
-    SWIFTFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class SwiftFormerModel(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig):
         super().__init__(config)
@@ -468,22 +422,13 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
-        r""" """
-
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -508,12 +453,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    SwiftFormer Model transformer with an image classification head on top (e.g. for ImageNet).
-    """,
-    SWIFTFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
     def __init__(self, config: SwiftFormerConfig) -> None:
         super().__init__(config)
@@ -531,13 +471,7 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWIFTFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -572,26 +506,7 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         # calculate loss
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

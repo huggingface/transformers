@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -30,7 +29,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DonutSwinModel
+    from transformers import DonutSwinForImageClassification, DonutSwinModel
 
 
 class DonutSwinModelTester:
@@ -130,6 +129,24 @@ class DonutSwinModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        config.num_labels = self.type_sequence_label_size
+        model = DonutSwinForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = DonutSwinForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -143,13 +160,14 @@ class DonutSwinModelTester:
 
 @require_torch
 class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-feature-extraction": DonutSwinModel} if is_torch_available() else {}
-    fx_compatible = True
+    all_model_classes = (DonutSwinModel, DonutSwinForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-feature-extraction": DonutSwinModel, "image-classification": DonutSwinForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DonutSwinModelTester(self)
@@ -167,6 +185,10 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @unittest.skip(reason="DonutSwin does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -189,7 +211,8 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -333,17 +356,3 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model_name = "naver-clova-ix/donut-base"
         model = DonutSwinModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "embeddings" not in name and param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )

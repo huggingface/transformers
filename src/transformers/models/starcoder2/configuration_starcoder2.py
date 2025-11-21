@@ -14,23 +14,25 @@
 # limitations under the License.
 """Starcoder2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Starcoder2Config(PretrainedConfig):
+class Starcoder2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate a
     Starcoder2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [bigcode/starcoder2-7b](https://huggingface.co/bigcode/starcoder2-7b) model.
 
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -50,8 +52,8 @@ class Starcoder2Config(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -68,45 +70,10 @@ class Starcoder2Config(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 50256):
             The id of the "end-of-sequence" token.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*):
             Sliding window attention window size. If not specified, will default to `None` (no sliding window).
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -141,7 +108,7 @@ class Starcoder2Config(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.c_fc": "colwise",
-        "layers.*.mlp.c_proj": "colwise",
+        "layers.*.mlp.c_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -151,26 +118,25 @@ class Starcoder2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=49152,
-        hidden_size=3072,
-        intermediate_size=12288,
-        num_hidden_layers=30,
-        num_attention_heads=24,
-        num_key_value_heads=2,
-        hidden_act="gelu_pytorch_tanh",
-        max_position_embeddings=4096,
-        initializer_range=0.018042,
-        norm_epsilon=1e-5,
-        use_cache=True,
-        bos_token_id=50256,
-        eos_token_id=50256,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        sliding_window=None,
-        attention_dropout=0.0,
-        residual_dropout=0.0,
-        embedding_dropout=0.0,
-        use_bias=True,
+        vocab_size: Optional[int] = 49152,
+        hidden_size: Optional[int] = 3072,
+        intermediate_size: Optional[int] = 12288,
+        num_hidden_layers: Optional[int] = 30,
+        num_attention_heads: Optional[int] = 24,
+        num_key_value_heads: Optional[int] = 2,
+        hidden_act: Optional[str] = "gelu_pytorch_tanh",
+        max_position_embeddings: Optional[int] = 4096,
+        initializer_range: Optional[float] = 0.018042,
+        norm_epsilon: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        bos_token_id: Optional[int] = 50256,
+        eos_token_id: Optional[int] = 50256,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        sliding_window: Optional[int] = None,
+        attention_dropout: Optional[float] = 0.0,
+        residual_dropout: Optional[float] = 0.0,
+        embedding_dropout: Optional[float] = 0.0,
+        use_bias: Optional[bool] = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -186,15 +152,16 @@ class Starcoder2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.norm_epsilon = norm_epsilon
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
         self.residual_dropout = residual_dropout
         self.embedding_dropout = embedding_dropout
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         super().__init__(

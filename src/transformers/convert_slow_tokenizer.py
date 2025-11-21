@@ -19,6 +19,7 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
+from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -326,7 +327,9 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -395,7 +398,9 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab: dict[str, int] = None, merges: list[tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -1408,7 +1413,7 @@ class MarkupLMConverter(Converter):
 class MoshiConverter(SpmConverter):
     handle_byte_fallback = True
 
-    def __init__(self, vocab_file, model_max_length=None, **kwargs):
+    def __init__(self, vocab_file, **kwargs):
         requires_backends(self, "protobuf")
 
         Converter.__init__(self, vocab_file)
@@ -1449,7 +1454,7 @@ class MoshiConverter(SpmConverter):
 class HeliumConverter(SpmConverter):
     handle_byte_fallback = True
 
-    def __init__(self, vocab_file=None, *args):
+    def __init__(self, vocab_file=None, **kwargs):
         requires_backends(self, "protobuf")
 
         Converter.__init__(self, vocab_file)
@@ -1535,6 +1540,54 @@ class HeliumConverter(SpmConverter):
         )
 
 
+class ParakeetConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file=None, *args):
+        self.vocab_file = vocab_file
+
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        model_pb2 = import_protobuf()
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(proto)
+
+        _, merges = self.SpmExtractor(self.vocab_file).extract(vocab_scores)
+        bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+        tokenizer = Tokenizer(
+            BPE(
+                bpe_vocab,
+                merges,
+                unk_token=proto.trainer_spec.unk_piece,
+                fuse_unk=True,
+                byte_fallback=self.handle_byte_fallback,
+                dropout=None,
+            )
+        )
+
+        # Add user defined symbols and control tokens from sentencepiece model
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
+
+        return tokenizer
+
+
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -1571,15 +1624,15 @@ class TikTokenConverter:
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
         additional_special_tokens=None,
-        *args,
         **kwargs,
     ):
-        super().__init__(*args)
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
         self.additional_special_tokens = (
-            additional_special_tokens.keys() if type(additional_special_tokens) is dict else additional_special_tokens
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
         )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
@@ -1678,10 +1731,8 @@ SLOW_TO_FAST_CONVERTERS = {
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
     "Qwen2Tokenizer": Qwen2Converter,
-    "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
-    "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,

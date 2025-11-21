@@ -14,41 +14,41 @@
 # limitations under the License.
 """GLPN model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GLPNConfig(PretrainedConfig):
+class GLPNConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GLPNModel`]. It is used to instantiate an GLPN
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GLPN
     [vinvino02/glpn-kitti](https://huggingface.co/vinvino02/glpn-kitti) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_encoder_blocks (`int`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
+        depths (`list[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
-        sr_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
+        sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
             Sequence reduction ratios in each encoder block.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
             Dimension of each of the encoder blocks.
-        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
+        patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
             Patch size before each encoder block.
-        strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+        strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
+        num_attention_heads (`list[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
+        mlp_ratios (`list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):

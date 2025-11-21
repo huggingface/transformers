@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,10 @@
 import json
 import os
 import unittest
-from functools import lru_cache
-from typing import List
 
 from transformers import ClvpTokenizer
 
-from ...test_tokenization_common import TokenizerTesterMixin, slow, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin, slow
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -75,8 +72,6 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_tokenizer with GPT2->Clvp
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
@@ -90,7 +85,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from transformers.tests.models.layoutxlm.test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_add_special_tokens
     def test_add_special_tokens(self):
-        tokenizers: List[ClvpTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[ClvpTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 special_token = "[SPECIAL_TOKEN]"

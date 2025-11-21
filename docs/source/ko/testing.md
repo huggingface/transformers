@@ -473,13 +473,6 @@ GPU 요구 사항을 표로 정리하면 아래와 같습니디ㅏ:
 def test_example_with_multi_gpu():
 ```
 
-`tensorflow`가 필요한 경우 `require_tf` 데코레이터를 사용합니다. 예를 들어 다음과 같습니다:
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
-```
-
 이러한 데코레이터는 중첩될 수 있습니다.
 예를 들어, 느린 테스트로 진행되고 pytorch에서 적어도 하나의 GPU가 필요한 경우 다음과 같이 설정할 수 있습니다:
 

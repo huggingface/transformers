@@ -36,8 +36,7 @@ def download_checkpoint(path):
 
     with open(path, "wb") as f:
         with requests.get(url, stream=True) as req:
-            for chunk in req.iter_content(chunk_size=2048):
-                f.write(chunk)
+            f.writelines(req.iter_content(chunk_size=2048))
 
 
 def get_vivit_config() -> VivitConfig:
@@ -129,7 +128,7 @@ def transform_state_encoder_block(state_dict, i):
 
 
 def get_n_layers(state_dict):
-    return sum([1 if "encoderblock_" in k else 0 for k in state_dict["optimizer"]["target"]["Transformer"].keys()])
+    return sum(1 if "encoderblock_" in k else 0 for k in state_dict["optimizer"]["target"]["Transformer"])
 
 
 def transform_state(state_dict, classification_head=False):

@@ -18,6 +18,7 @@ https://github.com/DepthAnything/PromptDA"""
 import argparse
 import re
 from pathlib import Path
+from typing import Optional
 
 import requests
 import torch
@@ -130,7 +131,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     Convert old state dict keys to new keys using regex patterns.
     """
@@ -173,7 +174,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         filename=f"{filename}",
     )
 
-    state_dict = torch.load(filepath, map_location="cpu")["state_dict"]
+    state_dict = torch.load(filepath, map_location="cpu", weights_only=True)["state_dict"]
     state_dict = {key[9:]: state_dict[key] for key in state_dict}
 
     # Convert state dict using mappings

@@ -16,7 +16,6 @@ import itertools
 import os
 import subprocess
 import unittest
-from copy import deepcopy
 from functools import partial
 
 from parameterized import parameterized
@@ -47,10 +46,7 @@ from transformers.utils import (
 
 
 if is_torch_available():
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_1
     from transformers.trainer import FSDP_MODEL_NAME
-else:
-    is_torch_greater_or_equal_than_2_1 = False
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
@@ -91,22 +87,11 @@ def get_master_port(real_launcher=False):
 
 
 if is_torch_available():
-    from tests.trainer.test_trainer import (  # noqa
-        RegressionModelConfig,
-        RegressionPreTrainedModel,
-    )
-
     # hack to restore original logging level pre #21700
     get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
 
-require_fsdp_version = require_fsdp
 if is_accelerate_available():
-    from accelerate.utils.constants import (
-        FSDP_PYTORCH_VERSION,
-        FSDP_SHARDING_STRATEGY,
-    )
-
-    require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
+    from accelerate.utils.constants import FSDP_SHARDING_STRATEGY
 
 
 FSDP2_ACCELERATE_VERSION = "1.6.0"
@@ -145,7 +130,6 @@ def _parameterized_custom_name_func(func, param_num, param):
 
 @require_accelerate
 @require_torch_accelerator
-@require_fsdp_version
 class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def setUp(self):
         super().setUp()
@@ -156,6 +140,20 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             "RANK": "0",
             "LOCAL_RANK": "0",
             "WORLD_SIZE": "1",
+        }
+        self.accelerate_fsdp_config = {
+            "fsdp_activation_checkpointing": False,
+            "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
+            "fsdp_backward_prefetch": "BACKWARD_PRE",
+            "fsdp_cpu_ram_efficient_loading": True,
+            "fsdp_forward_prefetch": False,
+            "fsdp_offload_params": False,
+            "fsdp_reshard_after_forward": "FULL_SHARD",
+            "fsdp_state_dict_type": "FULL_STATE_DICT",
+            "fsdp_sync_module_states": True,
+            "fsdp_transformer_layer_cls_to_wrap": "LlamaDecoderLayer",
+            "fsdp_use_orig_params": True,
+            "fsdp_version": 1,
         }
 
         self.fsdp_config = {
@@ -171,6 +169,27 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     def tearDown(self):
         super().tearDown()
+
+    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
+    def test_accelerate_fsdp_config(self, sharding_strategy, dtype):
+        output_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {
+            "output_dir": output_dir,
+            "train_len": 128,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "fsdp": f"{sharding_strategy} offload auto_wrap",
+            "fsdp_config": self.accelerate_fsdp_config,
+        }
+        kwargs[dtype] = True
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(**kwargs)
+            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
+            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
+            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
+            for k, v in trainer.args.fsdp_config.items():
+                self.assertTrue(k in self.accelerate_fsdp_config)
+                self.assertEqual(v, self.accelerate_fsdp_config[k])
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
@@ -191,44 +210,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
             for k, v in trainer.args.fsdp_config.items():
                 self.assertEqual(v, self.fsdp_config[k])
-            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
-
-    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
-    def test_fsdp_config_transformers_auto_wrap(self, sharding_strategy, dtype):
-        output_dir = self.get_auto_remove_tmp_dir()
-        fsdp_config = deepcopy(self.fsdp_config)
-        del fsdp_config["min_num_params"]
-        fsdp_config["transformer_layer_cls_to_wrap"] = "BertLayer"
-        kwargs = {
-            "output_dir": output_dir,
-            "train_len": 128,
-            "save_steps": 5,
-            "learning_rate": 0.1,
-            "fsdp": f"{sharding_strategy} offload auto_wrap",
-            "fsdp_config": fsdp_config,
-        }
-        kwargs[dtype] = True
-        prefix = "FSDP_"
-        with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
-            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            fsdp_sharding_strategy = str(FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1)
-            self.assertEqual(os.environ[f"{prefix}SHARDING_STRATEGY"], fsdp_sharding_strategy)
-            self.assertEqual(os.environ[f"{prefix}OFFLOAD_PARAMS"], "true")
-            self.assertEqual(os.environ[f"{prefix}AUTO_WRAP_POLICY"], "TRANSFORMER_BASED_WRAP")
-            self.assertEqual(
-                os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"], ",".join(fsdp_config["transformer_layer_cls_to_wrap"])
-            )
-            self.assertEqual(os.environ[f"{prefix}BACKWARD_PREFETCH"], fsdp_config["backward_prefetch"])
-            self.assertEqual(os.environ[f"{prefix}FORWARD_PREFETCH"], fsdp_config["forward_prefetch"])
-            self.assertEqual(os.environ[f"{prefix}USE_ORIG_PARAMS"], fsdp_config["use_orig_params"])
-            self.assertEqual(os.environ[f"{prefix}SYNC_MODULE_STATES"], fsdp_config["sync_module_states"])
-            self.assertEqual(
-                os.environ[f"{prefix}CPU_RAM_EFFICIENT_LOADING"], fsdp_config["cpu_ram_efficient_loading"]
-            )
-            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
@@ -237,8 +218,12 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_basic_run(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
+        fsdp_config = '{"fsdp_transformer_layer_cls_to_wrap": "BertLayer"}'
         args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}"]
-        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_config", f"{fsdp_config}"]
+        if dtype == "fp16":
+            # fp16 + fsdp + fused adamw torch breaks so we switch optimizers
+            fsdp_args += ["--optim", "adamw_torch"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -250,8 +235,12 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_basic_run_with_gradient_accumulation(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
+        fsdp_config = '{"fsdp_transformer_layer_cls_to_wrap": "BertLayer"}'
         args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}", "--gradient_accumulation_steps", "2"]
-        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_config", f"{fsdp_config}"]
+        if dtype == "fp16":
+            # fp16 + fsdp + fused adamw torch breaks so we switch optimizers
+            fsdp_args += ["--optim", "adamw_torch"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -260,12 +249,15 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_multi_accelerator
     @run_first
     @slow
-    @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
     def test_basic_run_with_cpu_offload(self, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
         args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}", "--max_steps", "10"]
-        fsdp_args = ["--fsdp", "full_shard auto_wrap offload", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        fsdp_config = '{"fsdp_transformer_layer_cls_to_wrap": "BertLayer"}'
+        fsdp_args = ["--fsdp", "full_shard auto_wrap offload", "--fsdp_config", f"{fsdp_config}"]
+        if dtype == "fp16":
+            # fp16 + fsdp + fused adamw torch breaks so we switch optimizers
+            fsdp_args += ["--optim", "adamw_torch"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -275,7 +267,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @run_first
     @slow
     def test_training_and_can_resume_normally(self, state_dict_type):
-        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        output_dir = self.get_auto_remove_tmp_dir()
 
         sharding_strategy = "full_shard"
         use_accelerate = state_dict_type == "SHARDED_STATE_DICT"
@@ -326,12 +318,12 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             raise AssertionError("CPU offloading failed with FSDP!")
 
     @require_torch_multi_accelerator
+    @run_first
     @slow
-    @require_fsdp
     @require_fsdp_v2_version
     @require_accelerate_fsdp2
     def test_accelerate_fsdp2_integration(self):
-        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        output_dir = self.get_auto_remove_tmp_dir()
         sharding_strategy = "full_shard"
         use_accelerate = True
 
@@ -374,6 +366,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
 
     @require_torch_multi_accelerator
+    @run_first
     @slow
     @require_fsdp
     @require_fsdp_v2_version
@@ -394,12 +387,8 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
         if not use_accelerate:
-            fsdp_args = [
-                "--fsdp",
-                f"{sharding_strategy} auto_wrap",
-                "--fsdp_transformer_layer_cls_to_wrap",
-                "BertLayer",
-            ]
+            fsdp_config = '{"fsdp_transformer_layer_cls_to_wrap": "BertLayer"}'
+            fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_config", f"{fsdp_config}"]
             cmd = launcher + script + args + fsdp_args
         else:
             fsdp_config = f"""
@@ -418,7 +407,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --model_name_or_path google-bert/bert-base-cased
             --task_name mrpc
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --max_seq_length 128
             --per_device_train_batch_size 16

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 HuggingFace Inc..
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +50,7 @@ def get_results(output_dir):
     results = {}
     path = os.path.join(output_dir, "all_results.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             results = json.load(f)
     else:
         raise ValueError(f"can't find {path}")
@@ -75,6 +74,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdir)
 
+    @slow
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_run_glue_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -148,6 +148,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "mlm_no_trainer")))
 
+    @slow
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_run_ner_no_trainer(self):
         # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
@@ -176,6 +177,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ner_no_trainer")))
 
+    @slow
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_run_squad_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -204,6 +206,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "qa_no_trainer")))
 
+    @slow
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_run_swag_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -306,6 +309,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         result = get_results(tmp_dir)
         self.assertGreaterEqual(result["eval_overall_accuracy"], 0.10)
 
+    @slow
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline", "DVCLIVE_TEST": "true"})
     def test_run_image_classification_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
@@ -313,7 +317,6 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             {self.examples_dir}/pytorch/image-classification/run_image_classification_no_trainer.py
             --model_name_or_path google/vit-base-patch16-224-in21k
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
-            --trust_remote_code
             --learning_rate 1e-4
             --per_device_train_batch_size 2
             --per_device_eval_batch_size 1

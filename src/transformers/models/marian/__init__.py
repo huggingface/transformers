@@ -19,9 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_marian import *
-    from .modeling_flax_marian import *
     from .modeling_marian import *
-    from .modeling_tf_marian import *
     from .tokenization_marian import *
 else:
     import sys

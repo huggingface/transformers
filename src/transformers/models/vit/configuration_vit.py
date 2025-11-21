@@ -14,28 +14,22 @@
 # limitations under the License.
 """ViT model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ViTConfig(PretrainedConfig):
+class ViTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTModel`]. It is used to instantiate an ViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ViT
     [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -71,9 +65,7 @@ class ViTConfig(PretrainedConfig):
         pooler_output_size (`int`, *optional*):
            Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
         pooler_act (`str`, *optional*, defaults to `"tanh"`):
-           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
-           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
-           supported for Tensorflow.
+           The activation function to be used by the pooler.
 
     Example:
 
@@ -132,20 +124,4 @@ class ViTConfig(PretrainedConfig):
         self.pooler_act = pooler_act
 
 
-class ViTOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["ViTConfig", "ViTOnnxConfig"]
+__all__ = ["ViTConfig"]

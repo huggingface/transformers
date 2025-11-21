@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pickle
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import SPIECE_UNDERLINE, XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -216,13 +214,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def big_tokenizer(self):
         return XLMRobertaTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
 
-    def test_picklable_without_disk(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = XLMRobertaTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
-
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             self.skipTest(reason="test_rust_tokenizer is set to False")
@@ -259,7 +250,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_base_hard_symbols(self):
         symbols = (
             'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
-            " add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth"
+            " add words that should not exist and be tokenized to <unk>, such as saoneuhaoesuth"
         )
         original_tokenizer_encodings = [
             0,

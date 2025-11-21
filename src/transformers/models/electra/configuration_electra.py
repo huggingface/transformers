@@ -15,26 +15,22 @@
 # limitations under the License.
 """ELECTRA model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ElectraConfig(PretrainedConfig):
+class ElectraConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ElectraModel`] or a [`TFElectraModel`]. It is
     used to instantiate a ELECTRA model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ELECTRA
     [google/electra-small-discriminator](https://huggingface.co/google/electra-small-discriminator) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -89,12 +85,6 @@ class ElectraConfig(PretrainedConfig):
             Argument used when doing sequence summary. Used in the sequence classification and multiple choice models.
 
             The dropout ratio to be used after the projection and activation.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -138,7 +128,6 @@ class ElectraConfig(PretrainedConfig):
         summary_activation="gelu",
         summary_last_dropout=0.1,
         pad_token_id=0,
-        position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
         **kwargs,
@@ -163,25 +152,8 @@ class ElectraConfig(PretrainedConfig):
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation
         self.summary_last_dropout = summary_last_dropout
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
 
 
-class ElectraOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["ElectraConfig", "ElectraOnnxConfig"]
+__all__ = ["ElectraConfig"]

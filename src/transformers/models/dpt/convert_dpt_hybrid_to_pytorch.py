@@ -226,11 +226,11 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     config, expected_shape = get_dpt_config(checkpoint_url)
     # load original state_dict from URL
     # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
-    state_dict = torch.load(checkpoint_url, map_location="cpu")
+    state_dict = torch.load(checkpoint_url, map_location="cpu", weights_only=True)
     # remove certain keys
     remove_ignore_keys_(state_dict)
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # read in qkv matrices

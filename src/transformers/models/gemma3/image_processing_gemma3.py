@@ -16,7 +16,7 @@
 
 import itertools
 import math
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -40,6 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -50,6 +51,24 @@ if is_vision_available():
     import PIL
 
 
+class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_pan_and_scan (`bool`, *optional*):
+        Whether to apply `pan_and_scan` to images.
+    pan_and_scan_min_crop_size (`int`, *optional*):
+        Minimum size of each crop in pan and scan.
+    pan_and_scan_max_num_crops (`int`, *optional*):
+        Maximum number of crops per image in pan and scan.
+    pan_and_scan_min_ratio_to_activate (`float`, *optional*):
+        Minimum aspect ratio to activate pan and scan.
+    """
+
+    do_pan_and_scan: bool
+    pan_and_scan_min_crop_size: int
+    pan_and_scan_max_num_crops: int
+    pan_and_scan_min_ratio_to_activate: float
+
+
 class Gemma3ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SigLIP image processor.
@@ -58,7 +77,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
@@ -71,10 +90,10 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
             `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -91,18 +110,19 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_crops"]
+    valid_kwargs = Gemma3ImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_convert_rgb: Optional[bool] = True,
         do_pan_and_scan: Optional[bool] = None,
         pan_and_scan_min_crop_size: Optional[int] = None,
         pan_and_scan_max_num_crops: Optional[int] = None,
@@ -140,7 +160,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     ):
         """
         Pan and Scan and image, by cropping into smaller images when the aspect ratio exceeds
-        minumum allowed ratio.
+        minimum allowed ratio.
 
         Args:
             image (`np.ndarray`):
@@ -213,7 +233,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
 
     def _process_images_for_pan_and_scan(
         self,
-        images: List[np.ndarray],
+        images: list[np.ndarray],
         do_pan_and_scan: bool,
         pan_and_scan_min_crop_size: int,
         pan_and_scan_max_num_crops: int,
@@ -241,13 +261,13 @@ class Gemma3ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -266,7 +286,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
@@ -277,18 +297,16 @@ class Gemma3ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -302,7 +320,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
-            do_pan_and_scan (`bool`, *optional*, defaults to `self.do_convert_rgb`):
+            do_pan_and_scan (`bool`, *optional*, defaults to `self.do_pan_and_scan`):
                 Whether to apply `pan_and_scan` to images.
             pan_and_scan_min_crop_size (`int`, *optional*, defaults to `self.pan_and_scan_min_crop_size`):
                 Minimum size of each crop in pan and scan.
@@ -334,13 +352,11 @@ class Gemma3ImageProcessor(BaseImageProcessor):
             else self.pan_and_scan_min_ratio_to_activate
         )
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

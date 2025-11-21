@@ -1,22 +1,17 @@
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-    Wav2Vec2BaseModelOutput,
-    XVectorOutput,
-)
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import logging
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2FeatureProjection,
     Wav2Vec2FeedForward,
@@ -32,20 +27,6 @@ from .configuration_wavlm import WavLMConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "WavLMConfig"
-
-_CHECKPOINT_FOR_DOC = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
-
-_CTC_EXPECTED_OUTPUT = "'mister quilter is the aposle of the middle classes and we are glad to welcome his gospel'"
-_CTC_EXPECTED_LOSS = 12.51
-
-_FRAME_CLASS_CHECKPOINT = "microsoft/wavlm-base-plus-sd"
-_FRAME_EXPECTED_OUTPUT = [0, 0]
-
-_XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
-_XVECTOR_EXPECTED_OUTPUT = 0.97
 
 
 class WavLMPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -102,7 +83,7 @@ class WavLMAttention(nn.Module):
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         index=0,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Attention layer with relative attention"""
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -142,7 +123,7 @@ class WavLMAttention(nn.Module):
         attention_mask: Union[torch.LongTensor, torch.BoolTensor],
         gated_position_bias: torch.FloatTensor,
         output_attentions: bool,
-    ) -> (torch.FloatTensor, torch.FloatTensor):
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """simple wrapper around torch's multi_head_attention_forward function"""
         # self-attention assumes q = k = v
         query = key = value = hidden_states.transpose(0, 1)
@@ -226,7 +207,7 @@ class WavLMFeedForward(Wav2Vec2FeedForward):
     pass
 
 
-class WavLMEncoderLayer(nn.Module):
+class WavLMEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -267,7 +248,7 @@ class WavLMEncoderLayer(nn.Module):
         return outputs
 
 
-class WavLMEncoderLayerStableLayerNorm(nn.Module):
+class WavLMEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -344,28 +325,19 @@ class WavLMEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        position_bias=position_bias,
-                        output_attentions=output_attentions,
-                        index=i,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_bias=position_bias,
+                    output_attentions=output_attentions,
+                    index=i,
+                )
 
                 hidden_states, position_bias = layer_outputs[:2]
 
@@ -429,28 +401,19 @@ class WavLMEncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = self.training and i > 0 and (dropout_probability < self.config.layerdrop)
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if self.gradient_checkpointing and self.training:
-                    layer_outputs = self._gradient_checkpointing_func(
-                        layer.__call__,
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
-                        output_attentions,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states,
-                        attention_mask=attention_mask,
-                        output_attentions=output_attentions,
-                        position_bias=position_bias,
-                    )
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                    position_bias=position_bias,
+                )
                 hidden_states, position_bias = layer_outputs[:2]
 
             if skip_the_layer:
@@ -474,7 +437,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
 class WavLMGumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See [CATEGORICAL REPARAMETERIZATION WITH
-    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    GUMBEL-SOFTMAX](https://huggingface.co/papers/1611.01144) for more information.
     """
 
     def __init__(self, config):
@@ -542,50 +505,48 @@ class WavLMGumbelVectorQuantizer(nn.Module):
 
 
 class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = WavLMConfig
+    config: WavLMConfig
     base_model_prefix = "wavlm"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = False
+    _supports_flash_attn = False
     _supports_sdpa = False
+    _supports_flex_attn = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # gumbel softmax requires special init
         if isinstance(module, WavLMGumbelVectorQuantizer):
-            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.data.zero_()
-            nn.init.uniform_(module.codevectors)
+            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            init.zeros_(module.weight_proj.bias)
+            init.uniform_(module.codevectors)
         elif isinstance(module, WavLMPositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, WavLMFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for WavLM")
@@ -597,155 +558,27 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
         raise AttributeError("Not needed for WavLM")
 
 
-WAVLM_START_DOCSTRING = r"""
-    WavLM was proposed in [WavLM: Unified Speech Representation Learning with Labeled and Unlabeled
-    Data](https://arxiv.org/abs/2110.13900) by Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo
-    Chen, Jinyu Li, Naoyuki Kanda, Takuya Yoshioka, Xiong Xiao, Jian Wu, Long Zhou, Shuo Ren, Yanmin Qian, Yao Qian,
-    Jian Wu, Michael Zeng, Xiangzhan Yu, Furu Wei.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`WavLMConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-WAVLM_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, `attention_mask` should
-            **not** be passed to avoid degraded performance when doing batched inference. For such models
-            `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware that these
-            models also yield slightly different results depending on whether `input_values` is padded or not.
-
-            </Tip>
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
 WavLMBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@add_start_docstrings(
-    "The bare WavLM Model transformer outputting raw hidden-states without any specific head on top.",
-    WAVLM_START_DOCSTRING,
-)
 class WavLMModel(Wav2Vec2Model):
-    @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=WavLMBaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
-
-
-@add_start_docstrings(
-    """WavLM Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    WAVLM_START_DOCSTRING,
-)
-class WavLMForCTC(Wav2Vec2ForCTC):
-    @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@add_start_docstrings(
-    """
-    WavLM Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
-    SUPERB Keyword Spotting.
-    """,
-    WAVLM_START_DOCSTRING,
-)
-class WavLMForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@add_start_docstrings(
-    """
-    WavLM Model with a frame classification head on top for tasks like Speaker Diarization.
-    """,
-    WAVLM_START_DOCSTRING,
-)
-class WavLMForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_FRAME_CLASS_CHECKPOINT,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_FRAME_EXPECTED_OUTPUT,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
-
-
-@add_start_docstrings(
-    """
-    WavLM Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """,
-    WAVLM_START_DOCSTRING,
-)
-class WavLMForXVector(Wav2Vec2ForXVector):
     pass
 
-    @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_XVECTOR_CHECKPOINT,
-        output_type=XVectorOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_XVECTOR_EXPECTED_OUTPUT,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
+
+class WavLMForCTC(Wav2Vec2ForCTC):
+    pass
+
+
+class WavLMForSequenceClassification(Wav2Vec2ForSequenceClassification):
+    pass
+
+
+class WavLMForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
+    pass
+
+
+class WavLMForXVector(Wav2Vec2ForXVector):
+    pass
 
 
 __all__ = [

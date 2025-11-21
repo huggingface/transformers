@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +17,7 @@ import copy
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -79,7 +78,7 @@ class PegasusXModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -214,19 +213,12 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
 
     def setUp(self):
         self.model_tester = PegasusXModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PegasusXConfig)
-
-    @unittest.skip(
-        "`PegasusXGlobalLocalAttention` returns attentions as dictionary - not compatible with torchscript "
-    )
-    def test_torchscript_output_attentions(self):
-        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -239,7 +231,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -305,7 +297,8 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -552,7 +545,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -591,7 +584,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.0702, -0.1552, 0.1192], [0.0836, -0.1848, 0.1304], [0.0673, -0.1686, 0.1045]], device=torch_device
+            [[[0.0702, -0.1552, 0.1192], [0.0836, -0.1848, 0.1304], [0.0673, -0.1686, 0.1045]]], device=torch_device
         )
 
         torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
@@ -609,7 +602,8 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.0, 9.5705185, 1.5897303], [0.0, 9.833374, 1.5828674], [0.0, 10.429961, 1.5643371]], device=torch_device
+            [[[0.0, 9.5705185, 1.5897303], [0.0, 9.833374, 1.5828674], [0.0, 10.429961, 1.5643371]]],
+            device=torch_device,
         )
         torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
@@ -636,8 +630,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
             batch_input,
             max_length=512,
             padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
+            truncation="only_first",
             return_tensors="pt",
         )
 
@@ -677,7 +670,7 @@ class PegasusXStandaloneDecoderModelTester:
         decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
-        max_position_embeddings=30,
+        max_position_embeddings=50,
         is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
@@ -820,7 +813,7 @@ class PegasusXStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, use_cache=True)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -849,9 +842,8 @@ class PegasusXStandaloneDecoderModelTester:
 @require_torch
 class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXDecoder,) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
-    test_head_masking = False
 
     def setUp(
         self,
@@ -872,4 +864,8 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        return
+
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
         return

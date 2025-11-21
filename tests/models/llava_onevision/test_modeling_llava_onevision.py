@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,10 +24,12 @@ from transformers import (
     AutoProcessor,
     LlavaOnevisionConfig,
     LlavaOnevisionForConditionalGeneration,
+    LlavaOnevisionModel,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -40,7 +41,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -60,6 +60,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         parent,
         ignore_index=-100,
         image_token_index=1,
+        video_token_index=2,
         projector_hidden_act="gelu",
         seq_length=7,
         vision_feature_select_strategy="full",
@@ -107,6 +108,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         self.parent = parent
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
+        self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
@@ -133,6 +135,7 @@ class LlavaOnevisionVisionText2TextModelTester:
             vision_config=self.vision_config,
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
+            video_token_index=self.video_token_index,
             projector_hidden_act=self.projector_hidden_act,
             vision_feature_select_strategy=self.vision_feature_select_strategy,
             vision_feature_layer=self.vision_feature_layer,
@@ -181,12 +184,24 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     Model tester for `LlavaOnevisionForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaOnevisionModel,
+            LlavaOnevisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
-    test_pruning = False
-    test_head_masking = False
+
+    # MP works but offload doesn't work when the MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
     _is_composite = True
 
     def setUp(self):
@@ -199,65 +214,27 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_odd_sized_image(self):
+        # prepare model configuration
+        config = self.model_tester.get_config()
 
-        configs_no_init = _config_zero_init(config)
+        # prepare input
+        num_image_tokens = 10
+        pixel_values = floats_tensor([1, 2, 3, config.vision_config.image_size, config.vision_config.image_size])
+        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
+        input_ids[:, :num_image_tokens] = config.image_token_index
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        # forward with odd-sized image input
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # LLaVa Onevision has SigLIP backbone which init weights differently from CLIP
-                if "image_newline" in name or "vision_tower" in name:
-                    continue
-                elif param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
 
     @parameterized.expand(
         [
@@ -282,7 +259,8 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(
@@ -303,18 +281,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("LLaVA OneVision has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -342,7 +312,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         inputs = self.processor(images=self.image, text=self.prompt_image, return_tensors="pt").to(
@@ -357,17 +327,24 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1'  # fmt: skip
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("xpu", 3): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1',
+                ("cuda", 7): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1',
+                ("cuda", 8): 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows',
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        DECODED_TEXT = self.processor.decode(output[0], skip_special_tokens=True)
+
+        self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         inputs = self.processor(
@@ -393,7 +370,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
@@ -416,11 +393,11 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
@@ -431,12 +408,66 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        output_text = self.processor.decode(output[0], skip_special_tokens=True)
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", None): "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The",
+                ("xpu", 3): "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The",
+            }
         )
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        # fmt: on
+
+        self.assertEqual(output_text, EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_multi_image_nested(self):
+        # related to (#34585)
+        model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            dtype="float16",
+            device_map=torch_device,
+        )
+
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+        prompts = [
+            "user\nTell me about the french revolution.<|im_end|>\n<|im_start|>assistant\n",  # text-only case
+            "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n",
+            self.prompt_image,
+        ]
+        images_nested = [[], [image, self.image], [self.image]]
+        inputs = self.processor(
+            text=prompts,
+            images=images_nested,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device, torch.float16)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=40)
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", None): [
+                    "user\nTell me about the french revolution.\nassistant\nThe French Revolution! A pivotal event in modern history that had a profound impact on the course of Western civilization. Here's a brief overview:\n\n**Background**\n\nIn the late 18th century,",
+                    "user\n\nWhat is the difference between these images?\nassistant\nThe first image shows a stop sign with a traditional Chinese architectural background, while the second image displays a radar chart with various algorithms and models, including BLIP-2, InstructBLIP, Q",
+                    "user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different"
+                    ],
+                ("xpu", 3): [
+                    "user\nTell me about the french revolution.\nassistant\nThe French Revolution! A pivotal event in modern history that had a profound impact on the course of Western civilization. Here's a brief overview:\n\n**Background**\n\nIn the late 18th century,",
+                    'user\n\nWhat is the difference between these images?\nassistant\nThe image shows a traffic light with a stop sign in the foreground, while the other images show a car driving through a street intersection.',
+                    'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that represents the performance of different machine learning models in terms of their ability to predict the number of users who have been infected with COVID-19. The radar chart is'
+                    ],
+            }
+        )
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        # fmt: on
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        self.assertListEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
@@ -444,7 +475,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 
@@ -466,7 +497,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", torch_dtype="float16", device_map=torch_device
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -483,7 +514,10 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a wildlife camera, likely a security camera, capturing a moment in a natural setting. It features two deer, one larger and one smaller, grazing on the grass. The environment is foggy, suggesting early morning or late', 'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene of two deer in a grassy area with trees in the background. The weather appears to be foggy, giving the scene a misty and somewhat mysterious atmosphere. The deer are standing close to each other, possibly grazing or',
+            'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its',
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -494,7 +528,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
-            torch_dtype="float16",
+            dtype="float16",
             device_map=torch_device,
         )
 

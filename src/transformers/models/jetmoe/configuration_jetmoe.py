@@ -14,14 +14,17 @@
 # limitations under the License.
 """JetMoe model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class JetMoeConfig(PretrainedConfig):
+class JetMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JetMoeModel`]. It is used to instantiate a
     JetMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +32,8 @@ class JetMoeConfig(PretrainedConfig):
 
     [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -57,7 +60,7 @@ class JetMoeConfig(PretrainedConfig):
         num_experts_per_tok (`int, *optional*, defaults to 2):
             The number of experts to route per-token and for MoE and MoA.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss.
         aux_loss_coef (`float`, *optional*, defaults to 0.01):
             The coefficient for the auxiliary loss.
@@ -70,8 +73,10 @@ class JetMoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -94,29 +99,30 @@ class JetMoeConfig(PretrainedConfig):
 
     model_type = "jetmoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"head_dim": "kv_channels"}
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=2048,
-        num_hidden_layers=12,
-        num_key_value_heads=16,
-        kv_channels=128,
-        intermediate_size=5632,
-        max_position_embeddings=4096,
-        activation_function="silu",
-        num_local_experts=8,
-        num_experts_per_tok=2,
-        output_router_logits=False,
-        aux_loss_coef=0.01,
-        use_cache=True,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=True,
-        rope_theta=10000.0,
-        rms_norm_eps=1e-6,
-        initializer_range=0.01,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 2048,
+        num_hidden_layers: Optional[int] = 12,
+        num_key_value_heads: Optional[int] = 16,
+        kv_channels: Optional[int] = 128,
+        intermediate_size: Optional[int] = 5632,
+        max_position_embeddings: Optional[int] = 4096,
+        activation_function: Optional[str] = "silu",
+        num_local_experts: Optional[int] = 8,
+        num_experts_per_tok: Optional[int] = 2,
+        output_router_logits: Optional[bool] = False,
+        aux_loss_coef: Optional[float] = 0.01,
+        use_cache: Optional[bool] = True,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        rms_norm_eps: Optional[int] = 1e-6,
+        initializer_range: Optional[float] = 0.01,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         if num_experts_per_tok > num_local_experts:
@@ -140,9 +146,15 @@ class JetMoeConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-
-        self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs

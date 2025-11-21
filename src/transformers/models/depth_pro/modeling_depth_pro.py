@@ -16,22 +16,15 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...modeling_outputs import BaseModelOutput
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ..auto import AutoModel
 from .configuration_depth_pro import DepthProConfig
 
@@ -40,64 +33,44 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class DepthProOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for DepthPro's outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        features (`Union[torch.FloatTensor, List[torch.FloatTensor]]`, *optional*):
-            Features from encoders. Can be a single feature or a list of features.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, n_patches_per_batch, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DepthProOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
+    features (`Union[torch.FloatTensor, List[torch.FloatTensor]]`, *optional*):
+        Features from encoders. Can be a single feature or a list of features.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    features: Union[torch.FloatTensor, List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    features: Union[torch.FloatTensor, list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class DepthProDepthEstimatorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for DepthProForDepthEstimation's output.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Predicted depth for each pixel.
-        field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
-            Field of View Scaler.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, n_patches_per_batch, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DepthProDepthEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
+        Field of View Scaler.
     """
 
     loss: Optional[torch.FloatTensor] = None
     predicted_depth: Optional[torch.FloatTensor] = None
     field_of_view: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio: float) -> torch.Tensor:
@@ -142,7 +115,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
         return patches
 
     if n_patches_per_batch < 4:
-        # for each batch, atleast 4 small patches are required to
+        # for each batch, at least 4 small patches are required to
         # recreate a large square patch from merging them and later padding is applied
         # 3 x (8x8) patches becomes 1 x ( 8x8 ) patch (extra patch ignored, no padding)
         # 4 x (8x8) patches becomes 1 x (16x16) patch (padding later)
@@ -208,7 +181,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
 
 
 def reconstruct_feature_maps(
-    hidden_state: torch.Tensor, batch_size: int, padding: int, output_size: Tuple[float, float]
+    hidden_state: torch.Tensor, batch_size: int, padding: int, output_size: tuple[float, float]
 ) -> torch.Tensor:
     """
     Reconstructs feature maps from the hidden state produced by any of the encoder. Converts the hidden state of shape
@@ -220,7 +193,7 @@ def reconstruct_feature_maps(
             representing the encoded patches.
         batch_size (int): The number of samples in a batch.
         padding (int): The amount of padding to be removed when merging patches.
-        output_size (Tuple[float, float]): The desired output size for the feature maps, specified as `(height, width)`.
+        output_size (tuple[float, float]): The desired output size for the feature maps, specified as `(height, width)`.
 
     Returns:
         torch.Tensor: Reconstructed feature maps of shape `(batch_size, hidden_size, output_size[0], output_size[1])`.
@@ -267,8 +240,7 @@ class DepthProPatchEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-    ) -> List[torch.Tensor]:
+    ) -> list[torch.Tensor]:
         batch_size, num_channels, height, width = pixel_values.shape
 
         if min(self.scaled_images_ratios) * min(height, width) < self.config.patch_size:
@@ -307,7 +279,6 @@ class DepthProPatchEncoder(nn.Module):
         encodings = self.model(
             # each patch is processed as a separate batch
             patches,
-            head_mask=head_mask,
             # required for intermediate features
             output_hidden_states=self.n_intermediate_hooks > 0,
         )
@@ -327,7 +298,6 @@ class DepthProPatchEncoder(nn.Module):
         scaled_images_features = []
         for i in range(self.n_scaled_images):
             hidden_state = scaled_images_last_hidden_state[i]
-            batch_size = batch_size
             padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i]))
             output_height = base_height * 2**i
             output_width = base_width * 2**i
@@ -373,7 +343,6 @@ class DepthProImageEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -390,7 +359,6 @@ class DepthProImageEncoder(nn.Module):
         )
         encodings = self.model(
             pixel_values=pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -439,7 +407,6 @@ class DepthProEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -448,11 +415,9 @@ class DepthProEncoder(nn.Module):
 
         patch_features = self.patch_encoder(
             pixel_values,
-            head_mask=head_mask,
         )
         image_encodings = self.image_encoder(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -561,7 +526,7 @@ class DepthProFeatureUpsample(nn.Module):
             )
             self.intermediate.append(block)
 
-    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, features: list[torch.Tensor]) -> list[torch.Tensor]:
         features[0] = self.image_block(features[0])
 
         for i in range(self.n_scaled_images):
@@ -596,7 +561,7 @@ class DepthProFeatureProjection(nn.Module):
                     )
                 )
 
-    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, features: list[torch.Tensor]) -> list[torch.Tensor]:
         projected_features = []
         for i, projection in enumerate(self.projections):
             upsampled_feature = projection(features[i])
@@ -620,7 +585,7 @@ class DepthProNeck(nn.Module):
         )
         self.feature_projection = DepthProFeatureProjection(config)
 
-    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, features: list[torch.Tensor]) -> list[torch.Tensor]:
         features = self.feature_upsample(features)
         # global features = low res features + image features
         global_features = torch.cat((features[1], features[0]), dim=1)
@@ -631,91 +596,36 @@ class DepthProNeck(nn.Module):
 
 
 # General docstring
-_CONFIG_FOR_DOC = "DepthProConfig"
 
 
-DEPTH_PRO_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DEPTH_PRO_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        use_fov_model (`bool`, *optional*, defaults to `True`):
-            Whether to use `DepthProFovModel` to generate the field of view.
-"""
-
-
+@auto_docstring
 class DepthProPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = DepthProConfig
+    config: DepthProConfig
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = ["DepthProPreActResidualLayer"]
     _keys_to_ignore_on_load_unexpected = ["fov_model.*"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
 
-@add_start_docstrings(
-    "The bare DepthPro Model transformer outputting raw hidden-states without any specific head on top.",
-    DEPTH_PRO_START_DOCSTRING,
-)
+@auto_docstring
 class DepthProModel(DepthProPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -728,19 +638,15 @@ class DepthProModel(DepthProPreTrainedModel):
     def get_input_embeddings(self):
         return self.encoder.image_encoder.model.get_input_embeddings()
 
-    @add_start_docstrings_to_model_forward(DEPTH_PRO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, DepthProOutput]:
+    ) -> Union[tuple, DepthProOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -773,7 +679,6 @@ class DepthProModel(DepthProPreTrainedModel):
 
         encodings = self.encoder(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -802,7 +707,7 @@ class DepthProPreActResidualLayer(nn.Module):
             Model configuration class defining the model architecture.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DepthProConfig):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm_in_fusion_residual
@@ -902,14 +807,14 @@ class DepthProFeatureFusionStage(nn.Module):
         for _ in range(self.num_layers - 1):
             self.intermediate.append(DepthProFeatureFusionLayer(config))
 
-        # final layer doesnot require deconvolution
+        # final layer does not require deconvolution
         self.final = DepthProFeatureFusionLayer(config, use_deconv=False)
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: list[torch.Tensor]) -> list[torch.Tensor]:
         if self.num_layers != len(hidden_states):
             raise ValueError(
                 f"num_layers={self.num_layers} in DepthProFeatureFusionStage"
-                f"doesnot match len(hidden_states)={len(hidden_states)}"
+                f"does not match len(hidden_states)={len(hidden_states)}"
             )
 
         fused_hidden_states = []
@@ -941,7 +846,6 @@ class DepthProFovEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
 
@@ -955,7 +859,6 @@ class DepthProFovEncoder(nn.Module):
         )
         encodings = self.model(
             pixel_values=pixel_values,
-            head_mask=head_mask,
         )
         hidden_state = encodings[0]
         hidden_state = self.neck(hidden_state)
@@ -1034,9 +937,8 @@ class DepthProFovModel(nn.Module):
         self,
         pixel_values: torch.Tensor,
         global_features: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        fov_features = self.fov_encoder(pixel_values, head_mask)
+        fov_features = self.fov_encoder(pixel_values)
 
         global_features = self.conv(global_features)
         global_features = self.activation(global_features)
@@ -1087,14 +989,17 @@ class DepthProDepthEstimationHead(nn.Module):
         return predicted_depth
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     DepthPro Model with a depth estimation head on top (consisting of 3 convolutional layers).
-    """,
-    DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING,
+    """
 )
 class DepthProForDepthEstimation(DepthProPreTrainedModel):
     def __init__(self, config, use_fov_model=None):
+        r"""
+        use_fov_model (bool, *optional*):
+            Whether to use the field of view model.
+        """
         super().__init__(config)
         self.config = config
         self.use_fov_model = use_fov_model if use_fov_model is not None else self.config.use_fov_model
@@ -1114,22 +1019,18 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DEPTH_PRO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DepthProDepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], DepthProDepthEstimatorOutput]:
+    ) -> Union[tuple[torch.Tensor], DepthProDepthEstimatorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.
-
-        Returns:
 
         Examples:
 
@@ -1182,7 +1083,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
 
         depth_pro_outputs = self.depth_pro(
             pixel_values=pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
@@ -1197,7 +1097,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             fov = self.fov_model(
                 pixel_values=pixel_values,
                 global_features=features_for_fov,
-                head_mask=head_mask,
             )
         else:
             fov = None

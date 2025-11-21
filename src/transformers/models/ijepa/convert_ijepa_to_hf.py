@@ -21,6 +21,7 @@ import argparse
 import gc
 import re
 from pathlib import Path
+from typing import Optional
 
 import requests
 import torch
@@ -63,7 +64,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     Converts old keys to new keys using the mapping and dynamically removes the 'ijepa.' prefix if necessary.
 
@@ -252,7 +253,7 @@ def main():
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the model to the 🤗 Hub.",
+        help="Whether or not to push the model to the Hugging Face Hub.",
     )
     parser.add_argument(
         "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."

@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 CANINE モデルは、[CANINE: Pre-training an Efficient Tokenization-Free Encoder for Language
-Representation](https://arxiv.org/abs/2103.06874)、Jonathan H. Clark、Dan Garrette、Iulia Turc、John Wieting 著。その
+Representation](https://huggingface.co/papers/2103.06874)、Jonathan H. Clark、Dan Garrette、Iulia Turc、John Wieting 著。その
 明示的なトークン化ステップ (バイト ペアなど) を使用せずに Transformer をトレーニングする最初の論文の 1 つ
 エンコーディング (BPE、WordPiece または SentencePiece)。代わりに、モデルは Unicode 文字レベルで直接トレーニングされます。
 キャラクターレベルでのトレーニングでは必然的にシーケンスの長さが長くなりますが、CANINE はこれを効率的な方法で解決します。
@@ -98,7 +98,7 @@ CANINE は生の文字で動作するため、**トークナイザーなし**で
 
 ## Resources
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [多肢選択タスク ガイド](../tasks/multiple_choice)

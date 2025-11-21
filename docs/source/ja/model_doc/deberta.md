@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-DeBERTa モデルは、Pengcheng He、Xiaodong Liu、Jianfeng Gao、Weizhu Chen によって [DeBERTa: Decoding-enhanced BERT with Disentangled Attendant](https://arxiv.org/abs/2006.03654) で提案されました。Google のモデルに基づいています。
+DeBERTa モデルは、Pengcheng He、Xiaodong Liu、Jianfeng Gao、Weizhu Chen によって [DeBERTa: Decoding-enhanced BERT with Disentangled Attendant](https://huggingface.co/papers/2006.03654) で提案されました。Google のモデルに基づいています。
 2018年にリリースされたBERTモデルと2019年にリリースされたFacebookのRoBERTaモデル。
 
 これは、もつれた注意を解きほぐし、使用されるデータの半分を使用して強化されたマスク デコーダ トレーニングを備えた RoBERTa に基づいて構築されています。
@@ -52,7 +52,7 @@ DeBERTa を使い始めるのに役立つ公式 Hugging Face およびコミュ�
 - DeBERTa による [機械学習によるスーパーチャージされた顧客サービス](https://huggingface.co/blog/supercharge-customer-service-with-machine-learning) に関するブログ投稿。
 - [`DebertaForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)。
 - [`TFDebertaForSequenceClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)。
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification" />
 
@@ -94,8 +94,6 @@ DeBERTa を使い始めるのに役立つ公式 Hugging Face およびコミュ�
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
 
-<frameworkcontent>
-<pt>
 
 ## DebertaModel
 
@@ -126,39 +124,4 @@ DeBERTa を使い始めるのに役立つ公式 Hugging Face およびコミュ�
 [[autodoc]] DebertaForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFDebertaModel
-
-[[autodoc]] TFDebertaModel
-    - call
-
-## TFDebertaPreTrainedModel
-
-[[autodoc]] TFDebertaPreTrainedModel
-    - call
-
-## TFDebertaForMaskedLM
-
-[[autodoc]] TFDebertaForMaskedLM
-    - call
-
-## TFDebertaForSequenceClassification
-
-[[autodoc]] TFDebertaForSequenceClassification
-    - call
-
-## TFDebertaForTokenClassification
-
-[[autodoc]] TFDebertaForTokenClassification
-    - call
-
-## TFDebertaForQuestionAnswering
-
-[[autodoc]] TFDebertaForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>
 

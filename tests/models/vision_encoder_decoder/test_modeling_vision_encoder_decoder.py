@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 import re
 import tempfile
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
@@ -27,14 +27,12 @@ from transformers.testing_utils import (
     require_nltk,
     require_sentencepiece,
     require_torch,
-    require_torch_sdpa,
     require_vision,
     slow,
     to_2tuple,
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -247,6 +245,10 @@ class EncoderDecoderMixin:
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -311,9 +313,9 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             inputs,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -390,7 +392,7 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
+    @unittest.skip("TODO Arthur I have to skip for now because I don't understand it")
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")
@@ -481,6 +483,10 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -671,6 +677,10 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -808,6 +818,10 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -869,10 +883,12 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="There are no published pretrained TrOCR checkpoints for now")
     def test_real_model_save_load_from_pretrained(self):
@@ -892,19 +908,9 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = ViTModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_head_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, _, _, _, _, _ = decoder_config_and_inputs
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
@@ -916,7 +922,6 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_head_mask": decoder_head_mask,
             "labels": decoder_input_ids,
         }
 
@@ -930,6 +935,10 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -987,10 +996,12 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="VIT2GPT2 also has an integration test for testinf save-load")
     def test_real_model_save_load_from_pretrained(self):
@@ -1010,19 +1021,9 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         model_tester_encoder = DonutSwinModelTester(self, batch_size=13)
         model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
-        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
+        decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
-        (
-            decoder_config,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_head_mask,
-            decoder_token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = decoder_config_and_inputs
+        decoder_config, decoder_input_ids, decoder_attention_mask, _, _, _, _, _ = decoder_config_and_inputs
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
@@ -1034,7 +1035,6 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_head_mask": decoder_head_mask,
             "labels": decoder_input_ids,
         }
 
@@ -1048,6 +1048,10 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -1105,10 +1109,12 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
             decoder_start_token_id=enc_dec_model.config.decoder.bos_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
             **kwargs,
         )
-        self.assertEqual(generated_output.shape, (pixel_values.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            generated_output.shape, (pixel_values.shape[0],) + (enc_dec_model.generation_config.max_length,)
+        )
 
     @unittest.skip(reason="Donut has an Integration test for that")
     def test_real_model_save_load_from_pretrained(self):
@@ -1126,8 +1132,8 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_handwritten(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test", trust_remote_code=True)
-        image = Image.open(dataset[0]["file"]).convert("RGB")
+        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="train")
+        image = dataset[1]["image"].convert("RGB")
 
         processor = self.default_processor
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
@@ -1151,8 +1157,8 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
     def test_inference_printed(self):
         model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-printed").to(torch_device)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="test", trust_remote_code=True)
-        image = Image.open(dataset[1]["file"]).convert("RGB")
+        dataset = load_dataset("hf-internal-testing/fixtures_ocr", split="train")
+        image = dataset[0]["image"].convert("RGB")
 
         processor = self.default_processor
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)

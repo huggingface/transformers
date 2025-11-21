@@ -15,31 +15,33 @@
 """Mimi model configuration"""
 
 import math
+from typing import Optional
 
 import numpy as np
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MimiConfig(PretrainedConfig):
+class MimiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [kyutai/mimi](https://huggingface.co/kyutai/mimi) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-        frame_rate (`float`, *optional*, defaults to 12.5):
-            Framerate of the model.
+        frame_rate (`float`, *optional*):
+            Should be computed from the other parameters, yet kept for backward compatibility.
         audio_channels (`int`, *optional*, defaults to 1):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
         hidden_size (`int`, *optional*, defaults to 512):
@@ -95,8 +97,8 @@ class MimiConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -111,14 +113,18 @@ class MimiConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
+        use_streaming (`bool`, *optional*, defaults to `False`):
+            Whether to use streaming mode. If `True`, the model encode method will return the padding cache that can be used in a subsequent call to the encode method.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 250):
             Sliding window attention window size. If not specified, will default to `250`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-            Initiale scale of the residual rescaling operation done in the Transformer models.
+            Initial scale of the residual rescaling operation done in the Transformer models.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
     Example:
@@ -140,47 +146,47 @@ class MimiConfig(PretrainedConfig):
 
     def __init__(
         self,
-        sampling_rate=24_000,
-        frame_rate=12.5,
-        audio_channels=1,
-        hidden_size=512,
-        num_filters=64,
-        num_residual_layers=1,
-        upsampling_ratios=None,
-        kernel_size=7,
-        last_kernel_size=3,
-        residual_kernel_size=3,
-        dilation_growth_rate=2,
-        use_causal_conv=True,
-        pad_mode="constant",
-        compress=2,
-        trim_right_ratio=1.0,
-        codebook_size=2048,
-        codebook_dim=256,
-        num_quantizers=32,
-        use_conv_shortcut=False,
-        vector_quantization_hidden_dimension=256,
-        num_semantic_quantizers=1,
-        upsample_groups=512,
-        num_hidden_layers=8,
-        intermediate_size=2048,
-        num_attention_heads=8,
-        num_key_value_heads=8,
-        head_dim=None,
-        hidden_act="gelu",
-        max_position_embeddings=8000,
-        initializer_range=0.02,
-        norm_eps=1e-5,
-        use_cache=False,
-        rope_theta=10000.0,
-        sliding_window=250,
-        attention_dropout=0.0,
-        layer_scale_initial_scale=0.01,
-        attention_bias=False,
+        sampling_rate: Optional[int] = 24_000,
+        frame_rate: Optional[int] = None,
+        audio_channels: Optional[int] = 1,
+        hidden_size: Optional[int] = 512,
+        num_filters: Optional[int] = 64,
+        num_residual_layers: Optional[int] = 1,
+        upsampling_ratios: Optional[list[int]] = None,
+        kernel_size: Optional[int] = 7,
+        last_kernel_size: Optional[int] = 3,
+        residual_kernel_size: Optional[int] = 3,
+        dilation_growth_rate: Optional[int] = 2,
+        use_causal_conv: Optional[bool] = True,
+        pad_mode: Optional[str] = "constant",
+        compress: Optional[int] = 2,
+        trim_right_ratio: Optional[float] = 1.0,
+        codebook_size: Optional[int] = 2048,
+        codebook_dim: Optional[int] = 256,
+        num_quantizers: Optional[int] = 32,
+        use_conv_shortcut: Optional[bool] = False,
+        vector_quantization_hidden_dimension: Optional[int] = 256,
+        num_semantic_quantizers: Optional[int] = 1,
+        upsample_groups: Optional[int] = 512,
+        num_hidden_layers: Optional[int] = 8,
+        intermediate_size: Optional[int] = 2048,
+        num_attention_heads: Optional[int] = 8,
+        num_key_value_heads: Optional[int] = 8,
+        head_dim: Optional[int] = None,
+        hidden_act: Optional[str] = "gelu",
+        max_position_embeddings: Optional[int] = 8000,
+        initializer_range: Optional[float] = 0.02,
+        norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = False,
+        use_streaming: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        sliding_window: Optional[int] = 250,
+        attention_dropout: Optional[float] = 0.0,
+        layer_scale_initial_scale: Optional[float] = 0.01,
+        attention_bias: Optional[bool] = False,
         **kwargs,
     ):
         self.sampling_rate = sampling_rate
-        self.frame_rate = frame_rate
         self.audio_channels = audio_channels
         self.hidden_size = hidden_size
         self.num_filters = num_filters
@@ -209,12 +215,28 @@ class MimiConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.norm_eps = norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
+        self.use_streaming = use_streaming
         self.sliding_window = sliding_window
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
+
+        # Handle backward compatibility for frame_rate:
+        # If frame_rate is explicitly provided, use it (backward compatibility)
+        # Otherwise, compute it from other parameters (correctly)
+        if frame_rate is not None:
+            self._frame_rate = frame_rate
+        else:
+            self._frame_rate = None
 
         if num_semantic_quantizers >= self.num_quantizers:
             raise ValueError(
@@ -232,6 +254,37 @@ class MimiConfig(PretrainedConfig):
     def num_codebooks(self) -> int:
         # alias to num_quantizers
         return self.num_quantizers
+
+    @property
+    def frame_size(self) -> int:
+        # 1. we need each encoder conv stride
+        # first conv
+        strides = [1]
+
+        # layer convs
+        for ratio in reversed(self.upsampling_ratios):
+            for j in range(self.num_residual_layers):
+                len_kernel_sizes = len(self.residual_kernel_size) if isinstance(self.residual_kernel_size, list) else 1
+                strides.extend([1] * (len_kernel_sizes + 1))
+                if self.use_conv_shortcut:  # skip connection
+                    strides.append(1)
+
+            strides.append(ratio)
+
+        # last conv
+        strides.append(1)
+
+        # downsampling layer
+        strides.append(2)
+
+        return math.prod(strides)
+
+    @property
+    def frame_rate(self) -> float:
+        # handle backward compatibility
+        if self._frame_rate is not None:
+            return self._frame_rate
+        return self.sampling_rate / self.frame_size
 
 
 __all__ = ["MimiConfig"]

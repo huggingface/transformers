@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The SqueezeBert authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -239,9 +238,8 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SqueezeBertModelTester(self)

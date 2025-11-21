@@ -2,7 +2,7 @@ import gc
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
-from transformers.testing_utils import require_compressed_tensors, require_torch
+from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
 from transformers.utils import is_torch_available
 
 
@@ -13,16 +13,16 @@ if is_torch_available():
 @require_compressed_tensors
 @require_torch
 class CompressedTensorsTest(unittest.TestCase):
-    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense-hf-quantizer"
-    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
-    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
+    tinyllama_w8a16 = "nm-testing/tinyllama-w8a16-dense"
+    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
+    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
     llama3_8b_fp8 = "nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat"
 
     prompt = "Paris is the capital of which country?"
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_config_args(self):
@@ -47,7 +47,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertIsInstance(config_from_dict.sparsity_config, SparsityCompressionConfig)
 
     def test_tinyllama_w8a8(self):
-        expected_out = "<s> Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n  1. Paris is the capital of which country?\n\n"
+        expected_out = "<s> Paris is the capital of which country?\n\n**A) 10** Paris is the capital of which country?\n\n**B) 11** Paris is the capital of which country?\n\n**C) 1"
         self._test_quantized_model(self.tinyllama_w8a8, expected_out)
 
     def test_tinyllama_w4a16(self):
@@ -59,7 +59,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self._test_quantized_model(self.tinyllama_w8a16, expected_out)
 
     def test_llama_8b_fp8(self):
-        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous museum in Paris that is home to the Mona Lisa? The Louvre\nWhat is the name of the famous bridge in Paris that is often associated with the city"
+        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera? "
         self._test_quantized_model(self.llama3_8b_fp8, expected_out)
 
     def _test_quantized_model(self, model_name: str, expected_output: str):

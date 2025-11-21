@@ -16,28 +16,24 @@
 # limitations under the License.
 """Pvt model configuration"""
 
-from collections import OrderedDict
-from typing import Callable, List, Mapping
+from collections.abc import Callable, Mapping
 
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PvtConfig(PretrainedConfig):
+class PvtConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PvtModel`]. It is used to instantiate an Pvt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Pvt
     [Xrenya/pvt-tiny-224](https://huggingface.co/Xrenya/pvt-tiny-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         image_size (`int`, *optional*, defaults to 224):
@@ -46,19 +42,19 @@ class PvtConfig(PretrainedConfig):
             The number of input channels.
         num_encoder_blocks (`int`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
+        depths (`list[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
-        sequence_reduction_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
+        sequence_reduction_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
             Sequence reduction ratios in each encoder block.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 128, 320, 512]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[64, 128, 320, 512]`):
             Dimension of each of the encoder blocks.
-        patch_sizes (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+        patch_sizes (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Patch size before each encoder block.
-        strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+        strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
+        num_attention_heads (`list[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
+        mlp_ratios (`list[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -100,13 +96,13 @@ class PvtConfig(PretrainedConfig):
         image_size: int = 224,
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
-        depths: List[int] = [2, 2, 2, 2],
-        sequence_reduction_ratios: List[int] = [8, 4, 2, 1],
-        hidden_sizes: List[int] = [64, 128, 320, 512],
-        patch_sizes: List[int] = [4, 2, 2, 2],
-        strides: List[int] = [4, 2, 2, 2],
-        num_attention_heads: List[int] = [1, 2, 5, 8],
-        mlp_ratios: List[int] = [8, 8, 4, 4],
+        depths: list[int] = [2, 2, 2, 2],
+        sequence_reduction_ratios: list[int] = [8, 4, 2, 1],
+        hidden_sizes: list[int] = [64, 128, 320, 512],
+        patch_sizes: list[int] = [4, 2, 2, 2],
+        strides: list[int] = [4, 2, 2, 2],
+        num_attention_heads: list[int] = [1, 2, 5, 8],
+        mlp_ratios: list[int] = [8, 8, 4, 4],
         hidden_act: Mapping[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
@@ -139,24 +135,4 @@ class PvtConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
 
-class PvtOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
-
-
-__all__ = ["PvtConfig", "PvtOnnxConfig"]
+__all__ = ["PvtConfig"]

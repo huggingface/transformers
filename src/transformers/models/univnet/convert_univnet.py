@@ -56,7 +56,7 @@ def get_kernel_predictor_key_mapping(config: UnivNetConfig, old_prefix: str = ""
 def get_key_mapping(config: UnivNetConfig):
     mapping = {}
 
-    # NOTE: inital conv layer keys are the same
+    # NOTE: initial conv layer keys are the same
 
     # LVC Residual blocks
     for i in range(len(config.resblock_stride_sizes)):
@@ -106,7 +106,7 @@ def convert_univnet_checkpoint(
     repo_id=None,
     safe_serialization=False,
 ):
-    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu")
+    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     # Get the generator's state dict
     state_dict = model_state_dict_base["model_g"]
 
@@ -141,7 +141,7 @@ def main():
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the Hugging Face hub."
     )
     parser.add_argument(
         "--safe_serialization", action="store_true", help="Whether to save the model using `safetensors`."

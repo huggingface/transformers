@@ -14,25 +14,22 @@
 # limitations under the License.
 """mT5 model configuration"""
 
-from typing import Mapping
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxSeq2SeqConfigWithPast
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MT5Config(PretrainedConfig):
+class MT5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MT5Model`] or a [`TFMT5Model`]. It is used to
     instantiate a mT5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the mT5
     [google/mt5-small](https://huggingface.co/google/mt5-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 250112):
@@ -121,7 +118,6 @@ class MT5Config(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
@@ -146,37 +142,8 @@ class MT5Config(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+        # TODO: Mt5 never supported not tying encoder decoder so this has to be true.
+        self.tie_encoder_decoder = True
 
 
-class MT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    # Copied from transformers.models.t5.configuration_t5.T5OnnxConfig.inputs
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = {
-            "input_ids": {0: "batch", 1: "encoder_sequence"},
-            "attention_mask": {0: "batch", 1: "encoder_sequence"},
-        }
-        if self.use_past:
-            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    @property
-    # Copied from transformers.models.t5.configuration_t5.T5OnnxConfig.default_onnx_opset
-    def default_onnx_opset(self) -> int:
-        return 13
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 5e-4
-
-
-__all__ = ["MT5Config", "MT5OnnxConfig"]
+__all__ = ["MT5Config"]

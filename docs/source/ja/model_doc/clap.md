@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 CLAP モデルは、[Large Scale Contrastive Language-Audio pretraining with
-feature fusion and keyword-to-caption augmentation](https://arxiv.org/pdf/2211.06687.pdf)、Yusong Wu、Ke Chen、Tianyu Zhang、Yuchen Hui、Taylor Berg-Kirkpatrick、Shlomo Dubnov 著。
+feature fusion and keyword-to-caption augmentation](https://huggingface.co/papers/2211.06687)、Yusong Wu、Ke Chen、Tianyu Zhang、Yuchen Hui、Taylor Berg-Kirkpatrick、Shlomo Dubnov 著。
 
 CLAP (Contrastive Language-Audio Pretraining) は、さまざまな (音声、テキスト) ペアでトレーニングされたニューラル ネットワークです。タスクに合わせて直接最適化することなく、音声が与えられた場合に最も関連性の高いテキスト スニペットを予測するように指示できます。 CLAP モデルは、SWINTransformer を使用して log-Mel スペクトログラム入力からオーディオ特徴を取得し、RoBERTa モデルを使用してテキスト特徴を取得します。次に、テキストとオーディオの両方の特徴が、同じ次元の潜在空間に投影されます。投影されたオーディオとテキストの特徴の間のドット積が、同様のスコアとして使用されます。
 
@@ -33,7 +33,6 @@ CLAP (Contrastive Language-Audio Pretraining) は、さまざまな (音声、�
 ## ClapConfig
 
 [[autodoc]] ClapConfig
-    - from_text_audio_configs
 
 ## ClapTextConfig
 

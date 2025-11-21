@@ -17,7 +17,7 @@ import inspect
 import os
 import re
 
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
@@ -32,11 +32,21 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
+    "Ernie4_5Config": ["tie_word_embeddings"],
+    "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
+    "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
+    "Lfm2MoeConfig": ["tie_word_embeddings"],
+    # used internally during generation to provide the custom logit processors with their necessary information
+    "DiaConfig": [
+        "delay_pattern",
+    ],
     # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
     # periods and offsets are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
     "BambaConfig": [
         "attn_layer_indices",
     ],
+    "Dots1Config": ["max_window_layers"],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
@@ -44,17 +54,26 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
-    "Qwen2Config": ["use_sliding_window"],
-    "Qwen2MoeConfig": ["use_sliding_window"],
-    "Qwen2VLConfig": ["use_sliding_window"],
+    "Qwen2Config": ["use_sliding_window", "max_window_layers"],
+    "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5_VLTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5OmniTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5OmniTalkerConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen3Config": ["max_window_layers", "use_sliding_window"],  # now use `layer_types` instead
+    "Qwen3MoeConfig": ["max_window_layers", "use_sliding_window"],
     # `cache_implementation` should be in the default generation config, but we don't yet support per-model
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     "Cohere2Config": ["cache_implementation"],
+    "JetMoeConfig": ["output_router_logits"],
     # Dropout with this value was declared but never used
     "Phi3Config": ["embd_pdrop"],
+    "PhimoeConfig": ["max_position_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
+    # used to compute `frame_rate`
+    "XcodecConfig": ["sample_rate", "audio_channels"],
     # used to compute the property `self.layers_block_type`
     "RecurrentGemmaConfig": ["block_types"],
     # used as in the config to define `intermediate_size`
@@ -105,6 +124,10 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
+    # used by sam3 video, kept here for consistency with sam2
+    "Sam3VisionConfig": ["backbone_feature_sizes"],
+    # used internally to calculate `mlp_dim`
+    "SamHQVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented
     "ClapAudioConfig": ["num_classes"],
     # Not used, but providing useful information to users
@@ -181,7 +204,31 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
         "mask_loss_coefficient",
     ],
+    "DFineConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+        "weight_loss_fgl",
+        "weight_loss_ddf",
+    ],
     "GroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
+    "MMGroundingDinoConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
         "class_cost",
@@ -244,8 +291,28 @@ SPECIAL_CASES_TO_ALLOW = {
         "output_router_logits",
         "router_aux_loss_coef",
         "router_jitter_noise",
+        "cache_implementation",
+        "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertDecoderConfig": [
+        "embedding_dropout",
+        "hidden_activation",
+        "initializer_cutoff_factor",
+        "intermediate_size",
+        "max_position_embeddings",
+        "mlp_bias",
+        "mlp_dropout",
+        "classifier_activation",
+        "global_attn_every_n_layers",
+        "local_attention",
+        "local_rope_theta",
+    ],
+    "SmolLM3Config": ["no_rope_layer_interval"],
+    "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
+    "VaultGemmaConfig": ["tie_word_embeddings"],
+    "GemmaConfig": ["tie_word_embeddings"],
+    "CsmConfig": ["tie_codebooks_embeddings"],
 }
 
 
@@ -285,6 +352,8 @@ SPECIAL_CASES_TO_ALLOW.update(
         "IdeficsConfig": True,
         "IdeficsVisionConfig": True,
         "IdeficsPerceiverConfig": True,
+        # TODO: @Arthur/Joao (`hidden_act` unused)
+        "GptOssConfig": True,
     }
 )
 
@@ -326,17 +395,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 is not None
             ):
                 attribute_used = True
-            # `SequenceSummary` is called with `SequenceSummary(config)`
-            elif attribute in [
-                "summary_type",
-                "summary_use_proj",
-                "summary_activation",
-                "summary_last_dropout",
-                "summary_proj_to_labels",
-                "summary_first_dropout",
-            ]:
-                if "SequenceSummary" in modeling_source:
-                    attribute_used = True
             if attribute_used:
                 break
         if attribute_used:
@@ -344,16 +402,20 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
     # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
+        "initializer_range",
+        "init_std",
+        "initializer_factor",
         "bos_index",
         "eos_index",
         "pad_index",
         "unk_index",
         "mask_index",
-        "image_token_index",  # for VLMs
-        "video_token_index",
+        "image_token_id",  # for VLMs
+        "video_token_id",
         "image_seq_length",
         "video_seq_length",
         "image_size",
+        "text_config",  # may appear as `get_text_config()`
         "use_cache",
         "out_features",
         "out_indices",
@@ -368,8 +430,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "rope_theta",
         "partial_rotary_factor",
         "pretraining_tp",
-        "boi_token_index",
-        "eoi_token_index",
+        "boi_token_id",
+        "eoi_token_id",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
@@ -378,10 +440,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     if not attribute_used:
         case_allowed = False
         for attribute in attributes:
-            # Allow if the default value in the configuration class is different from the one in `PretrainedConfig`
-            if attribute in ["is_encoder_decoder"] and default_value is True:
+            # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
+            if attribute == "is_encoder_decoder" and default_value is True:
                 case_allowed = True
-            elif attribute in ["tie_word_embeddings"] and default_value is False:
+            elif attribute == "tie_word_embeddings" and default_value is False:
                 case_allowed = True
 
             # Allow cases without checking the default value in the configuration class
@@ -419,7 +481,6 @@ def check_config_attributes_being_used(config_class):
     # Get the path to modeling source files
     config_source_file = inspect.getsourcefile(config_class)
     model_dir = os.path.dirname(config_source_file)
-    # Let's check against all frameworks: as long as one framework uses an attribute, we are good.
     modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
 
     # Get the source code strings
@@ -457,7 +518,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and issubclass(x, PretrainedConfig)
+                and issubclass(x, PreTrainedConfig)
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]

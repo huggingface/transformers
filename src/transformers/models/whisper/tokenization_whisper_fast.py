@@ -17,9 +17,8 @@
 import json
 import os
 import re
-import warnings
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from tokenizers import AddedToken, processors
@@ -210,7 +209,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Compute offsets for a given tokenized input
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
@@ -291,7 +290,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens from the token ids. If `True`, the prompt token ids will be
@@ -329,7 +328,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
@@ -393,34 +392,18 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         text = super()._decode(*args, **kwargs)
 
         if normalize:
-            clean_text = self._normalize(text)
+            clean_text = self.normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
 
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
-    def _normalize(self, text):
-        warnings.warn(
-            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
-        )
-        return self.normalize(text)
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
-    def _basic_normalize(self, text, remove_diacritics=False):
-        warnings.warn(
-            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
-        )
-        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
-
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
     def normalize(self, text):
         """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
         english text.
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
@@ -430,13 +413,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.basic_normalize
     def basic_normalize(text, remove_diacritics=False):
         """
-        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
         multilingual text.
         """
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
 
         normalizer_file = os.path.join(
@@ -493,7 +476,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
     @property
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.prefix_tokens
-    def prefix_tokens(self) -> List[int]:
+    def prefix_tokens(self) -> list[int]:
         bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
         translate_token_id = self.convert_tokens_to_ids("<|translate|>")
         transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
@@ -527,7 +510,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return bos_sequence
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
@@ -536,22 +519,22 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -601,7 +584,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return batch_encoding["input_ids"]
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
-    def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+    def _strip_prompt(self, token_ids: list[int], prompt_token_id: int, decoder_start_token_id: int):
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
 
@@ -624,12 +607,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     def _convert_to_list(token_ids):
         # convert type to ndarray if necessary
         if hasattr(token_ids, "numpy"):
-            if "torch" in str(type(token_ids)):
-                token_ids = token_ids.cpu().numpy()
-            elif "tensorflow" in str(type(token_ids)):
-                token_ids = token_ids.numpy()
-        elif "jaxlib" in str(type(token_ids)):
-            token_ids = token_ids.tolist()
+            token_ids = token_ids.cpu().numpy()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()

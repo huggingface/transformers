@@ -19,19 +19,21 @@
 # limitations under the License.
 
 import math
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class Phi4MultimodalVisionConfig(PretrainedConfig):
+class Phi4MultimodalVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalVisionModel`]. It is used to instantiate a
     Phi4Multimodal vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -108,15 +110,15 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
         self.feature_layer = feature_layer
 
 
-class Phi4MultimodalAudioConfig(PretrainedConfig):
+class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalAudioModel`]. It is used to instantiate a
     Phi4Multimodal audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -137,7 +139,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
             The dropout ratio.
         ext_pw_out_channel (`int`, *optional*, defaults to 1024):
             Number of out channels in the point-wise conv modules.
-        depthwise_seperable_out_channel (`int`, *optional*, defaults to 1024):
+        depthwise_separable_out_channel (`int`, *optional*, defaults to 1024):
             Number of out channels in the depth-wise separable conv modules.
         depthwise_multiplier (`int`, *optional*, defaults to 1):
             Input size multiplier for the depth-wise separable conv modules.
@@ -190,7 +192,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         left_chunk: int = 18,
         dropout_rate: float = 0.0,
         ext_pw_out_channel: int = 1024,
-        depthwise_seperable_out_channel: int = 1024,
+        depthwise_separable_out_channel: int = 1024,
         depthwise_multiplier: int = 1,
         kernel_size: int = 3,
         conv_activation: str = "swish",
@@ -217,7 +219,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         self.num_blocks = num_blocks
         self.dropout_rate = dropout_rate
         self.ext_pw_out_channel = ext_pw_out_channel
-        self.depthwise_seperable_out_channel = depthwise_seperable_out_channel
+        self.depthwise_separable_out_channel = depthwise_separable_out_channel
         self.depthwise_multiplier = depthwise_multiplier
         self.kernel_size = kernel_size
         self.conv_activation = conv_activation
@@ -236,20 +238,20 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         if time_reduction % 2 != 0:
             raise ValueError("`time_reduction` should be a multiple of 2!")
         length = input_size
-        for _ in range(int(math.log(time_reduction, 2))):
+        for _ in range(int(math.log2(time_reduction))):
             length = math.floor((length - 1) / 2 + 1)
         self.nemo_final_size = length
 
 
-class Phi4MultimodalConfig(PretrainedConfig):
+class Phi4MultimodalConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalModel`]. It is used to instantiate a
     Phi4Multimodal model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 200064):
@@ -268,8 +270,8 @@ class Phi4MultimodalConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
@@ -290,13 +292,10 @@ class Phi4MultimodalConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
-            the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
-            divided by the number of attention heads divided by 2.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
             Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 199999):
@@ -352,40 +351,43 @@ class Phi4MultimodalConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=200064,
-        hidden_size=3072,
-        intermediate_size=8192,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        resid_pdrop=0.0,
-        embd_pdrop=0.0,
-        attention_dropout=0.0,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        partial_rotary_factor=1,
-        bos_token_id=199999,
-        eos_token_id=[199999, 200020],
-        pad_token_id=199999,
-        original_max_position_embeddings=4096,
-        sliding_window=None,
-        vision_config=None,
-        audio_config=None,
+        vocab_size: Optional[int] = 200064,
+        hidden_size: Optional[int] = 3072,
+        intermediate_size: Optional[int] = 8192,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 8,
+        resid_pdrop: Optional[float] = 0.0,
+        embd_pdrop: Optional[float] = 0.0,
+        attention_dropout: Optional[float] = 0.0,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        partial_rotary_factor: Optional[int] = 1,
+        bos_token_id: Optional[int] = 199999,
+        eos_token_id: Optional[list[int]] = [199999, 200020],
+        pad_token_id: Optional[int] = 199999,
+        original_max_position_embeddings: Optional[int] = 4096,
+        sliding_window: Optional[int] = None,
+        vision_config: Optional[dict] = None,
+        audio_config: Optional[dict] = None,
         **kwargs,
     ):
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        if isinstance(vision_config, dict):
+            vision_config = Phi4MultimodalVisionConfig(**vision_config)
+        elif vision_config is None:
+            Phi4MultimodalVisionConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Phi4MultimodalAudioConfig(**audio_config)
+        elif vision_config is None:
+            audio_config = Phi4MultimodalAudioConfig()
+        self.audio_config = audio_config
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -405,78 +407,75 @@ class Phi4MultimodalConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
-        self._rope_scaling_adjustment()
-        self._rope_scaling_validation()
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
+        self._rope_parameters_adjustment()
+        self._rope_parameters_validation()
         self.sliding_window = sliding_window
 
-        if isinstance(vision_config, dict):
-            vision_config = Phi4MultimodalVisionConfig(**vision_config)
-        elif vision_config is None:
-            Phi4MultimodalVisionConfig()
-        self.vision_config = vision_config
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
-        if isinstance(audio_config, dict):
-            audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
-            audio_config = Phi4MultimodalAudioConfig()
-        self.audio_config = audio_config
-
-    def _rope_scaling_adjustment(self):
+    def _rope_parameters_adjustment(self):
         """
-        Adjust the `type` of the `rope_scaling` configuration for backward compatibility.
+        Adjust the `type` of the `rope_parameters` configuration for backward compatibility.
         """
-        if self.rope_scaling is None:
-            return
-
-        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_parameters_type = self.rope_parameters.get("rope_type", None)
 
         # For backward compatibility if previous version used "su" or "yarn"
-        if rope_scaling_type is not None and rope_scaling_type in ["su", "yarn"]:
-            self.rope_scaling["type"] = "longrope"
+        if rope_parameters_type is not None and rope_parameters_type in ["su", "yarn"]:
+            self.rope_parameters["rope_type"] = "longrope"
 
-    def _rope_scaling_validation(self):
+    def _rope_parameters_validation(self):
         """
-        Validate the `rope_scaling` configuration.
+        Validate the `rope_parameters` configuration.
         """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 3:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with three fields, `type`, `short_factor` and `long_factor`, "
-                f"got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
-        rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
-            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
-        if not (
-            isinstance(rope_scaling_short_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
-            )
+        if not isinstance(self.rope_parameters, dict):
+            raise ValueError(f"`rope_parameters` must be a dictionary but got {self.rope_parameters}")
+        rope_parameters_type = self.rope_parameters.get("rope_type", None)
+        rope_parameters_short_factor = self.rope_parameters.get("short_factor", None)
+        rope_parameters_long_factor = self.rope_parameters.get("long_factor", None)
         rotary_ndims = int(self.hidden_size // self.num_attention_heads * self.partial_rotary_factor)
-        if not len(rope_scaling_short_factor) == rotary_ndims // 2:
-            raise ValueError(
-                f"`rope_scaling`'s short_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_short_factor)}"
-            )
-        if not (
-            isinstance(rope_scaling_long_factor, list)
-            and all(isinstance(x, (int, float)) for x in rope_scaling_long_factor)
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must be a list of numbers, got {rope_scaling_long_factor}"
-            )
-        if not len(rope_scaling_long_factor) == rotary_ndims // 2:
-            raise ValueError(
-                f"`rope_scaling`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_long_factor)}"
-            )
+        if rope_parameters_type not in ["default", "longrope"]:
+            raise ValueError(f"`rope_parameters`'s type field must be one of ['longrope'], got {rope_parameters_type}")
+
+        if rope_parameters_short_factor is not None:
+            if not (
+                isinstance(rope_parameters_short_factor, list)
+                and all(isinstance(x, (int, float)) for x in rope_parameters_short_factor)
+            ):
+                raise ValueError(
+                    f"`rope_parameters`'s short_factor field must be a list of numbers, got {rope_parameters_short_factor}"
+                )
+            if not len(rope_parameters_short_factor) == rotary_ndims // 2:
+                raise ValueError(
+                    f"`rope_parameters`'s short_factor field must have length {rotary_ndims // 2}, got {len(rope_parameters_short_factor)}"
+                )
+
+        if rope_parameters_long_factor is not None:
+            if not (
+                isinstance(rope_parameters_long_factor, list)
+                and all(isinstance(x, (int, float)) for x in rope_parameters_long_factor)
+            ):
+                raise ValueError(
+                    f"`rope_parameters`'s long_factor field must be a list of numbers, got {rope_parameters_long_factor}"
+                )
+            if not len(rope_parameters_long_factor) == rotary_ndims // 2:
+                raise ValueError(
+                    f"`rope_parameters`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_parameters_long_factor)}"
+                )
 
 
 __all__ = ["Phi4MultimodalVisionConfig", "Phi4MultimodalAudioConfig", "Phi4MultimodalConfig"]

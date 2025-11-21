@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "timm",
+#     "datasets",
+#     "torchmetrics",
+#     "pycocotools",
+# ]
+# ///
+
 """Finetuning 🤗 Transformers model for instance segmentation leveraging the Trainer API."""
 
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Optional
 
 import albumentations as A
 import numpy as np
@@ -38,15 +49,14 @@ from transformers import (
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.trainer import EvalPrediction
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/instance-segmentation/requirements.txt")
 
@@ -86,7 +96,7 @@ class Arguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -200,7 +210,7 @@ class Evaluator:
     def reset_metric(self):
         self.metric.reset()
 
-    def postprocess_target_batch(self, target_batch) -> List[Dict[str, torch.Tensor]]:
+    def postprocess_target_batch(self, target_batch) -> list[dict[str, torch.Tensor]]:
         """Collect targets in a form of list of dictionaries with keys "masks", "labels"."""
         batch_masks = target_batch[0]
         batch_labels = target_batch[1]
@@ -214,13 +224,13 @@ class Evaluator:
             )
         return post_processed_targets
 
-    def get_target_sizes(self, post_processed_targets) -> List[List[int]]:
+    def get_target_sizes(self, post_processed_targets) -> list[list[int]]:
         target_sizes = []
         for target in post_processed_targets:
             target_sizes.append(target["masks"].shape[-2:])
         return target_sizes
 
-    def postprocess_prediction_batch(self, prediction_batch, target_sizes) -> List[Dict[str, torch.Tensor]]:
+    def postprocess_prediction_batch(self, prediction_batch, target_sizes) -> list[dict[str, torch.Tensor]]:
         """Collect predictions in a form of list of dictionaries with keys "masks", "labels", "scores"."""
 
         model_output = ModelOutput(class_queries_logits=prediction_batch[0], masks_queries_logits=prediction_batch[1])
@@ -323,18 +333,6 @@ def find_last_checkpoint(training_args: TrainingArguments) -> Optional[str]:
     checkpoint = None
     if training_args.resume_from_checkpoint is not None:
         checkpoint = training_args.resume_from_checkpoint
-    elif os.path.isdir(training_args.output_dir) and not training_args.overwrite_output_dir:
-        checkpoint = get_last_checkpoint(training_args.output_dir)
-        if checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif checkpoint is not None and training_args.resume_from_checkpoint is None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
 
     return checkpoint
 
@@ -356,14 +354,10 @@ def main():
     training_args.batch_eval_metrics = True
     training_args.remove_unused_columns = False
 
-    # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_instance_segmentation", args)
-
     # Setup logging and log on each process the small summary:
     setup_logging(training_args)
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")

@@ -13,85 +13,116 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-12-01 and added to Hugging Face Transformers on 2024-03-05.*
+
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
+</div>
 
 # Mamba
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Mamba](https://huggingface.co/papers/2312.00752) is a selective structured state space model (SSMs) designed to work around Transformers computational inefficiency when dealing with long sequences.  It is a completely attention-free architecture, and comprised of a combination of H3 and gated MLP blocks (Mamba block). Mamba's "content-based reasoning" allows it to focus on specific parts of an input depending on the current token. Mamba also uses a new hardware-aware parallel algorithm to compensate for the lack of convolutional operations. As a result, Mamba has fast inference and can scale to very long sequences.
 
-## Overview
+You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 
-The Mamba model was proposed in [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://arxiv.org/abs/2312.00752) by Albert Gu and Tri Dao.
+> [!TIP]
+> This model was contributed by [Molbap](https://huggingface.co/Molbap) and [AntonV](https://huggingface.co/AntonV).
+> Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
-This model is a new paradigm architecture based on `state-space-models`. You can read more about the intuition behind these [here](https://srush.github.io/annotated-s4/).
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-The abstract from the paper is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*Foundation models, now powering most of the exciting applications in deep learning, are almost universally based on the Transformer architecture and its core attention module. Many subquadratic-time architectures such as linear attention, gated convolution and recurrent models, and structured state space models (SSMs) have been developed to address Transformers' computational inefficiency on long sequences, but they have not performed as well as attention on important modalities such as language. We identify that a key weakness of such models is their inability to perform content-based reasoning, and make several improvements. First, simply letting the SSM parameters be functions of the input addresses their weakness with discrete modalities, allowing the model to selectively propagate or forget information along the sequence length dimension depending on the current token. Second, even though this change prevents the use of efficient convolutions, we design a hardware-aware parallel algorithm in recurrent mode. We integrate these selective SSMs into a simplified end-to-end neural network architecture without attention or even MLP blocks (Mamba). Mamba enjoys fast inference (5× higher throughput than Transformers) and linear scaling in sequence length, and its performance improves on real data up to million-length sequences. As a general sequence model backbone, Mamba achieves state-of-the-art performance across several modalities such as language, audio, and genomics. On language modeling, our Mamba-3B model outperforms Transformers of the same size and matches Transformers twice its size, both in pretraining and downstream evaluation.*
-
-Tips:
-
-- Mamba is a new `state space model` architecture that rivals the classic Transformers. It is based on the line of progress on structured state space models, with an efficient hardware-aware design and implementation in the spirit of [FlashAttention](https://github.com/Dao-AILab/flash-attention).
-- Mamba stacks `mixer` layers, which are the equivalent of `Attention` layers. The core logic of `mamba` is held in the `MambaMixer` class.
-- Two implementations cohabit: one is optimized and uses fast cuda kernels, while the other one is naive but can run on any device!
-- The current implementation leverages the original cuda kernels: the equivalent of flash attention for Mamba are hosted in the [`mamba-ssm`](https://github.com/state-spaces/mamba) and the [`causal_conv1d`](https://github.com/Dao-AILab/causal-conv1d) repositories. Make sure to install them if your hardware supports them!
-- Contributions to make the naive path faster are welcome 🤗
-
-This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
-The original code can be found [here](https://github.com/state-spaces/mamba).
-
-# Usage
-
-### A simple generation example:
-```python
-from transformers import MambaConfig, MambaForCausalLM, AutoTokenizer
+```py
 import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="text-generation",
+    model="state-spaces/mamba-130m-hf",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch  
+from transformers import AutoModelForCausalLM, AutoTokenizer  
 
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
-input_ids = tokenizer("Hey how are you doing?", return_tensors= "pt")["input_ids"]
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float16, device_map="auto",)  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
 
-out = model.generate(input_ids, max_new_tokens=10)
-print(tokenizer.batch_decode(out))
+output = model.generate(**input_ids)  
+print(tokenizer.decode(output[0], skip_special_tokens=True)
 ```
 
-### Peft finetuning
-The slow version is not very stable for training, and the fast one needs `float32`!
+</hfoption>
+<hfoption id="transformers CLI">
 
-```python
-from datasets import load_dataset
-from trl import SFTTrainer
-from peft import LoraConfig
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
-model_id = "state-spaces/mamba-130m-hf"
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id)
-dataset = load_dataset("Abirate/english_quotes", split="train")
-training_args = TrainingArguments(
-    output_dir="./results",
-    num_train_epochs=3,
-    per_device_train_batch_size=4,
-    logging_dir='./logs',
-    logging_steps=10,
-    learning_rate=2e-3
-)
-lora_config =  LoraConfig(
-        r=8,
-        target_modules=["x_proj", "embeddings", "in_proj", "out_proj"],
-        task_type="CAUSAL_LM",
-        bias="none"
-)
-trainer = SFTTrainer(
-    model=model,
-    processing_class=tokenizer,
-    args=training_args,
-    peft_config=lora_config,
-    train_dataset=dataset,
-    dataset_text_field="quote",
-)
-trainer.train()
+```bash
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model state-spaces/mamba-130m-hf --device 0
 ```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+from torchao.quantization import Int4WeightOnlyConfig
+
+quantization_config = Int4WeightOnlyConfig(group_size=128)
+quantization_config = TorchAoConfig(quant_type=quant_config)
+tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-2.8b-hf")
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- The current implementation uses the original CUDA kernels. The FlashAttention equivalent implementation is hosted in the [mamba-ssm](https://github.com/state-spaces/mamba) and [causal_conv1d](https://github.com/Dao-AILab/causal-conv1d) repositories. Make sure to install them if your hardware supports it!
+- Mamba stacks `mixer` layers which are equivalent to `Attention` layers. You can find the main logic of Mamba in the `MambaMixer` class.
+- The example below demonstrates how to fine-tune Mamba with [PEFT](https://huggingface.co/docs/peft).
+
+  ```py
+  from datasets import load_dataset
+  from trl import SFTConfig, SFTTrainer
+  from peft import LoraConfig
+
+  model_id = "state-spaces/mamba-130m-hf"
+  dataset = load_dataset("Abirate/english_quotes", split="train")
+  training_args = SFTConfig(dataset_text_field="quote")
+  lora_config =  LoraConfig(target_modules=["x_proj", "embeddings", "in_proj", "out_proj"])
+  trainer = SFTTrainer(
+      model=model_id,
+      args=training_args,
+      train_dataset=dataset,
+      peft_config=lora_config,
+  )
+  trainer.train()
+   ```
+
+## MambaCache
+
+[[autodoc]] MambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
 
 ## MambaConfig
 

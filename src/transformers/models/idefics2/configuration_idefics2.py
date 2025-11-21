@@ -13,7 +13,7 @@
 # limitations under the License.
 """Idefics2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Idefics2VisionConfig(PretrainedConfig):
+class Idefics2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2VisionModel`]. It is used to instantiate a
     Idefics2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -29,8 +29,8 @@ class Idefics2VisionConfig(PretrainedConfig):
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics2 model
     [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -106,10 +106,10 @@ class Idefics2VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Idefics2PerceiverConfig(PretrainedConfig):
+class Idefics2PerceiverConfig(PreTrainedConfig):
     r"""
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -130,6 +130,8 @@ class Idefics2PerceiverConfig(PretrainedConfig):
             Number of key-value heads in the perceiver attention block.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation for initializing all weight matrices in the model.
     """
 
     model_type = "idefics2_perceiver"
@@ -145,6 +147,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         resampler_head_dim=96,
         num_key_value_heads=4,
         attention_dropout=0.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.hidden_act = hidden_act
@@ -156,6 +159,7 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.resampler_head_dim = resampler_head_dim
         self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
         if self.num_key_value_heads > self.resampler_n_heads:
             raise ValueError(
                 f"num_key_value_heads={self.num_key_value_heads} must be less than or equal to"
@@ -164,15 +168,15 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Idefics2Config(PretrainedConfig):
+class Idefics2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
     Idefics2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the Idefics2
     [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -237,7 +241,7 @@ class Idefics2Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "mistral"
+            text_config["model_type"] = text_config.get("model_type", "mistral")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("text_config is None, using default text config")

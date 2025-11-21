@@ -3,7 +3,7 @@ import unittest
 import warnings
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.testing_utils import require_compressed_tensors, require_torch
+from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import CompressedTensorsConfig
 
@@ -41,7 +41,7 @@ class StackCompressedModelTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_compressed_uncompressed_model_shapes(self):
@@ -65,13 +65,13 @@ class StackCompressedModelTest(unittest.TestCase):
                 uncompressed = AutoModelForCausalLM.from_pretrained(
                     uncompressed_model,
                     device_map="auto",
-                    torch_dtype="auto",
+                    dtype="auto",
                     quantization_config=CompressedTensorsConfig(run_compressed=False),
                 )
                 compressed_decompressed = AutoModelForCausalLM.from_pretrained(
                     compressed_model,
                     device_map="auto",
-                    torch_dtype="auto",
+                    dtype="auto",
                     quantization_config=CompressedTensorsConfig(run_compressed=False),
                 )
 
@@ -85,7 +85,11 @@ class StackCompressedModelTest(unittest.TestCase):
                             )
                         else:
                             self.assertTrue(
-                                torch.allclose(submodule.weight, comp_decomp_obj.weight, atol=0.2),
+                                torch.allclose(
+                                    submodule.weight.to(torch_device),
+                                    comp_decomp_obj.weight.to(torch_device),
+                                    atol=0.2,
+                                ),
                                 f"Weight mismatch for module '{name}' in quantized-only or stacked model.",
                             )
 
@@ -100,7 +104,7 @@ class StackCompressedModelTest(unittest.TestCase):
         uncompressed = AutoModelForCausalLM.from_pretrained(
             self.sparse_uncompressed_model,
             device_map="auto",
-            torch_dtype="auto",
+            dtype="auto",
             quantization_config=CompressedTensorsConfig(run_compressed=False),
         )
 
@@ -109,7 +113,7 @@ class StackCompressedModelTest(unittest.TestCase):
         decompressed = AutoModelForCausalLM.from_pretrained(
             self.sparse_compressed_model,
             device_map="auto",
-            torch_dtype="auto",
+            dtype="auto",
             quantization_config=CompressedTensorsConfig(run_compressed=False),
         )
         output_decompressed = decompressed.generate(input_ids.to(decompressed.device), max_new_tokens=100)
@@ -132,7 +136,7 @@ class StackCompressedModelTest(unittest.TestCase):
                     AutoModelForCausalLM.from_pretrained(
                         model_stub,
                         device_map="auto",
-                        torch_dtype="auto",
+                        dtype="auto",
                         quantization_config=CompressedTensorsConfig(run_compressed=False),
                     )
                     for warning in caught_warnings:
@@ -151,8 +155,8 @@ class StackCompressedModelTest(unittest.TestCase):
 @require_compressed_tensors
 @require_torch
 class RunCompressedTest(unittest.TestCase):
-    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
-    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
+    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
+    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
 
     prompt = "Paris is the capital of which country?"
 
@@ -160,7 +164,7 @@ class RunCompressedTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_default_run_compressed__True(self):

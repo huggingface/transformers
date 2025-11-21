@@ -1,11 +1,32 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
+from ..utils import logging
 
+
+logger = logging.get_logger(__name__)
 
 _use_top_left_mask = flash_attn_supports_top_left_mask()
+
+
+def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtype:
+    """If the query is in float32, return a target dtype compatible with flash attention. Return None otherwise."""
+    if query.dtype == torch.float32:
+        if torch.is_autocast_enabled():
+            # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+            return (
+                torch.get_autocast_dtype("cuda")
+                if hasattr(torch, "get_autocast_dtype")
+                else torch.get_autocast_gpu_dtype()
+            )
+        # Handle the case where the model is quantized
+        elif hasattr(module.config, "_pre_quantization_dtype"):
+            return module.config._pre_quantization_dtype
+        else:
+            return next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+    return None
 
 
 def flash_attention_forward(
@@ -18,11 +39,24 @@ def flash_attention_forward(
     scaling: Optional[float] = None,
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
+    is_causal: Optional[bool] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> tuple[torch.Tensor, None]:
+    if kwargs.get("output_attentions", False):
+        logger.warning_once(
+            "`flash_attention_2` does not support `output_attentions=True`."
+            " Please set your attention to `eager` if you want any of these features."
+        )
+
     # This is before the transpose
     seq_len = query.shape[2]
 
+    if any(dim == 0 for dim in query.shape):
+        raise ValueError(
+            "Tensor query has shape  with a zero dimension.\n"
+            "FlashAttention does not support inputs with dim=0.\n"
+            "Please check your input shapes or use SDPA instead."
+        )
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
@@ -33,18 +67,10 @@ def flash_attention_forward(
     # cast them back in the correct dtype just to be sure everything works as expected.
     # This might slowdown training & inference so it is recommended to not cast the LayerNorms
     # in fp32. (usually our RMSNorm modules handle it correctly)
-    target_dtype = None
-    if query.dtype == torch.float32:
-        if torch.is_autocast_enabled():
-            target_dtype = torch.get_autocast_gpu_dtype()
-        # Handle the case where the model is quantized
-        elif hasattr(module.config, "_pre_quantization_dtype"):
-            target_dtype = module.config._pre_quantization_dtype
-        else:
-            target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+    target_dtype = get_target_dtype(query, module)
 
-    # FA2 always relies on the value set in the module, so remove it if present in kwargs to avoid passing it twice
-    kwargs.pop("is_causal", None)
+    # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
+    is_causal = is_causal if is_causal is not None else module.is_causal
 
     attn_output = _flash_attention_forward(
         query,
@@ -52,13 +78,15 @@ def flash_attention_forward(
         value,
         attention_mask,
         query_length=seq_len,
-        is_causal=module.is_causal,
+        is_causal=is_causal,
         dropout=dropout,
         softmax_scale=scaling,
         sliding_window=sliding_window,
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
         target_dtype=target_dtype,
+        attn_implementation=module.config._attn_implementation,
+        layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
         **kwargs,
     )
 

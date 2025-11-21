@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ A subclass of `Trainer` specific to Question-Answering tasks
 
 import math
 import time
-from typing import Dict, List, Optional
+from typing import Optional
 
 from torch.utils.data import Dataset
 
@@ -42,10 +41,10 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         self,
         eval_dataset: Optional[Dataset] = None,
         eval_examples=None,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
         **gen_kwargs,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         gen_kwargs = gen_kwargs.copy()
 
         # Use legacy argument setting if a) the option is not explicitly passed; and b) the argument is set in the
@@ -64,9 +63,8 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
         start_time = time.time()
-        eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
         try:
-            output = eval_loop(
+            output = self.evaluation_loop(
                 eval_dataloader,
                 description="Evaluation",
                 # No point gathering the predictions if there are no metrics, otherwise we defer to
@@ -78,8 +76,6 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         finally:
             self.compute_metrics = compute_metrics
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,
@@ -107,7 +103,7 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
             # Only the main node log the results by default
             self.log(metrics)
 
-        if self.args.tpu_metrics_debug or self.args.debug:
+        if self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
@@ -125,9 +121,8 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
         start_time = time.time()
-        eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
         try:
-            output = eval_loop(
+            output = self.evaluation_loop(
                 predict_dataloader,
                 description="Prediction",
                 # No point gathering the predictions if there are no metrics, otherwise we defer to
@@ -140,8 +135,6 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
             self.compute_metrics = compute_metrics
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         output.metrics.update(
             speed_metrics(
                 metric_key_prefix,

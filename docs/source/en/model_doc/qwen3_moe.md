@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-29 and added to Hugging Face Transformers on 2025-03-31.*
 
 # Qwen3MoE
 
 ## Overview
 
-To be released with the official model launch.
+[Qwen3MoE](https://huggingface.co/papers/2505.09388) refers to the mixture of experts model architecture Qwen3-235B-A22B which was released with its dense variant [Qwen3](qwen3) ([blog post](https://qwenlm.github.io/blog/qwen3/)).
 
 ### Model Details
 

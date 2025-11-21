@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-BigBird モデルは、[Big Bird: Transformers for Longer Sequences](https://arxiv.org/abs/2007.14062) で提案されました。
+BigBird モデルは、[Big Bird: Transformers for Longer Sequences](https://huggingface.co/papers/2007.14062) で提案されました。
 ザヒール、マンジルとグルガネシュ、グルとダベイ、クマール・アヴィナヴァとエインズリー、ジョシュアとアルベルティ、クリスとオンタノン、
 サンティアゴとファム、フィリップとラブラ、アニルードとワン、キーファンとヤン、リーなど。 BigBird は注目度が低い
 BERT などの Transformer ベースのモデルをさらに長いシーケンスに拡張する、Transformer ベースのモデル。まばらに加えて
@@ -58,7 +58,7 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 
 ## ドキュメント リソース
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
@@ -85,8 +85,6 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 
 [[autodoc]] models.big_bird.modeling_big_bird.BigBirdForPreTrainingOutput
 
-<frameworkcontent>
-<pt>
 
 ## BigBirdModel
 
@@ -128,49 +126,4 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 [[autodoc]] BigBirdForQuestionAnswering
     - forward
 
-</pt>
-<jax>
-
-## FlaxBigBirdModel
-
-[[autodoc]] FlaxBigBirdModel
-    - __call__
-
-## FlaxBigBirdForPreTraining
-
-[[autodoc]] FlaxBigBirdForPreTraining
-    - __call__
-
-## FlaxBigBirdForCausalLM
-
-[[autodoc]] FlaxBigBirdForCausalLM
-    - __call__
-
-## FlaxBigBirdForMaskedLM
-
-[[autodoc]] FlaxBigBirdForMaskedLM
-    - __call__
-
-## FlaxBigBirdForSequenceClassification
-
-[[autodoc]] FlaxBigBirdForSequenceClassification
-    - __call__
-
-## FlaxBigBirdForMultipleChoice
-
-[[autodoc]] FlaxBigBirdForMultipleChoice
-    - __call__
-
-## FlaxBigBirdForTokenClassification
-
-[[autodoc]] FlaxBigBirdForTokenClassification
-    - __call__
-
-## FlaxBigBirdForQuestionAnswering
-
-[[autodoc]] FlaxBigBirdForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>
 

@@ -13,57 +13,129 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Bamba
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Bamba](https://huggingface.co/blog/bamba) is a 9B parameter decoder-only language model built on the [Mamba-2](./mamba2) architecture. It is pretrained in two stages - it starts by training on 2T tokens from the [Dolma v1.7](https://huggingface.co/datasets/allenai/dolma) dataset and then trained on an additional 200B tokens from [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) and [Cosmopedia](https://huggingface.co/datasets/HuggingFaceTB/cosmopedia).
 
-## Overview
+You can find all the original Bamba checkpoints under the [Bamba](https://huggingface.co/collections/ibm-ai-platform/bamba-674f1388b9bbc98b413c7bab) collection.
 
-Bamba-9B is a decoder-only language model based on the [Mamba-2](https://github.com/state-spaces/mamba) architecture and is designed to handle a wide range of text generation tasks. It is trained from scratch using a two-stage training approach. In the first stage, the model is trained on 2 trillion tokens from the Dolma v1.7 dataset. In the second stage, it undergoes additional training on 200 billion tokens, leveraging a carefully curated blend of high-quality data to further refine its performance and enhance output quality.
+> [!TIP]
+> This model was contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim).
+>
+> Click on the Bamba models in the right sidebar for more examples of how to apply Bamba to different text generation tasks.
 
-Checkout all Bamba-9B model checkpoints [here](https://github.com/foundation-model-stack/bamba).
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="text-generation",
+    model="ibm-ai-platform/Bamba-9B-v2",
+    dtype=torch.bfloat16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
+```
+
+</hfoption>
+
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")
+model = AutoModelForCausalLM.from_pretrained("ibm-ai-platform/Bamba-9B-v2", dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+
+<hfoption id="transformers CLI">
+```bash
+echo "Plants create energy through a process known as" | transformers run --task text-generation --model ibm-ai-platform/Bamba-9B-v2 --device 0
+```
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+tokenizer = AutoTokenizer.from_pretrained("ibm-ai-platform/Bamba-9B-v2")
+model = AutoModelForCausalLM.from_pretrained(
+   "ibm-ai-platform/Bamba-9B-v2",
+   quantization_config=quantization_config,
+   device_map="auto",
+   attn_implementation="sdpa"
+)
+
+inputs = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+output = model.generate(**inputs)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- Bamba supports padding-free training which concatenates distinct training examples while still processing inputs as separate batches. It can significantly accelerate inference by [~2x](https://github.com/huggingface/transformers/pull/35861#issue-2807873129) (depending on model and data distribution) and reduce memory-usage if there are examples of varying lengths by avoiding unnecessary compute and memory overhead from padding tokens.
+
+  Padding-free training requires the `flash-attn`, `mamba-ssm`, and `causal-conv1d` packages and the following arguments must be passed to the model in addition to `input_ids` and `labels`.
+
+  - `position_ids: torch.LongTensor`: the position index of each token in each sequence.
+  - `seq_idx: torch.IntTensor`: the index of each sequence in the batch.
+  - Each of the [`FlashAttentionKwargs`]
+    - `cu_seq_lens_q: torch.LongTensor`: the cumulative sequence lengths of all queries.
+    - `cu_seq_lens_k: torch.LongTensor`: the cumulative sequence lengths of all keys.
+    - `max_length_q: int`: the longest query length in the batch.
+    - `max_length_k: int`: the longest key length in the batch.
+
+  The `attention_mask` inputs should not be provided. The [`DataCollatorWithFlattening`] programmatically generates the set of additional arguments above using `return_seq_idx=True` and `return_flash_attn_kwargs=True`. See the [Improving Hugging Face Training Efficiency Through Packing with Flash Attention](https://huggingface.co/blog/packing-with-FA2) blog post for additional information.
+
+  ```python
+  from transformers import DataCollatorWithFlattening
+
+  # Example of using padding-free training
+  data_collator = DataCollatorWithFlattening(
+      tokenizer=tokenizer,
+      return_seq_idx=True,
+      return_flash_attn_kwargs=True
+  )
+  ```
 
 ## BambaConfig
 
-| Model            | Params       | # Layers | Hidden Dim. | Attention Heads | GQA | KV Heads | Context Length |  Tied Embeddings |
-|-------------------|--------------|----------|-------------|-----------------|-----|----------|----------------|------------------|
-| Bamba  | 9B (9.78B)   | 32       | 4096        | 32              | Yes | 8        | 4096           | True |
-
 [[autodoc]] BambaConfig
-
-<!---
-## Usage Tips
-
-Tips: 
-
-- The architecture is based on Mamba-2 models.
 
 ## BambaModel
 
 [[autodoc]] BambaModel
     - forward
--->
 
 ## BambaForCausalLM
 
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model = AutoModelForCausalLM.from_pretrained("ibm-fms/Bamba-9B")
-tokenizer = AutoTokenizer.from_pretrained("ibm-fms/Bamba-9B")
-
-message = ["Mamba is a snake with following properties  "]
-inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False)
-response = model.generate(**inputs, max_new_tokens=64)
-print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
-```
-
 [[autodoc]] BambaForCausalLM
     - forward
-
-This HF implementation is contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim). 

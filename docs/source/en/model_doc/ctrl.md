@@ -13,17 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-09-11 and added to Hugging Face Transformers on 2020-11-16.*
 
 # CTRL
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
 
-CTRL model was proposed in [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://arxiv.org/abs/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and
+CTRL model was proposed in [CTRL: A Conditional Transformer Language Model for Controllable Generation](https://huggingface.co/papers/1909.05858) by Nitish Shirish Keskar*, Bryan McCann*, Lav R. Varshney, Caiming Xiong and
 Richard Socher. It's a causal (unidirectional) transformer pre-trained using language modeling on a very large corpus
 of ~140 GB of text data with the first token reserved as a control code (such as Links, Books, Wikipedia etc.).
 
@@ -51,10 +51,9 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
   token in a sequence. Leveraging this feature allows CTRL to generate syntactically coherent text as it can be
   observed in the *run_generation.py* example script.
 - The PyTorch models can take the `past_key_values` as input, which is the previously computed key/value attention pairs.
-  TensorFlow models accepts `past` as input. Using the `past_key_values` value prevents the model from re-computing
+  Using the `past_key_values` value prevents the model from re-computing
   pre-computed values in the context of text generation. See the [`forward`](model_doc/ctrl#transformers.CTRLModel.forward)
   method for more information on the usage of this argument.
-
 
 ## Resources
 
@@ -70,9 +69,6 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
 [[autodoc]] CTRLTokenizer
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
-
 ## CTRLModel
 
 [[autodoc]] CTRLModel
@@ -87,24 +83,3 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
 
 [[autodoc]] CTRLForSequenceClassification
     - forward
-
-</pt>
-<tf>
-
-## TFCTRLModel
-
-[[autodoc]] TFCTRLModel
-    - call
-
-## TFCTRLLMHeadModel
-
-[[autodoc]] TFCTRLLMHeadModel
-    - call
-
-## TFCTRLForSequenceClassification
-
-[[autodoc]] TFCTRLForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>

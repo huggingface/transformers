@@ -104,7 +104,7 @@ def _convert_model(
             state_dict[new_key] = state_dict.pop(k)
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unecessary param
+    extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unnecessary param
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
     if len(extra_keys) != 0:
         raise ValueError(f"extra keys found: {extra_keys}")

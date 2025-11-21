@@ -16,13 +16,10 @@
 Speech processor class for Wav2Vec2-BERT
 """
 
-import warnings
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
-from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
 class Wav2Vec2BertProcessorKwargs(ProcessingKwargs, total=False):
@@ -44,37 +41,13 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "SeamlessM4TFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        try:
-            return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        except OSError:
-            warnings.warn(
-                f"Loading a tokenizer inside {cls.__name__} from a config that does not"
-                " include a `tokenizer_class` attribute is deprecated and will be "
-                "removed in v5. Please add `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`"
-                " attribute to either your `config.json` or `tokenizer_config.json` "
-                "file to suppress this warning: ",
-                FutureWarning,
-            )
-
-            feature_extractor = SeamlessM4TFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-            return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
-
     def __call__(
         self,
-        audio: AudioInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
-        images=None,
-        videos=None,
+        audio: Optional[AudioInput] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
     ):
         """
@@ -84,12 +57,12 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the docstring of the above two methods for more information.
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
 
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -145,19 +118,11 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             input_features["labels"] = labels["input_ids"]
             return input_features
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        # The processor doesn't return text ids and the model seems to not need them
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return feature_extractor_input_names + ["labels"]
 
 
 __all__ = ["Wav2Vec2BertProcessor"]

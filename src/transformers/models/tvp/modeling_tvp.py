@@ -16,18 +16,17 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import prune_linear_layer
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_tvp import TvpConfig
 
@@ -36,27 +35,23 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class TvpVideoGroundingOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Temporal-Distance IoU loss for video grounding.
-        logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
-            input texts.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Temporal-Distance IoU loss for video grounding.
+    logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+        Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
+        input texts.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class TvpLoss(nn.Module):
@@ -66,7 +61,7 @@ class TvpLoss(nn.Module):
     ground-truth / prediction (supervise class and box).
 
     Args:
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied.
     """
 
@@ -123,7 +118,7 @@ class TvpLoss(nn.Module):
         Args:
             logits (`torch.FloatTensor`):
                 The output logits of head module.
-            labels (`List[torch.FloatTensor]`):
+            labels (`list[torch.FloatTensor]`):
                 List of tensors ([start, end, duration]), which contains start time, end time of the video corresponding to the text, and also the duration.
         """
         duration, start_time, end_time = labels
@@ -251,7 +246,7 @@ class TvpVisualInputEmbedding(nn.Module):
         # (batch_size, height, width, hidden_dim)
         positional_embeddings = row_position_embeddings + col_position_embeddings
 
-        # This interpolation gets triggered ONLY when the input image dim is larger in any dimenstion than the original position embeddings
+        # This interpolation gets triggered ONLY when the input image dim is larger in any dimension than the original position embeddings
         if interpolate_pos_encoding and (
             height > self.max_grid_row_position_embeddings or width > self.max_grid_col_position_embeddings
         ):
@@ -348,30 +343,6 @@ class TvpAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        mask = torch.ones(self.num_attention_heads, self.attention_head_size)
-        heads = set(heads) - self.pruned_heads  # Convert to set and remove already pruned heads
-        for head in heads:
-            # Compute how many pruned heads are before the head and move the index accordingly
-            head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
-
-        # Prune linear layers
-        self.query = prune_linear_layer(self.query, index)
-        self.key = prune_linear_layer(self.key, index)
-        self.value = prune_linear_layer(self.value, index)
-        self.dense = prune_linear_layer(self.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.num_attention_heads = self.num_attention_heads - len(heads)
-        self.all_head_size = self.attention_head_size * self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def _reshape(self, tensor: torch.Tensor, sequence_length: int, batch_size: int):
         return (
@@ -384,7 +355,6 @@ class TvpAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions: Optional[bool] = None,
     ):
         batch_size, sequence_length = hidden_states.shape[:2]
@@ -409,10 +379,6 @@ class TvpAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.attn_dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         attn_output = torch.matmul(attention_probs, value_layer)
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -456,7 +422,7 @@ class TvpOutputLayer(nn.Module):
         return hidden_states
 
 
-class TvpEncodeLayer(nn.Module):
+class TvpEncodeLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = TvpAttention(config)
@@ -467,13 +433,11 @@ class TvpEncodeLayer(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions: Optional[bool] = None,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -495,7 +459,6 @@ class TvpEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -512,16 +475,7 @@ class TvpEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    (head_mask[i] if head_mask is not None else None),
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -562,81 +516,38 @@ class TvpPooler(nn.Module):
         return pooled_output
 
 
+@auto_docstring
 class TvpPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
-    """
-
-    config_class = TvpConfig
+    config: TvpConfig
     base_model_prefix = "model"
+    input_modalities = ["video", "text"]
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, nn.Conv2d):
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                init.constant_(module.bias, 0)
+        elif isinstance(module, TvpModel):
+            init.normal_(module.text_prompt)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-
-        if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-            if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-
-
-TVP_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`TvpConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-TVP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
-
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`TvpImageProcessor`]. See [`TvpImageProcessor.__call__`]
-            for details.
-
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate the pre-trained image pad prompter encodings and positional encodings.
-"""
+            init.zeros_(module.bias)
+        if hasattr(module, "pad_up"):
+            init.normal_(module.pad_up)
+        if hasattr(module, "pad_down"):
+            init.normal_(module.pad_down)
+        if hasattr(module, "pad_left"):
+            init.normal_(module.pad_left)
+        if hasattr(module, "pad_right"):
+            init.normal_(module.pad_right)
 
 
 class TvpFrameDownPadPrompter(nn.Module):
@@ -772,9 +683,10 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 }
 
 
-@add_start_docstrings(
-    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on top.",
-    TVP_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on top.
+    """
 )
 class TvpModel(TvpPreTrainedModel):
     def __init__(self, config):
@@ -799,29 +711,18 @@ class TvpModel(TvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=TvpConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ):
         r"""
-        Returns:
-
         Examples:
         ```python
         >>> import torch
@@ -864,7 +765,6 @@ class TvpModel(TvpPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            head_mask=self.get_head_mask(head_mask, self.config.num_hidden_layers),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -897,11 +797,10 @@ class TvpVideoGroundingHead(nn.Module):
         return logits
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Tvp Model with a video grounding head on top computing IoU, distance, and duration loss.
-    """,
-    TVP_START_DOCSTRING,
+    """
 )
 class TvpForVideoGrounding(TvpPreTrainedModel):
     def __init__(self, config):
@@ -912,15 +811,13 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TvpVideoGroundingOutput, config_class=TvpConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        labels: Tuple[torch.Tensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        labels: Optional[tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -929,7 +826,6 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
             The labels contains duration, start time, and end time of the video corresponding to the text.
-        Returns:
 
         Examples:
         ```python
@@ -949,7 +845,6 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
             input_ids,
             pixel_values,
             attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

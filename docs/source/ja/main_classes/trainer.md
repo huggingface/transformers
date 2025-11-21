@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 [`Trainer`] をインスタンス化する前に、トレーニング中にカスタマイズのすべてのポイントにアクセスするために [`TrainingArguments`] を作成します。
 
-この API は、複数の GPU/TPU での分散トレーニング、[NVIDIA Apex](https://github.com/NVIDIA/apex) および PyTorch のネイティブ AMP による混合精度をサポートします。
+この API は、複数の GPU/TPU での分散トレーニング、PyTorch のネイティブ AMP による混合精度をサポートします。
 
 [`Trainer`] には、上記の機能をサポートする基本的なトレーニング ループが含まれています。カスタム動作を挿入するには、それらをサブクラス化し、次のメソッドをオーバーライドします。
 
@@ -291,7 +291,7 @@ export CUDA_VISIBLE_DEVICES=1,0
 [`Trainer`] は、トレーニングを劇的に改善する可能性のあるライブラリをサポートするように拡張されました。
 時間とはるかに大きなモデルに適合します。
 
-現在、サードパーティのソリューション [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://arxiv.org/abs/1910.02054)。
+現在、サードパーティのソリューション [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) および [PyTorch FSDP](https://pytorch.org/docs/stable/fsdp.html) をサポートしています。論文 [ZeRO: メモリの最適化兆パラメータ モデルのトレーニングに向けて、Samyam Rajbhandari、Jeff Rasley、Olatunji Ruwase、Yuxiong He 著](https://huggingface.co/papers/1910.02054)。
 
 この提供されるサポートは、この記事の執筆時点では新しくて実験的なものです。 DeepSpeed と PyTorch FSDP のサポートはアクティブであり、それに関する問題は歓迎しますが、FairScale 統合は PyTorch メインに統合されているため、もうサポートしていません ([PyTorch FSDP 統合](#pytorch-fully-sharded-data-parallel))
 
@@ -534,7 +534,6 @@ python examples/pytorch/text-classification/run_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
 ```
 
 **注意すべきいくつかの注意事項**
@@ -669,7 +668,6 @@ accelerate launch \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 4. `accelerate launch`するための cmd 引数を直接使用することもできます。上の例は次のようにマッピングされます。
@@ -694,7 +692,6 @@ accelerate launch --num_processes=2 \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 詳細については、🤗 Accelerate CLI ガイドを参照してください: [🤗 Accelerate スクリプトの起動](https://huggingface.co/docs/accelerate/basic_tutorials/launch)。

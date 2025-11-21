@@ -19,19 +19,24 @@ import copy
 import functools
 import gc
 import inspect
+import json
 import os
 import random
 import re
 import threading
 import time
+from collections.abc import Callable
+from functools import partial
 from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
 
 from .utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    WEIGHTS_INDEX_NAME,
     ExplicitEnum,
+    check_torch_load_is_safe,
     is_psutil_available,
-    is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_hpu_available,
@@ -47,21 +52,22 @@ from .utils import (
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file as safe_load_file
 
 
-def seed_worker(_):
+def seed_worker(worker_id: int, num_workers: int, rank: int):
     """
     Helper function to set worker seed during Dataloader initialization.
     """
-    worker_seed = torch.initial_seed() % 2**32
+    init_seed = torch.initial_seed() % 2**32
+    worker_seed = num_workers * rank + init_seed
     set_seed(worker_seed)
 
 
 def enable_full_determinism(seed: int, warn_only: bool = False):
     """
     Helper function for reproducible behavior during distributed training. See
-    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
-    - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
+    https://pytorch.org/docs/stable/notes/randomness.html for pytorch
     """
     # set seed first
     set_seed(seed)
@@ -83,15 +89,10 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    if is_tf_available():
-        import tensorflow as tf
-
-        tf.config.experimental.enable_op_determinism()
-
 
 def set_seed(seed: int, deterministic: bool = False):
     """
-    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` (if installed).
 
     Args:
         seed (`int`):
@@ -117,12 +118,6 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
-    if is_tf_available():
-        import tensorflow as tf
-
-        tf.random.set_seed(seed)
-        if deterministic:
-            tf.config.experimental.enable_op_determinism()
 
 
 def neftune_post_forward_hook(module, input, output):
@@ -236,12 +231,6 @@ class SaveStrategy(ExplicitEnum):
     BEST = "best"
 
 
-class EvaluationStrategy(ExplicitEnum):
-    NO = "no"
-    STEPS = "steps"
-    EPOCH = "epoch"
-
-
 class HubStrategy(ExplicitEnum):
     END = "end"
     EVERY_SAVE = "every_save"
@@ -259,7 +248,7 @@ class BestRun(NamedTuple):
             with run-{run_id}).
         objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (`Dict[str, Any]`):
+        hyperparameters (`dict[str, Any]`):
             The hyperparameters picked to get this run.
         run_summary (`Optional[Any]`):
             A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
@@ -277,7 +266,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
         `float`: The objective to minimize or maximize
@@ -286,11 +275,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [
-        m
-        for m in metrics.keys()
-        if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
-    ]
+    speed_metrics = [m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second")]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -308,7 +293,7 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -322,20 +307,7 @@ def default_hp_space_ray(trial) -> dict[str, float]:
     }
 
 
-def default_hp_space_sigopt(trial):
-    return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformation": "log"},
-        {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
-        {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
-        {
-            "categorical_values": ["4", "8", "16", "32", "64"],
-            "name": "per_device_train_batch_size",
-            "type": "categorical",
-        },
-    ]
-
-
-def default_hp_space_wandb(trial) -> dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
@@ -356,19 +328,18 @@ def default_hp_space_wandb(trial) -> dict[str, float]:
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
-    SIGOPT = "sigopt"
     WANDB = "wandb"
 
 
 def is_main_process(local_rank):
     """
-    Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
+    Whether or not the current process is the local process, based on `xr.global_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.get_ordinal() == 0
+        return xr.global_ordinal() == 0
     return local_rank in [-1, 0]
 
 
@@ -377,9 +348,9 @@ def total_processes_number(local_rank):
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
     if is_torch_xla_available():
-        import torch_xla.core.xla_model as xm
+        import torch_xla.runtime as xr
 
-        return xm.xrt_world_size()
+        return xr.world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -422,16 +393,17 @@ class SchedulerType(ExplicitEnum):
     Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
     By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
     Scheduler types:
-       - "linear" = get_linear_schedule_with_warmup
-       - "cosine" = get_cosine_schedule_with_warmup
-       - "cosine_with_restarts" = get_cosine_with_hard_restarts_schedule_with_warmup
-       - "polynomial" = get_polynomial_decay_schedule_with_warmup
-       - "constant" =  get_constant_schedule
-       - "constant_with_warmup" = get_constant_schedule_with_warmup
-       - "inverse_sqrt" = get_inverse_sqrt_schedule
-       - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
-       - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
-       - "warmup_stable_decay" = get_wsd_schedule
+       - "linear" = [`get_linear_schedule_with_warmup`]
+       - "cosine" = [`get_cosine_schedule_with_warmup`]
+       - "cosine_with_restarts" = [`get_cosine_with_hard_restarts_schedule_with_warmup`]
+       - "polynomial" = [`get_polynomial_decay_schedule_with_warmup`]
+       - "constant" =  [`get_constant_schedule`]
+       - "constant_with_warmup" = [`get_constant_schedule_with_warmup`]
+       - "inverse_sqrt" = [`get_inverse_sqrt_schedule`]
+       - "reduce_lr_on_plateau" = [`get_reduce_on_plateau_schedule`]
+       - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
+       - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
+       - "warmup_stable_decay" = [`get_wsd_schedule`]
     """
 
     LINEAR = "linear"
@@ -443,6 +415,7 @@ class SchedulerType(ExplicitEnum):
     INVERSE_SQRT = "inverse_sqrt"
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 
@@ -463,8 +436,6 @@ class TrainerMemoryTracker:
     metrics = {"train_runtime": 10.5}
     self._memory_tracker.stop_and_update_metrics(metrics)
     ```
-
-    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
 
     To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
@@ -488,7 +459,7 @@ class TrainerMemoryTracker:
         if self.skip_memory_metrics:
             return
 
-        import psutil  # noqa
+        import psutil
 
         if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
             import torch
@@ -792,14 +763,14 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Optional[Callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function`. `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
-        function (`callable`, *optional*)
+        function (`Callable`, *optional*)
             A function to wrap
         starting_batch_size (`int`, *optional*)
             The batch size to try and fit into memory
@@ -875,7 +846,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
     """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
 
     Args:
-        optim_target_modules (`Union[str, List[str]]`):
+        optim_target_modules (`Union[str, list[str]]`):
             A list of strings to try to match. Can be also a full string.
         key (`str`):
             A key to search any matches in optim_target_modules
@@ -894,7 +865,7 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
 
     if isinstance(optim_target_modules, str):
         target_module_found = bool(re.fullmatch(optim_target_modules, key))
-        is_regex = True if not optim_target_modules == key else False
+        is_regex = optim_target_modules != key
     elif key in optim_target_modules:  # from here, target_module_found must be a list of str
         # this module is specified directly in target_modules
         target_module_found = True
@@ -908,3 +879,79 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
         return target_module_found, is_regex
 
     return target_module_found
+
+
+def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
+    """
+    This is the same as
+    [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
+    but for a sharded checkpoint.
+
+    This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
+    loaded in the model.
+
+    Args:
+        model (`torch.nn.Module`): The model in which to load the checkpoint.
+        folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
+        strict (`bool`, *optional*, defaults to `True`):
+            Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+        prefer_safe (`bool`, *optional*, defaults to `False`):
+            If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
+            safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
+
+    Returns:
+        `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
+            - `missing_keys` is a list of str containing the missing keys
+            - `unexpected_keys` is a list of str containing the unexpected keys
+    """
+    # Load the index
+    index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
+    safe_index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
+
+    index_present = os.path.isfile(index_file)
+    safe_index_present = os.path.isfile(safe_index_file)
+
+    if not index_present and not safe_index_present:
+        filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME)
+        raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
+
+    load_safe = safe_index_present and (prefer_safe or not index_present)
+    load_index = safe_index_file if load_safe else index_file
+
+    with open(load_index, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    shard_files = list(set(index["weight_map"].values()))
+
+    # If strict=True, error before loading any of the state dicts.
+    # TODO: Here, update the weigth map with the config.dynamic_weight_conversion
+    loaded_keys = index["weight_map"].keys()
+    model_keys = model.state_dict().keys()
+    missing_keys = [key for key in model_keys if key not in loaded_keys]
+    unexpected_keys = [key for key in loaded_keys if key not in model_keys]
+    if strict and (len(missing_keys) > 0 or len(unexpected_keys) > 0):
+        error_message = f"Error(s) in loading state_dict for {model.__class__.__name__}"
+        if len(missing_keys) > 0:
+            str_missing_keys = ",".join([f'"{k}"' for k in missing_keys])
+            error_message += f"\nMissing key(s): {str_missing_keys}."
+        if len(unexpected_keys) > 0:
+            str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
+            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+        raise RuntimeError(error_message)
+
+    if load_safe:
+        loader = safe_load_file
+    else:
+        check_torch_load_is_safe()
+        loader = partial(torch.load, map_location="cpu", weights_only=True)
+
+    for shard_file in shard_files:
+        state_dict = loader(os.path.join(folder, shard_file))
+        model.load_state_dict(state_dict, strict=False)
+
+        # Make sure memory is freed before we load the next state dict.
+        del state_dict
+        gc.collect()
+
+    # Return the same thing as PyTorch load_state_dict function.
+    return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)

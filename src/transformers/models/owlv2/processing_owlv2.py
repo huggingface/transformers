@@ -16,8 +16,7 @@
 Image/Text processor class for OWLv2
 """
 
-import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -28,10 +27,9 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available
+from ...utils import TensorType, is_torch_available
 
 
 if TYPE_CHECKING:
@@ -48,7 +46,6 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
         },
-        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "np",
         },
@@ -57,22 +54,16 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
 
 class Owlv2Processor(ProcessorMixin):
     r"""
-    Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
-    a single processor that interits both the image processor and tokenizer functionalities. See the
+    Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`]/[`Owlv2ImageProcessorFast`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
+    a single processor that inherits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Owlv2ImageProcessor`]):
+        image_processor ([`Owlv2ImageProcessor`, `Owlv2ImageProcessorFast`]):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Owlv2ImageProcessor"
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
-    optional_call_args = ["query_images"]
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
@@ -81,43 +72,33 @@ class Owlv2Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        # The following is to capture `query_images` argument that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
-        # or this conversation for more context: https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        #
-        *args,
-        audio=None,
-        videos=None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
-            `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`,
+            `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The query image to be prepared, one query image is expected per target image to be queried. Each image
                 can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
                 should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -132,28 +113,25 @@ class Owlv2Processor(ProcessorMixin):
             Owlv2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
         )
         query_images = output_kwargs["images_kwargs"].pop("query_images", None)
-        return_tensors = output_kwargs["common_kwargs"]["return_tensors"]
+        return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
             raise ValueError(
                 "You have to specify at least one text or query image or image. All three cannot be none."
             )
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         data = {}
         if text is not None:
-            if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
+            if isinstance(text, str) or (isinstance(text, list) and not isinstance(text[0], list)):
                 encodings = [self.tokenizer(text, **output_kwargs["text_kwargs"])]
 
-            elif isinstance(text, List) and isinstance(text[0], List):
+            elif isinstance(text, list) and isinstance(text[0], list):
                 encodings = []
 
                 # Maximum number of queries across batch
-                max_num_queries = max([len(text_single) for text_single in text])
+                max_num_queries = max(len(text_single) for text_single in text)
 
                 # Pad all batch samples to max number of text queries
                 for text_single in text:
@@ -169,24 +147,11 @@ class Owlv2Processor(ProcessorMixin):
                 input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
                 attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
 
-            elif return_tensors == "jax" and is_flax_available():
-                import jax.numpy as jnp
-
-                input_ids = jnp.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = jnp.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
-
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
                 input_ids = torch.cat([encoding["input_ids"] for encoding in encodings], dim=0)
                 attention_mask = torch.cat([encoding["attention_mask"] for encoding in encodings], dim=0)
-
-            elif return_tensors == "tf" and is_tf_available():
-                import tensorflow as tf
-
-                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings], axis=0)
-
             else:
                 raise ValueError("Target return tensor type could not be returned")
 
@@ -204,26 +169,13 @@ class Owlv2Processor(ProcessorMixin):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_object_detection with OwlViT->Owlv2
-    def post_process_object_detection(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to [`Owlv2ImageProcessor.post_process_object_detection`]. Please refer
-        to the docstring of this method for more information.
-        """
-        warnings.warn(
-            "`post_process_object_detection` method is deprecated for OwlVitProcessor and will be removed in v5. "
-            "Use `post_process_grounded_object_detection` instead.",
-            FutureWarning,
-        )
-        return self.image_processor.post_process_object_detection(*args, **kwargs)
-
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.post_process_grounded_object_detection with OwlViT->Owlv2
     def post_process_grounded_object_detection(
         self,
         outputs: "Owlv2ObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
-        text_labels: Optional[List[List[str]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        text_labels: Optional[list[list[str]]] = None,
     ):
         """
         Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -234,15 +186,15 @@ class Owlv2Processor(ProcessorMixin):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.1):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-            text_labels (`List[List[str]]`, *optional*):
+            text_labels (`list[list[str]]`, *optional*):
                 List of lists of text labels for each image in the batch. If unset, "text_labels" in output will be
                 set to `None`.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
             - "scores": The confidence scores for each predicted box on the image.
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
@@ -272,7 +224,7 @@ class Owlv2Processor(ProcessorMixin):
         outputs: "Owlv2ImageGuidedObjectDetectionOutput",
         threshold: float = 0.0,
         nms_threshold: float = 0.3,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO
@@ -291,7 +243,7 @@ class Owlv2Processor(ProcessorMixin):
                 None, predictions will not be unnormalized.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
             - "scores": The confidence scores for each predicted box on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
             - "labels": Set to `None`.
@@ -299,22 +251,6 @@ class Owlv2Processor(ProcessorMixin):
         return self.image_processor.post_process_image_guided_detection(
             outputs=outputs, threshold=threshold, nms_threshold=nms_threshold, target_sizes=target_sizes
         )
-
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.batch_decode
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.decode
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
 
 __all__ = ["Owlv2Processor"]

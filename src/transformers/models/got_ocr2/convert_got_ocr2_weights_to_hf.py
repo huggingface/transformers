@@ -16,7 +16,7 @@ import argparse
 import gc
 import glob
 import os
-from typing import List, Optional
+from typing import Optional
 
 import regex as re
 import torch
@@ -61,7 +61,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 CONTEXT_LENGTH = 8000
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -161,7 +161,7 @@ class GotOcr2Converter(TikTokenConverter):
     def __init__(
         self,
         vocab_file,
-        special_tokens: List[str],
+        special_tokens: list[str],
         pattern: str,
         model_max_length: int,
         chat_template: Optional[str] = None,
@@ -182,7 +182,7 @@ class GotOcr2Converter(TikTokenConverter):
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, push_to_hub: bool = False):
     model_max_length = CONTEXT_LENGTH
-    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
+    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
     # Special tokens
     special_tokens = (
         ["<|endoftext|>", "<|im_start|>", "<|im_end|>"]
@@ -250,7 +250,9 @@ def main():
     )
 
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
     write_tokenizer(

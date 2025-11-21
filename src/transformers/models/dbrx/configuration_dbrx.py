@@ -16,29 +16,30 @@
 
 from typing import Any, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DbrxAttentionConfig(PretrainedConfig):
+class DbrxAttentionConfig(PreTrainedConfig):
     """Configuration class for Dbrx Attention.
 
     [`DbrxAttention`] class. It is used to instantiate attention layers
     according to the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         attn_pdrop (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention layers.
         clip_qkv (`float`, *optional*):
             If set, clip the queries, keys, and values in the attention layer to this value.
-        kv_n_heads (`int`, *optional*, defaults to 1): For grouped_query_attention only, allow user to specify number of kv heads.
-        rope_theta (`float`, *optional*, defaults to 10000.0): The base frequency for rope.
+        kv_n_heads (`int`, *optional*, defaults to 1):
+            For grouped_query_attention only, allow user to specify number of kv heads.
     """
 
     base_config_key = "attn_config"
@@ -48,30 +49,22 @@ class DbrxAttentionConfig(PretrainedConfig):
         attn_pdrop: float = 0.0,
         clip_qkv: Optional[float] = None,
         kv_n_heads: int = 1,
-        rope_theta: float = 10000.0,
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
         self.attn_pdrop = attn_pdrop
         self.clip_qkv = clip_qkv
         self.kv_n_heads = kv_n_heads
-        self.rope_theta = rope_theta
-
-        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype"]:
-            if k in kwargs:
-                kwargs.pop(k)
-        if len(kwargs) != 0:
-            raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxFFNConfig(PretrainedConfig):
+class DbrxFFNConfig(PreTrainedConfig):
     """Configuration class for Dbrx FFN.
 
     [`DbrxFFN`] class. It is used to instantiate feedforward layers according to
     the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
@@ -89,7 +82,8 @@ class DbrxFFNConfig(PretrainedConfig):
 
     def __init__(
         self,
-        ffn_act_fn: dict = None,
+        hidden_size=6144,
+        ffn_act_fn: Optional[dict] = None,
         ffn_hidden_size: int = 3584,
         moe_num_experts: int = 4,
         moe_top_k: int = 1,
@@ -101,6 +95,7 @@ class DbrxFFNConfig(PretrainedConfig):
         super().__init__()
         if ffn_act_fn is None:
             ffn_act_fn = {"name": "silu"}
+        self.hidden_size = hidden_size
         self.ffn_act_fn = ffn_act_fn
         self.ffn_hidden_size = ffn_hidden_size
         self.moe_num_experts = moe_num_experts
@@ -109,22 +104,22 @@ class DbrxFFNConfig(PretrainedConfig):
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
 
-        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype"]:
+        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype", "dtype"]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxConfig(PretrainedConfig):
+class DbrxConfig(PreTrainedConfig):
     r"""
 
     This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
     specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a different configuration to that of the [databricks/dbrx-instruct](https://huggingface.co/databricks/dbrx-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -182,18 +177,19 @@ class DbrxConfig(PretrainedConfig):
 
     def __init__(
         self,
-        d_model: int = 2048,
-        n_heads: int = 16,
-        n_layers: int = 24,
-        max_seq_len: int = 2048,
-        vocab_size: int = 32000,
-        resid_pdrop: float = 0.0,
-        emb_pdrop: float = 0.0,
+        d_model: Optional[int] = 2048,
+        n_heads: Optional[int] = 16,
+        n_layers: Optional[int] = 24,
+        max_seq_len: Optional[int] = 2048,
+        vocab_size: Optional[int] = 32000,
+        resid_pdrop: Optional[float] = 0.0,
+        emb_pdrop: Optional[float] = 0.0,
         attn_config: Optional[DbrxAttentionConfig] = None,
         ffn_config: Optional[DbrxFFNConfig] = None,
-        use_cache: bool = True,
-        initializer_range: float = 0.02,
-        output_router_logits: bool = False,
+        use_cache: Optional[bool] = True,
+        initializer_range: Optional[float] = 0.02,
+        output_router_logits: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -221,10 +217,17 @@ class DbrxConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        standardize_rope_params(self, rope_theta=10000.0)
+        rope_config_validation(self)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

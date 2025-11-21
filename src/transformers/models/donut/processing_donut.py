@@ -17,9 +17,7 @@ Processor class for Donut.
 """
 
 import re
-import warnings
-from contextlib import contextmanager
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -50,36 +48,13 @@ class DonutProcessor(ProcessorMixin):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
-
-        image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
-        self._in_target_context_manager = False
 
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         **kwargs: Unpack[DonutProcessorKwargs],
     ):
         """
@@ -88,9 +63,6 @@ class DonutProcessor(ProcessorMixin):
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
         [`~DonutTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
-        if self._in_target_context_manager:
-            return self.current_processor(images, text, **kwargs)
-
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
@@ -116,35 +88,11 @@ class DonutProcessor(ProcessorMixin):
             inputs["input_ids"] = encodings["input_ids"]
             return inputs
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to DonutTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to DonutTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @contextmanager
-    def as_target_processor(self):
-        """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning TrOCR.
-        """
-        warnings.warn(
-            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
-            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your images inputs, or in a separate call."
-        )
-        self._in_target_context_manager = True
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.image_processor
-        self._in_target_context_manager = False
+        return list(image_processor_input_names + ["input_ids", "labels"])
 
     def token2json(self, tokens, is_inner_value=False, added_vocab=None):
         """
@@ -156,14 +104,18 @@ class DonutProcessor(ProcessorMixin):
         output = {}
 
         while tokens:
-            start_token = re.search(r"<s_(.*?)>", tokens, re.IGNORECASE)
-            if start_token is None:
+            # We want r"<s_(.*?)>" but without ReDOS risk, so do it manually in two parts
+            potential_start = re.search(r"<s_", tokens, re.IGNORECASE)
+            if potential_start is None:
                 break
-            key = start_token.group(1)
+            start_token = tokens[potential_start.start() :]
+            if ">" not in start_token:
+                break
+            start_token = start_token[: start_token.index(">") + 1]
+            key = start_token[len("<s_") : -len(">")]
             key_escaped = re.escape(key)
 
             end_token = re.search(rf"</s_{key_escaped}>", tokens, re.IGNORECASE)
-            start_token = start_token.group()
             if end_token is None:
                 tokens = tokens.replace(start_token, "")
             else:
@@ -195,26 +147,10 @@ class DonutProcessor(ProcessorMixin):
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
                     return [output] + self.token2json(tokens[6:], is_inner_value=True, added_vocab=added_vocab)
 
-        if len(output):
+        if output:
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}
-
-    @property
-    def feature_extractor_class(self):
-        warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
-            FutureWarning,
-        )
-        return self.image_processor_class
-
-    @property
-    def feature_extractor(self):
-        warnings.warn(
-            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
-            FutureWarning,
-        )
-        return self.image_processor
 
 
 __all__ = ["DonutProcessor"]

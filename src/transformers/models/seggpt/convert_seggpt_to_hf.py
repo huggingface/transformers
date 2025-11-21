@@ -114,7 +114,7 @@ def convert_seggpt_checkpoint(args):
     verify_logits = args.verify_logits
     push_to_hub = args.push_to_hub
 
-    # Define default GroundingDINO configuation
+    # Define default GroundingDINO configuration
     config = SegGptConfig()
 
     # Load original checkpoint
@@ -214,7 +214,9 @@ if __name__ == "__main__":
         help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()
