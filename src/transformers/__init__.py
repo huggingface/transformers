@@ -58,6 +58,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "audio_utils": [],
+    "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
