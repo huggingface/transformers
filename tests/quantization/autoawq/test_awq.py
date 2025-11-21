@@ -311,7 +311,6 @@ class AwqScaleTest(unittest.TestCase):
 @slow
 @require_gptqmodel
 @require_accelerate
-@require_intel_extension_for_pytorch
 class AwqIPEXTest(unittest.TestCase):
     def test_quantized_model_ipex(self):
         """
