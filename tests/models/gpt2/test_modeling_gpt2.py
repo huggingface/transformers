@@ -438,16 +438,18 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
 
-        expected_output = Expectations({
-            ("cuda", (8, 6)): [
-                "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
-                "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
-            ],
-            ("rocm", (9, 4)): [
-                '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was also a member of the group, said: "We are very happy to have been',
-                "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
-            ]
-        }).get_expectation()
+        expected_output = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
+                    "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
+                ],
+                ("rocm", (9, 4)): [
+                    '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was also a member of the group, said: "We are very happy to have been',
+                    "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
+                ],
+            }
+        ).get_expectation()
 
         self.assertListEqual(output_native, output_fa_2)
         self.assertListEqual(output_native, expected_output)
