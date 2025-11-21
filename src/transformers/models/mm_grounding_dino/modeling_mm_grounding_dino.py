@@ -1783,33 +1783,53 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
         - **attention_mask** (`torch.BoolTensor` of shape `(batch_size, sequence_length, sequence_length)`)
         - **position_ids** (`torch.LongTensor` of shape `(batch_size, sequence_length)`)
     """
-    batch_size, num_token = input_ids.shape
-    # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
-    special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
-    for special_token in SPECIAL_TOKENS:
-        special_tokens_mask = torch.logical_or(special_tokens_mask, input_ids == special_token)
 
-    # idxs: each row is a list of indices of special tokens
-    idxs = torch.nonzero(special_tokens_mask)
+    batch_size, seq_len = input_ids.shape
+    device = input_ids.device
 
-    # generate attention mask and positional ids
-    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(batch_size, 1, 1)
-    position_ids = torch.zeros((batch_size, num_token), device=input_ids.device)
-    previous_col = 0
-    for i in range(idxs.shape[0]):
-        row, col = idxs[i]
-        if (col == 0) or (col == num_token - 1):
-            attention_mask[row, col, col] = True
-            position_ids[row, col] = 0
-        else:
-            attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
-            position_ids[row, previous_col + 1 : col + 1] = torch.arange(
-                0, col - previous_col, device=input_ids.device
-            )
+    # 1) Identify special token positions
+    # boolean mask of special-token positions (B, N)
+    special_mask = torch.isin(input_ids, torch.tensor(SPECIAL_TOKENS, device=device))
 
-        previous_col = col
+    # 2) For each position, find index of next special token (or seq_len if none)
+    # indexes [0,1,2,...,N-1] broadcasted to (B, N)
+    indexes = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
+    # at special token positions keep their index, else sentinel seq_len
+    candidates = torch.where(special_mask, indexes, torch.tensor(seq_len, device=device))  # (B, N)
+    # compute prefix minimum from the right to get first special >= p
+    next_delim_idx = torch.flip(torch.cummin(torch.flip(candidates, dims=[1]), dim=1)[0], dims=[1])  # (B, N)
 
-    return attention_mask, position_ids.to(torch.long)
+    # 3) Build group mask based on next_delim_idx
+    # tokens sharing same next_delim_idx (and where that delim is real) belong to same block
+    nd_i = next_delim_idx.unsqueeze(2)  # (B, N, 1)
+    nd_j = next_delim_idx.unsqueeze(1)  # (B, 1, N)
+    has_real_delim = next_delim_idx != seq_len
+    group_mask = (nd_i == nd_j) & has_real_delim.unsqueeze(1)  # (B, N, N)
+
+    # 4) Exclude blocks whose closing delimiter is at position 0 or N-1 (these should only keep diagonal)
+    valid_block = (next_delim_idx != 0) & (next_delim_idx != (seq_len - 1)) & (next_delim_idx != seq_len)
+    group_mask &= valid_block.unsqueeze(1)
+
+    # Always allow self-attention (diagonal)
+    identity = torch.eye(seq_len, device=device, dtype=torch.bool).unsqueeze(0).expand(batch_size, -1, -1)
+    attention_mask = identity | group_mask  # (B, N, N)
+
+    # 5) Compute position_ids as distance from previous delimiter (+1), only for valid blocks
+    # previous delimiter index at each column: shift prefix-max of special indices right by 1
+    neg_one = torch.full((batch_size, 1), -1, device=device, dtype=torch.long)
+    prev_candidates = torch.where(special_mask, indexes, torch.tensor(-1, device=device))
+    prefix_max = torch.cummax(prev_candidates, dim=1)[0]  # (B, N)
+    prev_delim_per_col = torch.cat((neg_one, prefix_max[:, :-1]), dim=1)  # (B, N)
+    prev_delim_per_col = torch.clamp(prev_delim_per_col, min=0)  # (B, N)
+    # gather previous delimiter corresponding to each token's closing delimiter
+    gather_idx = torch.clamp(next_delim_idx, max=seq_len - 1)  # (B, N)
+    prev_delim_for_token = torch.gather(prev_delim_per_col, 1, gather_idx)  # (B, N)
+    position_ids = indexes - prev_delim_for_token - 1  # distance from previous delimiter (0-based)
+    # only keep position ids for tokens in valid blocks; others set to 0
+    position_ids = torch.where(valid_block, position_ids, torch.zeros_like(position_ids))
+    position_ids = torch.clamp(position_ids, min=0).to(torch.long)
+
+    return attention_mask, position_ids
 
 
 @auto_docstring(
