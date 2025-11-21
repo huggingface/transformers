@@ -682,7 +682,7 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
             curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
             curr_input_dict["image_merge_sizes"] = curr_input_dict["image_merge_sizes"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -693,7 +693,7 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 _ = model(
                     input_ids=input_ids,
                     pixel_values=pixel_values,

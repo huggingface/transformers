@@ -1293,7 +1293,6 @@ def torch_check(cond: Any, msg=None) -> None:
     import torch
 
     if not isinstance(cond, bool):
-        # expecially helpful for tensor-like conditions
         cond = bool(cond)
 
     torch._check(cond, msg)
