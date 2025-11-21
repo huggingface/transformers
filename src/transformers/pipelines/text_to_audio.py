@@ -174,7 +174,7 @@ class TextToAudioPipeline(Pipeline):
                 text.messages,
                 tokenize=True,
                 return_dict=True,
-                **kwargs, 
+                **kwargs,
             )
         else:
             output = preprocessor(text, **kwargs, return_tensors="pt")
@@ -272,7 +272,7 @@ class TextToAudioPipeline(Pipeline):
                         return super().__call__(chats, **forward_params)
                     else:
                         return super().__call__(list(chats), **forward_params)
-                    
+
         return super().__call__(text_inputs, **forward_params)
 
     def _sanitize_parameters(
