@@ -739,9 +739,9 @@ def convert_and_load_state_dict_in_model(
                     )
                     # Offloading support
                     if param_device == "disk":
-                        missing_keys.discard(k)
-                        # If not already offloaded, or if we applied any special Operation, we need to re-save
-                        if k not in disk_offload_index or len(operations) > 0:
+                        missing_keys.discard(target_name)
+                        # If not already offloaded, or if we applied any special Operation except Renaming, we need to re-save
+                        if target_name not in disk_offload_index or isinstance(mapping, WeightConverter):
                             disk_offload_index = offload_weight(
                                 param, target_name, disk_offload_folder, disk_offload_index
                             )
@@ -759,6 +759,7 @@ def convert_and_load_state_dict_in_model(
                         )
             except SkipLayer:
                 continue
+
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, misc
 
