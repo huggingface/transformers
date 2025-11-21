@@ -135,13 +135,13 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
                 "Expected a `font` to be saved when using `draw_on_frames` in Ernie 4.5 VL; found nothing."
             )
         if font_name is not None and draws_on_frames:
-            base_directory = Path(resolved_file_path).parent
-            video_processor_dict["font"] = str(Path(base_directory, font_name))
             try:
+                base_directory = Path(resolved_file_path).parent
+                video_processor_dict["font"] = str(Path(base_directory, font_name))
                 ImageFont.truetype(video_processor_dict["font"])
-            except OSError:
+            except (TypeError, OSError):
                 raise OSError(
-                    f"Could not find an associated font file at {video_processor_dict['font']}. "
+                    f"Could not find an associated font file for {video_processor_dict['font']}. "
                     "Make sure to save a font file along for Ernie 4.5 VL."
                 )
 
