@@ -84,8 +84,10 @@ class TorchAoQuantize(ConversionOps):
         # 2. run tie_weights to populate the weights
         # 3. quantize
         input_embed = model.get_input_embeddings()
-        if self.hf_quantizer.quantization_config.untie_embedding_weights and id(module) == id(input_embed):
-            model.tie_weights()
+        is_embedding_param = id(module) == id(input_embed)
+        untie_embedding_weights = self.hf_quantizer.quantization_config.untie_embedding_weights
+        
+        if untie_embedding_weights and is_embedding_param:
             setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
         # handle FqnToConfig, introduced in torchao 0.15.0+
@@ -125,11 +127,13 @@ class TorchAoQuantize(ConversionOps):
 
                 if c is not None:
                     if top_level_param_name == "weight":
+                        if is_embedding_param and untie_embedding_weights:
+                            lm_head = module.weight.clone()
                         # we can apply the module config directly
                         quantize_(module, c, (lambda x, fqn: True))
                         missing_keys.discard(full_layer_name)
                         module._is_hf_initialized = True
-                        return {}
+                        return {"lm_head.weight": lm_head} if is_embedding_param and untie_embedding_weights else {}
                     else:
                         # need to apply to custom param name
                         custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
@@ -165,17 +169,21 @@ class TorchAoQuantize(ConversionOps):
                         c = config.module_fqn_to_config.get("_default", None)
                 if c is not None:
                     # filter_fn: not filtering out any modules
+                    if is_embedding_param and untie_embedding_weights:
+                        lm_head = module.weight.clone()
                     quantize_(module, c, filter_fn=lambda x, fqn: True)
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
-                    return {}
+                    return {"lm_head.weight": lm_head} if is_embedding_param and untie_embedding_weights else {}
 
                 return {full_layer_name: value}
         
+        if is_embedding_param and untie_embedding_weights:
+            lm_head = module.weight.clone()
         quantize_(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
         missing_keys.discard(full_layer_name)
         module._is_hf_initialized = True
-        return {}
+        return {"lm_head.weight": lm_head} if is_embedding_param and untie_embedding_weights else {}
 
 
 class TorchAoDeserialize(ConversionOps):
