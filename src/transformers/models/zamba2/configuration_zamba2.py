@@ -162,7 +162,7 @@ class Zamba2Config(PreTrainedConfig):
         use_shared_attention_adapter: Optional[bool] = False,
         adapter_rank: Optional[int] = 128,
         use_mem_rope: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,

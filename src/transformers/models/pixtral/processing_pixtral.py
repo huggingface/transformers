@@ -87,10 +87,6 @@ class PixtralProcessor(ProcessorMixin):
             Special token used to denote the end of an image input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
