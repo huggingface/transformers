@@ -174,8 +174,8 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
             size["shortest_edge"] = min_pixels
         if max_pixels is not None:
             size["longest_edge"] = max_pixels
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
+        self.min_pixels = size["shortest_edge"]
+        self.max_pixels = size["longest_edge"]
         self.size = size
         self.do_resize = do_resize
         self.resample = resample

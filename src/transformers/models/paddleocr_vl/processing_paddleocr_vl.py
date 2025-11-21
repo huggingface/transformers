@@ -41,29 +41,16 @@ class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
 
 class PaddleOCRVLProcessor(ProcessorMixin):
     r"""
-    [`PaddleOCRVLProcessor`] offers all the functionalities of [`PaddleOCRVLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`PaddleOCRVLProcessor`] offers all the functionalities of [`PaddleOCRVLImageProcessor`] and [`LLamaTokenizerFast`]. See the
     [`~PaddleOCRVLProcessor.__call__`] and [`~PaddleOCRVLProcessor.decode`] for more information.
     Args:
         image_processor ([`PaddleOCRVLImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
+        tokenizer ([`LLamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "image_std",
-        "min_pixels",
-        "image_mean",
-        "merge_size",
-        "image_processor_type",
-        "temporal_patch_size",
-        "patch_size",
-        "max_pixels",
-    ]
 
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -79,11 +66,6 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         **kwargs: Unpack[PaddleOCRVLProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
-        PaddleOCRVLImageProcessor's [`~PaddleOCRVLImageProcessor.__call__`] if `vision_infos` is not `None`.
-
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
@@ -116,8 +98,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         )
 
         if images is not None:
-            image_inputs = self.image_processor(images=images, return_tensors="pt")
-            image_inputs["pixel_values"] = image_inputs["pixel_values"]
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
 
         else:
@@ -126,6 +107,8 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
         if not isinstance(text, list):
             text = [text]
+
+        text = text.copy()
 
         if image_grid_thw is not None:
             index = 0

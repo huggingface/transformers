@@ -23,12 +23,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig
+from ...modeling_rope_utils import RopeParameters, rope_config_validation
 
 
-class PaddleOCRVisionConfig(PretrainedConfig):
-    model_type = "paddleocr_vl"
+class PaddleOCRVLVisionConfig(PretrainedConfig):
+    model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -65,7 +67,7 @@ class PaddleOCRVisionConfig(PretrainedConfig):
         self.tokens_per_second = tokens_per_second
 
 
-class PaddleOCRVLConfig(PretrainedConfig):
+class PaddleOCRVLTextConfig(PretrainedConfig):
     """
     Configuration class.
 
@@ -73,11 +75,8 @@ class PaddleOCRVLConfig(PretrainedConfig):
     It inherits from PretrainedConfig and can be used to control model outputs.
     """
 
-    model_type = "paddleocr_vl"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"vision_config": PaddleOCRVisionConfig}
+    model_type = "paddleocr_vl_text"
 
-    # Default tensor parallel plan for base model `Qwen3`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -101,9 +100,6 @@ class PaddleOCRVLConfig(PretrainedConfig):
         max_position_embeddings=32768,
         num_hidden_layers=2,
         num_attention_heads=2,
-        image_token_id=101304,
-        video_token_id=101305,
-        vision_start_token_id=101306,
         rms_norm_eps=1e-6,
         use_cache=False,
         use_flash_attention=False,
@@ -122,8 +118,7 @@ class PaddleOCRVLConfig(PretrainedConfig):
         num_key_value_heads=None,
         max_sequence_length=None,
         tie_word_embeddings=False,
-        vision_config=None,
-        rope_scaling=None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         """
@@ -161,10 +156,6 @@ class PaddleOCRVLConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             **kwargs,
         )
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -177,9 +168,6 @@ class PaddleOCRVLConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.vision_start_token_id = vision_start_token_id
         self.head_dim = head_dim
         self.hidden_act = hidden_act
         self.sliding_window = None
@@ -193,13 +181,113 @@ class PaddleOCRVLConfig(PretrainedConfig):
         self.compression_ratio = compression_ratio
         self.num_key_value_heads = num_key_value_heads
         self.max_sequence_length = max_sequence_length
-        self.rope_scaling = rope_scaling
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            if self.rope_scaling["type"] == "mrope":
-                self.rope_scaling["type"] = "default"
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+        if self.rope_parameters is not None and self.rope_parameters["rope_type"] == "mrope":
+            self.rope_parameters["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-__all__ = ["PaddleOCRVLConfig", "PaddleOCRVisionConfig"]
+class PaddleOCRVLConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PaddleOCRVLModel`]. It is used to instantiate a
+    Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+
+    Args:
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `PaddleOCRVLTextConfig`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `PaddleOCRVLVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to 151655):
+            The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 151656):
+            The video token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 151652):
+            The token index to denote start of vision input.
+        vision_end_token_id (`int`, *optional*, defaults to 151653):
+            The token index to denote end of vision input.
+
+    ```python
+    >>> from transformers import PaddleOCRVLForConditionalGeneration, PaddleOCRVLConfig
+
+    >>> # Initializing a PaddleOCRVL style configuration
+    >>> configuration = PaddleOCRVLConfig()
+
+    >>> # Initializing a model from the Qwen2-VL-7B style configuration
+    >>> model = PaddleOCRVLForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "paddleocr_vl"
+    sub_configs = {"vision_config": PaddleOCRVLVisionConfig, "text_config": PaddleOCRVLTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id=151655,
+        video_token_id=151656,
+        vision_start_token_id=151652,
+        vision_end_token_id=151653,
+        **kwargs,
+    ):
+        # We need to init super() here so that it does not reset values
+        # that are in text config to the BaseClass defaults. The Base
+        # config has many text related defaults and not all defaults are same as for `PaddleOCRVLTextConfig`
+        super().__init__(**kwargs)
+
+        if isinstance(vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        elif text_config is None:
+            # For BC use all kwargs to init `TextConfig`
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
+
+        # Attention implementation to use. It sets it recursively on sub-configs so we call it again in the end
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
+
+    def __setattr__(self, key, value):
+        if (
+            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
+            and key not in ["_name_or_path", "model_type", "dtype", "_attn_implementation_internal"]
+            and key in text_config.__dict__
+        ):
+            setattr(text_config, key, value)
+        else:
+            super().__setattr__(key, value)
+
+    def __getattribute__(self, key):
+        if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "_name_or_path",
+            "model_type",
+            "dtype",
+            "_attn_implementation_internal",
+        ]:
+            text_config = super().__getattribute__("text_config")
+            if key in text_config.__dict__:
+                return getattr(text_config, key)
+
+        return super().__getattribute__(key)
+
+
+__all__ = ["PaddleOCRVLConfig", "PaddleOCRVLTextConfig"]
