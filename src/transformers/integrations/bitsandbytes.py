@@ -59,6 +59,7 @@ class Bnb4bitQuantize(ConversionOps):
             # remove missing keys that were create when initializing Params4bit
             for key in new_value.quant_state.as_dict(packed=True).keys():
                 missing_keys.discard(f"{full_name}.{key}")
+            module._is_hf_initialized = True
             return {target_key: new_value}
         else:
             module_name = target_key.rsplit(".", 1)[0]
@@ -77,6 +78,7 @@ class Bnb4bitQuantize(ConversionOps):
                     device=value.device,
                     module=module,
                 )
+                module._is_hf_initialized = Truee
                 del self.hf_quantizer.param_quant_stats[module_name]
                 return {target_key: new_value}
             return {}

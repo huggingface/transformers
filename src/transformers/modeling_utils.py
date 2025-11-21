@@ -4360,11 +4360,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             self.initialize_weights()
 
-        # Clean _is_hf_initialized atribute from parameters since initialization is done
-        for parameter in self.parameters():
-            if hasattr(parameter,"_is_hf_initialized"):
-                delattr(parameter, "_is_hf_initialized")
-
     def _adjust_missing_and_unexpected_keys(
         self, missing_keys: set[str], unexpected_keys: set[str]
     ) -> tuple[set[str], set[str]]:
