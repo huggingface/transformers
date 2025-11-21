@@ -27,6 +27,8 @@ class BenchmarkConfig:
         ("sdpa", "math"),
         ("sdpa", "flash_attention"),
         ("flex_attention", None),
+        ("paged|sdpa", None),
+        ("paged|flash_attention_2", None),
     ]
 
     all_compiled_modes = [None, "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
