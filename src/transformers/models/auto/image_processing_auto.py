@@ -158,7 +158,7 @@ else:
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
             ("perception_lm", (None, "PerceptionLMImageProcessorFast")),
             ("phi4_multimodal", (None, "Phi4MultimodalImageProcessorFast")),
-            ("pix2struct", ("Pix2StructImageProcessor", None)),
+            ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
