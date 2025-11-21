@@ -291,13 +291,16 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # Validate dataset_index when using multiple experts
-        if self.num_experts > 1 and dataset_index is None:
-            raise ValueError(
-                "dataset_index must be provided when using multiple experts "
-                f"(num_experts={self.num_experts}). Please provide dataset_index "
-                "to the forward pass."
-            )
+        # Handle dataset_index for multiple experts - provide default when None
+        if self.num_experts > 1:
+            if dataset_index is None:
+                # Default to expert 0 (COCO dataset) when not provided
+                dataset_index = torch.zeros(hidden_states.shape[0], dtype=torch.long, device=hidden_states.device)
+            elif dataset_index.shape[0] != hidden_states.shape[0]:
+                raise ValueError(
+                    f"dataset_index batch size ({dataset_index.shape[0]}) must match "
+                    f"hidden_states batch size ({hidden_states.shape[0]})."
+                )
 
         hidden_states_norm = self.layernorm_before(hidden_states)
         attention_output = self.attention(hidden_states_norm)
