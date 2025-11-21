@@ -323,7 +323,10 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _, resolved_file = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        # Specific models need the original path for modification in `from_dict`, see `Ernie 4.5 VL` with fonts
+        kwargs["resolved_video_processor_file_path"] = resolved_file
+
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):

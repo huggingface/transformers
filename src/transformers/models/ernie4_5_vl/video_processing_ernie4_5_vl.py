@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import json
-import os
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -36,17 +34,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
-    IMAGE_PROCESSOR_NAME,
-    PROCESSOR_NAME,
-    VIDEO_PROCESSOR_NAME,
     TensorType,
     add_start_docstrings,
-    download_url,
-    is_offline_mode,
-    is_remote_url,
     logging,
 )
-from ...utils.hub import cached_file
 from ...utils.import_utils import is_tracing, requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
@@ -130,115 +121,31 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         super().__init__(size=size, **kwargs)
 
     @classmethod
-    def get_video_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
-        proxies = kwargs.pop("proxies", None)
-        token = kwargs.pop("token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
-        subfolder = kwargs.pop("subfolder", "")
+    def from_dict(cls, video_processor_dict: dict[str, Any], **kwargs):
+        """
+        Specifc logic to this ernie model where we expect an associated font name to be saved within dict
+        and the specific font file to exist along side the json in a separate file.
 
-        from_pipeline = kwargs.pop("_from_pipeline", None)
-        from_auto_class = kwargs.pop("_from_auto", False)
-
-        user_agent = {"file_type": "video processor", "from_auto_class": from_auto_class}
-        if from_pipeline is not None:
-            user_agent["using_pipeline"] = from_pipeline
-
-        if is_offline_mode() and not local_files_only:
-            logger.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
-
-        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        is_local = os.path.isdir(pretrained_model_name_or_path)
-        if os.path.isfile(pretrained_model_name_or_path):
-            resolved_video_processor_file = pretrained_model_name_or_path
-            is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            video_processor_file = pretrained_model_name_or_path
-            resolved_video_processor_file = download_url(pretrained_model_name_or_path)
-        else:
-            video_processor_file = VIDEO_PROCESSOR_NAME
+        Note that this is only relevant when we use `draw_on_frames` as this is required to have a font.
+        """
+        resolved_file_path = kwargs.pop("resolved_video_processor_file_path", None)
+        draws_on_frames = video_processor_dict.get("draw_on_frames")
+        if (font_name := video_processor_dict.get("font")) is None and draws_on_frames:
+            raise AttributeError(
+                "Expected a `font` to be saved when using `draw_on_frames` in Ernie 4.5 VL; found nothing."
+            )
+        if font_name is not None and draws_on_frames:
+            base_directory = Path(resolved_file_path).parent
+            video_processor_dict["font"] = str(Path(base_directory, font_name))
             try:
-                # Try to load with a new config name first and if not successful try with the old file name
-                # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
-                resolved_video_processor_files = [
-                    resolved_file
-                    for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
-                    if (
-                        resolved_file := cached_file(
-                            pretrained_model_name_or_path,
-                            filename=filename,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            local_files_only=local_files_only,
-                            token=token,
-                            user_agent=user_agent,
-                            revision=revision,
-                            subfolder=subfolder,
-                            _raise_exceptions_for_missing_entries=False,
-                        )
-                    )
-                    is not None
-                ]
-                resolved_video_processor_file = resolved_video_processor_files[0]
+                ImageFont.truetype(video_processor_dict["font"])
             except OSError:
-                # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to
-                # the original exception.
-                raise
-            except Exception:
-                # For any other exception, we throw a generic error.
                 raise OSError(
-                    f"Can't load video processor for '{pretrained_model_name_or_path}'. If you were trying to load"
-                    " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
-                    f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {VIDEO_PROCESSOR_NAME} file"
+                    f"Could not find an associated font file at {video_processor_dict['font']}. "
+                    "Make sure to save a font file along for Ernie 4.5 VL."
                 )
 
-        try:
-            # Load video_processor dict
-            with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
-                text = reader.read()
-            video_processor_dict = json.loads(text)
-            video_processor_dict = video_processor_dict.get("video_processor", video_processor_dict)
-
-            # MAIN DIFFERENCE to the original loading function
-            # Specifc logic to this ernie model where we expect an associated font name to be saved within dict
-            # and the specific font file to exist along side the json in a separate file.
-            #
-            # Note that this is only relevant when we use `draw_on_frames` as this is required to have a font.
-            draws_on_frames = video_processor_dict.get("draw_on_frames")
-            if (font_name := video_processor_dict.get("font")) is None and draws_on_frames:
-                raise AttributeError(
-                    "Expected a `font` to be saved when using `draw_on_frames` in Ernie 4.5 VL; found nothing."
-                )
-            if font_name is not None and draws_on_frames:
-                base_directory = Path(resolved_video_processor_file).parent
-                video_processor_dict["font"] = str(Path(base_directory, font_name))
-                try:
-                    ImageFont.truetype(video_processor_dict["font"])
-                except OSError:
-                    raise OSError(
-                        f"Could not find an associated font file at {video_processor_dict['font']}. "
-                        "Make sure to save a font file along for Ernie 4.5 VL."
-                    )
-
-        except json.JSONDecodeError:
-            raise OSError(
-                f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
-            )
-
-        if is_local:
-            logger.info(f"loading configuration file {resolved_video_processor_file}")
-        else:
-            logger.info(
-                f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
-            )
-        return video_processor_dict, kwargs
+        return super().from_dict(video_processor_dict, **kwargs)
 
     def _further_process_kwargs(
         self,
