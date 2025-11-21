@@ -48,6 +48,7 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForTokenClassification,
     HfArgumentParser,
+    PreTrainedConfig,
     Trainer,
     TrainingArguments,
     set_seed,
