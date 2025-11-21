@@ -100,7 +100,7 @@ class TextToAudioPipeline(Pipeline):
     """
 
     _pipeline_calls_generate = True
-    _load_processor = None
+    _load_processor = None  # prioritize processors as some models require it
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
@@ -120,6 +120,10 @@ class TextToAudioPipeline(Pipeline):
                 if vocoder is None
                 else vocoder
             )
+
+        if self.model.config.model_type in ["musicgen"]:
+            # MusicGen expect to use the tokenizer
+            self.processor = None
 
         self.sampling_rate = sampling_rate
         if self.vocoder is not None:
@@ -164,10 +168,6 @@ class TextToAudioPipeline(Pipeline):
             kwargs = new_kwargs
 
         preprocessor = self.processor if self.processor is not None else self.tokenizer
-        if self.model.config.model_type in ["musicgen"]:
-            # Fallback to legacy models that prefer tokenizer
-            preprocessor = self.tokenizer
-
         if isinstance(text, Chat):
             output = preprocessor.apply_chat_template(
                 text.messages,
@@ -230,7 +230,7 @@ class TextToAudioPipeline(Pipeline):
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            text_inputs (`str` or `list[str]`):
+            text_inputs (`str`, `list[str]`, list[dict[str, str]], or `list[list[dict[str, str]]]`):
                 One or several texts to generate. If strings or a list of string are passed, this pipeline will
                 generate the corresponding text. Alternatively, a "chat", in the form of a list of dicts with "role"
                 and "content" keys, can be passed, or a list of such chats. When chats are passed, the model's chat
