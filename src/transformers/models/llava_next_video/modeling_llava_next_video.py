@@ -505,11 +505,10 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
-            )
-
+        torch._check(
+            video_features is None or inputs_embeds[special_video_mask].numel() == video_features.numel(),
+            lambda: f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}",
+        )
         return special_image_mask, special_video_mask
 
     @can_return_tuple
@@ -544,10 +543,10 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        self.vision_feature_layer = (
+        vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
-        self.vision_feature_select_strategy = (
+        vision_feature_select_strategy = (
             vision_feature_select_strategy
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
@@ -563,8 +562,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             image_features = self.get_image_features(
                 pixel_values,
                 image_sizes,
-                vision_feature_layer=self.vision_feature_layer,
-                vision_feature_select_strategy=self.vision_feature_select_strategy,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
             )
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
@@ -575,8 +574,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
                 pixel_values_videos,
-                vision_feature_layer=self.vision_feature_layer,
-                vision_feature_select_strategy=self.vision_feature_select_strategy,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
             )
             video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]

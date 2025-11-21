@@ -621,7 +621,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch._check(
             video_features is None or inputs_embeds[special_video_mask].numel() == video_features.numel(),
-            lambda: f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}",
+            lambda: f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}",
         )
         return special_image_mask, special_video_mask
 
