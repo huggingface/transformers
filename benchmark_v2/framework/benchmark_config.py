@@ -89,18 +89,20 @@ class BenchmarkConfig:
             self.compile_mode = None
         # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
         if self.attn_implementation == "sdpa" and self.sdpa_backend is None:
-            default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
+            # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
+            default_backend = "math" if self.continuous_batching else "flash_attention"
             logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
             self.sdpa_backend = default_backend
+        # Handle continuous batching cases
         if self.continuous_batching:
             if self.attn_implementation == "flex_attention":
                 logger.error(
-                    "disabling continuous batching because of invalid configuration: flex attention is not supported"
+                    "Disabling continuous batching because of invalid configuration: flex attention is not supported."
                 )
                 self.continuous_batching = False
-            elif self.attn_implementation == "sdpa" and self.sdpa_backend is not None:
+            elif self.attn_implementation == "sdpa" and self.sdpa_backend != "math":
                 logger.warning(
-                    "when continuous batching is enabled, sdpa_backend must be None because of the attention mask, setting it to None"
+                    "When continuous batching is enabled, sdpa_backend must be 'math' because of the attention mask."
                 )
                 self.sdpa_backend = None
 
