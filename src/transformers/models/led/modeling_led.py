@@ -30,7 +30,7 @@ from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, logging, torch_check
 from .configuration_led import LEDConfig
 
 
@@ -2180,7 +2180,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        torch._check(
+        torch_check(
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )

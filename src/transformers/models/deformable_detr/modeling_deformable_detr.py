@@ -37,6 +37,7 @@ from ...utils import (
     is_timm_available,
     logging,
     requires_backends,
+    torch_check,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_deformable_detr import DeformableDetrConfig
@@ -537,7 +538,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         total_elements = sum(height * width for height, width in spatial_shapes_list)
-        torch._check(
+        torch_check(
             total_elements == sequence_length,
             lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )

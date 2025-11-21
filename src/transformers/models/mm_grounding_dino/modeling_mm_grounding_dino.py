@@ -33,7 +33,7 @@ from ...file_utils import ModelOutput, is_timm_available, requires_backends
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import auto_docstring
+from ...utils import auto_docstring, torch_check
 from ...utils.backbone_utils import load_backbone
 from ..auto.modeling_auto import AutoModel
 from .configuration_mm_grounding_dino import MMGroundingDinoConfig
@@ -207,7 +207,7 @@ class MMGroundingDinoMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
-        torch._check(
+        torch_check(
             (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
             lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )

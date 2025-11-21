@@ -43,6 +43,7 @@ from ...utils import (
     DUMMY_MASK,
     auto_docstring,
     logging,
+    torch_check,
 )
 from .configuration_mt5 import MT5Config
 
@@ -1409,7 +1410,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(sequence_output.device)
 
-        torch._check(
+        torch_check(
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )

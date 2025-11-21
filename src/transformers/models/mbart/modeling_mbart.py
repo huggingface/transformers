@@ -47,6 +47,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
+    torch_check,
 )
 from .configuration_mbart import MBartConfig
 
@@ -1259,7 +1260,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        torch._check(
+        torch_check(
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )

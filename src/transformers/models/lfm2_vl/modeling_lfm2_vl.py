@@ -31,7 +31,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_check
 from ..auto import AutoModel
 from .configuration_lfm2_vl import Lfm2VlConfig
 
@@ -226,7 +226,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0]
-        torch._check(
+        torch_check(
             inputs_embeds[special_image_mask].numel() == image_features.numel(),
             lambda: f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )

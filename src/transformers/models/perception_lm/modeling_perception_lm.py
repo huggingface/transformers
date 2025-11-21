@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple, torch_check
 from ..auto import AutoModel
 from .configuration_perception_lm import PerceptionLMConfig
 
@@ -234,7 +234,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        torch._check(
+        torch_check(
             video_features is None or inputs_embeds[special_video_mask].numel() == video_features.numel(),
             lambda: f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.size()[:-1].numel()}",
         )

@@ -45,6 +45,7 @@ from ...utils import (
     auto_docstring,
     is_torchdynamo_compiling,
     logging,
+    torch_check,
 )
 from .configuration_bart import BartConfig
 
@@ -1282,7 +1283,7 @@ class BartForSequenceClassification(BartPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        torch._check(
+        torch_check(
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )

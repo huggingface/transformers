@@ -22,7 +22,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_check
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -157,7 +157,7 @@ class Lfm2VlModel(LlavaModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0]
-        torch._check(
+        torch_check(
             inputs_embeds[special_image_mask].numel() == image_features.numel(),
             lambda: f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )

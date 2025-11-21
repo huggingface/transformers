@@ -1289,9 +1289,11 @@ def is_tracing(tensor=None) -> bool:
 
 
 def torch_check(cond: Any, msg=None) -> None:
+    """Same as `torch.check` but ensures `cond` is a bool."""
     import torch
 
-    if isinstance(cond, torch.Tensor):
+    if not isinstance(cond, bool):
+        # expecially helpful for tensor-like conditions
         cond = bool(cond)
 
     torch._check(cond, msg)

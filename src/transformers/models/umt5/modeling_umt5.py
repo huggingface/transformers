@@ -45,6 +45,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
+    torch_check,
 )
 from .configuration_umt5 import UMT5Config
 
@@ -1472,7 +1473,7 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(sequence_output.device)
 
-        torch._check(
+        torch_check(
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )
