@@ -1288,6 +1288,15 @@ def is_tracing(tensor=None) -> bool:
     return _is_tracing
 
 
+def torch_check(cond: Any, msg=None) -> None:
+    import torch
+
+    if isinstance(cond, torch.Tensor):
+        cond = bool(cond)
+
+    torch._check(cond, msg)
+
+
 @lru_cache
 def is_in_notebook() -> bool:
     try:
