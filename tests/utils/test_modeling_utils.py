@@ -2885,7 +2885,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 )
 
         self.assertTrue(
-            "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!"
+            "You do not have `flash_attn` installed, using `kernels-community/flash-attn2` from the `kernels` library instead!"
             in cl.out
         )
 
@@ -2897,7 +2897,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
-                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn"
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn2"
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
