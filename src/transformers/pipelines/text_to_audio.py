@@ -250,10 +250,7 @@ class TextToAudioPipeline(Pipeline):
             - **audio** (`np.ndarray` of shape `(nb_channels, audio_length)`) -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
-        if isinstance(
-            text_inputs,
-            (list, tuple, types.GeneratorType) if is_torch_available() else (list, tuple, types.GeneratorType),
-        ):
+        if isinstance(text_inputs, (list, tuple, types.GeneratorType)):
             if isinstance(text_inputs, types.GeneratorType):
                 text_inputs, _ = itertools.tee(text_inputs)
                 text_inputs, first_item = (x for x in text_inputs), next(_)
