@@ -1472,8 +1472,10 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(sequence_output.device)
 
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
+        torch._check(
+            len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
+            lambda: "All examples must have the same number of <eos> tokens.",
+        )
         batch_size, _, hidden_size = sequence_output.shape
         sentence_representation = sequence_output[eos_mask, :].view(batch_size, -1, hidden_size)[:, -1, :]
         logits = self.classification_head(sentence_representation)
