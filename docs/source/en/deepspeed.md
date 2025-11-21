@@ -377,7 +377,7 @@ Arctic Long Sequence Training (ALST) uses a combination of sharding inputs along
 > [!TIP]
 > For more detailed information about sequence parallelism, see the Accelerate [Sequence Parallelism](https://huggingface.co/docs/accelerate/concept_guides/sequence_parallelism) guide.
 
-To enable ALST/Ulysses sequence parallelism with [`Trainer`], configure `parallelism_config` in [`TrainingArguments`]. Sequence parallelism is configured via Accelerate's `ParallelismConfig` and requires Accelerate version higher than 1.11.0.
+To enable ALST/Ulysses sequence parallelism with [`Trainer`], configure `parallelism_config` in [`TrainingArguments`]. Sequence parallelism is configured via Accelerate's `ParallelismConfig` and requires an Accelerate version higher than 1.12.0.
 
 ```py
 from accelerate.utils import ParallelismConfig, DeepSpeedSequenceParallelConfig
