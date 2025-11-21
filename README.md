@@ -24,11 +24,6 @@ limitations under the License.
   <br/>
 </p>
 
-# sarah
-
-sarah — A local assistant and toolkit (derived from the project) with Excel and OCR helpers.
-
-
 <p align="center">
     <a href="https://huggingface.com/models"><img alt="Checkpoints on Hub" src="https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen"></a>
     <a href="https://circleci.com/gh/huggingface/transformers"><img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/main"></a>

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Vincenzo Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import yaml
 
 COMMON_ENV_VARIABLES = {
     "OMP_NUM_THREADS": 1,
-    "SARAH_IS_CI": True,
+    "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
 }
@@ -401,7 +401,7 @@ def create_circleci_config(folder=None):
     }
     if "CIRCLE_TOKEN" in os.environ:
         # For private forked repo. (e.g. new model addition)
-        config["workflows"] = {"version": 2, "run_tests": {"jobs": [{j.job_name: {"context": ["SARAH_CONTEXT"]}} for j in jobs]}}
+        config["workflows"] = {"version": 2, "run_tests": {"jobs": [{j.job_name: {"context": ["TRANSFORMERS_CONTEXT"]}} for j in jobs]}}
     else:
         # For public repo. (e.g. `transformers`)
         config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}

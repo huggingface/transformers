@@ -1,6 +1,0 @@
-docs/source/ar/troubleshooting.md:74:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-docs/source/en/troubleshooting.md:96:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-docs/source/ja/troubleshooting.md:92:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-docs/source/ko/troubleshooting.md:96:ImportError: cannot import name 'ImageGPTImageProcessor' from 'transformers' (unknown location)
-tests/sagemaker/README.md:62:    tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
-tests/sagemaker/README.md:132:    tag: !join [ *VERSION, '-', 'transformers', *TRANSFORMERS_VERSION, '-', *DEVICE_TYPE, '-', *TAG_PYTHON_VERSION, '-',
