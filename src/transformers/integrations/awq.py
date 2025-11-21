@@ -150,9 +150,9 @@ def replace_with_awq_linear(
             else:
                 raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
         elif quantization_config.version == AWQLinearVersion.IPEX:
-            from gptqmodel.quantization.awq.modules.linear.gemm_ipex import WQLinear_IPEX
+            from gptqmodel.nn_modules.qlinear.torch_fused_awq import TorchFusedAwqQuantLinear
 
-            target_cls = WQLinear_IPEX
+            target_cls = TorchFusedAwqQuantLinear
         else:
             raise ValueError(f"Unrecognized AWQ version: {quantization_config.version}")
     else:
