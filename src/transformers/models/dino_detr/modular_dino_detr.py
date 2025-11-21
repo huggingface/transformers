@@ -16,11 +16,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
-    is_scipy_available,
-    is_timm_available,
     is_torch_available,
-    is_torchvision_available,
-    is_vision_available,
     logging,
 )
 from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
@@ -30,7 +26,7 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrMultiscaleDeformableAttention,
 )
 from ..detr.image_processing_detr import DetrImageProcessor
-from ..detr.modeling_detr import DetrConvModel, DetrFrozenBatchNorm2d, DetrMLPPredictionHead
+from ..detr.modeling_detr import DetrConvModel, DetrMLPPredictionHead
 from ..rt_detr.modeling_rt_detr import get_contrastive_denoising_training_group
 from .configuration_dino_detr import DinoDetrConfig
 
@@ -39,10 +35,6 @@ logger = logging.get_logger(__name__)
 
 
 class DinoDetrEncoderLayer(DeformableDetrEncoderLayer):
-    pass
-
-
-class DinoDetrFrozenBatchNorm2d(DetrFrozenBatchNorm2d):
     pass
 
 
@@ -66,18 +58,6 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
     from torch import nn
-
-if is_torchvision_available():
-    pass
-
-if is_vision_available():
-    pass
-
-if is_scipy_available():
-    pass
-
-if is_timm_available():
-    pass
 
 
 _CONFIG_FOR_DOC = "DinoDetrConfig"
