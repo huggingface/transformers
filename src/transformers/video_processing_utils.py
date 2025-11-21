@@ -725,7 +725,11 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             logger.info(
                 f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
-        return video_processor_dict, kwargs, final_resolved_file_path
+
+        # Specific models need the original path for modification in `from_dict`, e.g. see `Ernie 4.5 VL` with fonts
+        kwargs["resolved_file_path"] = final_resolved_file_path
+
+        return video_processor_dict, kwargs
 
     @classmethod
     def from_dict(cls, video_processor_dict: dict[str, Any], **kwargs):

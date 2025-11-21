@@ -128,7 +128,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
 
         Note that this is only relevant when we use `draw_on_frames` as this is required to have a font.
         """
-        resolved_file_path = kwargs.pop("resolved_video_processor_file_path", None)
+        resolved_file_path = kwargs.pop("resolved_file_path", None)
         draws_on_frames = video_processor_dict.get("draw_on_frames")
         if (font_name := video_processor_dict.get("font")) is None and draws_on_frames:
             raise AttributeError(
