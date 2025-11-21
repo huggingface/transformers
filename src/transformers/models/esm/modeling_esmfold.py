@@ -137,6 +137,7 @@ class EsmForProteinFoldingOutput(ModelOutput):
 
 def is_fp16_enabled(device_type):
     # Autocast world
+    # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
     autocast_dtype = (
         torch.get_autocast_dtype(device_type)
         if hasattr(torch, "get_autocast_dtype")
@@ -2257,7 +2258,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     @staticmethod
     def output_to_pdb(output: dict) -> list[str]:
-        """Returns the pbd (file) string from the model given the model output."""
+        """Returns the pdb (file) string from the model given the model output."""
         output = {k: v.to("cpu").numpy() for k, v in output.items()}
         pdbs = []
         final_atom_positions = atom14_to_atom37(output["positions"][-1], output)
