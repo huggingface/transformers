@@ -336,6 +336,9 @@ class MaskTest(unittest.TestCase):
         self._run_bidirectional_mask(mask_fn=mask_creation_function, attn_implementation="sdpa")
 
     def test_bidirectional_mask_skip_eager(self):
+        """
+        Checks whether the bidirectional mask creation can skip the mask creation if we have a full mask.
+        """
         full_masks, padded_mask = self._run_bidirectional_mask(
             mask_fn=create_bidirectional_mask, attn_implementation="eager"
         )
