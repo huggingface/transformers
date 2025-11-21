@@ -86,6 +86,7 @@ else:
         "StopStringCriteria",
     ]
     _import_structure["continuous_batching"] = [
+        "ContinuousBatchingManager",
         "ContinuousMixin",
     ]
     _import_structure["utils"] = [
@@ -127,7 +128,7 @@ if TYPE_CHECKING:
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
-        from .continuous_batching import ContinuousMixin
+        from .continuous_batching import ContinuousBatchingManager, ContinuousMixin
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
