@@ -20,6 +20,7 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
         module = module.get_submodule(module_name)
     return module, tensor_name
 
+
 def get_parameter_or_buffer(module, target: str):
     """
     Return the parameter or buffer given by `target` if it exists, otherwise throw an error. This combines
@@ -27,6 +28,7 @@ def get_parameter_or_buffer(module, target: str):
     it will return the extra state provided by the module. Note that it only work if `target` is a leaf of the model.
     """
     import torch
+
     try:
         return module.get_parameter(target)
     except AttributeError:

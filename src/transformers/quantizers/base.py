@@ -168,6 +168,7 @@ class HfQuantizer(ABC):
     def param_element_size(self, model: "PreTrainedModel", param_name: str) -> float:
         "Return the element size (in bytes) for `param_name`."
         from .quantizers_utils import get_parameter_or_buffer
+
         if self.param_needs_quantization(model, param_name):
             from accelerate.utils import CustomDtype
 
