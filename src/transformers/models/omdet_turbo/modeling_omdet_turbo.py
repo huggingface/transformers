@@ -354,10 +354,10 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
         total_elements = sum(shape[0] * shape[1] for shape in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch._check(
+            total_elements == sequence_length,
+            lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
