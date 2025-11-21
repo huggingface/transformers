@@ -2453,7 +2453,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Tie the model weights. If `recompute_mapping=False` (default when called internally), it will rely on the
         `model.all_tied_weights_keys` attribute, containing the `{target: source}` mapping for the tied params.
         If `recompute_mapping=True`, it will re-check all internal submodels and their config to determine the params
-        that need to be tied.
+        that need to be tied. This is the default when `model.tie_weights()` is called on its own, outside of
+        `__init__`, and `from_pretrained`, in case the config values were changed somewhere.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
         if not recompute_mapping:
