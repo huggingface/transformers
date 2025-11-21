@@ -40,13 +40,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    is_torchdynamo_compiling,
-    logging,
-    torch_check,
-)
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging, torch_check
 from .configuration_bart import BartConfig
 
 

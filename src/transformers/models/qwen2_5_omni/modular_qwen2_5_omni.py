@@ -48,13 +48,7 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    check_torch_load_is_safe,
-    logging,
-    torch_check,
-)
+from ...utils import TransformersKwargs, auto_docstring, check_torch_load_is_safe, logging, torch_check
 from ...utils.hub import cached_file
 
 

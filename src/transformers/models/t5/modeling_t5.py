@@ -38,13 +38,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
-    auto_docstring,
-    logging,
-    torch_check,
-)
+from ...utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, logging, torch_check
 from .configuration_t5 import T5Config
 
 

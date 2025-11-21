@@ -21,12 +21,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    logging,
-    torch_check,
-)
+from ...utils import auto_docstring, can_return_tuple, logging, torch_check
 from ..auto import AutoModel
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,

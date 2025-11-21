@@ -31,14 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    is_timm_available,
-    logging,
-    requires_backends,
-    torch_check,
-)
+from ...utils import ModelOutput, auto_docstring, is_timm_available, logging, requires_backends, torch_check
 from ...utils.backbone_utils import load_backbone
 from .configuration_deformable_detr import DeformableDetrConfig
 
