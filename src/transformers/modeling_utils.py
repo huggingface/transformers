@@ -2368,8 +2368,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             'bbox_embed.1.layers.2.weight': 'bbox_embed.0.layers.2.weight',
             'bbox_embed.2.layers.0.bias': 'bbox_embed.0.layers.0.bias',
             'bbox_embed.2.layers.0.weight': 'bbox_embed.0.layers.0.weight',
-            'bbox_embed.2.layers.1.bias': 'bbox_embed.0.layers.1.bias',
-            'bbox_embed.2.layers.1.weight': 'bbox_embed.0.layers.1.weight',
+            ...
+            'class_embed.1.bias': 'class_embed.0.bias',
+            'class_embed.1.weight': 'class_embed.0.weight',
+            'class_embed.2.bias': 'class_embed.0.bias',
+            'class_embed.2.weight': 'class_embed.0.weight',
+            ...
+            'model.decoder.class_embed.0.bias': 'class_embed.0.bias',
+            'model.decoder.class_embed.0.weight': 'class_embed.0.weight',
+            'model.decoder.class_embed.1.bias': 'class_embed.0.bias',
+            'model.decoder.class_embed.1.weight': 'class_embed.0.weight',
+            ...
+            'model.decoder.bbox_embed.0.layers.0.bias': 'bbox_embed.0.layers.0.bias',
+            'model.decoder.bbox_embed.0.layers.0.weight': 'bbox_embed.0.layers.0.weight',
+            'model.decoder.bbox_embed.0.layers.1.bias': 'bbox_embed.0.layers.1.bias',
+            'model.decoder.bbox_embed.0.layers.1.weight': 'bbox_embed.0.layers.1.weight',
             ...
         }
         ```
@@ -2377,7 +2390,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         if all_submodels:
             expanded_tied_weights = {}
-            for prefix, submodule in self.named_modules():
+            for prefix, submodule in self.named_modules(remove_duplicate=False):
                 if isinstance(submodule, PreTrainedModel):
                     # Will dynamically check the config if it has changed
                     submodel_tied_weights = submodule.get_expanded_tied_weights_keys(all_submodels=False)
