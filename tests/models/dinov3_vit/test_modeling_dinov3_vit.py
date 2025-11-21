@@ -177,19 +177,20 @@ class DINOv3ViTModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
+        torch_device_override = "cpu"  # Required, or else VRAM is not enough.
+        config.device_map = torch_device_override
         model = DINOv3ViTForImageClassification(config)
-        model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
         # test greyscale images
         config.num_channels = 1
+
         model = DINOv3ViTForImageClassification(config)
-        model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size]).to(torch_device_override)
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
@@ -313,13 +314,15 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
     @require_torch_large_accelerator
     @slow
     def test_inference_lc_head_imagenet(self):
+        torch_device_override = "cpu"
         model = DINOv3ViTForImageClassification.from_pretrained(
-            "dimidagd/dinov3-vit7b16-pretrain-lvd1689m-imagenet1k-lc"
-        ).to(torch_device)
+            "dimidagd/dinov3-vit7b16-pretrain-lvd1689m-imagenet1k-lc", device_map=torch_device_override
+        )
+
         ground_truth_class_imagenet1 = "tabby, tabby cat"
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device_override)
 
         # forward pass
         with torch.no_grad():
@@ -327,7 +330,7 @@ class DINOv3ViTModelIntegrationTest(unittest.TestCase):
 
         # Verify logits
         expected_logits = torch.tensor([-1.0708860159, -0.7589257956, -1.1738269329, -0.9263097048, -1.0259437561]).to(
-            torch_device
+            torch_device_override
         )
 
         torch.testing.assert_close(outputs.logits[0, : len(expected_logits)], expected_logits, rtol=1e-4, atol=1e-4)
