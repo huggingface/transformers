@@ -109,10 +109,6 @@ OBJECTS_TO_IGNORE = {
     # Deprecated
     "InputExample",
     "InputFeatures",
-    # Signature is *args/**kwargs
-    "TFSequenceSummary",
-    "TFBertTokenizer",
-    "TFGPT2Tokenizer",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
@@ -364,10 +360,6 @@ OBJECTS_TO_IGNORE = {
     "RagRetriever",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
-    "RealmConfig",
-    "RealmForOpenQA",
-    "RealmScorer",
-    "RealmTokenizerFast",
     "ReformerConfig",
     "ReformerTokenizerFast",
     "RegNetConfig",

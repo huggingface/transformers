@@ -720,12 +720,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @can_return_tuple
     @auto_docstring
     def forward(
