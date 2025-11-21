@@ -183,7 +183,7 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.linear_2.weight = self.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("linear_2.weight")
@@ -257,7 +257,7 @@ if is_torch_available():
         def forward(self, x):
             return self.decoder(self.base(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.decoder.weight = self.base.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("decoder.weight")
