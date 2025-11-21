@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
+
+import itertools
+import types
 from typing import Any, overload
 
 from ..generation import GenerationConfig
@@ -25,6 +28,23 @@ if is_torch_available():
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
+
+
+# Copied from transformers.pipelines.text_generation
+ChatType = list[dict[str, str]]
+
+
+# Copied from transformers.pipelines.text_generation
+class Chat:
+    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages: dict):
+        for message in messages:
+            if not ("role" in message and "content" in message):
+                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+        self.messages = messages
 
 
 class TextToAudioPipeline(Pipeline):
@@ -81,7 +101,7 @@ class TextToAudioPipeline(Pipeline):
     """
 
     _pipeline_calls_generate = True
-    _load_processor = False
+    _load_processor = None
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
@@ -91,11 +111,8 @@ class TextToAudioPipeline(Pipeline):
         max_new_tokens=256,
     )
 
-    def __init__(self, *args, vocoder=None, sampling_rate=None, no_processor=True, **kwargs):
+    def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Legacy behaviour just uses the tokenizer while new models use the processor as a whole at any given time
-        self.no_processor = no_processor
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
@@ -127,7 +144,7 @@ class TextToAudioPipeline(Pipeline):
                         self.sampling_rate = sampling_rate
 
         # last fallback to get the sampling rate based on processor
-        if self.sampling_rate is None and not self.no_processor and hasattr(self.processor, "feature_extractor"):
+        if self.sampling_rate is None and self.processor is not None and hasattr(self.processor, "feature_extractor"):
             self.sampling_rate = self.processor.feature_extractor.sampling_rate
 
     def preprocess(self, text, **kwargs):
@@ -141,16 +158,22 @@ class TextToAudioPipeline(Pipeline):
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
-                "padding": "max_length",
             }
 
             # priority is given to kwargs
             new_kwargs.update(kwargs)
-
             kwargs = new_kwargs
 
-        preprocessor = self.tokenizer if self.no_processor else self.processor
-        output = preprocessor(text, **kwargs, return_tensors="pt")
+        preprocessor = self.processor if self.processor is not None else self.tokenizer
+        if isinstance(text, Chat):
+            output = preprocessor.apply_chat_template(
+                text.messages,
+                tokenize=True,
+                return_dict=True,
+                **kwargs, 
+            )
+        else:
+            output = preprocessor(text, **kwargs, return_tensors="pt")
 
         return output
 
@@ -193,13 +216,22 @@ class TextToAudioPipeline(Pipeline):
     @overload
     def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[dict[str, Any]]: ...
 
+    @overload
+    def __call__(self, text_inputs: ChatType, **forward_params: Any) -> list[dict[str, ChatType]]: ...
+
+    @overload
+    def __call__(self, text_inputs: list[ChatType], **forward_params: Any) -> list[list[dict[str, ChatType]]]: ...
+
     def __call__(self, text_inputs: str | list[str], **forward_params) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
             text_inputs (`str` or `list[str]`):
-                The text(s) to generate.
+                One or several texts to generate. If strings or a list of string are passed, this pipeline will
+                generate the corresponding text. Alternatively, a "chat", in the form of a list of dicts with "role"
+                and "content" keys, can be passed, or a list of such chats. When chats are passed, the model's chat
+                template will be used to format them before passing them to the model.
             forward_params (`dict`, *optional*):
                 Parameters passed to the model generation/forward method. `forward_params` are always passed to the
                 underlying model.
@@ -215,6 +247,28 @@ class TextToAudioPipeline(Pipeline):
             - **audio** (`np.ndarray` of shape `(nb_channels, audio_length)`) -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
+        if isinstance(
+            text_inputs,
+            (list, tuple, types.GeneratorType)
+            if is_torch_available()
+            else (list, tuple, types.GeneratorType),
+        ):
+            if isinstance(text_inputs, types.GeneratorType):
+                text_inputs, _ = itertools.tee(text_inputs)
+                text_inputs, first_item = (x for x in text_inputs), next(_)
+            else:
+                first_item = text_inputs[0]
+            if isinstance(first_item, (list, tuple, dict)):
+                # We have one or more prompts in list-of-dicts format, so this is chat mode
+                if isinstance(first_item, dict):
+                    return super().__call__(Chat(text_inputs), **forward_params)
+                else:
+                    chats = (Chat(chat) for chat in text_inputs)
+                    if isinstance(text_inputs, types.GeneratorType):
+                        return super().__call__(chats, **forward_params)
+                    else:
+                        return super().__call__(list(chats), **forward_params)
+                    
         return super().__call__(text_inputs, **forward_params)
 
     def _sanitize_parameters(
@@ -248,17 +302,12 @@ class TextToAudioPipeline(Pipeline):
         else:
             waveform_key = "waveform"
 
-        # We directly get the waveform
-        if self.no_processor:
-            if isinstance(audio, dict):
-                waveform = audio[waveform_key]
-            elif isinstance(audio, tuple):
-                waveform = audio[0]
-            else:
-                waveform = audio
-        # Or we need to postprocess to get the waveform
+        if isinstance(audio, dict):
+            waveform = audio[waveform_key]
+        elif isinstance(audio, tuple):
+            waveform = audio[0]
         else:
-            waveform = self.processor.decode(audio)
+            waveform = audio
 
         if isinstance(audio, list):
             output_dict["audio"] = [el.to(device="cpu", dtype=torch.float).numpy() for el in waveform]
