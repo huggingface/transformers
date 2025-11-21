@@ -117,6 +117,8 @@ class ConversionOps:
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
@@ -140,6 +142,8 @@ class Chunk(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         tensors = next(iter(value.values()))
@@ -165,6 +169,8 @@ class Concatenate(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
         if len(target_keys) != 1:
@@ -193,6 +199,8 @@ class MergeModulelist(Concatenate):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
@@ -222,6 +230,8 @@ class SplitModulelist(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         if len(value) != len(self.sizes):
@@ -260,6 +270,8 @@ class PermuteForRope(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
@@ -751,8 +763,7 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation,
                         hf_quantizer,
                     )
-            except SkipLayer as e:
-                logger.warning(f"Skipping layer {layer_name} because: {e}")
+            except SkipLayer:
                 continue
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, misc
