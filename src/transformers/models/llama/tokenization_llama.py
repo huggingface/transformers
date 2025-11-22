@@ -195,6 +195,12 @@ class LlamaTokenizer(PreTrainedTokenizer):
     def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         if self.legacy or from_slow:  # no dependency on protobuf
+            if self.vocab_file is None or not isinstance(self.vocab_file, str):
+                raise ValueError(
+                    f"Cannot load the tokenizer: vocab_file is '{self.vocab_file}'. "
+                    f"This model appears to require special tokenization support. "
+                    f"Please install the required package with: pip install mistral-common"
+                )
             tokenizer.Load(self.vocab_file)
             return tokenizer
 

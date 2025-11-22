@@ -330,6 +330,21 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_slow = self.tokenizer_class.from_pretrained(tmp_dir)
             self.assertEqual(tokenizer_slow.encode("This is a test"), [1, 910, 338, 263, 1243])
 
+    def test_missing_vocab_file_error_message(self):
+        """
+        Test that a helpful error message is raised when vocab_file is None.
+        This can happen when loading models like Voxtral without mistral-common installed.
+        """
+        with self.assertRaises(ValueError) as context:
+            # Attempt to create tokenizer with None vocab_file
+            LlamaTokenizer(vocab_file=None)
+
+        error_message = str(context.exception)
+        # Check that the error message contains helpful information
+        self.assertIn("Cannot load the tokenizer", error_message)
+        self.assertIn("vocab_file is 'None'", error_message)
+        self.assertIn("mistral-common", error_message)
+
 
 @require_torch
 @require_sentencepiece
