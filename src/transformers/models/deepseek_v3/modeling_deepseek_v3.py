@@ -554,6 +554,9 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, DeepseekV3TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, DeepseekV3NaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
