@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F  # noqa: F401
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
@@ -713,14 +714,11 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        std = self.config.init_std
+        super()._init_weights(module)
 
         if isinstance(module, LwDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
-            default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
-            )
+            init.constant_(module.sampling_offsets.weight, 0.0)
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -729,35 +727,25 @@ class LwDetrPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
         if hasattr(module, "level_embed"):
-            nn.init.normal_(module.level_embed)
+            init.normal_(module.level_embed)
         if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
-            nn.init.constant_(module.refpoint_embed.weight.data, 0)
+            init.constant_(module.refpoint_embed.weight, 0)
         if hasattr(module, "class_embed") and module.class_embed is not None:
             prior_prob = 0.01
             bias_value = -math.log((1 - prior_prob) / prior_prob)
-            nn.init.constant_(module.class_embed.bias.data, bias_value)
+            init.constant_(module.class_embed.bias, bias_value)
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
-            nn.init.constant_(module.bbox_embed.layers[-1].weight.data, 0)
-            nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
+            init.constant_(module.bbox_embed.layers[-1].weight, 0)
+            init.constant_(module.bbox_embed.layers[-1].bias, 0)
 
 
 def refine_bboxes(reference_points, deltas):
