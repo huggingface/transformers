@@ -29,7 +29,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, torch_check
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_qwen2_audio import Qwen2AudioConfig, Qwen2AudioEncoderConfig
 
@@ -789,11 +789,10 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
                     n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
                     n_audio_features = audio_features.shape[0]
-
-                    if n_audio_tokens != n_audio_features:
-                        raise ValueError(
-                            f"Audio features and audio tokens do not match: tokens: {n_audio_tokens}, features {n_audio_features}"
-                        )
+                    torch_check(
+                        n_audio_tokens == n_audio_features,
+                        lambda: f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
+                    )
                     special_audio_mask = (input_ids == self.config.audio_token_id).to(inputs_embeds.device)
                     special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
                     audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)

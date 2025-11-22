@@ -1814,14 +1814,14 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch_check(
             image_features is None or inputs_embeds[special_image_mask].numel() == image_features.numel(),
-            lambda: f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}",
+            lambda: f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch_check(
             video_features is None or inputs_embeds[special_video_mask].numel() == video_features.numel(),
-            lambda: f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}",
+            lambda: f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
         )
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
