@@ -987,7 +987,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        model_name = "../sam3-hf-v4-video-full"
+        model_name = "facebook/sam3"
         self.model = Sam3Model.from_pretrained(model_name).to(torch.float32)
         self.processor = Sam3Processor.from_pretrained(model_name)
         self.model.to(torch_device)
