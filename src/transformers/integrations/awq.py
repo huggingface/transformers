@@ -35,44 +35,6 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-AWQ_FUSED_MAPPINGS = {
-    "mistral": {
-        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
-        "mlp": ["gate_proj", "up_proj", "down_proj"],
-        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
-        "use_alibi": False,
-    },
-    "mixtral": {
-        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
-        "mlp": ["w1", "w3", "w2"],
-        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
-        "use_alibi": False,
-    },
-    "llama": {
-        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
-        "mlp": ["gate_proj", "up_proj", "down_proj"],
-        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
-        "use_alibi": False,
-    },
-    "llava": {
-        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
-        "mlp": ["gate_proj", "up_proj", "down_proj"],
-        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
-        "use_alibi": False,
-    },
-    "qwen2": {
-        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
-        "mlp": ["gate_proj", "up_proj", "down_proj"],
-        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
-        "use_alibi": False,
-    },
-    "qwen3": {
-        "attention": ["q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm"],
-        "mlp": ["gate_proj", "up_proj", "down_proj"],
-        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
-        "use_alibi": False,
-    },
-}
 
 AWQ_SCALES_MAPPINGS = {
     "starcoder2": {"act": "act", "layer_before_act": "c_fc"},
@@ -84,53 +46,6 @@ AWQ_SCALES_MAPPINGS = {
     "gpt_bigcode": {"act": "act", "layer_before_act": "c_fc"},
     "bloom": {"act": "gelu_impl", "layer_before_act": "dense_h_to_4h"},
 }
-
-
-if is_auto_awq_available():
-    from awq.modules.fused.attn import RoPE
-
-    class AWQRoPE(RoPE):
-        """
-        AWQRoPE module for hacking rope implementation in AWQ fused attention modules to support more models.
-
-        Args:
-            rope_type (`str`):
-                The rope type to use.
-            head_dim (`int`):
-                The head dimension.
-            max_seq_len (`int`):
-                The maximum sequence length.
-            config (`PreTrainedConfig`):
-                The model config object.
-            device (`torch.device`):
-                The device to put the module on.
-        """
-
-        def __init__(self, rope_type, head_dim, max_seq_len, config, device):
-            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            self.inv_freq, self.attention_scaling = rope_init_fn(config, device)
-            # Use fake rope_theta to initialize the parent class
-            super().__init__(head_dim=head_dim, max_seq_len=max_seq_len, device=device, rope_theta=-1)
-
-        def precompute_freqs_cis(self, dim: int, end: int, theta=-1):
-            t = torch.arange(end, device=self.inv_freq.device)
-            freqs = torch.outer(t, self.inv_freq).float()
-            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
-            del self.inv_freq  # free the memory
-            return freqs_cis
-
-        def forward(
-            self,
-            xq: torch.Tensor,
-            xk: torch.Tensor,
-            start_pos: int,
-            seqlen: int,
-            partial: bool = False,
-        ):
-            xq_out, xk_out = super().forward(xq, xk, start_pos, seqlen, partial)
-            xq_out = (xq_out * self.attention_scaling).type_as(xq)
-            xk_out = (xk_out * self.attention_scaling).type_as(xk)
-            return xq_out, xk_out
 
 
 def replace_quantization_scales(model, model_type):
