@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging, torch_check
+from ...utils import check_with, logging
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
@@ -512,7 +512,8 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        torch_check(
+        check_with(
+            ValueError,
             (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
             lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )

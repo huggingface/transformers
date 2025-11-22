@@ -252,7 +252,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # if we remove some images from inputs leaving only one
             # image number mismatch error should raise
             curr_inputs["pixel_values_images"] = curr_inputs["pixel_values_images"][:1]
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(**curr_inputs)
 
     def test_video_only_input(self):
@@ -263,7 +263,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # replace image token id with dummy id
             # Error will be raised as num-image-tokens and num-of-image-embeds mismatch
             curr_inputs["input_ids"][:, : self.model_tester.num_image_tokens] = 2
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(**curr_inputs)
 
             curr_inputs["pixel_values_images"] = None
@@ -281,7 +281,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                 self.model_tester.num_image_tokens : self.model_tester.num_image_tokens
                 + self.model_tester.num_video_tokens,
             ] = 2
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(**curr_inputs)
 
             curr_inputs["pixel_values_videos"] = None
@@ -358,7 +358,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values_images"] = curr_input_dict["pixel_values_images"][-1:, ...]
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -367,7 +367,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(input_ids=input_ids, pixel_values_images=pixel_values)
 
             # two images and two image tokens don't raise an error

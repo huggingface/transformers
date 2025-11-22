@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, torch_check
+from ...utils import auto_docstring, check_with, logging
 from .configuration_mvp import MvpConfig
 
 
@@ -1292,7 +1292,8 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        torch_check(
+        check_with(
+            ValueError,
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )

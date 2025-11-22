@@ -187,13 +187,13 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             # remove one image but leave the image token in text
             input_ids = curr_input_dict["input_ids"]
             image_patches = curr_input_dict["image_patches"][1:, ...]
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(input_ids=input_ids, image_patches=image_patches)
 
             # remove one image token from text
             input_ids = curr_input_dict["input_ids"][2:]
             image_patches = curr_input_dict["image_patches"]
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(input_ids=input_ids, image_patches=image_patches)
 
     @unittest.skip(

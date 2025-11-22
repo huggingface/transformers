@@ -116,6 +116,7 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     check_torch_load_is_safe,
+    check_with,
     direct_transformers_import,
     get_torch_version,
     is_accelerate_available,
@@ -253,7 +254,6 @@ from .import_utils import (
     is_xlstm_available,
     is_yt_dlp_available,
     requires_backends,
-    torch_check,
     torch_only_method,
 )
 from .kernel_config import KernelConfig

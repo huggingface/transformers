@@ -33,11 +33,11 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    check_with,
     is_accelerate_available,
     is_scipy_available,
     logging,
     requires_backends,
-    torch_check,
 )
 from ...utils.backbone_utils import load_backbone
 from .configuration_oneformer import OneFormerConfig
@@ -1027,7 +1027,8 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        torch_check(
+        check_with(
+            ValueError,
             (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
             lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )

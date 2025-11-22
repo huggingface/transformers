@@ -1288,14 +1288,19 @@ def is_tracing(tensor=None) -> bool:
     return _is_tracing
 
 
-def torch_check(cond: Any, msg=None) -> None:
-    """Same as `torch.check` but ensures `cond` is a bool."""
+def check_with(error_type: Exception, cond: Any, msg: Callable[[], str]) -> None:
+    """
+    Same as `torch._check_with()` but:
+    - Works with non-bool conditions (e.g. converting scalar `torch.Tensor` to bool).
+    - Can be disabled globally with `TRANSFORMERS_DISABLE_CHECKS` environment variable.
+    """
+
+    if os.getenv("TRANSFORMERS_DISABLE_CHECKS", "0") == "1":
+        return
+
     import torch
 
-    if not isinstance(cond, bool):
-        cond = bool(cond)
-
-    torch._check(cond, msg)
+    torch._check_with(error_type, bool(cond), msg)
 
 
 @lru_cache

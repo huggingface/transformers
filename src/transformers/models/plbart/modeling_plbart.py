@@ -43,7 +43,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging, torch_check
+from ...utils import TransformersKwargs, auto_docstring, check_with, is_torchdynamo_compiling, logging
 from .configuration_plbart import PLBartConfig
 
 
@@ -1212,7 +1212,8 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        torch_check(
+        check_with(
+            ValueError,
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )

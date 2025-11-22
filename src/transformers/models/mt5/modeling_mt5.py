@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, logging, torch_check
+from ...utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, check_with, logging
 from .configuration_mt5 import MT5Config
 
 
@@ -1404,7 +1404,8 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(sequence_output.device)
 
-        torch_check(
+        check_with(
+            ValueError,
             len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )

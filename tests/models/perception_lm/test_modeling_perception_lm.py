@@ -258,7 +258,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
             # remove one image but leave the image token in text
             input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(**input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -267,7 +267,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two image tokens don't raise an error
