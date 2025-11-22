@@ -25,7 +25,9 @@ logger = logging.get_logger(__name__)
 class S3TokenizerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`S3TokenizerModel`]. It is used to instantiate a
-    S3Tokenizer model according to the specified arguments, defining the model architecture.
+    S3Tokenizer model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the S3Tokenizer
+    [ResembleAI/s3tokenizer-v2](https://huggingface.co/ResembleAI/s3tokenizer-v2) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

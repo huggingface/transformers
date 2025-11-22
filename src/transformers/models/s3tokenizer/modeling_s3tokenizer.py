@@ -639,17 +639,6 @@ class S3TokenizerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "s3tokenizer"
     main_input_name = "input_values"
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, torch.nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.n_audio_state**-0.5)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, torch.nn.Conv1d):
-            torch.nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
 
 class S3TokenizerModel(S3TokenizerPreTrainedModel):
     """
@@ -662,7 +651,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
         config (S3TokenizerConfig): Model configuration class with all parameters of the model.
     """
 
-    ignore_state_dict_missing = ("_mel_filters", "window")
+    ignore_state_dict_missing = ("_mel_filters",)
     all_tied_weights_keys = {}
 
     def __init__(self, config: S3TokenizerConfig, name: str = "speech_tokenizer_v2_25hz"):
@@ -693,7 +682,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
                 "Install librosa with: pip install librosa"
             )
             self.register_buffer("_mel_filters", torch.zeros(config.n_mels, self.n_fft // 2 + 1))
-
+        # self.window = torch.hann_window(self.n_fft)
         self.register_buffer("window", torch.hann_window(self.n_fft))
 
     def pad(self, wavs: list[Union[torch.Tensor, np.ndarray]], sr: int) -> list[torch.Tensor]:

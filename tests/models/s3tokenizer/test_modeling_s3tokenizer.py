@@ -163,6 +163,49 @@ class S3TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load(self):
         return super().test_save_load()
 
+    def test_window_buffer_loading(self):
+        """Test that the window buffer can be loaded from checkpoint if it exists."""
+        import torch
+        import tempfile
+        import os
+
+        config = self.model_tester.get_config()
+        model1 = S3TokenizerModel(config=config)
+
+        # Modify the window to a custom value
+        custom_window = torch.ones_like(model1.window) * 0.5
+        model1.window = custom_window
+
+        # Save the model with the custom window
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model1.save_pretrained(tmp_dir)
+
+            # Load the model and verify the window was loaded
+            model2 = S3TokenizerModel.from_pretrained(tmp_dir)
+
+            # Verify the custom window was loaded from checkpoint
+            self.assertTrue(torch.allclose(model2.window, custom_window))
+
+    def test_window_buffer_missing_from_checkpoint(self):
+        """Test that the default window is used when not present in checkpoint."""
+        import torch
+
+        config = self.model_tester.get_config()
+        model = S3TokenizerModel(config=config)
+
+        # Create a state dict without window
+        state_dict = {}
+        for key, value in model.state_dict().items():
+            if key != "window":
+                state_dict[key] = value
+
+        # Load the state dict (window should remain as default)
+        default_window = model.window.clone()
+        model.load_state_dict(state_dict, strict=False)
+
+        # Verify the default window is still used
+        self.assertTrue(torch.allclose(model.window, default_window))
+
     @slow
     @require_torch
     def test_model_from_pretrained(self):
