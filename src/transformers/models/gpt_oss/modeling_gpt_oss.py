@@ -345,6 +345,8 @@ def sdpa_attention_forward(
     """
     N, H, L, E = query.shape
     _, G, *_ = key.shape
+    if attention_mask is None:
+        attention_mask = torch.zeros(N, 1, L, L, device=query.device, dtype=query.dtype)
     attention = torch.nn.functional.scaled_dot_product_attention(
         query,
         *(
