@@ -101,7 +101,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]], BatchFeature],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -115,10 +115,12 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`, `BatchFeature`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-                stereo, i.e. single float per timestep.
+                values, a list of numpy arrays, a list of list of float values, or a `BatchFeature` object containing
+                `input_values`. When passing a `BatchFeature`, it must contain the `input_values` key with audio data.
+                This is useful when the data is already batched and potentially on a specific device (e.g., GPU).
+                Must be mono channel audio, not stereo, i.e. single float per timestep.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -181,19 +183,31 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
-        is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
-        )
+        # Handle BatchFeature input
+        if isinstance(raw_speech, BatchFeature):
+            # Validate that it contains the required key
+            if self.model_input_names[0] not in raw_speech:
+                raise ValueError(
+                    f"When passing a BatchFeature to {self.__class__.__name__}, it must contain "
+                    f"the key '{self.model_input_names[0]}', but got keys: {list(raw_speech.keys())}"
+                )
+            # Use the BatchFeature directly - it's already in the correct format
+            encoded_inputs = raw_speech
+        else:
+            # Original logic for non-BatchFeature inputs
+            is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+            if is_batched_numpy and len(raw_speech.shape) > 2:
+                raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+            is_batched = is_batched_numpy or (
+                isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            )
 
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
+            # always return batch
+            if not is_batched:
+                raw_speech = [raw_speech]
 
-        # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_values": raw_speech})
+            # convert into correct format for padding
+            encoded_inputs = BatchFeature({"input_values": raw_speech})
 
         padded_inputs = self.pad(
             encoded_inputs,

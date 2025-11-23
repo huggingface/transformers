@@ -20,6 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import Wav2Vec2Config, Wav2Vec2FeatureExtractor
+from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import require_torch, slow
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -230,3 +231,87 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         # only "layer" feature extraction norm should make use of
         # attention_mask
         self.assertEqual(feat_extract.return_attention_mask, config.feat_extract_norm == "layer")
+
+    def test_call_with_batch_feature_input(self):
+        """Test that BatchFeature can be passed as input"""
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        # First, create a BatchFeature from normal processing
+        normal_output = feat_extract(speech_inputs, padding=True, return_tensors="np")
+
+        # Now create a BatchFeature manually with same data
+        batch_feature_input = BatchFeature({"input_values": speech_inputs})
+
+        # Pass the BatchFeature as input
+        batch_feature_output = feat_extract(batch_feature_input, padding=True, return_tensors="np")
+
+        # Verify outputs match
+        np.testing.assert_allclose(
+            normal_output.input_values, batch_feature_output.input_values, atol=1e-5
+        )
+
+    @require_torch
+    def test_call_with_batch_feature_torch_tensors(self):
+        """Test BatchFeature with torch tensors (common use case mentioned in issue)"""
+        import torch
+
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        # Create BatchFeature with torch tensors (simulating data on device)
+        # Convert list of lists to list of numpy arrays first, then to tensor
+        tensor_inputs = [torch.tensor(speech, dtype=torch.float32) for speech in speech_inputs]
+        batch_feature_input = BatchFeature({"input_values": tensor_inputs})
+
+        # Should work seamlessly
+        output = feat_extract(batch_feature_input, padding=True, return_tensors="pt")
+
+        self.assertIsInstance(output.input_values, torch.Tensor)
+        # Verify normalization was applied
+        self.assertEqual(output.input_values.shape[0], 3)
+
+    def test_call_with_batch_feature_missing_key(self):
+        """Test that passing BatchFeature without required key raises clear error"""
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+
+        # Create BatchFeature with wrong key
+        batch_feature_input = BatchFeature({"wrong_key": [1, 2, 3]})
+
+        with self.assertRaisesRegex(ValueError, "must contain the key 'input_values'"):
+            feat_extract(batch_feature_input)
+
+    def test_call_with_batch_feature_preserves_attention_mask(self):
+        """Test that existing attention_mask in BatchFeature is handled correctly"""
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        # Create BatchFeature with both input_values and attention_mask
+        attention_mask = [[1] * len(s) for s in speech_inputs]
+        batch_feature_input = BatchFeature({"input_values": speech_inputs, "attention_mask": attention_mask})
+
+        output = feat_extract(batch_feature_input, padding=True, return_attention_mask=True)
+
+        # Verify attention mask is present and processed correctly
+        self.assertIn("attention_mask", output)
+        self.assertEqual(len(output["attention_mask"]), 3)
+
+    def test_call_with_batch_feature_numpy_arrays(self):
+        """Test BatchFeature with numpy arrays"""
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        # Convert to numpy arrays
+        np_speech_inputs = [np.asarray(speech, dtype=np.float32) for speech in speech_inputs]
+
+        # Create BatchFeature with numpy arrays
+        batch_feature_input = BatchFeature({"input_values": np_speech_inputs})
+
+        # Process
+        output = feat_extract(batch_feature_input, padding=True, return_tensors="np")
+
+        # Verify output
+        self.assertIsInstance(output.input_values, np.ndarray)
+        self.assertEqual(output.input_values.shape[0], 3)
+        # Check normalization was applied
+        self._check_zero_mean_unit_variance(output.input_values[0][:800])
