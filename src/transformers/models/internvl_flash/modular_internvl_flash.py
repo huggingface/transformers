@@ -13,47 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.utils.checkpoint as cp
 
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ..internvl.configuration_internvl import InternVLConfig
 from ..internvl.modeling_internvl import (
-    InternVLCausalLMOutputWithPast,
     InternVLModel,
     InternVLModelOutputWithPast,
     InternVLMultiModalProjector,
-    InternVLPreTrainedModel,
-    InternVLVisionAttention,
-    InternVLVisionEmbeddings,
-    InternVLVisionEncoder,
-    InternVLVisionLayer,
-    InternVLVisionMLP,
     InternVLVisionModel,
-    InternVLVisionModelOutputWithPooling,
-    InternVLVisionPatchEmbeddings,
-    InternVLVisionPreTrainedModel,
-    InternVLVisionRMSNorm
 )
 from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
 )
+from ..zoedepth.modeling_zoedepth import ZoeDepthMultiheadAttention
 
 import torch.nn as nn
 
-class InternvlFlashVisionAttention(InternVLVisionAttention):
-    pass
-
-class InternvlFlashVisionConfig(InternVLVisionConfig):
-    pass
 class InternVLFlashMLP(nn.Module):
     def __init__(self, in_dim, out_dim, dropout=0.0):
         super().__init__()
@@ -124,17 +107,19 @@ class InternVLFlashGating(nn.Module):
         probs = torch.softmax(logits, dim=-1)  # 每个 token 的 expert 选择概率
         return probs
 
+class InternvlFlashMultiheadAttention(ZoeDepthMultiheadAttention):
+    pass
 class InternVLFlashCrossAttentionPooling(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim, num_heads=16):
         super().__init__()
         self.query_token = nn.Parameter(torch.randn(1, dim))  # [1, D]
-        self.attn1 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.attn1 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm1 = nn.LayerNorm(dim)
-        self.attn2 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.attn2 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm2 = nn.LayerNorm(dim)
-        self.attn3 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.attn3 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm3 = nn.LayerNorm(dim)
-        self.attn4 = InternvlFlashVisionAttention(InternvlFlashVisionConfig)
+        self.attn4 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm4 = nn.LayerNorm(dim)
 
     def forward(self, batched_tokens: list[torch.Tensor]):
@@ -160,14 +145,27 @@ class InternVLFlashCrossAttentionPooling(nn.Module):
             padding_mask[i, :L] = False
         # 2. Query token: [B, 1, D]
         query = self.query_token.unsqueeze(0).expand(B, -1, -1)  # learnable token for each sample
+
+        # 1. 创建一个全 0 的 float tensor，类型要和 query 一致 (float16/float32)
+        attention_mask = torch.zeros_like(padding_mask, dtype=query.dtype)
+        
+        # 2. 将 padding_mask 为 True (即 Padding) 的位置填为负无穷 (-inf)
+        # 这样在 softmax 时，这些位置的概率会变为 0
+        min_value = torch.finfo(query.dtype).min # 或者用 -1e9
+        attention_mask.masked_fill_(padding_mask, min_value)
+
+        # 3. 调整形状以匹配 Attention Score 的维度: [B, Num_Heads, Q_Len, K_Len]
+        # 当前 attention_mask 是 [B, K_Len]，我们需要把它变成 [B, 1, 1, K_Len]
+        # 这样它才能正确地广播到所有的 Head 和 Query 上
+        attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
         # 3. Attention layers
-        out1, _ = self.attn1(query, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out1 = self.attn1(query, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
         out1 = self.norm1(out1)
-        out2, _ = self.attn2(out1, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out2 = self.attn2(out1, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
         out2 = self.norm2(out2)
-        out3, _ = self.attn3(out2, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out3 = self.attn3(out2, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
         out3 = self.norm3(out3)
-        out4, _ = self.attn4(out3, padded, padded, key_padding_mask=padding_mask)  # [B, 1, D]
+        out4 = self.attn4(out3, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
         out4 = self.norm4(out4)
         return out4.squeeze(1)
 
@@ -239,7 +237,6 @@ class InternvlFlashModel(InternVLModel):
         self,
         input_embeds: torch.Tensor,
         input_ids: torch.Tensor,
-        mask_idx: torch.Tensor,
         lengths: torch.Tensor,
         starts: torch.Tensor,
         ends: torch.Tensor,
@@ -289,6 +286,10 @@ class InternvlFlashModel(InternVLModel):
         self,
         input_ids: torch.Tensor,
     ):
+        if input_ids is None:
+            raise ValueError(
+                "input_ids cannot be None when pixel_values are provided. "
+            )
         input_ids = input_ids.squeeze(0)  # (N,) #todo add batch size support
         selected = input_ids == self.config.image_token_id
         padded = torch.cat(
@@ -344,22 +345,22 @@ class InternvlFlashModel(InternVLModel):
         vit_embeds_256 = self.multi_modal_projector(vit_embeds_256)
 
         relative_threshold_value = torch.quantile(
-            gate_result[:, 0].to(torch.float32), self.flash_relative_threshold
+            gate[:, 0].to(torch.float32), self.flash_relative_threshold
         )
-        gate_result = (gate_result[:, 0] > relative_threshold_value) & (
-            gate_result[:, 0] >= self.flash_absolute_threshold
+        gate = (gate[:, 0] > relative_threshold_value) & (
+            gate[:, 0] >= self.flash_absolute_threshold
         )
 
         selected_embeds = []
-        for i in range(gate_result.size(0)):
-            if gate_result[i]:
+        for i in range(gate.size(0)):
+            if gate[i]:
                 selected_embeds.append(vit_embeds_64[i])
             else:
                 selected_embeds.append(vit_embeds_256[i])
 
         vit_embeds = torch.cat(selected_embeds, dim=0)
 
-        return vit_embeds, gate_result
+        return vit_embeds, gate
 
     def _scatter_image_embeddings(
             self,
@@ -392,9 +393,10 @@ class InternvlFlashModel(InternVLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            lengths, starts, ends= self.get_image_num_per_sample(input_ids) / 256
+        if pixel_values is not None and input_ids is not None:
+            lengths, starts, ends= self.get_image_num_per_sample(input_ids)
             lengths_copy = lengths.clone()
+            lengths = lengths / 256
 
             lengths_sum = torch.ones(int(lengths.sum().item()), dtype=torch.int64)
             lengths = lengths_sum.repeat_interleave(1)
@@ -405,7 +407,6 @@ class InternvlFlashModel(InternVLModel):
 
             input_ids = input_ids.reshape(B * N)
 
-            assert torch.all(attention_mask == 1)
             inputs_embeds, input_ids, keep_mask = self.compress_visual_tokens_in_sentence(
                 input_embeds=inputs_embeds,
                 input_ids=input_ids,
