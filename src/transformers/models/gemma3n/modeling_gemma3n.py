@@ -1639,6 +1639,20 @@ class Gemma3nRotaryEmbedding(nn.Module):
             setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
+    # Add a compatibility method so callers expecting PreTrainedModel-like API don't crash.
+    def get_parameter_or_buffer(self, name: str):
+        # Prefer direct attribute access (parameters and buffers are attributes)
+        if hasattr(self, name):
+            return getattr(self, name)
+        # Fallback: search named parameters and buffers (non-recursive to keep semantics)
+        for n, p in self.named_parameters(recurse=False):
+            if n == name:
+                return p
+        for n, b in self.named_buffers(recurse=False):
+            if n == name:
+                return b
+        raise AttributeError(f"{self.__class__.__name__} has no parameter or buffer named '{name}'")
+
     @staticmethod
     def compute_default_rope_parameters(
         config: Optional[Gemma3nTextConfig] = None,
