@@ -808,18 +808,28 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         vit_embeds_256 = self.multi_modal_projector(vit_embeds_256)
 
         relative_threshold_value = torch.quantile(gate[:, 0].to(torch.float32), self.flash_relative_threshold)
-        gate = (gate[:, 0] > relative_threshold_value) & (gate[:, 0] >= self.flash_absolute_threshold)
+        gate_mask = (gate[:, 0] > relative_threshold_value) & (gate[:, 0] >= self.flash_absolute_threshold)
 
         selected_embeds = []
-        for i in range(gate.size(0)):
-            if gate[i]:
-                selected_embeds.append(vit_embeds_64[i])
+        for i in range(gate_mask.size(0)):
+            prob = gate[i, 0]
+
+            if gate_mask[i]:
+                feat = vit_embeds_64[i]
             else:
-                selected_embeds.append(vit_embeds_256[i])
+                feat = vit_embeds_256[i]
+
+            if self.training:
+                feat = feat + prob - prob.detach()  # straight through estimator for backpropagation
+
+            selected_embeds.append(feat)
 
         vit_embeds = torch.cat(selected_embeds, dim=0)
 
-        return vit_embeds, gate
+        if self.training:
+            vit_embeds = vit_embeds + 0.0 * vit_embeds_64.sum() + 0.0 * vit_embeds_256.sum()
+
+        return vit_embeds, gate_mask
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

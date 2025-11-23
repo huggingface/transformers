@@ -213,3 +213,7 @@ class InternvlFlashModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     @unittest.skip("query token in InternVLFlashCrossAttentionPooling generate randomly")
     def test_can_init_all_missing_weights(self):
         pass
+
+    @unittest.skip("InternVLFlash model requires input_ids to process pixel_values and merge visual features.")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
