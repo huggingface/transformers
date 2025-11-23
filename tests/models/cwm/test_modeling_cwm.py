@@ -18,12 +18,12 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
-    require_deterministic_for_xpu,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
