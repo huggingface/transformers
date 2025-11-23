@@ -247,9 +247,7 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         batch_feature_output = feat_extract(batch_feature_input, padding=True, return_tensors="np")
 
         # Verify outputs match
-        np.testing.assert_allclose(
-            normal_output.input_values, batch_feature_output.input_values, atol=1e-5
-        )
+        np.testing.assert_allclose(normal_output.input_values, batch_feature_output.input_values, atol=1e-5)
 
     @require_torch
     def test_call_with_batch_feature_torch_tensors(self):
