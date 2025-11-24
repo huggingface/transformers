@@ -4,12 +4,11 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from ..smolvlm import SmolVLMImageProcessor
+from ..idefics3 import Idefics3ImageProcessor
 
 
-class ModernVBertImageProcessor(SmolVLMImageProcessor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class ModernVBertImageProcessor(Idefics3ImageProcessor):
+    pass
 
 
 __all__ = ["ModernVBertImageProcessor"]

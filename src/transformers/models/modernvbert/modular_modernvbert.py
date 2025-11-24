@@ -16,36 +16,24 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..modernbert import ModernBertConfig, ModernBertForMaskedLM, ModernBertModel
 from ..siglip import SiglipConfig, SiglipVisionConfig, SiglipVisionModel
-from ..smolvlm import SmolVLMImageProcessor, SmolVLMImageProcessorFast, SmolVLMProcessor
-from ..smolvlm.video_processing_smolvlm import SmolVLMVideoProcessor
-
-from ..auto import AutoConfig, AutoModel, AutoModelForMaskedLM
+from ..idefics3 import Idefics3ImageProcessor, Idefics3ImageProcessorFast, Idefics3Processor
 
 logger = logging.get_logger(__name__)
 
+class ModernVBertImageProcessor(Idefics3ImageProcessor):
+    pass
 
-class ModernVBertVideoProcessor(SmolVLMVideoProcessor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class ModernVBertImageProcessorFast(Idefics3ImageProcessorFast):
+    pass
 
+DEFAULT_CHAT_TEMPLATE = "<|begin_of_text|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
+class ModernVBertProcessor(Idefics3Processor):
+    image_processor_class = "ModernVBertImageProcessor"
 
-class ModernVBertImageProcessor(SmolVLMImageProcessor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-class ModernVBertImageProcessorFast(SmolVLMImageProcessorFast):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-class ModernVBertProcessor(SmolVLMProcessor):
-    image_processor_class = ModernVBertImageProcessor
-    video_processor_class = ModernVBertVideoProcessor
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+    def apply_chat_template(self, conversation, chat_template = None, **kwargs):
+        if chat_template is None:
+            chat_template = DEFAULT_CHAT_TEMPLATE
+        return super().apply_chat_template(conversation, chat_template, **kwargs)
 
 class ModernVBertTextConfig(PretrainedConfig):
     r"""
@@ -176,8 +164,6 @@ class ModernVBertConfig(PretrainedConfig):
             Token id reserved for image tokens inserted into the text stream.
         vocab_size (`int`, optional, defaults to 128256):
             Vocabulary size used by the text embeddings.
-        use_cache (`bool`, optional, defaults to `True`):
-            Whether to cache key/value tensors for attention (relevant for decoder architectures).
         tie_word_embeddings (`bool`, optional, defaults to `False`):
             Whether to tie input token embeddings and output token embeddings.
         pixel_shuffle_factor (`int`, optional, defaults to 4):
@@ -188,86 +174,60 @@ class ModernVBertConfig(PretrainedConfig):
             Padding token id.
         initializer_range (`float`, optional, defaults to 0.02):
             Stddev used for weight initialization.
-        freeze_config (`Any`, optional):
-            Optional config describing which submodules to freeze during training.
-        use_resampler (`bool`, optional, defaults to `False`):
-            Whether to enable an additional resampler on visual features.
-        neftune_noise_alpha (`float`, optional, defaults to 0.0):
-            Alpha parameter for neftune noise injection.
 
     Example:
     ```python
     >>> from modernvbert import ModernVBertConfig
+
     >>> # Initializing configuration
     >>> configuration = ModernVBertConfig()
+
     >>> # Initializing a model from the configuration (model class is implemented in
     >>> # `modernvbert.modeling_modernvbert`)
+
     >>> from modernvbert import ModernVBertModel
     >>> model = ModernVBertModel(configuration)
+
     >>> # Accessing the model configuration
     >>> cfg = model.config
     ```"""
 
     model_type = "modernvbert"
-    sub_configs = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
+    sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
 
     def __init__(
         self,
-        text_config: Union[PretrainedConfig, dict[str, Any]] = None,
-        vision_config: Union[PretrainedConfig, dict[str, Any]] = None,
+        text_config=None,
+        vision_config=None,
         image_token_id: int = 50407,
-        vocab_size=50368,
-        use_cache=True,
-        tie_word_embeddings=False,
-        freeze_config=None,
-        pad_token_id=None,
         initializer_range=0.02,
+        vocab_size=50368,
+        pad_token_id=None,
         pixel_shuffle_factor=4,
-        use_resampler=False,
         additional_vocab_size=0,
-        neftune_noise_alpha=0.0,
         **kwargs,
     ):
-        self.image_token_id = image_token_id
-        self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
-        self.scale_factor = pixel_shuffle_factor
-        self.additional_vocab_size = additional_vocab_size
+        super().__init__(**kwargs)
 
         if text_config is None:
-            text_config = ModernVBertTextConfig.from_base_model("jhu-clsp/ettin-encoder-150m")
+            text_config = self.sub_configs["text_config"].from_base_model("jhu-clsp/ettin-encoder-150m")
         elif isinstance(text_config, dict):
-            text_config = ModernVBertTextConfig.from_dict(text_config)
+            text_config = self.sub_configs["text_config"].from_dict(text_config)
         self.text_config = text_config
 
         if vision_config is None:
-            vision_config = ModernVBertVisionConfig.from_base_model("google/siglip2-base-patch16-512")
+            vision_config = self.sub_configs["vision_config"].from_base_model("google/siglip2-base-patch16-512")
         elif isinstance(vision_config, dict):
-            vision_config = ModernVBertVisionConfig.from_dict(vision_config)
+            vision_config = self.sub_configs["vision_config"].from_dict(vision_config)
         self.vision_config = vision_config
 
-        self.freeze_config = freeze_config
-        self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.use_resampler = use_resampler
-        self.neftune_noise_alpha = neftune_noise_alpha
         self.initializer_range = initializer_range
-
-        hidden_size = kwargs.pop("hidden_size", self.text_config.hidden_size)
-
-        super().__init__(
-            **kwargs,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-        )
-
-    def to_dict(self):
-        output = copy.deepcopy(self.__dict__)
-        output["model_type"] = self.__class__.model_type
-        output["vision_config"] = self.vision_config.to_dict()
-        output["text_config"] = self.text_config.to_dict()
-        return output
+        self.image_token_id = image_token_id
+        self.pad_token_id = pad_token_id
+        self.pixel_shuffle_factor = pixel_shuffle_factor
+        self.vocab_size = vocab_size
+        self.additional_vocab_size = additional_vocab_size
+        self.hidden_size = kwargs.pop("hidden_size", self.text_config.hidden_size)
 
     @classmethod
     def from_pretrained_models(
@@ -452,24 +412,24 @@ class ModernVBertConnector(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.scale_factor = config.pixel_shuffle_factor
+        self.pixel_shuffle_factor = config.pixel_shuffle_factor
         self.modality_projection = ModernVBertSimpleMLP(
-            input_size=config.vision_config.hidden_size * (config.scale_factor**2),
+            input_size=config.vision_config.hidden_size * (config.pixel_shuffle_factor**2),
             output_size=config.text_config.hidden_size,
         )
 
-    def pixel_shuffle(self, x, scale_factor):
+    def pixel_shuffle(self, x, pixel_shuffle_factor):
         bsz, seq, embed_dim = x.size()
         height = width = int(seq**0.5)
         x = x.view(bsz, height, width, embed_dim)
-        x = x.view(bsz, height, int(width / scale_factor), embed_dim * scale_factor)
+        x = x.view(bsz, height, int(width / pixel_shuffle_factor), embed_dim * pixel_shuffle_factor)
         x = x.permute(0, 2, 1, 3)
-        x = x.reshape(bsz, int(width / scale_factor), int(height / scale_factor), embed_dim * (scale_factor**2))
+        x = x.reshape(bsz, int(width / pixel_shuffle_factor), int(height / pixel_shuffle_factor), embed_dim * (pixel_shuffle_factor**2))
         x = x.permute(0, 2, 1, 3)
-        return x.reshape(bsz, int(seq / (scale_factor**2)), embed_dim * (scale_factor**2))
+        return x.reshape(bsz, int(seq / (pixel_shuffle_factor**2)), embed_dim * (pixel_shuffle_factor**2))
 
     def forward(self, image_hidden_states):
-        image_hidden_states = self.pixel_shuffle(image_hidden_states, self.scale_factor)
+        image_hidden_states = self.pixel_shuffle(image_hidden_states, self.pixel_shuffle_factor)
         return self.modality_projection(image_hidden_states)
 
 
@@ -508,7 +468,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         
         self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.pixel_shuffle_factor**2)
         )
 
         self.post_init()
@@ -533,7 +493,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             num_embeddings=text_model_config.vocab_size,
             num_additional_embeddings=config.additional_vocab_size,
             embedding_dim=config.hidden_size,
-            partially_freeze=config.freeze_config["freeze_text_layers"] if config.freeze_config is not None else False,
+            partially_freeze=getattr(config, "freeze_config", {"freeze_text_layers": False})["freeze_text_layers"],
             padding_idx=config.pad_token_id,
         )
         text_model.set_input_embeddings(embed_layer)

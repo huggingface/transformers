@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import copy
 import os
 from typing import Any, Union
 
@@ -142,8 +141,6 @@ class ModernVBertConfig(PretrainedConfig):
             Token id reserved for image tokens inserted into the text stream.
         vocab_size (`int`, optional, defaults to 128256):
             Vocabulary size used by the text embeddings.
-        use_cache (`bool`, optional, defaults to `True`):
-            Whether to cache key/value tensors for attention (relevant for decoder architectures).
         tie_word_embeddings (`bool`, optional, defaults to `False`):
             Whether to tie input token embeddings and output token embeddings.
         pixel_shuffle_factor (`int`, optional, defaults to 4):
@@ -154,86 +151,60 @@ class ModernVBertConfig(PretrainedConfig):
             Padding token id.
         initializer_range (`float`, optional, defaults to 0.02):
             Stddev used for weight initialization.
-        freeze_config (`Any`, optional):
-            Optional config describing which submodules to freeze during training.
-        use_resampler (`bool`, optional, defaults to `False`):
-            Whether to enable an additional resampler on visual features.
-        neftune_noise_alpha (`float`, optional, defaults to 0.0):
-            Alpha parameter for neftune noise injection.
 
     Example:
     ```python
     >>> from modernvbert import ModernVBertConfig
+
     >>> # Initializing configuration
     >>> configuration = ModernVBertConfig()
+
     >>> # Initializing a model from the configuration (model class is implemented in
     >>> # `modernvbert.modeling_modernvbert`)
+
     >>> from modernvbert import ModernVBertModel
     >>> model = ModernVBertModel(configuration)
+
     >>> # Accessing the model configuration
     >>> cfg = model.config
     ```"""
 
     model_type = "modernvbert"
-    sub_configs = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
+    sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
 
     def __init__(
         self,
-        text_config: Union[PretrainedConfig, dict[str, Any]] = None,
-        vision_config: Union[PretrainedConfig, dict[str, Any]] = None,
+        text_config=None,
+        vision_config=None,
         image_token_id: int = 50407,
-        vocab_size=50368,
-        use_cache=True,
-        tie_word_embeddings=False,
-        freeze_config=None,
-        pad_token_id=None,
         initializer_range=0.02,
+        vocab_size=50368,
+        pad_token_id=None,
         pixel_shuffle_factor=4,
-        use_resampler=False,
         additional_vocab_size=0,
-        neftune_noise_alpha=0.0,
         **kwargs,
     ):
-        self.image_token_id = image_token_id
-        self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
-        self.scale_factor = pixel_shuffle_factor
-        self.additional_vocab_size = additional_vocab_size
+        super().__init__(**kwargs)
 
         if text_config is None:
-            text_config = ModernVBertTextConfig.from_base_model("jhu-clsp/ettin-encoder-150m")
+            text_config = self.sub_configs["text_config"].from_base_model("jhu-clsp/ettin-encoder-150m")
         elif isinstance(text_config, dict):
-            text_config = ModernVBertTextConfig.from_dict(text_config)
+            text_config = self.sub_configs["text_config"].from_dict(text_config)
         self.text_config = text_config
 
         if vision_config is None:
-            vision_config = ModernVBertVisionConfig.from_base_model("google/siglip2-base-patch16-512")
+            vision_config = self.sub_configs["vision_config"].from_base_model("google/siglip2-base-patch16-512")
         elif isinstance(vision_config, dict):
-            vision_config = ModernVBertVisionConfig.from_dict(vision_config)
+            vision_config = self.sub_configs["vision_config"].from_dict(vision_config)
         self.vision_config = vision_config
 
-        self.freeze_config = freeze_config
-        self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.use_resampler = use_resampler
-        self.neftune_noise_alpha = neftune_noise_alpha
         self.initializer_range = initializer_range
-
-        hidden_size = kwargs.pop("hidden_size", self.text_config.hidden_size)
-
-        super().__init__(
-            **kwargs,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-        )
-
-    def to_dict(self):
-        output = copy.deepcopy(self.__dict__)
-        output["model_type"] = self.__class__.model_type
-        output["vision_config"] = self.vision_config.to_dict()
-        output["text_config"] = self.text_config.to_dict()
-        return output
+        self.image_token_id = image_token_id
+        self.pad_token_id = pad_token_id
+        self.pixel_shuffle_factor = pixel_shuffle_factor
+        self.vocab_size = vocab_size
+        self.additional_vocab_size = additional_vocab_size
+        self.hidden_size = kwargs.pop("hidden_size", self.text_config.hidden_size)
 
     @classmethod
     def from_pretrained_models(

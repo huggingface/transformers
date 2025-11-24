@@ -182,8 +182,30 @@ TORCH_INIT_FUNCTIONS = {
     "xavier_normal": nn.init.xavier_normal,
     "kaiming_uniform": nn.init.kaiming_uniform,
     "kaiming_normal": nn.init.kaiming_normal,
-    "orthogonal_": nn.init.orthogonal_,
+        "orthogonal_": nn.init.orthogonal_
 }
+
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "colpali",
+    "colmodernvbert",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "shieldgemma2",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+]
 
 
 @contextmanager

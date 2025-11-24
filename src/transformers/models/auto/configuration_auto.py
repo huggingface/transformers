@@ -272,7 +272,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("modernbert", "ModernBertConfig"),
         ("modernbert-decoder", "ModernBertDecoderConfig"),
         ("modernvbert", "ModernVBertConfig"),
-        # ("modernvbert", "ModernVBertConfig"),
         ("moonshine", "MoonshineConfig"),
         ("moshi", "MoshiConfig"),
         ("mpnet", "MPNetConfig"),
