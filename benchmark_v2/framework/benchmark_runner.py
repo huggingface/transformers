@@ -6,7 +6,6 @@ import pathlib
 import re
 import tempfile
 import time
-from contextlib import nullcontext
 from datetime import datetime
 from queue import Queue
 from typing import Any
@@ -77,24 +76,6 @@ def get_git_revision() -> str:
         ref = head.readline().split(" ")[-1].strip()
     with (git_dir / ref).open("r") as git_hash:
         return git_hash.readline().strip()
-
-
-def get_sdpa_backend(backend_name: str | None) -> torch.nn.attention.SDPBackend | None:
-    """Get the SDPA backend enum from string name."""
-    if backend_name is None:
-        return None
-
-    try:
-        backend_map = {
-            "math": torch.nn.attention.SDPBackend.MATH,
-            "flash_attention": torch.nn.attention.SDPBackend.FLASH_ATTENTION,
-            "efficient_attention": torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION,
-            "cudnn_attention": torch.nn.attention.SDPBackend.CUDNN_ATTENTION,
-        }
-        return backend_map.get(backend_name.lower())
-    except AttributeError:
-        # torch.nn.attention.SDPBackend not available in older torch versions
-        return None
 
 
 def flush_memory():
@@ -223,12 +204,7 @@ class BenchmarkRunner:
         self, model_id: str, config: BenchmarkConfig, num_tokens_to_profile: int = 0
     ) -> dict[str, Any] | None:
         """Run a single benchmark with the given model ID and config."""
-        sdpa_ctx = nullcontext()
-        if config.attn_implementation == "sdpa":
-            sdpa_backend = get_sdpa_backend(config.sdpa_backend)
-            sdpa_ctx = torch.nn.attention.sdpa_kernel(sdpa_backend)
-
-        with sdpa_ctx, torch.no_grad():
+        with torch.no_grad():
             self.logger.info(f"Running benchmark scenario: {config.name}")
 
             # Quick validation: try one measurement first to see if this scenario works
@@ -243,14 +219,14 @@ class BenchmarkRunner:
 
             # Warmup runs
             self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
-            for _ in trange(config.warmup_iterations):
+            for _ in trange(config.warmup_iterations, desc="Warmup"):
                 _ = generate_fn(max_new_tokens=config.num_tokens_to_generate)
             self.logger.info("Warmup over.")
 
             # Measurement runs
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
-            for _ in trange(config.measurement_iterations):
+            for _ in trange(config.measurement_iterations, desc="Benchmarking"):
                 e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = generate_fn(
                     max_new_tokens=config.num_tokens_to_generate,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
@@ -281,49 +257,32 @@ class BenchmarkRunner:
     ) -> tuple[float, list[float], str, GPURawMetrics | None]:
         if gpu_monitor is not None:
             gpu_monitor.start()
-        config = GenerationConfig(
-            max_new_tokens=max_new_tokens,
-            eos_token_id=self.tokenizer.eos_token_id,
-            pad_token_id=self.tokenizer.pad_token_id,
-            do_sample=True,
-        )
-        manager = self.model.init_continuous_batching(config)
-        manager.start()
-        try:
-            first_req_results = []
-            timestamps = []
-            wall_time_0 = time.perf_counter()
-            inputs = self.inputs["input_ids"].tolist()
+        # Prepare inputs
+        inputs = self.inputs["input_ids"].tolist()
+        timestamps = []
+        last_result_generated_tokens = None
+        wall_time_0 = time.perf_counter()
+        # We disable prefix sharing because all prompts are the same
+        with self.model.continuous_batching_context_manager(allow_prefix_sharing=False) as manager:
             manager.add_requests(inputs, max_new_tokens=max_new_tokens, streaming=True)
-            first_req_id = None
-            num_requests = len(inputs)
-            finished_requests = 0
-            while finished_requests < num_requests:
+            unfinished_requests = len(inputs)
+            while unfinished_requests > 0:
                 # NOTE: I don't like having the extra if stmt here, but hopefully won't degrade perf too much
                 result = manager.get_result()
-                if result:
-                    timestamps.append(time.perf_counter() - wall_time_0)
+                if result is not None:
+                    timestamps.append(time.perf_counter() - wall_time_0)  # FIXME: the timestamps are wrong
                     if result.is_finished():
-                        finished_requests += 1
-                    if first_req_id is None:
-                        first_req_id = result.request_id
-                    if result.request_id == first_req_id:
-                        first_req_results.append(result)
-                else:
-                    if not manager.is_running():
-                        raise RuntimeError("Generation thread exited unexpectedly")
-            wall_time_1 = time.perf_counter()
-            gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
-            decoded_output = self.tokenizer.decode(
-                [res.generated_tokens[0] for res in first_req_results], skip_special_tokens=True
-            )
-            shape_and_decoded_output = f"{(1, len(first_req_results))} | {decoded_output}"
-            e2e_latency = wall_time_1 - wall_time_0
-            return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
-        except Exception as e:
-            raise e
-        finally:
-            manager.stop()
+                        last_result_generated_tokens = result.generated_tokens
+                        unfinished_requests -= 1
+                elif not manager.is_running():
+                    raise RuntimeError("Generation thread exited unexpectedly")
+        # Post-processing
+        wall_time_1 = time.perf_counter()
+        e2e_latency = wall_time_1 - wall_time_0
+        gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
+        decoded_output = self.tokenizer.decode(last_result_generated_tokens, skip_special_tokens=True)
+        shape_and_decoded_output = f"{(1, len(last_result_generated_tokens))} | {decoded_output}"
+        return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def time_generate(
         self,
