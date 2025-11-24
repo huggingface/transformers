@@ -17,6 +17,7 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
@@ -239,7 +240,6 @@ class InternvlFlashModel(InternVLModel):
         input_ids: torch.Tensor,
         lengths: torch.Tensor,
         starts: torch.Tensor,
-        ends: torch.Tensor,
         img_context_token_id: int,
         gate_result,
     ) -> tuple:
@@ -273,10 +273,6 @@ class InternvlFlashModel(InternVLModel):
             delete_flags[indices_to_remove] = 1
 
 
-
-        cumulative_deletes = torch.cumsum(delete_flags, dim=0)
-        cumulative_deletes = torch.cat([cumulative_deletes, cumulative_deletes[-1:].clone()], dim=0)
-
         new_input_embeds = input_embeds[keep_mask.to(input_embeds.device), :]
         new_input_ids = input_ids[keep_mask.to(input_ids.device)]
 
@@ -290,18 +286,23 @@ class InternvlFlashModel(InternVLModel):
             raise ValueError(
                 "input_ids cannot be None when pixel_values are provided. "
             )
-        input_ids = input_ids.squeeze(0)  # (N,) #todo add batch size support
+        if input_ids.dim() ==  1:
+            input_ids = input_ids.squeeze(0)  # (N,) #todo add batch size support
         selected = input_ids == self.config.image_token_id
-        padded = torch.cat(
-            [torch.tensor([0], device=selected.device), selected.int(), torch.tensor([0], device=selected.device)]
-        )
-        diff = torch.diff(padded)
 
-        starts = (diff == 1).nonzero(as_tuple=True)[0]
-        ends = (diff == -1).nonzero(as_tuple=True)[0]
+        padded = F.pad(selected.int(), (1, 1), value=0)
+        diff = torch.diff(padded, dim=1)
+
+        starts_coords = (diff == 1).nonzero(as_tuple=False)
+        ends_coords = (diff == -1).nonzero(as_tuple=False)
+
+        batch_indices = starts_coords[:, 0]
+
+        starts = starts_coords[:, 1]
+        ends = ends_coords[:, 1]
         lengths = ends - starts
 
-        return lengths, starts, ends
+        return lengths, starts, batch_indices
 
     def get_image_features(
         self,
@@ -366,7 +367,7 @@ class InternvlFlashModel(InternVLModel):
             selected_embeds.append(feat)
             
         vit_embeds = torch.cat(selected_embeds, dim=0)
-        
+
         if self.training:
                     vit_embeds = vit_embeds + 0.0 * vit_embeds_64.sum() + 0.0 * vit_embeds_256.sum()
 
@@ -405,18 +406,19 @@ class InternvlFlashModel(InternVLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None and input_ids is not None:
-            lengths, starts, ends= self.get_image_num_per_sample(input_ids)
+            lengths, starts, batch_indices= self.get_image_num_per_sample(input_ids)
             lengths_copy = lengths.clone()
             lengths = lengths / 256
 
             lengths_sum = torch.ones(int(lengths.sum().item()), dtype=torch.int64)
-            lengths = lengths_sum.repeat_interleave(1)
-            vit_embeds, gate_result = self.get_image_features(pixel_values, lengths)
+            vit_embeds, gate_result = self.get_image_features(pixel_values, lengths_sum)
 
             B, N, C = inputs_embeds.shape
             inputs_embeds = inputs_embeds.reshape(B * N, C)
 
             input_ids = input_ids.reshape(B * N)
+
+            global_starts = starts + (batch_indices * N)
 
             inputs_embeds, input_ids, keep_mask = self.compress_visual_tokens_in_sentence(
                 input_embeds=inputs_embeds,
@@ -424,8 +426,7 @@ class InternvlFlashModel(InternVLModel):
                 img_context_token_id=self.config.image_token_id,
                 gate_result=gate_result,
                 lengths=lengths_copy,
-                starts=starts,
-                ends=ends,
+                starts=global_starts
             )
 
             attention_mask = attention_mask[:, keep_mask].to(inputs_embeds.device)
