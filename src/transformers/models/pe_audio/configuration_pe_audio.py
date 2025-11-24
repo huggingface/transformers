@@ -139,6 +139,12 @@ class PEAudioEncoderConfig(PretrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
+    _default_dac_config_kwargs = {
+        "downsampling_ratios": [2, 8, 10, 12],
+        "encoder_hidden_size": 64,
+        "codebook_dim": 128,
+    }
+
     def __init__(
         self,
         dac_config=None,
@@ -171,14 +177,9 @@ class PEAudioEncoderConfig(PretrainedConfig):
         )
         if isinstance(dac_config, dict):
             dac_config["model_type"] = dac_config.get("model_type", "dac")
-            dac_config = CONFIG_MAPPING[dac_config["model_type"]](**dac_config)
+            dac_config = CONFIG_MAPPING[dac_config["model_type"]](**{**self._default_dac_config_kwargs, **dac_config})
         elif dac_config is None:
-            dac_config = CONFIG_MAPPING["dac"](
-                downsampling_ratios=[2, 8, 10, 12],
-                encoder_hidden_size=64,
-                codebook_dim=128,
-            )
-            # TODO: add log
+            dac_config = CONFIG_MAPPING["dac"](**self._default_dac_config_kwargs)
 
         self.dac_config = dac_config
         self.vocab_size = vocab_size
@@ -226,6 +227,14 @@ class PEAudioConfig(PretrainedConfig):
     model_type = "pe_audio"
     sub_configs = {"text_config": AutoConfig, "audio_config": PEAudioEncoderConfig}
 
+    _default_text_config_kwargs = {
+        "model_type": "modernbert",
+        "hidden_size": 1024,
+        "intermediate_size": 2624,
+        "num_hidden_layers": 22,
+        "num_attention_heads": 16,
+    }
+
     def __init__(
         self,
         text_config=None,
@@ -238,19 +247,14 @@ class PEAudioConfig(PretrainedConfig):
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "modernbert")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["modernbert"](
-                hidden_size=1024,
-                intermediate_size=2624,
-                num_hidden_layers=22,
-                num_attention_heads=16,
-                # classifier_pooling="mean",
+            text_config = CONFIG_MAPPING[text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **text_config}
             )
-            # TODO: add log
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
 
         if isinstance(audio_config, dict):
-            audio_config = PEAudioEncoderConfig.from_dict(audio_config)
+            audio_config = PEAudioEncoderConfig(**audio_config)
         elif audio_config is None:
             audio_config = PEAudioEncoderConfig()
             # TODO: add log

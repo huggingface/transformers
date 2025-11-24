@@ -23,6 +23,15 @@ from ..timm_wrapper import TimmWrapperConfig
 class PEVideoEncoderConfig(Qwen3Config):
     model_type = "pe_video_encoder"
     sub_configs = {"vision_config": TimmWrapperConfig}
+
+    _default_vision_config_kwargs = {
+        "architecture": "vit_pe_core_large_patch14_336",
+        "do_pooling": True,
+        "num_classes": 1024,
+        "global_pool": "map",
+        "initializer_range": 0.02,
+    }
+    
     def __init__(
         self,
         vision_config=None,
@@ -50,17 +59,12 @@ class PEVideoEncoderConfig(Qwen3Config):
         **kwargs,
     ):
         if isinstance(vision_config, dict):
-            vision_config['model_type'] = vision_config.get('model_type', 'timm_wrapper')
-            vision_config = CONFIG_MAPPING[vision_config['model_type']](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING['timm_wrapper'](
-                architecture='vit_pe_core_large_patch14_336',
-                do_pooling=True,
-                num_labels=1024,
-                global_pool='map',
-                initializer_range=0.02,
+            vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]].from_dict(
+                {**self._default_vision_config_kwargs, **vision_config}
             )
-            # TODO: add log
+        elif vision_config is None:
+            vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
 
         self.vision_config = vision_config
 
@@ -112,7 +116,7 @@ class PEVideoConfig(PretrainedConfig):
             # TODO: add log
 
         if isinstance(video_config, dict):
-            video_config = PEVideoEncoderConfig.from_dict(video_config)
+            video_config = PEVideoEncoderConfig(**video_config)
         elif video_config is None:
             video_config = PEVideoEncoderConfig()
             # TODO: add log

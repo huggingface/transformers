@@ -234,6 +234,14 @@ class PEAudioVideoConfig(PretrainedConfig):
     model_type = "pe_audio"
     sub_configs = {"text_config": AutoConfig, "audio_video_config": PEAudioVideoEncoderConfig}
 
+    _default_text_config_kwargs = {
+        "model_type": "modernbert",
+        "hidden_size": 1024,
+        "intermediate_size": 2624,
+        "num_hidden_layers": 28,
+        "num_attention_heads": 16,
+    }
+
     def __init__(
         self,
         text_config=None,
@@ -245,19 +253,14 @@ class PEAudioVideoConfig(PretrainedConfig):
         super().__init__(**kwargs)
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "modernbert")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["modernbert"](
-                hidden_size=1024,
-                intermediate_size=2624,
-                num_hidden_layers=28,
-                num_attention_heads=16,
-                # classifier_pooling="mean",
+            text_config = CONFIG_MAPPING[text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **text_config}
             )
-            # TODO: add log
+        elif text_config is None:
+            text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
 
         if isinstance(audio_video_config, dict):
-            audio_video_config = PEAudioVideoEncoderConfig.from_dict(audio_video_config)
+            audio_video_config = PEAudioVideoEncoderConfig(**audio_video_config)
         elif audio_video_config is None:
             audio_video_config = PEAudioVideoEncoderConfig()
             # TODO: add log
