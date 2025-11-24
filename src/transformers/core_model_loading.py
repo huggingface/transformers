@@ -164,7 +164,6 @@ class Concatenate(ConversionOps):
         self.dim = dim
         self.reverse_op = Chunk
 
-    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
@@ -194,7 +193,6 @@ class MergeModulelist(Concatenate):
         super().__init__(dim=dim)
         self.reverse_op = SplitModulelist
 
-    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
@@ -225,7 +223,6 @@ class SplitModulelist(ConversionOps):
         self.dim = dim
         self.reverse_op = MergeModulelist
 
-    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
@@ -265,7 +262,6 @@ class PermuteForRope(ConversionOps):
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
         return tensor
 
-    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
