@@ -398,7 +398,10 @@ class PeftAdapterMixin:
                 # We only want to call prepare_model_for_compiled_hotswap once
                 self._prepare_peft_hotswap_kwargs = None
         else:
-            from peft.utils.hotswap import check_hotswap_configs_compatible, hotswap_adapter_from_state_dict
+            from peft.utils.hotswap import (
+                check_hotswap_configs_compatible,
+                hotswap_adapter_from_state_dict,
+            )
 
             check_hotswap_configs_compatible(
                 self.peft_config[adapter_name], peft_config
