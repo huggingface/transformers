@@ -2432,8 +2432,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
+        try:
+            vocab_size = tokenizer.vocab_size
+        except NotImplementedError:
+            vocab_size = 0
 
-        if hasattr(tokenizer, "vocab_size") and tokenizer.vocab_size > 100000 and hasattr(tokenizer, "_tokenizer") and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None:
+        if (
+            vocab_size > 100000
+            and hasattr(tokenizer, "_tokenizer")
+            and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
+        ):
             from huggingface_hub import model_info
 
             def is_base_mistral(model_id: str) -> bool:
