@@ -23,11 +23,12 @@ from typing import Any, Optional, Union
 
 from transformers.utils.import_utils import is_mistral_common_available
 
+
+from ...tokenization_python import PreTrainedTokenizer
 from ... import PythonBackend
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from ...tokenization_python import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE, find_sentencepiece_model_file, load_vocab_and_merges
 from ...utils import (
     extract_commit_hash,

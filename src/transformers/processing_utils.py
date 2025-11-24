@@ -1427,12 +1427,19 @@ class ProcessorMixin(PushToHubMixin):
         # hints to keep backward compatibility (e.g. dynamic processors stored on the Hub).
         if not attributes:
             for attribute_name, value in cls.__dict__.items():
-                if value is None or attribute_name == "audio_tokenizer_class" or not attribute_name.endswith("_class"):
+                if (
+                    value is None
+                    or attribute_name == "audio_tokenizer_class"
+                    or not attribute_name.endswith("_class")
+                ):
                     continue
                 inferred_attribute = attribute_name[: -len("_class")]
                 if inferred_attribute == "audio_tokenizer":
                     continue
-                if inferred_attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING or "tokenizer" in inferred_attribute:
+                if (
+                    inferred_attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING
+                    or "tokenizer" in inferred_attribute
+                ):
                     attributes.append(inferred_attribute)
 
         return attributes

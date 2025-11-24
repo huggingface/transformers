@@ -108,9 +108,7 @@ class CLIPTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(
-                    Regex(
-                        r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"""
-                    ),
+                    Regex(r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+"""),
                     behavior="removed",
                     invert=True,
                 ),
@@ -122,7 +120,7 @@ class CLIPTokenizer(TokenizersBackend):
 
         bos_token_id = _vocab.get(str(bos_token), 0)
         eos_token_id = _vocab.get(str(eos_token), 1)
-
+        
         self._tokenizer.post_processor = processors.RobertaProcessing(
             sep=(str(eos_token), eos_token_id),
             cls=(str(bos_token), bos_token_id),
@@ -140,6 +138,7 @@ class CLIPTokenizer(TokenizersBackend):
             pad_token=pad_token,
             **kwargs,
         )
+
 
         if hasattr(self, "_post_init"):
             self._post_init()
@@ -162,6 +161,7 @@ class CLIPTokenizer(TokenizersBackend):
             return text
 
         self.backend_tokenizer.decode = new_decode_method
+
 
 
 __all__ = ["CLIPTokenizer"]

@@ -2599,7 +2599,9 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
 
         self.assertEqual(tokenizer_r.add_special_tokens({}), 0)
         self.assertEqual(tokenizer_r.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
-        self.assertRaises(ValueError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"})
+        self.assertRaises(
+            ValueError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"}
+        )
         self.assertEqual(tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken2>"]}), 1)
         self.assertEqual(
             tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
