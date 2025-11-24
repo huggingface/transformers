@@ -618,7 +618,7 @@ class S3TokenizerV2Core(torch.nn.Module):
 @dataclass
 @auto_docstring
 class S3TokenizerOutput(ModelOutput):
-    """
+    r"""
     speech_tokens (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
         Discrete speech tokens computed using `model.quantize`.
     speech_token_lens (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -648,7 +648,8 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
     repository into HuggingFace Transformers.
 
     Args:
-        config (S3TokenizerConfig): Model configuration class with all parameters of the model.
+            config (S3TokenizerConfig): Model configuration class with all parameters of the model.
+            name (`str`, *optional*, defaults to `"speech_tokenizer_v2_25hz"`): <fill_docstring>
     """
 
     ignore_state_dict_missing = ("_mel_filters",)
