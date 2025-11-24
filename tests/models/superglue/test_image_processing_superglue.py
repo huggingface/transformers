@@ -28,17 +28,14 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import (
-    ImageProcessingTestMixin,
-    prepare_image_inputs,
-)
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
     import numpy as np
     import torch
 
-    from transformers.models.superglue.modeling_superglue import KeypointMatchingOutput
+    from transformers.models.superglue.modeling_superglue import SuperGlueKeypointMatchingOutput
 
 if is_vision_available():
     from transformers import SuperGlueImageProcessor
@@ -125,7 +122,7 @@ class SuperGlueImageProcessingTester:
             matches[i, 1, random_matches_indices0] = random_matches_indices1
             scores[i, 0, random_matches_indices1] = torch.rand((random_number_matches,))
             scores[i, 1, random_matches_indices0] = torch.rand((random_number_matches,))
-        return KeypointMatchingOutput(mask=mask, keypoints=keypoints, matches=matches, matching_scores=scores)
+        return SuperGlueKeypointMatchingOutput(mask=mask, keypoints=keypoints, matches=matches, matching_scores=scores)
 
 
 @require_torch
@@ -450,7 +447,9 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             matches[0, 0, 1] = 2  # Points to index 2, which is valid
             scores[0, 0, 1] = 0.8
 
-            outputs = KeypointMatchingOutput(mask=mask, keypoints=keypoints, matches=matches, matching_scores=scores)
+            outputs = SuperGlueKeypointMatchingOutput(
+                mask=mask, keypoints=keypoints, matches=matches, matching_scores=scores
+            )
 
             image_sizes = [((480, 640), (480, 640))]
 
