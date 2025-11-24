@@ -828,7 +828,6 @@ class ContinuousBatchingManager:
                     f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
                 )
             else:
-                logger.debug("\nPrefix sharing was off.")  # NOTE: not warning because this bring no inforantion
 
         if self._generation_thread is None:
             logger.warning("Manager not started.")
