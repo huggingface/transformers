@@ -1208,7 +1208,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model(self):
         device_map = {
             "transformer.wte": f"{torch_device}:0",
