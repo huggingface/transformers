@@ -151,7 +151,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
-_re_tokenizer_file = re.compile(r"(tokenizer|tekken)\.(.*)\.json")
+_re_tokenizer_file = re.compile(r"tokenizer\.(.*)\.json")
 
 
 class TruncationStrategy(ExplicitEnum):
@@ -2107,7 +2107,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             remote_files = os.listdir(pretrained_model_name_or_path)
 
-        if not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
+        if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
             other_pattern = re.escape("tekken.json|tokenizer.model.*")
