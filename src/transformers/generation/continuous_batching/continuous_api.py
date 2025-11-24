@@ -51,7 +51,7 @@ number of queries tokens is 1000, and NUM_Q_CUDA_GRAPHS is 4, we will slice the 
 
 Smaller slices means more granularity and thus less padding. But since each graph takes up space on the GPU and time to
 create, we don't want to many graphs. And since the size of the KV dimension is the number of queries tokens plus the
-number of tokens cached, dimension of KV is usually much larger than the the dimension of Q. So we have more granularity
+number of tokens cached, dimension of KV is usually much larger than the dimension of Q. So we have more granularity
 for the KV dimension than the query dimension.
 """
 NUM_Q_CUDA_GRAPHS = 4

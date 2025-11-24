@@ -91,15 +91,15 @@ class BlockManager:
         if len(self._uninit_block_ids) >= n_blocks:
             return True
         # Exit early if even after uninitializing all initialized blocks, there are not enough free blocks
-        block_to_unintialize = n_blocks - len(self._uninit_block_ids)
-        if len(self._init_block_ids) < block_to_unintialize:
+        block_to_uninitialize = n_blocks - len(self._uninit_block_ids)
+        if len(self._init_block_ids) < block_to_uninitialize:
             return False
         # Uninitialize the required amount of blocks
-        for _ in range(block_to_unintialize):
-            id_to_unintialize = self._init_block_ids.popitem()[0]
-            block = self._id_to_block[id_to_unintialize]
+        for _ in range(block_to_uninitialize):
+            id_to_uninitialize = self._init_block_ids.popitem()[0]
+            block = self._id_to_block[id_to_uninitialize]
             self._hash_to_id.pop(block.hash)
-            self._uninit_block_ids.append(id_to_unintialize)
+            self._uninit_block_ids.append(id_to_uninitialize)
         return True
 
     def get_free_blocks(self, n_blocks: int, last_block_id: int | None) -> list[int] | None:
