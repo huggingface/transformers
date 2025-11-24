@@ -28,6 +28,7 @@ from torch.nn import functional as F
 
 from transformers.activations import ACT2FN
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
@@ -926,52 +927,6 @@ class GraniteMoeHybridRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class GraniteFlashAttentionKwargs(TypedDict, total=False):
-    """
-    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
-    Use cases include padding-free training and fewer `torch.compile` graph breaks.
-
-    Attributes:
-        cu_seq_lens_q (`torch.LongTensor`)
-            Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`)
-            Gets cumulative sequence length for key state.
-        max_length_q (`int`):
-            Maximum sequence length for query state.
-        max_length_k (`int`):
-            Maximum sequence length for key state.
-        seq_idx (`torch.IntTensor):
-            Index of each packed sequence.
-    """
-
-    cu_seq_lens_q: torch.LongTensor
-    cu_seq_lens_k: torch.LongTensor
-    max_length_q: int
-    max_length_k: int
-    seq_idx: torch.IntTensor
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class GraniteMoeHybridRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        GraniteMoeHybridRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 class GraniteMoeHybridParallelExperts(nn.Module):
     def __init__(self, num_experts: int, input_size: int, output_size: int) -> None:
         """
@@ -1113,16 +1068,63 @@ class GraniteMoeHybridMoE(nn.Module):
         return layer_output
 
 
+class GraniteFlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
+    Use cases include padding-free training and fewer `torch.compile` graph breaks.
+
+    Attributes:
+        cu_seq_lens_q (`torch.LongTensor`)
+            Gets cumulative sequence length for query state.
+        cu_seq_lens_k (`torch.LongTensor`)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`):
+            Maximum sequence length for query state.
+        max_length_k (`int`):
+            Maximum sequence length for key state.
+        seq_idx (`torch.IntTensor):
+            Index of each packed sequence.
+    """
+
+    cu_seq_lens_q: torch.LongTensor
+    cu_seq_lens_k: torch.LongTensor
+    max_length_q: int
+    max_length_k: int
+    seq_idx: torch.IntTensor
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class GraniteMoeHybridRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        GraniteMoeHybridRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         # Either attention or mamba will be initialized, depending on the layer type.
         self.self_attn = None
-        self.block_sparse_moe = GraniteMoeHybridMoE(config)
         self.input_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        # Allow non-MoE (dense)
+        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
         self.shared_mlp = GraniteMoeHybridMLP(config)
         self.mamba = None
@@ -1202,16 +1204,17 @@ class GraniteMoeHybridPreTrainedModel(PreTrainedModel):
     }
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
 
 
 @auto_docstring
@@ -1395,7 +1398,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class GraniteMoeHybridForCausalLM(GraniteMoeHybridPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

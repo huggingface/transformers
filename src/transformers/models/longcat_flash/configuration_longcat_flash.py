@@ -129,9 +129,9 @@ class LongcatFlashConfig(PreTrainedConfig):
         "layers.*.mlps.*.gate_proj": "colwise",
         "layers.*.mlps.*.up_proj": "colwise",
         "layers.*.mlps.*.down_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
     }
 
     base_model_pp_plan = {
@@ -157,7 +157,7 @@ class LongcatFlashConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         ffn_hidden_size: Optional[int] = 12288,

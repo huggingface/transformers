@@ -116,7 +116,7 @@ class MimiConfig(PreTrainedConfig):
         use_streaming (`bool`, *optional*, defaults to `False`):
             Whether to use streaming mode. If `True`, the model encode method will return the padding cache that can be used in a subsequent call to the encode method.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 250):
@@ -179,7 +179,7 @@ class MimiConfig(PreTrainedConfig):
         norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = False,
         use_streaming: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         sliding_window: Optional[int] = 250,
         attention_dropout: Optional[float] = 0.0,
         layer_scale_initial_scale: Optional[float] = 0.01,

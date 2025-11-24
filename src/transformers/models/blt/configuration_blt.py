@@ -44,7 +44,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         max_position_embeddings: Optional[int] = 24576,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 2816,
         initializer_range: Optional[float] = 0.02,
@@ -99,7 +99,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         max_position_embeddings: Optional[int] = 24576,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 2816,
         initializer_range: Optional[float] = 0.02,
@@ -150,7 +150,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         max_position_embeddings: Optional[int] = 4096,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 5632,
         initializer_range: Optional[float] = 0.02,
@@ -211,7 +211,7 @@ class BltPatcherConfig(PreTrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 2048):
             Dimension of the MLP representations.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -231,7 +231,7 @@ class BltPatcherConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         intermediate_size: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
@@ -307,7 +307,7 @@ class BltConfig(PreTrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
 
@@ -356,7 +356,7 @@ class BltConfig(PreTrainedConfig):
         global_config: Optional[dict] = None,
         tie_word_embeddings: Optional[bool] = False,
         initializer_range: Optional[float] = 0.02,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         # Basic model configuration

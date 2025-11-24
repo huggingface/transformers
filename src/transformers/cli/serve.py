@@ -305,7 +305,7 @@ class TimedModel:
         self,
         model: "PreTrainedModel",
         timeout_seconds: int,
-        processor: Optional[Union["ProcessorMixin", "PreTrainedTokenizerFast"]] = None,
+        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -363,7 +363,7 @@ class Serve:
             ),
         ] = "auto",
         dtype: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(
                 help="Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, the dtype will be automatically derived from the model's weights."
             ),
@@ -372,19 +372,15 @@ class Serve:
             bool, typer.Option(help="Whether to trust remote code when loading a model.")
         ] = False,
         attn_implementation: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(
                 help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
             ),
         ] = None,
-        load_in_8bit: Annotated[
-            bool, typer.Option(help="Whether to use 8 bit precision for the base model - works only with LoRA.")
-        ] = False,
-        load_in_4bit: Annotated[
-            bool, typer.Option(help="Whether to use 4 bit precision for the base model - works only with LoRA.")
-        ] = False,
-        bnb_4bit_quant_type: Annotated[str, typer.Option(help="Quantization type.")] = "nf4",
-        use_bnb_nested_quant: Annotated[bool, typer.Option(help="Whether to use nested quantization.")] = False,
+        quantization: Annotated[
+            Optional[str],
+            typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
+        ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
         port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
         model_timeout: Annotated[
@@ -394,7 +390,7 @@ class Serve:
             str, typer.Option(help="Logging level as a string. Example: 'info' or 'warning'.")
         ] = "info",
         default_seed: Annotated[
-            Optional[int], typer.Option(help="The default seed for torch, should be an integer.")
+            int | None, typer.Option(help="The default seed for torch, should be an integer.")
         ] = None,
         enable_cors: Annotated[
             bool,
@@ -404,7 +400,7 @@ class Serve:
         ] = False,
         input_validation: Annotated[bool, typer.Option(help="Whether to turn on strict input validation.")] = False,
         force_model: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(
                 help="Name of the model to be forced on all requests. This is useful for testing Apps that don't allow changing models in the request."
             ),
@@ -424,10 +420,7 @@ class Serve:
         self.dtype = dtype
         self.trust_remote_code = trust_remote_code
         self.attn_implementation = attn_implementation
-        self.load_in_8bit = load_in_8bit
-        self.load_in_4bit = load_in_4bit
-        self.bnb_4bit_quant_type = bnb_4bit_quant_type
-        self.use_bnb_nested_quant = use_bnb_nested_quant
+        self.quantization = quantization
         self.host = host
         self.port = port
         self.model_timeout = model_timeout
@@ -452,7 +445,7 @@ class Serve:
         # Internal state:
         # 1. Tracks models in memory, to prevent reloading the model unnecessarily
         self.loaded_models: dict[str, TimedModel] = {}
-        self.running_continuous_batching_manager: Optional[ContinuousBatchingManager] = None
+        self.running_continuous_batching_manager: ContinuousBatchingManager | None = None
 
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefill
@@ -655,13 +648,13 @@ class Serve:
     def build_chat_completion_chunk(
         self,
         request_id: str = "",
-        content: Optional[int] = None,
-        model: Optional[str] = None,
-        role: Optional[str] = None,
-        finish_reason: Optional[str] = None,
-        tool_calls: Optional[list["ChoiceDeltaToolCall"]] = None,
-        decode_stream: Optional[DecodeStream] = None,
-        tokenizer: Optional[PreTrainedTokenizerFast] = None,
+        content: int | None = None,
+        model: str | None = None,
+        role: str | None = None,
+        finish_reason: str | None = None,
+        tool_calls: list["ChoiceDeltaToolCall"] | None = None,
+        decode_stream: DecodeStream | None = None,
+        tokenizer: PreTrainedTokenizerFast | None = None,
     ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -820,7 +813,7 @@ class Serve:
         # TODO (Joao, Lysandre): this should also work with tool support
         inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
             model.device
-        )[0]
+        )["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
             try:
@@ -1244,7 +1237,7 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
@@ -1548,7 +1541,7 @@ class Serve:
         else:
             raise ValueError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
@@ -1688,21 +1681,19 @@ class Serve:
         Returns:
             `Optional[BitsAndBytesConfig]`: The quantization config.
         """
-        if self.load_in_4bit:
+        if self.quantization == "bnb-4bit":
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `dtype`
-                bnb_4bit_compute_dtype=self.dtype,
-                bnb_4bit_quant_type=self.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=self.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=self.dtype,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
             )
-        elif self.load_in_8bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True,
-            )
+        elif self.quantization == "bnb-8bit":
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         else:
             quantization_config = None
+
+        if quantization_config is not None:
+            logger.info(f"Quantization applied with the following config: {quantization_config}")
 
         return quantization_config
 
@@ -1750,7 +1741,6 @@ class Serve:
             revision=revision,
             trust_remote_code=self.trust_remote_code,
         )
-
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
@@ -1758,18 +1748,14 @@ class Serve:
             "revision": revision,
             "attn_implementation": self.attn_implementation,
             "dtype": dtype,
-            "device_map": "auto",
+            "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
+            "quantization_config": quantization_config,
         }
-        if quantization_config is not None:
-            model_kwargs["quantization_config"] = quantization_config
 
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
         architecture = getattr(transformers, config.architectures[0])
         model = architecture.from_pretrained(model_id, **model_kwargs)
-
-        if getattr(model, "hf_device_map", None) is None:
-            model = model.to(self.device)
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20

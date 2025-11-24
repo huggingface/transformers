@@ -20,6 +20,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 import torch.nn as nn
 from parameterized import parameterized
@@ -35,6 +36,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     require_flash_attn,
     require_torch,
@@ -74,7 +76,7 @@ def _test_encoder_eager_matches_sdpa_inference(
 ):
     """
     This test is written as a regular function to be able to overload it easily with different tolerances.
-    Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
+    Otherwise, `parameterize.expand` prevents it as it removes the original function from the namespace.
     """
     if not self.has_attentions:
         self.skipTest(reason="Model architecture does not support attentions")
@@ -830,7 +832,14 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-4, rtol=1e-4)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
-        EXPECTED_DECODED_TEXT = "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress"
+        # fmt: off
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                ("xpu", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+            }
+        ).get_expectation()
+        # fmt: on
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -873,11 +882,21 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+        # fmt: off
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): [
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+                ],
+                ("xpu", None): [
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+                ],
+            }
+        ).get_expectation()
+        # fmt: on
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-            "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
-        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -907,6 +926,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
             "lkhl/VideoLLaMA3-2B-Image-HF",
@@ -933,6 +953,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
             "lkhl/VideoLLaMA3-2B-Image-HF",
