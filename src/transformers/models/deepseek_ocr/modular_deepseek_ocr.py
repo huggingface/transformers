@@ -1325,4 +1325,8 @@ __all__ = [
     "DeepseekOcrProjector",
     "DeepseekOcrSamVisionEncoder",
     "DeepseekOcrCLIPVisionModel",
+    "DeepseekOCRForCausalLM",
 ]
+
+
+DeepseekOCRForCausalLM = DeepseekOcrForConditionalGeneration

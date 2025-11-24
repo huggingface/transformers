@@ -2040,4 +2040,8 @@ __all__ = [
     "DeepseekOcrProjector",
     "DeepseekOcrSamVisionEncoder",
     "DeepseekOcrCLIPVisionModel",
+    "DeepseekOCRForCausalLM",
 ]
+
+
+DeepseekOCRForCausalLM = DeepseekOcrForConditionalGeneration # hack for vLLM, do not merge as is
