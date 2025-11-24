@@ -2099,9 +2099,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
-        if not is_local:
-            remote_files = list_repo_files(pretrained_model_name_or_path)
-
+        if not is_local and not local_files_only:
+            try:
+                remote_files = list_repo_files(pretrained_model_name_or_path)
+            except Exception:
+                remote_files = []
         else:
             remote_files = os.listdir(pretrained_model_name_or_path)
 
@@ -2431,11 +2433,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 " fine-tuned or trained."
             )
 
-        if (
-            tokenizer.vocab_size > 100000
-            and hasattr(tokenizer, "_tokenizer")
-            and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
-        ):
+        if hasattr(tokenizer, "vocab_size") and tokenizer.vocab_size > 100000 and hasattr(tokenizer, "_tokenizer") and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None:
             from huggingface_hub import model_info
 
             def is_base_mistral(model_id: str) -> bool:
