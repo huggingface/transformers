@@ -165,9 +165,9 @@ class S3TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_window_buffer_loading(self):
         """Test that the window buffer can be loaded from checkpoint if it exists."""
-        import torch
         import tempfile
-        import os
+
+        import torch
 
         config = self.model_tester.get_config()
         model1 = S3TokenizerModel(config=config)

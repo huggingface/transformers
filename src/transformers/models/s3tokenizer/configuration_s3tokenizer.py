@@ -39,14 +39,8 @@ class S3TokenizerConfig(PreTrainedConfig):
             Number of mel-frequency bins for the mel-spectrogram.
         n_fft (`int`, *optional*, defaults to 400):
             Size of the FFT window for computing the mel-spectrogram.
-        hop_length (`int`, *optional*, defaults to 160):
-            Number of audio samples between adjacent STFT columns (10ms at 16kHz).
-        token_rate (`int`, *optional*, defaults to 25):
-            Number of speech tokens generated per second of audio (25 Hz for v2 models).
         vocab_size (`int`, *optional*, defaults to 6561):
             Vocabulary size of the S3 tokenizer (3^8 for FSQ quantization).
-        n_audio_ctx (`int`, *optional*, defaults to 1500):
-            Maximum audio context length.
         n_audio_state (`int`, *optional*, defaults to 1280):
             Hidden state dimension of the audio encoder.
         n_audio_head (`int`, *optional*, defaults to 20):
@@ -78,10 +72,7 @@ class S3TokenizerConfig(PreTrainedConfig):
         sampling_rate=16000,
         n_mels=128,
         n_fft=400,
-        hop_length=160,
-        token_rate=25,
         vocab_size=6561,
-        n_audio_ctx=1500,
         n_audio_state=1280,
         n_audio_head=20,
         n_audio_layer=6,
@@ -91,10 +82,7 @@ class S3TokenizerConfig(PreTrainedConfig):
         self.sampling_rate = sampling_rate
         self.n_mels = n_mels
         self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.token_rate = token_rate
         self.vocab_size = vocab_size
-        self.n_audio_ctx = n_audio_ctx
         self.n_audio_state = n_audio_state
         self.n_audio_head = n_audio_head
         self.n_audio_layer = n_audio_layer
