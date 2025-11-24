@@ -19,11 +19,13 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
+from functools import lru_cache
 from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
+from tqdm import tqdm
 
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
@@ -542,21 +544,21 @@ class DebertaConverter(Converter):
         return tokenizer
 
 
-class SpmConverter(Converter):
+class SpmConverter:
     handle_byte_fallback = False
     SpmExtractor = SentencePieceExtractor
     special_tokens = {}
 
-    def __init__(self, *args):
+    def __init__(self, original_tokenizer=None, vocab_file: Optional[str] = None, *args):
         requires_backends(self, "protobuf")
-
-        super().__init__(*args)
-
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
+        if original_tokenizer is not None:
+            self.original_tokenizer = original_tokenizer
+            vocab_file = self.original_tokenizer.vocab_file
 
         m = model_pb2.ModelProto()
-        with open(self.original_tokenizer.vocab_file, "rb") as f:
+        with open(vocab_file, "rb") as f:
             m.ParseFromString(f.read())
         self.proto = m
 
@@ -568,32 +570,27 @@ class SpmConverter(Converter):
                 "unknown tokens into a sequence of byte tokens matching the original piece of text."
             )
 
-    def vocab(self, proto):
-        return [(piece.piece, piece.score) for piece in proto.pieces]
-
-    def unk_id(self, proto):
-        return proto.trainer_spec.unk_id
-
-    def tokenizer(self, proto):
+        proto = self.proto
         model_type = proto.trainer_spec.model_type
-        vocab_scores = self.vocab(proto)
+        self.vocab = self.vocab_(proto)
 
         if model_type == 1:
-            tokenizer = Tokenizer(
+            self.tokenizer = Tokenizer(
                 Unigram(
-                    vocab_scores,
+                    self.vocab,
                     unk_id=self.unk_id(proto),
                     byte_fallback=self.handle_byte_fallback,
                 )
             )
+            self.merges = None
 
         elif model_type == 2:
-            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
-            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
-            tokenizer = Tokenizer(
+            _, self.merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(self.vocab)
+            self.vocab = {word: i for i, (word, score) in enumerate(self.vocab)}
+            self.tokenizer = Tokenizer(
                 BPE(
-                    bpe_vocab,
-                    merges,
+                    self.vocab,
+                    self.merges,
                     unk_token=proto.trainer_spec.unk_piece,
                     fuse_unk=True,
                     byte_fallback=self.handle_byte_fallback,
@@ -605,7 +602,6 @@ class SpmConverter(Converter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
-
         # control tokens are special
         # user defined symbols are not
         # both user and control tokens are AddedTokens
@@ -615,13 +611,19 @@ class SpmConverter(Converter):
             for id, p in enumerate(proto.pieces)
             if p.type in [3, 4]
         ]
-        tokenizer.add_tokens(
-            [
-                AddedToken(token, normalized=False, special=special)
-                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
-            ]
-        )
+        self.special_tokens = [
+            AddedToken(token, normalized=False, special=special)
+            for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+        ]
 
+    def vocab_(self, proto):
+        return [(piece.piece, piece.score) for piece in proto.pieces]
+
+    def unk_id(self, proto):
+        return proto.trainer_spec.unk_id
+
+    def tokenizer_(self, proto):
+        tokenizer = self.tokenizer
         return tokenizer
 
     def normalizer(self, proto):
@@ -1623,17 +1625,21 @@ class TikTokenConverter:
         vocab_file=None,
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
-        additional_special_tokens=None,
+        extra_special_tokens=None,
         **kwargs,
     ):
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.additional_special_tokens = (
-            additional_special_tokens.keys()
-            if isinstance(additional_special_tokens, dict)
-            else additional_special_tokens
+        self.extra_special_tokens = (
+            extra_special_tokens.keys() if isinstance(extra_special_tokens, dict) else extra_special_tokens
         )
+        if self.extra_special_tokens is None:
+            self.extra_special_tokens = []
+        vocab_scores, merges = self.extract_vocab_merges_from_model(vocab_file)
+        self.vocab_scores = vocab_scores
+        self.vocab = vocab_scores
+        self.merges = merges
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
@@ -1667,6 +1673,87 @@ class TikTokenConverter:
         return vocab, merges
 
     def tokenizer(self):
+        tokenizer = Tokenizer(BPE(self.vocab_scores, self.merges, fuse_unk=False))
+        if hasattr(tokenizer.model, "ignore_merges"):
+            tokenizer.model.ignore_merges = True
+        return tokenizer
+
+    def converted(self) -> Tokenizer:
+        tokenizer = self.tokenizer()
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
+                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
+            ]
+        )
+        tokenizer.decoder = decoders.ByteLevel()
+
+        tokenizer.add_special_tokens(
+            [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
+        )
+
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        return tokenizer
+
+
+class MistralConverter:
+    def __init__(
+        self,
+        vocab_file=None,
+        pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
+        add_prefix_space=False,
+        additional_special_tokens=None,
+        **kwargs,
+    ):
+        self.vocab_file = vocab_file
+        self.pattern = pattern
+        self.add_prefix_space = add_prefix_space
+        self.additional_special_tokens = (
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
+        )
+
+    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+        import base64
+        import json
+
+        with open(self.vocab_file, "r", encoding="utf-8") as f:
+            untyped = json.load(f)
+        self.pattern = untyped["config"]["pattern"]
+        self.additional_special_tokens = [
+            AddedToken(k["token_str"], special=k["is_control"]) for k in untyped["special_tokens"]
+        ]
+        bpe_ranks = untyped["vocab"]
+        byte_encoder = bytes_to_unicode()
+
+        @lru_cache
+        def token_bytes_to_string(b):
+            return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
+
+        merges = []
+        vocab = {}
+        for idx, token in enumerate(self.additional_special_tokens):
+            vocab[token.content] = idx
+        bpe_ranks = [base64.b64decode(k["token_bytes"]) for k in bpe_ranks]
+        rank_set = set(bpe_ranks)
+        for rank, token in enumerate(tqdm(bpe_ranks, desc="Converting tekken.json to tokenizer.json")):
+            vocab[token_bytes_to_string(token)] = rank
+            if len(token) == 1:
+                continue
+            local = []
+            for index in range(1, len(token)):
+                piece_l, piece_r = token[:index], token[index:]
+                if piece_l in rank_set and piece_r in rank_set and (piece_l + piece_r) in rank_set:
+                    local.append((piece_l, piece_r, rank))
+            local = sorted(local, key=lambda x: (bpe_ranks.index(x[0]), bpe_ranks.index(x[1])), reverse=False)
+            merges.extend(local)
+        merges = sorted(merges, key=lambda val: val[2], reverse=False)
+        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
+        return vocab, merges
+
+    def tokenizer(self):
         vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab_file)
         tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
         if hasattr(tokenizer.model, "ignore_merges"):
@@ -1683,10 +1770,7 @@ class TikTokenConverter:
         )
         tokenizer.decoder = decoders.ByteLevel()
 
-        tokenizer.add_special_tokens(
-            [AddedToken(token, normalized=False, special=True) for token in self.additional_special_tokens]
-        )
-
+        tokenizer.add_tokens(self.additional_special_tokens)
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
         return tokenizer
@@ -1771,13 +1855,16 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
-
+    elif transformer_tokenizer.vocab_file.endswith("tekken.json"):
+        transformer_tokenizer.original_tokenizer = transformer_tokenizer
+        logger.info("Converting from Mistral tekken.json")
+        return MistralConverter(transformer_tokenizer.vocab_file).converted()
     else:
         try:
             logger.info("Converting from Tiktoken")
             return TikTokenConverter(
                 vocab_file=transformer_tokenizer.vocab_file,
-                additional_special_tokens=transformer_tokenizer.additional_special_tokens,
+                extra_special_tokens=transformer_tokenizer.extra_special_tokens,
             ).converted()
         except Exception:
             raise ValueError(

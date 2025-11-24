@@ -31,7 +31,7 @@ from transformers import (
     is_tokenizers_available,
 )
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers
-from transformers.tokenization_utils import ExtensionsTrie, Trie
+from transformers.tokenization_python import ExtensionsTrie, Trie
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))

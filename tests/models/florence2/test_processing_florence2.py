@@ -15,7 +15,8 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, BartTokenizerFast, Florence2Processor
+from transformers import AutoProcessor, Florence2Processor
+from transformers.models.roberta.tokenization_roberta import RobertaTokenizer as BartTokenizerFast
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 

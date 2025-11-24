@@ -58,6 +58,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "audio_utils": [],
+    "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
@@ -171,13 +172,13 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_utils": ["PreTrainedTokenizer"],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
+    "tokenization_utils": ["PreTrainedTokenizer", "PythonBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
         "CharSpan",
         "PreTrainedTokenizerBase",
-        "SpecialTokensMixin",
         "TokenSpan",
     ],
     "trainer_callback": [
@@ -276,7 +277,11 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
+    _import_structure["tokenization_utils_tokenizers"] = [
+        "TokenizersBackend",
+        "TokenizersExtractor",
+        "PreTrainedTokenizerFast",
+    ]
 
 
 try:
@@ -679,13 +684,22 @@ if TYPE_CHECKING:
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_utils import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
     from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
-    from .tokenization_utils_base import SpecialTokensMixin as SpecialTokensMixin
     from .tokenization_utils_base import TokenSpan as TokenSpan
-    from .tokenization_utils_fast import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+
+    # Tokenization
+    from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
+    from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+    from .tokenization_utils_tokenizers import (
+        TokenizersBackend as TokenizersBackend,
+    )
+    from .tokenization_utils_tokenizers import (
+        TokenizersExtractor as TokenizersExtractor,
+    )
 
     # Trainer
     from .trainer import Trainer as Trainer

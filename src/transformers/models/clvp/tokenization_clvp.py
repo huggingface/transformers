@@ -21,7 +21,7 @@ from typing import Optional
 
 import regex as re
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from .number_normalizer import EnglishNormalizer
 
@@ -160,6 +160,16 @@ class ClvpTokenizer(PreTrainedTokenizer):
         self.add_eos_token = add_eos_token
         self._normalizer = None
 
+        # Set special_tokens_pattern based on add_bos_token and add_eos_token flags
+        if add_bos_token and add_eos_token:
+            kwargs["special_tokens_pattern"] = "bos_eos"
+        elif add_bos_token:
+            kwargs["special_tokens_pattern"] = "bos"
+        elif add_eos_token:
+            kwargs["special_tokens_pattern"] = "eos"
+        else:
+            kwargs["special_tokens_pattern"] = "none"
+
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -256,39 +266,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
         return output
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        if not self.add_bos_token:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=False
-            )
-
-        if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0))
-        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
-
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -324,7 +301,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
         return text
 
     def clean_up_tokenization(self, text):
-        text = "".join(text)
+        text = "".join(text) if isinstance(text, list) else text
         vocab_tokens = list(self.encoder.keys()) + list(self.added_tokens_encoder.keys())
 
         text = text.replace("[SPACE]", " ") if "[SPACE]" in vocab_tokens else text

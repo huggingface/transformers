@@ -18,9 +18,9 @@ import unittest
 from functools import cached_property
 
 from transformers import (
-    PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
+    PythonBackend,
     UdopProcessor,
     UdopTokenizer,
     UdopTokenizerFast,
@@ -74,7 +74,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
+    def get_tokenizer(cls, **kwargs) -> PythonBackend:
         return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
     @classmethod

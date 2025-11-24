@@ -195,63 +195,10 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]])
 
         if self.test_rust_tokenizer:
-            rust_tokenizer = self.get_rust_tokenizer()
+            rust_tokenizer = self.get_tokenizer()
             self.assertListEqual(
                 [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]]
             )
-
-    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_offsets_with_special_characters
-    def test_offsets_with_special_characters(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-
-                sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
-                tokens = tokenizer_r.encode_plus(
-                    sentence,
-                    return_attention_mask=False,
-                    return_token_type_ids=False,
-                    return_offsets_mapping=True,
-                    add_special_tokens=True,
-                )
-
-                do_lower_case = tokenizer_r.do_lower_case if hasattr(tokenizer_r, "do_lower_case") else False
-                expected_results = (
-                    [
-                        ((0, 0), tokenizer_r.cls_token),
-                        ((0, 1), "A"),
-                        ((1, 2), ","),
-                        ((3, 5), "na"),
-                        ((5, 6), "##ï"),
-                        ((6, 8), "##ve"),
-                        ((9, 15), tokenizer_r.mask_token),
-                        ((16, 21), "Allen"),
-                        ((21, 23), "##NL"),
-                        ((23, 24), "##P"),
-                        ((25, 33), "sentence"),
-                        ((33, 34), "."),
-                        ((0, 0), tokenizer_r.sep_token),
-                    ]
-                    if not do_lower_case
-                    else [
-                        ((0, 0), tokenizer_r.cls_token),
-                        ((0, 1), "a"),
-                        ((1, 2), ","),
-                        ((3, 8), "naive"),
-                        ((9, 15), tokenizer_r.mask_token),
-                        ((16, 21), "allen"),
-                        ((21, 23), "##nl"),
-                        ((23, 24), "##p"),
-                        ((25, 33), "sentence"),
-                        ((33, 34), "."),
-                        ((0, 0), tokenizer_r.sep_token),
-                    ]
-                )
-
-                self.assertEqual(
-                    [e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"])
-                )
-                self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_change_tokenize_chinese_chars
     def test_change_tokenize_chinese_chars(self):
@@ -261,7 +208,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 kwargs["tokenize_chinese_chars"] = True
                 tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
@@ -274,7 +221,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertListEqual(tokens_without_spe_char_r, list_of_common_chinese_char)
 
                 kwargs["tokenize_chinese_chars"] = False
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_tokenizer(pretrained_name, **kwargs)
                 tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
@@ -316,6 +263,6 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     tokens_ids, tokens_shape_ids, tokens_proun_ids, add_special_tokens=True
                 )
 
-                input_dict = tokenizer.encode_plus(string_sequence, add_special_tokens=True)
+                input_dict = tokenizer(string_sequence, add_special_tokens=True)
 
                 self.assertEqual(input_dict, prepared_input_dict)

@@ -172,10 +172,10 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 sample_text = " He is very happy, UNwant\u00e9d,running"
                 tokenizer.add_tokens(["bim", "bambam"])
-                additional_special_tokens = tokenizer.additional_special_tokens
-                additional_special_tokens.append("new_additional_special_token")
+                extra_special_tokens = tokenizer.extra_special_tokens
+                extra_special_tokens.append("new_extra_special_token")
                 tokenizer.add_special_tokens(
-                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                    {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
                 )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
@@ -183,7 +183,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
                 after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
                 self.assertListEqual(before_tokens, after_tokens)
-                self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+                self.assertIn("new_extra_special_token", after_tokenizer.extra_special_tokens)
                 self.assertEqual(after_tokenizer.model_max_length, 42)
 
                 tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
@@ -195,9 +195,6 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # We need to add the extra_ids in the list of the arg additional_special_tokens
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
         tokenizer_list = []
-        if self.test_slow_tokenizer:
-            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
         if self.test_rust_tokenizer:
             tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
 

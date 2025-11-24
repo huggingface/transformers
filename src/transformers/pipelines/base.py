@@ -35,7 +35,7 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
     PushToHubMixin,

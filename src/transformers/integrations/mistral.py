@@ -12,16 +12,17 @@ class MistralConverter:
 
     def __init__(
         self,
-        vocab=None,
+        vocab_file=str,
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
         additional_special_tokens=None,
         **kwargs,
     ):
-        self.vocab = vocab
+        self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
         self.additional_special_tokens = additional_special_tokens
+        self.vocab, self.merges = self.extract_vocab_merges_from_model(vocab_file)
 
     def extract_vocab_merges_from_model(self, vocab: str):
         bpe_ranks = vocab
@@ -51,8 +52,7 @@ class MistralConverter:
         return vocab, merges
 
     def tokenizer(self):
-        vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab)
-        tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
+        tokenizer = Tokenizer(BPE(self.vocab, self.merges, fuse_unk=False))
         if hasattr(tokenizer.model, "ignore_merges"):
             tokenizer.model.ignore_merges = True
         return tokenizer
