@@ -207,8 +207,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if tokens:
                 self.add_tokens(tokens)
 
-        # there was an issue with mistral models where the pre_tokenizer's regex pattern
-        # is not correct. Here we try to fix it.
         try:
             pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
             if pre_tok_state.get("add_prefix_space", self.add_prefix_space) != self.add_prefix_space:
