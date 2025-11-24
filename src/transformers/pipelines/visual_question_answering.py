@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Union
 
 from ..generation import GenerationConfig
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
@@ -95,7 +95,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     def __call__(
         self,
         image: Union["Image.Image", str, list["Image.Image"], list[str], "KeyDataset"],
-        question: Optional[Union[str, list[str]]] = None,
+        question: str | list[str] | None = None,
         **kwargs,
     ):
         r"""

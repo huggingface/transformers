@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -38,7 +39,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import EmbeddingAccessMixin, PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
@@ -434,8 +434,8 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
         pos_seq = torch.arange(0, seq_len).to(device=hidden_states.device, dtype=torch.long)
         pos_seq = pos_seq[:, None] - pos_seq[None, :]
 
-        pos_seq[pos_seq < -self.max_length] = -self.max_length
-        pos_seq[pos_seq >= self.max_length] = self.max_length - 1
+        pos_seq = torch.where(pos_seq < -self.max_length, -self.max_length, pos_seq)
+        pos_seq = torch.where(pos_seq >= self.max_length, self.max_length - 1, pos_seq)
         pos_seq = pos_seq + self.max_length
 
         return self.pe_k(pos_seq)
@@ -806,14 +806,7 @@ class SpeechT5TextDecoderPrenet(nn.Module, EmbeddingAccessMixin):
         else:
             raise ValueError("You have to specify `decoder_input_ids`")
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
-
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         positions = self.embed_positions(input_ids, past_key_values_length)
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -876,7 +869,6 @@ class SpeechT5Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -904,17 +896,17 @@ class SpeechT5Attention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -924,7 +916,7 @@ class SpeechT5Attention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -1103,7 +1095,6 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = SpeechT5FeedForward(config, config.decoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1177,43 +1168,46 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
     config: SpeechT5Config
     base_model_prefix = "speecht5"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, SpeechT5PositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, SpeechT5ScaledPositionalEncoding):
-            module.alpha.data.fill_(1.0)
+            init.ones_(module.alpha)
         elif isinstance(module, SpeechT5FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
         if hasattr(module, "masked_spec_embed"):
-            nn.init.uniform_(module.masked_spec_embed)
+            init.uniform_(module.masked_spec_embed)
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
@@ -1523,13 +1517,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
@@ -1895,9 +1882,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             self.decoder.set_input_embeddings(value)
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -2012,7 +1996,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     """
 )
 class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["text_decoder_postnet.lm_head.weight"]
+    _tied_weights_keys = {"text_decoder_postnet.lm_head.weight": "speecht5.decoder.prenet.embed_tokens.weight"}
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
@@ -2033,12 +2017,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
 
     def freeze_feature_encoder(self):
         """
@@ -2331,6 +2309,7 @@ def _generate_speech(
     """
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
+    input_modalities = "text"
     main_input_name = "input_ids"
 
     def __init__(self, config: SpeechT5Config):
@@ -2359,12 +2338,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         # `GenerationMixin` (it has a non-standard generation method). This means that the base `can_generate()` will return `False`,
         # but we need to override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
         return True
-
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
 
     @auto_docstring
     def forward(
@@ -2697,12 +2670,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -3028,13 +2995,6 @@ class SpeechT5HifiGan(PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

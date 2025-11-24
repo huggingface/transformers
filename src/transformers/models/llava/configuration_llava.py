@@ -13,7 +13,7 @@
 # limitations under the License.
 """Llava model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class LlavaConfig(PretrainedConfig):
+class LlavaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +29,8 @@ class LlavaConfig(PretrainedConfig):
 
     e.g. [llava-hf/llava-9b](https://huggingface.co/llava-hf/llava-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):

@@ -35,7 +35,7 @@ alt="drawing" width="600"/>
 - [DeiT](deit) (Data-efficient Image Transformers) (Facebook AI 개발). DeiT 모델은 distilled vision transformers입니다.
   DeiT의 저자들은 더 효율적으로 훈련된 ViT 모델도 공개했으며, 이는 [`ViTModel`] 또는 [`ViTForImageClassification`]에 바로 사용할 수 있습니다. 여기에는 3가지 크기로 4개의 변형이 제공됩니다: *facebook/deit-tiny-patch16-224*, *facebook/deit-small-patch16-224*, *facebook/deit-base-patch16-224* and *facebook/deit-base-patch16-384*. 그리고 모델에 이미지를 준비하려면 [`DeiTImageProcessor`]를 사용해야 한다는 점에 유의하십시오.
 
-- [BEiT](beit) (BERT pre-training of Image Transformers) (Microsoft Research 개발). BEiT 모델은 BERT (masked image modeling)에 영감을  받고 VQ-VAE에 기반한 self-supervised 방법을 이용하여 supervised pre-trained vision transformers보다 더 우수한 성능을 보입니다. 
+- [BEiT](beit) (BERT pre-training of Image Transformers) (Microsoft Research 개발). BEiT 모델은 BERT (masked image modeling)에 영감을  받고 VQ-VAE에 기반한 self-supervised 방법을 이용하여 supervised pre-trained vision transformers보다 더 우수한 성능을 보입니다.
 
 - DINO (Vision Transformers의 self-supervised 훈련을 위한 방법) (Facebook AI 개발). DINO 방법으로 훈련된 Vision Transformer는 학습되지 않은 상태에서도 객체를 분할할 수 있는 합성곱 신경망에서는 볼 수 없는 매우 흥미로운 능력을 보여줍니다. DINO 체크포인트는 [hub](https://huggingface.co/models?other=dino)에서 찾을 수 있습니다.
 
@@ -93,7 +93,7 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 
 ⚗️ 최적화
 
-- [Optimum을 사용한 양자화를 통해 Vision Transformer(ViT) 가속](https://www.philschmid.de/optimizing-vision-transformer)에 대한 블로그 포스트 
+- [Optimum을 사용한 양자화를 통해 Vision Transformer(ViT) 가속](https://www.philschmid.de/optimizing-vision-transformer)에 대한 블로그 포스트
 
 ⚡️ 추론
 
@@ -109,10 +109,6 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 
 [[autodoc]] ViTConfig
 
-## ViTFeatureExtractor [[transformers.ViTFeatureExtractor]]
-
-[[autodoc]] ViTFeatureExtractor
-    - __call__
 
 ## ViTImageProcessor [[transformers.ViTImageProcessor]]
 
@@ -139,4 +135,3 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 
 [[autodoc]] ViTForImageClassification
     - forward
-

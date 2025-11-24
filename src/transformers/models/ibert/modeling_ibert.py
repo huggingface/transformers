@@ -24,6 +24,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,7 +36,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging
 from .configuration_ibert import IBertConfig
 from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmbedding, QuantLinear
@@ -73,7 +73,6 @@ class IBertEmbeddings(nn.Module):
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -132,14 +131,13 @@ class IBertEmbeddings(nn.Module):
             identity_scaling_factor=token_type_embeddings_scaling_factor,
         )
 
-        if self.position_embedding_type == "absolute":
-            position_embeddings, position_embeddings_scaling_factor = self.position_embeddings(position_ids)
-            embeddings, embeddings_scaling_factor = self.embeddings_act1(
-                embeddings,
-                embeddings_scaling_factor,
-                identity=position_embeddings,
-                identity_scaling_factor=position_embeddings_scaling_factor,
-            )
+        position_embeddings, position_embeddings_scaling_factor = self.position_embeddings(position_ids)
+        embeddings, embeddings_scaling_factor = self.embeddings_act1(
+            embeddings,
+            embeddings_scaling_factor,
+            identity=position_embeddings,
+            identity_scaling_factor=position_embeddings_scaling_factor,
+        )
 
         embeddings, embeddings_scaling_factor = self.LayerNorm(embeddings, embeddings_scaling_factor)
         embeddings = self.dropout(embeddings)
@@ -217,9 +215,6 @@ class IBertSelfAttention(nn.Module):
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type != "absolute":
-            raise ValueError("I-BERT only supports 'absolute' for `config.position_embedding_type`")
 
         self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant)
 
@@ -354,25 +349,6 @@ class IBertAttention(nn.Module):
         self.quant_mode = config.quant_mode
         self.self = IBertSelfAttention(config)
         self.output = IBertSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -610,21 +586,23 @@ class IBertPreTrainedModel(PreTrainedModel):
     config: IBertConfig
     base_model_prefix = "ibert"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (QuantLinear, nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (QuantEmbedding, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, (IntLayerNorm, nn.LayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, IBertLMHead):
-            module.bias.data.zero_()
+            init.zeros_(module.bias)
 
     def resize_token_embeddings(self, new_num_tokens=None):
         raise NotImplementedError("`resize_token_embeddings` is not supported for I-BERT.")
@@ -663,14 +641,6 @@ class IBertModel(IBertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -743,7 +713,10 @@ class IBertModel(IBertPreTrainedModel):
 
 @auto_docstring
 class IBertForMaskedLM(IBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.bias", "lm_head.decoder.weight"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "ibert.embeddings.word_embeddings.weight$",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -822,7 +795,6 @@ class IBertLMHead(nn.Module):
 
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
@@ -833,14 +805,6 @@ class IBertLMHead(nn.Module):
         x = self.decoder(x)
 
         return x
-
-    def _tie_weights(self) -> None:
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-            self.bias = self.decoder.bias
 
 
 @auto_docstring(

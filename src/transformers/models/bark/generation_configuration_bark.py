@@ -235,7 +235,6 @@ class BarkFineGenerationConfig(GenerationConfig):
         Overrides GenerationConfig.validate because BarkFineGenerationConfig don't use any parameters outside
         temperature.
         """
-        pass
 
 
 class BarkGenerationConfig(GenerationConfig):
@@ -315,7 +314,7 @@ class BarkGenerationConfig(GenerationConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

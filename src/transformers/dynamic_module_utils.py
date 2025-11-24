@@ -26,7 +26,6 @@ import shutil
 import signal
 import sys
 import threading
-import warnings
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, Union
@@ -285,8 +284,7 @@ def get_class_in_module(
         `typing.Type`: The class looked for.
     """
     name = os.path.normpath(module_path)
-    if name.endswith(".py"):
-        name = name[:-3]
+    name = name.removesuffix(".py")
     name = name.replace(os.path.sep, ".")
     module_file: Path = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
@@ -319,7 +317,6 @@ def get_cached_module_file(
     module_file: str,
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -349,9 +346,6 @@ def get_cached_module_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -376,16 +370,6 @@ def get_cached_module_file(
     Returns:
         `str`: The path to the module inside the cache.
     """
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -396,7 +380,7 @@ def get_cached_module_file(
     if is_local:
         submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
     else:
-        submodule = _sanitize_module_name(pretrained_model_name_or_path.replace("/", os.path.sep))
+        submodule = os.path.sep.join(map(_sanitize_module_name, pretrained_model_name_or_path.split("/")))
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
@@ -410,7 +394,6 @@ def get_cached_module_file(
             cache_dir=cache_dir,
             force_download=force_download,
             proxies=proxies,
-            resume_download=resume_download,
             local_files_only=local_files_only,
             token=token,
             revision=revision,
@@ -470,7 +453,6 @@ def get_cached_module_file(
                     f"{Path(module_file).parent / module_needed}.py",
                     cache_dir=cache_dir,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
                     token=token,
                     revision=revision,
@@ -497,7 +479,6 @@ def get_class_from_dynamic_module(
     pretrained_model_name_or_path: Union[str, os.PathLike],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -540,9 +521,6 @@ def get_class_from_dynamic_module(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -582,16 +560,6 @@ def get_class_from_dynamic_module(
     # module.
     cls = get_class_from_dynamic_module("sgugger/my-bert-model--modeling.MyBertModel", "sgugger/another-bert-model")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")
@@ -607,7 +575,6 @@ def get_class_from_dynamic_module(
         module_file + ".py",
         cache_dir=cache_dir,
         force_download=force_download,
-        resume_download=resume_download,
         proxies=proxies,
         token=token,
         revision=code_revision,
@@ -625,7 +592,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
     Args:
         obj (`Any`): The object for which to save the module files.
         folder (`str` or `os.PathLike`): The folder where to save.
-        config (`PretrainedConfig` or dictionary, `optional`):
+        config (`PreTrainedConfig` or dictionary, `optional`):
             A config in which to register the auto_map corresponding to this custom object.
 
     Returns:

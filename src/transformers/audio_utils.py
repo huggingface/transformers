@@ -587,7 +587,7 @@ def window_function(
         window = np.hamming(length)
     elif name in ["hann", "hann_window"]:
         window = np.hanning(length)
-    elif name in ["povey"]:
+    elif name == "povey":
         window = np.power(np.hanning(length), 0.85)
     else:
         raise ValueError(f"Unknown window function '{name}'")

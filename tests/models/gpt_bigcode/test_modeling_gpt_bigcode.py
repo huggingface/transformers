@@ -95,9 +95,6 @@ class GPTBigCodeModelTester:
         self.pad_token_id = vocab_size - 3
         self.multi_query = multi_query
 
-    def get_large_model_config(self):
-        return GPTBigCodeConfig.from_pretrained("bigcode/gpt_bigcode-santacoder")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -310,12 +307,16 @@ class GPTBigCodeModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, token_type_ids, *args, gradient_checkpointing=False
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_type_ids,
+        *args,
     ):
         model = GPTBigCodeForCausalLM(config)
+        model.train()
         model.to(torch_device)
-        if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
@@ -396,10 +397,8 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_torchscript = False
+
     multi_query = True
 
     # special case for DoubleHeads model
@@ -467,10 +466,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_gpt_bigcode_token_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_bigcode_for_token_classification(*config_and_inputs)
-
-    def test_gpt_bigcode_gradient_checkpointing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
 
     def test_gpt_bigcode_scale_attn_by_inverse_layer_idx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)

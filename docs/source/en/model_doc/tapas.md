@@ -30,6 +30,7 @@ token types that encode tabular structure. TAPAS is pre-trained on the masked la
 millions of tables from English Wikipedia and corresponding texts.
 
 For question answering, TAPAS has 2 heads on top: a cell selection head and an aggregation head, for (optionally) performing aggregations (such as counting or summing) among selected cells. TAPAS has been fine-tuned on several datasets:
+
 - [SQA](https://www.microsoft.com/en-us/download/details.aspx?id=54253) (Sequential Question Answering by Microsoft)
 - [WTQ](https://github.com/ppasupat/WikiTableQuestions) (Wiki Table Questions by Stanford University)
 - [WikiSQL](https://github.com/salesforce/WikiSQL) (by Salesforce).
@@ -334,29 +335,36 @@ In case of a conversational set-up, then each table-question pair must be provid
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 
 ## TAPAS specific outputs
+
 [[autodoc]] models.tapas.modeling_tapas.TableQuestionAnsweringOutput
 
 ## TapasConfig
+
 [[autodoc]] TapasConfig
 
 ## TapasTokenizer
+
 [[autodoc]] TapasTokenizer
     - __call__
     - convert_logits_to_predictions
     - save_vocabulary
 
 ## TapasModel
+
 [[autodoc]] TapasModel
     - forward
 
 ## TapasForMaskedLM
+
 [[autodoc]] TapasForMaskedLM
     - forward
 
 ## TapasForSequenceClassification
+
 [[autodoc]] TapasForSequenceClassification
     - forward
 
 ## TapasForQuestionAnswering
+
 [[autodoc]] TapasForQuestionAnswering
     - forward

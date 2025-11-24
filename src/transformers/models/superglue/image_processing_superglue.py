@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import requires
 
@@ -131,6 +132,15 @@ def validate_and_format_image_pairs(images: ImageInput):
         ):
             return [image for image_pair in images for image in image_pair]
     raise ValueError(error_message)
+
+
+class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 @requires(backends=("torch",))
@@ -384,8 +394,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             matches0 = matches[mask0]
             scores0 = scores[mask0]
 
-            # Filter out matches with low scores
-            valid_matches = torch.logical_and(scores0 > threshold, matches0 > -1)
+            # Filter out matches with low scores, invalid matches, and out-of-bounds indices
+            valid_matches = (scores0 > threshold) & (matches0 > -1) & (matches0 < keypoints1.shape[0])
 
             matched_keypoints0 = keypoints0[valid_matches]
             matched_keypoints1 = keypoints1[matches0[valid_matches]]

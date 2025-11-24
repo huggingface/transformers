@@ -357,6 +357,7 @@ class MoEModelOutput(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     router_probs: Optional[tuple[torch.FloatTensor]] = None
+    router_logits: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -494,6 +495,7 @@ class MoEModelOutputWithPastAndCrossAttentions(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     router_probs: Optional[tuple[torch.FloatTensor]] = None
+    router_logits: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass

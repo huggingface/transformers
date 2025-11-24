@@ -595,7 +595,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         boxes: Union[list[list[list[float]]], np.ndarray],
         kernel_size: int = 11,
         threshold: Optional[float] = None,
-        target_sizes: Union[TensorType, list[tuple]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.

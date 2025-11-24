@@ -57,6 +57,7 @@ The attributes can be obtained from model config, as `model.config.vision_config
 Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor's `apply_chat_template` method.  
 
 **Important:**  
+
 - You must construct a conversation history — passing a plain string won't work.  
 - Each message should be a dictionary with `"role"` and `"content"` keys.  
 - The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  

@@ -17,9 +17,10 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import (
     get_resize_output_image_size,
     group_images_by_shape,
@@ -37,23 +38,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class TextNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    size_divisor (`int`, *optional*, defaults to 32):
-        Ensures height and width are rounded to a multiple of this value after resizing.
-    """
-
-    size_divisor: Optional[int]
+from .image_processing_textnet import TextNetImageProcessorKwargs
 
 
 @auto_docstring
@@ -70,13 +56,13 @@ class TextNetImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
     size_divisor = 32
-    valid_kwargs = TextNetFastImageProcessorKwargs
+    valid_kwargs = TextNetImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[TextNetImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

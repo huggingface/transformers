@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import UserDict
-from typing import Any, Union
+from typing import Any
 
 import httpx
 import numpy as np
@@ -68,7 +68,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def __call__(self, audios: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
+    def __call__(self, audios: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Assign labels to the audio(s) passed as inputs.
 

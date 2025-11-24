@@ -26,12 +26,9 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
+from safetensors import safe_open
 
-from ..utils import is_safetensors_available, is_torch_available, is_torchao_available, logging
-
-
-if is_safetensors_available():
-    from safetensors import safe_open
+from ..utils import is_torch_available, is_torchao_available, logging
 
 
 if is_torch_available():
@@ -181,25 +178,24 @@ class TorchAoHfQuantizer(HfQuantizer):
             return None, {}
 
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
-            from accelerate.utils import CustomDtype
+        from accelerate.utils import CustomDtype
 
-            # Import AOBaseConfig directly since we know we have the right version
-            if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
-                from torchao.core.config import AOBaseConfig
+        # Import AOBaseConfig directly since we know we have the right version
+        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
+            from torchao.core.config import AOBaseConfig
 
-                quant_type = self.quantization_config.quant_type
-                if isinstance(quant_type, AOBaseConfig):
-                    # Extract size digit using fuzzy match on the class name
-                    config_name = quant_type.__class__.__name__
-                    size_digit = fuzzy_match_size(config_name)
+            quant_type = self.quantization_config.quant_type
+            if isinstance(quant_type, AOBaseConfig):
+                # Extract size digit using fuzzy match on the class name
+                config_name = quant_type.__class__.__name__
+                size_digit = fuzzy_match_size(config_name)
 
-                    # Map the extracted digit to appropriate dtype
-                    if size_digit == "4":
-                        return CustomDtype.INT4
-                    else:
-                        # Default to int8
-                        return torch.int8
+                # Map the extracted digit to appropriate dtype
+                if size_digit == "4":
+                    return CustomDtype.INT4
+                else:
+                    # Default to int8
+                    return torch.int8
 
             # Original mapping for non-AOBaseConfig types
             map_to_target_dtype = {
@@ -255,6 +251,23 @@ class TorchAoHfQuantizer(HfQuantizer):
             _QUANTIZABLE = [torch.nn.Linear]
             if self.quantization_config.include_input_output_embeddings:
                 _QUANTIZABLE.append(torch.nn.Embedding)
+
+            # Handle FqnToConfig, introduced in torchao 0.15.0+
+            if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
+                from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
+
+                if isinstance(self.quantization_config.quant_type, FqnToConfig):
+                    module_fqn, param_name_fqn = param_name.rsplit(".", 1)
+                    if (
+                        fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
+                        or fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
+                        or (
+                            "_default" in self.quantization_config.quant_type.fqn_to_config
+                            and isinstance(module, tuple(_QUANTIZABLE))
+                        )
+                    ):
+                        return True
+
             return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def create_quantized_param(
@@ -323,8 +336,54 @@ class TorchAoHfQuantizer(HfQuantizer):
                 model.tie_weights()
                 setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
+            # handle FqnToConfig, introduced in torchao 0.15.0+
+            if self.quantization_config._get_ao_version() >= version.Version("0.15.0"):
+                from torchao.quantization import FqnToConfig
+
+                config = self.quantization_config.get_apply_tensor_subclass()
+                if isinstance(config, FqnToConfig):
+                    module_fqn, top_level_param_name = param_name.rsplit(".", 1)
+                    c = None
+                    if param_name in config.fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "param fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[param_name]
+                    elif module_fqn in config.fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "module fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[module_fqn]
+                    # regex match module and param
+                    else:
+                        for maybe_module_fqn_pattern in config.fqn_to_config:
+                            # if key doesn't start with re, it is an exact fqn key, so we don't regex match
+                            if not maybe_module_fqn_pattern.startswith("re:"):
+                                continue
+                            # see if param matches first
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], param_name):
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
+                                # we'll apply the config for first fully matched pattern
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                        else:
+                            c = config.module_fqn_to_config.get("_default", None)
+
+                    if c is not None:
+                        if top_level_param_name == "weight":
+                            # we can apply the module config directly
+                            quantize_(module, c, (lambda x, fqn: True))
+                        else:
+                            # need to apply to custom param name
+                            custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
+                            quantize_(module, custom_param_fqn_config, filter_fn=None)
+                    return
+
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
-            if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+            # TODO deprecate this when we deprecate ModuleFqnToConfig
+            elif self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
                 from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
@@ -332,15 +391,42 @@ class TorchAoHfQuantizer(HfQuantizer):
                     module_fqn, _ = param_name.rsplit(".", 1)
                     c = None
                     if module_fqn in config.module_fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "module fqn should not start with`re:`, which is used for specifying regex"
+                        )
                         c = config.module_fqn_to_config[module_fqn]
                     else:
-                        c = config.module_fqn_to_config.get("_default", None)
+                        for maybe_module_fqn_pattern in config.module_fqn_to_config:
+                            if not maybe_module_fqn_pattern.startswith("re:"):
+                                continue
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
+                                # we'll apply the config for first fully matched pattern
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                        else:
+                            c = config.module_fqn_to_config.get("_default", None)
                     if c is not None:
                         # filter_fn: not filtering out any modules
                         quantize_(module, c, filter_fn=lambda x, fqn: True)
                     return
 
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
+
+    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
+        """
+        Setting model attributes and/or converting model before weights loading. At this point
+        the model should be initialized on the meta device so you can freely manipulate the skeleton
+        of the model in order to replace modules in-place. Make sure to override the abstract method `_process_model_before_weight_loading`.
+
+        Args:
+            model (`~transformers.PreTrainedModel`):
+                The model to quantize
+            kwargs (`dict`, *optional*):
+                The keyword arguments that are passed along `_process_model_before_weight_loading`.
+        """
+        super().preprocess_model(model, config, dtype, checkpoint_files, **kwargs)
+        # Torchao needs access to all metadata later
+        self.set_metadata(checkpoint_files)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
@@ -436,7 +522,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         return True
 
     def set_metadata(self, checkpoint_files: list[str]):
-        if checkpoint_files[0].endswith(".safetensors") and is_safetensors_available():
+        if checkpoint_files[0].endswith(".safetensors"):
             metadata = {}
             for checkpoint in checkpoint_files:
                 with safe_open(checkpoint, framework="pt") as f:

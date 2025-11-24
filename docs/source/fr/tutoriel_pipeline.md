@@ -275,15 +275,15 @@ from transformers import pipeline
 pipe = pipeline(model="facebook/opt-1.3b", dtype=torch.bfloat16, device_map="auto")
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
-Vous pouvez également passer des modèles chargés en 8 bits si vous installez `bitsandbytes` et ajoutez l'argument `load_in_8bit=True`
+Vous pouvez également passer des modèles chargés en 8 bits si vous installez `bitsandbytes` et ajoutez l'argument `quantization_config` 
 Notez que vous pouvez remplacer le point de contrôle par n'importe quel modèle.
 
 ```py
 # pip install accelerate bitsandbytes
 import torch
-from transformers import pipeline
+from transformers import pipeline, BitsAndBytesConfig
 
-pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"load_in_8bit": True})
+pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"quantization_config": BitsAndBytesConfig(load_in_8bit=True)})
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 

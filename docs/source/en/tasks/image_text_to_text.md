@@ -23,6 +23,7 @@ Image-text-to-text models, also known as vision language models (VLMs), are lang
 In this guide, we provide a brief overview of VLMs and show how to use them with Transformers for inference.
 
 To begin with, there are multiple types of VLMs:
+
 - base models used for fine-tuning
 - chat fine-tuned models for conversation
 - instruction fine-tuned models
@@ -38,10 +39,11 @@ pip install -q transformers accelerate flash_attn
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
+from transformers import AutoProcessor, AutoModelForImageTextToText
+from accelerate import Accelerator
 import torch
 
-device = torch.device(infer_device())
+device = Accelerator().device
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
     dtype=torch.bfloat16,

@@ -21,6 +21,7 @@ rendered properly in your Markdown viewer.
 Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more.
 
 This guide will show you how to:
+
 - Use an image-to-image pipeline for super resolution task,
 - Run image-to-image models for same task without a pipeline.
 
@@ -35,10 +36,11 @@ pip install transformers
 We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co/caidas/swin2SR-lightweight-x2-64). We can then infer with the pipeline by calling it with an image. As of now, only [Swin2SR models](https://huggingface.co/models?sort=trending&search=swin2sr) are supported in this pipeline.
 
 ```python
-from transformers import pipeline, infer_device
+from transformers import pipeline
+from accelerate import Accelerator
 import torch
 # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
-device = infer_device()
+device = Accelerator().device
 pipe = pipeline(task="image-to-image", model="caidas/swin2SR-lightweight-x2-64", device=device)
 ```
 

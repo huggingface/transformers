@@ -18,13 +18,15 @@ PyTorch XLNet model.
 """
 
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
@@ -64,9 +66,6 @@ class XLNetRelativeAttention(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.dropout)
-
-    def prune_heads(self, heads):
-        raise NotImplementedError
 
     @staticmethod
     def rel_shift(x, klen=-1):
@@ -637,20 +636,11 @@ class XLNetPreTrainedModel(PreTrainedModel):
     config: XLNetConfig
     base_model_prefix = "transformer"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, XLNetRelativeAttention):
+        super()._init_weights(module)
+        if isinstance(module, XLNetRelativeAttention):
             for param in [
                 module.q,
                 module.k,
@@ -662,9 +652,9 @@ class XLNetPreTrainedModel(PreTrainedModel):
                 module.r_w_bias,
                 module.seg_embed,
             ]:
-                param.data.normal_(mean=0.0, std=self.config.initializer_range)
+                init.normal_(param, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, XLNetModel):
-            module.mask_emb.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.mask_emb, mean=0.0, std=self.config.initializer_range)
 
 
 @dataclass
@@ -891,9 +881,6 @@ class XLNetModel(XLNetPreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.word_embedding = new_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError
 
     def create_mask(self, qlen, mlen):
         """
@@ -1238,7 +1225,7 @@ class XLNetModel(XLNetPreTrainedModel):
     """
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_loss.weight"]
+    _tied_weights_keys = {"lm_loss.weight": "transformer.word_embedding.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1326,6 +1313,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetLMHeadModelOutput]:
         r"""
@@ -1444,7 +1432,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        logits = self.lm_loss(transformer_outputs[0])
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_loss(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

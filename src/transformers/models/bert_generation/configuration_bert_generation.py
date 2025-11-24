@@ -14,10 +14,10 @@
 # limitations under the License.
 """BertGeneration model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class BertGenerationConfig(PretrainedConfig):
+class BertGenerationConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BertGenerationPreTrainedModel`]. It is used to
     instantiate a BertGeneration model according to the specified arguments, defining the model architecture.
@@ -25,8 +25,8 @@ class BertGenerationConfig(PretrainedConfig):
     [google/bert_for_seq_generation_L-24_bbc_encoder](https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50358):
@@ -60,12 +60,6 @@ class BertGenerationConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 1):
             End of stream token id.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -103,7 +97,6 @@ class BertGenerationConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=1,
-        position_embedding_type="absolute",
         use_cache=True,
         **kwargs,
     ):
@@ -120,7 +113,6 @@ class BertGenerationConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
 
 

@@ -20,7 +20,7 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_fp_quant_available, is_qutlass_available, is_torch_available, logging
+from ..utils import is_fp_quant_available, is_qutlass_available, is_torch_available, is_torch_xpu_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -37,7 +37,7 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     requires_parameters_quantization = True
-    is_qat_trainable = False
+    is_qat_trainable = True
     required_packages = ["fp_quant"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -45,9 +45,9 @@ class FPQuantHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, device_map, **kwargs):
-        if not torch.cuda.is_available():
+        if not torch.cuda.is_available() and not is_torch_xpu_available():
             raise NotImplementedError(
-                "FPQuant quantization is only supported on GPU. Please use a different quantizer."
+                "FPQuant quantization is only supported on GPU or Intel XPU. Please use a different quantizer."
             )
 
         if not is_qutlass_available() and not self.quantization_config.pseudoquantization:
@@ -63,12 +63,16 @@ class FPQuantHfQuantizer(HfQuantizer):
         if not is_fp_quant_available():
             raise ImportError("Using `fp_quant` quantization requires fp_quant: `pip install fp_quant`")
 
-        if device_map is None:
+        if device_map is None and not self.quantization_config.pseudoquantization:
             raise ValueError(
                 "You are attempting to load a FPQuant model without setting device_map."
                 " Please set device_map comprised of 'cuda' devices."
             )
-        elif isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        elif (
+            isinstance(device_map, dict)
+            and ("cpu" in device_map.values() or "disk" in device_map.values())
+            and not self.quantization_config.pseudoquantization
+        ):
             raise ValueError(
                 "You are attempting to load a FPQuant model with a device_map that contains a CPU or disk device."
                 " This is not supported. Please remove the CPU or disk device from the device_map."
@@ -92,6 +96,10 @@ class FPQuantHfQuantizer(HfQuantizer):
         **kwargs,
     ):
         module, _ = get_module_from_name(model, param_name)
+
+        if target_device == "cpu" and param_name.endswith("weight"):
+            # Works agains hard-coded missing key dispatch to CPU
+            return
 
         # The module holds either:
         #  * `weight` when `store_master_weights=True`
@@ -136,9 +144,6 @@ class FPQuantHfQuantizer(HfQuantizer):
         )
         model.config.quantization_config = self.quantization_config
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from fp_quant import FPQuantLinear
 
@@ -154,7 +159,12 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        return False
+        trainable = self.quantization_config.store_master_weights
+        if not trainable:
+            logger.warning(
+                "You are attempting to train a model with FPQuant quantization. This is only supported when `store_master_weights=True`. Please set `store_master_weights=True` to train the model."
+            )
+        return trainable
 
     def is_serializable(self, safe_serialization=None):
         return True

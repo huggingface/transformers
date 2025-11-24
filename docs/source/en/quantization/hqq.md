@@ -38,7 +38,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
 quant_config = HqqConfig(nbits=8, group_size=64)
-model = transformers.AutoModelForCausalLM.from_pretrained(
+model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B", 
     dtype=torch.float16, 
     device_map="auto", 

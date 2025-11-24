@@ -115,7 +115,6 @@ training_args = TrainingArguments(
     output_dir="my-awesome-model",
     num_train_epochs=30,
     fp16=True,
-    logging_dir=f"{repo_name}/logs",
     logging_strategy="epoch",
     eval_strategy="epoch",
     save_strategy="epoch",

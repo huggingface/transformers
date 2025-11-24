@@ -44,10 +44,10 @@ class TestBatchGeneration(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("eager_paged", 64, 128, 64),
-            ("sdpa_paged", 32, 256, 128),
-            ("paged_attention", 16, 512, 256),
-            ("flex_paged", 64, 128, 64),
+            ("paged|eager", 64, 128, 64),
+            ("paged|sdpa", 32, 256, 128),
+            ("paged|flash_attention_2", 16, 512, 256),
+            ("paged|flex_attention", 64, 128, 64),
         ]
     )
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
@@ -89,10 +89,10 @@ class TestBatchGeneration(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("eager_paged", 64, 128, 64),
-            ("sdpa_paged", 32, 256, 128),
-            ("paged_attention", 16, 512, 256),
-            ("flex_paged", 64, 128, 64),
+            ("paged|eager", 64, 128, 64),
+            ("paged|sdpa", 32, 256, 128),
+            ("paged|flash_attention_2", 16, 512, 256),
+            ("paged|flex_attention", 64, 128, 64),
         ]
     )
     def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):

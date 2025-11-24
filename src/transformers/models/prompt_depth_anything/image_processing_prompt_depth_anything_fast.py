@@ -24,10 +24,10 @@ from ...processing_utils import Unpack
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -42,15 +42,9 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     requires_backends,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
 
 
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
@@ -95,27 +89,6 @@ def _get_resize_output_image_size(
     return (new_height, new_width)
 
 
-class PromptDepthAnythingFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    keep_aspect_ratio (`bool`, *optional*):
-        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
-    ensure_multiple_of (`int`, *optional*):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
-    do_pad (`bool`, *optional*):
-        Whether to apply center padding.
-    size_divisor (`int`, *optional*):
-        If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
-    prompt_scale_to_meter (`float`, *optional*):
-        Scale factor to convert the prompt depth to meters.
-    """
-
-    keep_aspect_ratio: Optional[bool]
-    ensure_multiple_of: Optional[int]
-    do_pad: Optional[bool]
-    size_divisor: Optional[int]
-    prompt_scale_to_meter: Optional[float]
-
-
 @auto_docstring
 class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values", "prompt_depth"]
@@ -132,9 +105,9 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     do_pad = False
     size_divisor = None
     prompt_scale_to_meter = 0.001
-    valid_kwargs = PromptDepthAnythingFastImageProcessorKwargs
+    valid_kwargs = PromptDepthAnythingImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
@@ -142,7 +115,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         prompt_depth: Optional[ImageInput] = None,
-        **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
+        **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         prompt_depth (`ImageInput`, *optional*):
@@ -219,7 +192,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         device: Optional[Union[str, "torch.device"]] = None,
         prompt_scale_to_meter: Optional[float] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs: Unpack[PromptDepthAnythingFastImageProcessorKwargs],
+        **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs, including the main images and optional prompt depth.

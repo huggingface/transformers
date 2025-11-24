@@ -36,6 +36,7 @@ The model is an optimized [GPT2 model](https://huggingface.co/docs/transformers/
 ## Implementation details
 
 The main differences compared to GPT2.
+
 - Added support for Multi-Query Attention.
 - Use `gelu_pytorch_tanh` instead of classic `gelu`.
 - Avoid unnecessary synchronizations (this has since been added to GPT2 in #20061, but wasn't in the reference codebase).
@@ -63,8 +64,9 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
->>> device = infer_device() # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
+>>> device = Accelerator().device # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", dtype=torch.float16, attn_implementation="flash_attention_2")
 >>> tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")

@@ -160,9 +160,8 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     is_encoder_decoder = False
-    test_pruning = False
+
     test_missing_keys = True
-    test_torchscript = False
     test_inputs_embeds = False
 
     test_resize_embeddings = True
@@ -209,7 +208,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

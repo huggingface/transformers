@@ -20,31 +20,17 @@ rendered properly in your Markdown viewer.
 
 ## 超参数搜索后端
 
-[`Trainer`] 目前支持四种超参数搜索后端：[optuna](https://optuna.org/)，[sigopt](https://sigopt.com/)，[raytune](https://docs.ray.io/en/latest/tune/index.html)，[wandb](https://wandb.ai/site/sweeps)
+[`Trainer`] 目前支持四种超参数搜索后端：[optuna](https://optuna.org/)，[raytune](https://docs.ray.io/en/latest/tune/index.html)，[wandb](https://wandb.ai/site/sweeps)
 
 在使用它们之前，您应该先安装它们作为超参数搜索后端。
 
 ```bash
-pip install optuna/sigopt/wandb/ray[tune]
+pip install optuna/wandb/ray[tune]
 ```
 
 ## 如何在示例中启用超参数搜索
 
 定义超参数搜索空间，不同的后端需要不同的格式。
-
-对于sigopt，请参阅sigopt [object_parameter](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter)，它类似于以下内容：
-
-```py
->>> def sigopt_hp_space(trial):
-...     return [
-...         {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double"},
-...         {
-...             "categorical_values": ["16", "32", "64", "128"],
-...             "name": "per_device_train_batch_size",
-...             "type": "categorical",
-...         },
-...     ]
-```
 
 对于optuna，请参阅optuna [object_parameter](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py)，它类似于以下内容：
 
@@ -101,7 +87,6 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         use_auth_token=True if model_args.use_auth_token else None,
 ...     )
 ```
 
@@ -120,7 +105,7 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ... )
 ```
 
-调用超参数搜索，获取最佳试验参数，后端可以是`"optuna"`/`"sigopt"`/`"wandb"`/`"ray"`。方向可以是`"minimize"`或`"maximize"`，表示是否优化更大或更低的目标。
+调用超参数搜索，获取最佳试验参数，后端可以是`"optuna"`/`"wandb"`/`"ray"`。方向可以是`"minimize"`或`"maximize"`，表示是否优化更大或更低的目标。
 
 您可以定义自己的compute_objective函数，如果没有定义，将调用默认的compute_objective，并将评估指标（如f1）之和作为目标值返回。
 
@@ -135,4 +120,4 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 ```
 
 ## 针对DDP微调的超参数搜索
-目前，Optuna和Sigopt已启用针对DDP的超参数搜索。只有rank-zero进程会进行超参数搜索并将参数传递给其他进程。
+目前，Optuna已启用针对DDP的超参数搜索。只有rank-zero进程会进行超参数搜索并将参数传递给其他进程。

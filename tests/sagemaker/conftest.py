@@ -21,7 +21,6 @@ class SageMakerTestEnvironment:
         "do_eval": True,
         "do_predict": True,
         "output_dir": "/opt/ml/model",
-        "overwrite_output_dir": True,
         "max_steps": 500,
         "save_steps": 5500,
     }
