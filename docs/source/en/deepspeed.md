@@ -341,13 +341,6 @@ The example ZeRO-3 and ZeRO-Infinity config below sets most of the parameter val
             "buffer_size": 1e8,
             "max_in_cpu": 1e9
         },
-        "aio": {
-            "block_size": 262144,
-            "queue_depth": 32,
-            "thread_count": 1,
-            "single_submit": false,
-            "overlap_events": true
-        },
         "overlap_comm": true,
         "contiguous_gradients": true,
         "sub_group_size": 1e9,
@@ -358,7 +351,13 @@ The example ZeRO-3 and ZeRO-Infinity config below sets most of the parameter val
         "stage3_max_reuse_distance": 1e9,
         "stage3_gather_16bit_weights_on_model_save": true
     },
-
+    "aio": {
+        "block_size": 262144,
+        "queue_depth": 32,
+        "thread_count": 1,
+        "single_submit": false,
+        "overlap_events": true
+    },
     "gradient_accumulation_steps": "auto",
     "gradient_clipping": "auto",
     "steps_per_print": 2000,
