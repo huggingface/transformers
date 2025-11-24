@@ -18,9 +18,12 @@ import shutil
 import sys
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
+from unittest import mock
 
 import pytest
+from huggingface_hub import hf_hub_download
 
 import transformers
 from transformers import (
@@ -180,6 +183,14 @@ class AutoTokenizerTest(unittest.TestCase):
             AutoTokenizer.from_pretrained("google-bert/bert-base-cased", use_fast=False), BertTokenizer
         )
         self.assertIsInstance(AutoTokenizer.from_pretrained("google-bert/bert-base-cased"), BertTokenizerFast)
+
+    @require_tokenizers
+    def test_voxtral_tokenizer_converts_from_tekken(self):
+        repo_id = "mistralai/Voxtral-Mini-3B-2507"
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)  # should not raise
+        self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+        self.assertTrue(tokenizer.is_fast)
+        self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
 
     @require_tokenizers
     def test_do_lower_case(self):
