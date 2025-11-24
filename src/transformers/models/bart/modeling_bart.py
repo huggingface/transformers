@@ -897,21 +897,20 @@ class BartModel(BartPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def tie_weights(self, *args, **kwargs):
+    def tie_weights(self, missing_keys: Optional[set[str]] = None, recompute_mapping: bool = True):
         """We need to overload here to handle the wrong key saved in some main checkpoints."""
-        super().tie_weights(*args, **kwargs)
         if self.config.tie_word_embeddings:
-            # Some model checkpoints like "facebook/bart-large-cnn"'s embedding weight is in decoder.embed_tokens, 
+            # Some model checkpoints like "facebook/bart-large-cnn"'s embedding weight is in decoder.embed_tokens,
             # need check here, see issue #36247
-            if self.shared.weight.device == torch.device(
-                "meta"
-            ) and self.decoder.embed_tokens.weight.device != torch.device("meta"):
-                self._tie_embedding_weights(self.encoder.embed_tokens, self.decoder.embed_tokens)
-                self._tie_embedding_weights(self.shared, self.decoder.embed_tokens)
-            else:
-                self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-                self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
+            if missing_keys is not None:
+                if "shared.weight" in missing_keys and "decoder.embed_tokens.weight" not in missing_keys:
+                    self.encoder.embed_tokens.weight = self.decoder.embed_tokens.weight
+                    self.shared.weight = self.decoder.embed_tokens.weight
+                    missing_keys.discard("encoder.embed_token.weight")
+                    missing_keys.discard("shared.weight")
 
+        # needs to be done after, otherwise it raises an Error because the correct weights are not present
+        super().tie_weights(missing_keys=missing_keys, recompute_mapping=recompute_mapping)
 
     def get_input_embeddings(self):
         return self.shared
@@ -1049,6 +1048,21 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def tie_weights(self, missing_keys: Optional[set[str]] = None, recompute_mapping: bool = True):
+        """We need to overload here to handle the wrong key saved in some main checkpoints."""
+        if self.config.tie_word_embeddings:
+            # Some model checkpoints like "facebook/bart-large-cnn"'s embedding weight is in decoder.embed_tokens,
+            # need check here, see issue #36247
+            if missing_keys is not None:
+                if "model.shared.weight" in missing_keys and "model.decoder.embed_tokens.weight" not in missing_keys:
+                    self.model.encoder.embed_tokens.weight = self.model.decoder.embed_tokens.weight
+                    self.model.shared.weight = self.model.decoder.embed_tokens.weight
+                    missing_keys.discard("model.encoder.embed_token.weight")
+                    missing_keys.discard("model.shared.weight")
+
+        # needs to be done after, otherwise it raises an Error because the correct weights are not present
+        super().tie_weights(missing_keys=missing_keys, recompute_mapping=recompute_mapping)
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
@@ -1228,6 +1242,21 @@ class BartForSequenceClassification(BartPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def tie_weights(self, missing_keys: Optional[set[str]] = None, recompute_mapping: bool = True):
+        """We need to overload here to handle the wrong key saved in some main checkpoints."""
+        if self.config.tie_word_embeddings:
+            # Some model checkpoints like "facebook/bart-large-cnn"'s embedding weight is in decoder.embed_tokens,
+            # need check here, see issue #36247
+            if missing_keys is not None:
+                if "model.shared.weight" in missing_keys and "model.decoder.embed_tokens.weight" not in missing_keys:
+                    self.model.encoder.embed_tokens.weight = self.model.decoder.embed_tokens.weight
+                    self.model.shared.weight = self.model.decoder.embed_tokens.weight
+                    missing_keys.discard("model.encoder.embed_token.weight")
+                    missing_keys.discard("model.shared.weight")
+
+        # needs to be done after, otherwise it raises an Error because the correct weights are not present
+        super().tie_weights(missing_keys=missing_keys, recompute_mapping=recompute_mapping)
+
     @auto_docstring
     def forward(
         self,
@@ -1358,6 +1387,21 @@ class BartForQuestionAnswering(BartPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def tie_weights(self, missing_keys: Optional[set[str]] = None, recompute_mapping: bool = True):
+        """We need to overload here to handle the wrong key saved in some main checkpoints."""
+        if self.config.tie_word_embeddings:
+            # Some model checkpoints like "facebook/bart-large-cnn"'s embedding weight is in decoder.embed_tokens,
+            # need check here, see issue #36247
+            if missing_keys is not None:
+                if "model.shared.weight" in missing_keys and "model.decoder.embed_tokens.weight" not in missing_keys:
+                    self.model.encoder.embed_tokens.weight = self.model.decoder.embed_tokens.weight
+                    self.model.shared.weight = self.model.decoder.embed_tokens.weight
+                    missing_keys.discard("model.encoder.embed_token.weight")
+                    missing_keys.discard("model.shared.weight")
+
+        # needs to be done after, otherwise it raises an Error because the correct weights are not present
+        super().tie_weights(missing_keys=missing_keys, recompute_mapping=recompute_mapping)
 
     @auto_docstring
     def forward(
