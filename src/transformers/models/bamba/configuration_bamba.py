@@ -106,7 +106,7 @@ class BambaConfig(PreTrainedConfig):
         z_loss_coefficient (`float`, *optional*, defaults to 0.0):
             Coefficient for auxiliary z-loss used to control logit growth during training
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
     """

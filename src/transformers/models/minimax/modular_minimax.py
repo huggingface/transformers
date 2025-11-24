@@ -121,7 +121,7 @@ class MiniMaxConfig(PreTrainedConfig):
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         layer_types (`list`, *optional*):

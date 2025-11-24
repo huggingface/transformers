@@ -78,7 +78,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             The partial rotary factor used in the initialization of the rotary embeddings.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):

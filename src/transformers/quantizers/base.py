@@ -176,7 +176,7 @@ class HfQuantizer(ABC):
                 CustomDtype.FP8: 1,
                 CustomDtype.INT2: 0.25,
             }
-            # The value passed is actually not used when the method is overriden
+            # The value passed is actually not used when the method is overridden
             if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
                 return mapping[custom_dtype]
         return model.get_parameter_or_buffer(param_name).element_size()

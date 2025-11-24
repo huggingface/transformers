@@ -414,7 +414,7 @@ class BenchmarkRunner:
             self.save_results(model_id, all_results, timestamp=timestamp)
 
         if len(all_results) < 1:
-            raise RuntimeError("No benchmark was run succesfully")
+            raise RuntimeError("No benchmark was run successfully")
 
         if pretty_print_summary:
             print()
@@ -504,4 +504,4 @@ class BenchmarkRunner:
                 repo_type="dataset",
                 token=PUSH_TO_HUB_TOKEN,
             )
-        self.logger.info(f"Succesfully uploaded results to: {dataset_id}")
+        self.logger.info(f"Successfully uploaded results to: {dataset_id}")

@@ -72,7 +72,7 @@ class EfficientLoFTRConfig(PreTrainedConfig):
             Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
             the whole hidden_size, so this factor is used to compensate.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         fine_matching_slice_dim (`int`, *optional*, defaults to 8):

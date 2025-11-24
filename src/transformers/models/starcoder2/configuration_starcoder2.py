@@ -71,7 +71,7 @@ class Starcoder2Config(PreTrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 50256):
             The id of the "end-of-sequence" token.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*):
