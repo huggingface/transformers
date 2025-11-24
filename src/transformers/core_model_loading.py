@@ -29,8 +29,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from .utils.import_utils import is_torch_available
 
 
-if is_torch_available():
-    import torch
+import torch
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
 from .utils import is_torch_greater_or_equal, logging
