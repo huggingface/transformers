@@ -19,11 +19,13 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
+from functools import lru_cache
 from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
+from tqdm import tqdm
 
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
@@ -1692,6 +1694,85 @@ class TikTokenConverter:
         return tokenizer
 
 
+class MistralConverter:
+    def __init__(
+        self,
+        vocab_file=None,
+        pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
+        add_prefix_space=False,
+        additional_special_tokens=None,
+        **kwargs,
+    ):
+        self.vocab_file = vocab_file
+        self.pattern = pattern
+        self.add_prefix_space = add_prefix_space
+        self.additional_special_tokens = (
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
+        )
+
+    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+        import base64
+        import json
+
+        with open(self.vocab_file, "r", encoding="utf-8") as f:
+            untyped = json.load(f)
+        self.pattern = untyped["config"]["pattern"]
+        self.additional_special_tokens = [
+            AddedToken(k["token_str"], special=k["is_control"]) for k in untyped["special_tokens"]
+        ]
+        bpe_ranks = untyped["vocab"]
+        byte_encoder = bytes_to_unicode()
+
+        @lru_cache
+        def token_bytes_to_string(b):
+            return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
+
+        merges = []
+        vocab = {}
+        for idx, token in enumerate(self.additional_special_tokens):
+            vocab[token.content] = idx
+        bpe_ranks = [base64.b64decode(k["token_bytes"]) for k in bpe_ranks]
+        rank_set = set(bpe_ranks)
+        for rank, token in enumerate(tqdm(bpe_ranks, desc="Converting tekken.json to tokenizer.json")):
+            vocab[token_bytes_to_string(token)] = rank
+            if len(token) == 1:
+                continue
+            local = []
+            for index in range(1, len(token)):
+                piece_l, piece_r = token[:index], token[index:]
+                if piece_l in rank_set and piece_r in rank_set and (piece_l + piece_r) in rank_set:
+                    local.append((piece_l, piece_r, rank))
+            local = sorted(local, key=lambda x: (bpe_ranks.index(x[0]), bpe_ranks.index(x[1])), reverse=False)
+            merges.extend(local)
+        merges = sorted(merges, key=lambda val: val[2], reverse=False)
+        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
+        return vocab, merges
+
+    def tokenizer(self):
+        vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab_file)
+        tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
+        if hasattr(tokenizer.model, "ignore_merges"):
+            tokenizer.model.ignore_merges = True
+        return tokenizer
+
+    def converted(self) -> Tokenizer:
+        tokenizer = self.tokenizer()
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
+                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
+            ]
+        )
+        tokenizer.decoder = decoders.ByteLevel()
+
+        tokenizer.add_tokens(self.additional_special_tokens)
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        return tokenizer
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -1771,7 +1852,10 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
         converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
         return converter_class(transformer_tokenizer).converted()
-
+    elif transformer_tokenizer.vocab_file.endswith("tekken.json"):
+        transformer_tokenizer.original_tokenizer = transformer_tokenizer
+        logger.info("Converting from Mistral tekken.json")
+        return MistralConverter(transformer_tokenizer.vocab_file).converted()
     else:
         try:
             logger.info("Converting from Tiktoken")
