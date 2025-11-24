@@ -32,6 +32,11 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
+from tokenizers import AddedToken
+
+
+# impoprt convert_slow_tokenizer
+
 
 
 # impoprt convert_slow_tokenizer

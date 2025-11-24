@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     require_pandas,
     require_sentencepiece,
     require_tokenizers,
-    require_torch,
     slow,
 )
 
@@ -40,7 +39,6 @@ from ...test_tokenization_common import (
     SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     filter_non_english,
-    merge_model_tokenizer_mappings,
 )
 
 
@@ -297,7 +295,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 decoded = tokenizer.decode(encoded_special_token, skip_special_tokens=True)
                 self.assertTrue(special_token not in decoded)
-
 
     @require_tokenizers
     def test_encode_decode_with_spaces(self):
@@ -868,7 +865,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             if parameter.default != inspect.Parameter.empty:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
-
     def test_special_tokens_mask_input_pairs(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1097,7 +1093,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_chat_template_batched(self):
         pass
 
-
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -1197,7 +1192,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in r_output)
 
     def test_training_new_tokenizer(self):
-
         tokenizer = self.get_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
 
@@ -1239,7 +1233,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
-
         tokenizer = self.get_tokenizer()
         # Test with a special tokens map
         class_signature = inspect.signature(tokenizer.__class__)
@@ -1346,7 +1339,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_dict = tokenizer.encode_plus_boxes(words, boxes=boxes, add_special_tokens=True)
 
                 self.assertEqual(input_dict, prepared_input_dict)
-
 
     def test_batch_encode_dynamic_overflowing(self):
         """

@@ -987,6 +987,62 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
+        # Store additional_special_tokens in init_kwargs before conversion for backward compatibility
+        additional_special_tokens_value = kwargs.pop("additional_special_tokens", None)
+        if "additional_special_tokens" not in self.init_kwargs:
+            self.init_kwargs["additional_special_tokens"] = additional_special_tokens_value
+        kwargs.setdefault("extra_special_tokens", additional_special_tokens_value)
+
+        self._pad_token_type_id = 0
+        self.verbose = kwargs.pop("verbose", False)
+
+        # V5: Separate storage for named special tokens and extra special tokens
+        self._special_tokens_map = dict.fromkeys(self.SPECIAL_TOKENS_ATTRIBUTES)
+        self._extra_special_tokens = []  # List of extra model-specific special tokens
+
+        # V5: track both explicit and auto-detected model-specific tokens
+        explicit_model_specific_tokens = kwargs.pop("model_specific_special_tokens", None)
+        if explicit_model_specific_tokens is None:
+            explicit_model_specific_tokens = {}
+        elif not isinstance(explicit_model_specific_tokens, dict):
+            raise TypeError("model_specific_special_tokens must be a dictionary of token name to token value")
+        auto_model_specific_tokens = {}
+
+        # Directly set hidden values to allow init with tokens not yet in vocab
+        for key in list(kwargs.keys()):
+            if key in self.SPECIAL_TOKENS_ATTRIBUTES:
+                value = kwargs.pop(key)
+                if value is None:
+                    continue
+                if isinstance(value, (str, AddedToken)):
+                    self._special_tokens_map[key] = value
+                else:
+                    raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
+            elif key == "extra_special_tokens":
+                # V5: Support extra_special_tokens in __init__
+                value = kwargs.pop(key)
+                if value is None:
+                    continue
+                # If dict: treat as model specific named special tokens (attributes)
+                if isinstance(value, dict):
+                    self._set_model_specific_special_tokens(special_tokens=value)
+                else:
+                    if not isinstance(value, (list, tuple)) or not all(
+                        isinstance(t, (str, AddedToken)) for t in value
+                    ):
+                        raise TypeError(
+                            "extra_special_tokens must be a list/tuple of str or AddedToken, or a dict mapping names to tokens"
+                        )
+                    self._extra_special_tokens = list(value)
+            elif (
+                key.endswith("_token")
+                and key not in self.SPECIAL_TOKENS_ATTRIBUTES
+                and isinstance(kwargs[key], (str, AddedToken))
+            ):
+                value = kwargs.pop(key)
+                if value is None:
+                    continue
+                auto_model_specific_tokens[key] = value
 
         self._pad_token_type_id = 0
         self.verbose = kwargs.pop("verbose", False)
