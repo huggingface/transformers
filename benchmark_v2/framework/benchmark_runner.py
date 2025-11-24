@@ -10,6 +10,7 @@ from datetime import datetime
 from queue import Queue
 from typing import Any
 
+import numpy as np
 import torch
 from datasets import Dataset
 from huggingface_hub import HfApi
@@ -208,10 +209,11 @@ class BenchmarkRunner:
             self.logger.info(f"Running benchmark scenario: {config.name}")
 
             # Quick validation: try one measurement first to see if this scenario works
-            generate_fn = self.time_generate_batch if config.continuous_batching else self.time_generate
             flush_memory()
-            e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = generate_fn(
-                max_new_tokens=1, gpu_monitor=None
+            e2e_latency, ttft, itl, shape_and_decoded_output, gpu_metrics = self.time_generate(
+                max_new_tokens=config.num_tokens_to_generate,
+                use_continuous_batching=config.continuous_batching,
+                gpu_monitor=None
             )
             if e2e_latency < 0:
                 self.logger.warning(f"Skipping config {config.name}: {e2e_latency = } (no GPU monitoring)")
@@ -220,18 +222,23 @@ class BenchmarkRunner:
             # Warmup runs
             self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
             for _ in trange(config.warmup_iterations, desc="Warmup"):
-                _ = generate_fn(max_new_tokens=config.num_tokens_to_generate)
+                _ = self.time_generate(
+                    max_new_tokens=config.num_tokens_to_generate,
+                    use_continuous_batching=config.continuous_batching,
+                    gpu_monitor=None
+                )
             self.logger.info("Warmup over.")
 
             # Measurement runs
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
             for _ in trange(config.measurement_iterations, desc="Benchmarking"):
-                e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = generate_fn(
+                e2e_latency, ttft, itl, shape_and_decoded_output, gpu_metrics = self.time_generate(
                     max_new_tokens=config.num_tokens_to_generate,
+                    use_continuous_batching=config.continuous_batching,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
                 )
-                result.accumulate(e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics)
+                result.accumulate(e2e_latency, ttft, itl, shape_and_decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
 
             # Profile if needed
@@ -249,75 +256,51 @@ class BenchmarkRunner:
                 "config": config,
             }
 
-    # TODO: refactor `generate_batch` to handle streaming so we can use it here
-    def time_generate_batch(
-        self,
-        max_new_tokens: int,
-        gpu_monitor: GPUMonitor | None = None,
-    ) -> tuple[float, list[float], str, GPURawMetrics | None]:
-        if gpu_monitor is not None:
-            gpu_monitor.start()
-        # Prepare inputs
-        inputs = self.inputs["input_ids"].tolist()
-        timestamps = []
-        last_result_generated_tokens = None
-        wall_time_0 = time.perf_counter()
-        # We disable prefix sharing because all prompts are the same
-        with self.model.continuous_batching_context_manager(allow_prefix_sharing=False) as manager:
-            manager.add_requests(inputs, max_new_tokens=max_new_tokens, streaming=True)
-            unfinished_requests = len(inputs)
-            while unfinished_requests > 0:
-                # NOTE: I don't like having the extra if stmt here, but hopefully won't degrade perf too much
-                result = manager.get_result()
-                if result is not None:
-                    timestamps.append(time.perf_counter() - wall_time_0)  # FIXME: the timestamps are wrong
-                    if result.is_finished():
-                        last_result_generated_tokens = result.generated_tokens
-                        unfinished_requests -= 1
-                elif not manager.is_running():
-                    raise RuntimeError("Generation thread exited unexpectedly")
-        # Post-processing
-        wall_time_1 = time.perf_counter()
-        e2e_latency = wall_time_1 - wall_time_0
-        gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
-        decoded_output = self.tokenizer.decode(last_result_generated_tokens, skip_special_tokens=True)
-        shape_and_decoded_output = f"{(1, len(last_result_generated_tokens))} | {decoded_output}"
-        return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
-
     def time_generate(
         self,
         max_new_tokens: int,
+        use_continuous_batching: bool = False,
         gpu_monitor: GPUMonitor | None = None,
     ) -> tuple[float, list[float], str, GPURawMetrics | None]:
-        """Time the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
         # Prepare gpu monitoring if needed
         if gpu_monitor is not None:
             gpu_monitor.start()
-        # Prepare streamer
-        streamer = BenchmarkStreamer()
+
         # Generate and time
-        wall_time_0 = time.perf_counter()
-        outputs = self.model.generate(
-            **self.inputs,
-            max_new_tokens=max_new_tokens,
-            streamer=streamer,
-        )
+        if use_continuous_batching:
+            inputs = self.inputs["input_ids"].tolist()
+            wall_time_0 = time.perf_counter()
+            results = self.model.generate_batch(inputs, allow_prefix_sharing=False, record_timestamps=True)
+        else:
+            streamer = BenchmarkStreamer()
+            wall_time_0 = time.perf_counter()
+            results = self.model.generate(**self.inputs, streamer=streamer)
+
         wall_time_1 = time.perf_counter()
-        # Stop gpu monitoring if needed
         gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
-        # Check if generation had the right number of tokens
+
+        # Retrieve timestamps and results in a way that allows similar post-processing
         input_tokens = self.inputs["input_ids"].size(-1)
-        batch_size, output_tokens = outputs.shape
-        new_tokens = output_tokens - input_tokens
-        if new_tokens != max_new_tokens:
-            raise RuntimeError(f"Generated {new_tokens} tokens, expected {max_new_tokens}")
+        if use_continuous_batching:
+            timestamps = [result.timestamps for result in results.values()]
+            results = torch.tensor([result.generated_tokens for result in results.values()])
+        else:
+            timestamps = [streamer.timestamps]
+            results = results[:, input_tokens:]
+
+        # Check if generation had the right number of tokens
+        if results.size(-1) != max_new_tokens:
+            raise RuntimeError(f"Generated {results.size(-1)} tokens, expected {max_new_tokens}")
+
         # Decode outputs
-        decoded_output = self.tokenizer.decode(outputs[0, input_tokens:], skip_special_tokens=True)
-        shape_and_decoded_output = f"{tuple(outputs.shape)} | {decoded_output}"
-        # Compute intermediate quantities
+        decoded_output = self.tokenizer.decode(results[0], skip_special_tokens=True)
+        shape_and_decoded_output = f"{tuple(results.shape)} | {decoded_output}"
+
+        # Compute metrics
         e2e_latency = wall_time_1 - wall_time_0
-        token_generation_times = [t - wall_time_0 for t in streamer.timestamps[1:]]
-        return e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics
+        time_to_first_token = min(ts[0] - wall_time_0 for ts in timestamps)
+        inter_token_latency = np.mean([(ts[-1] - ts[0]) / (len(ts) - 1) for ts in timestamps])
+        return e2e_latency, time_to_first_token, inter_token_latency, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""

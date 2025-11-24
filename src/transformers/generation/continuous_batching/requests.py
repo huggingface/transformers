@@ -88,7 +88,8 @@ class GenerationOutput:
     logprobs: list[float] = field(default_factory=list)
     error: str | None = None
     status: RequestStatus = RequestStatus.PENDING
-    created_time: float = field(default_factory=time.time)
+    created_time: float = field(default_factory=time.perf_counter)
+    timestamps: list[float] | None = None  # Timestamps of the generated tokens
 
     def is_finished(self) -> bool:
         return self.status == RequestStatus.FINISHED
@@ -130,7 +131,7 @@ class RequestState:
     max_new_tokens: int = 20  # Maximum number of new tokens to generate
     eos_token_id: int = -1  # ID of the end-of-sequence token
     streaming: bool = False  # Whether to stream tokens as they're generated
-    created_time: float = field(default_factory=time.time)  # Time the request was created
+    created_time: float = field(default_factory=time.perf_counter)  # Time the request was created
     error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
@@ -142,9 +143,9 @@ class RequestState:
     @status.setter
     def status(self, value: RequestStatus):
         if self._status == RequestStatus.PENDING:
-            self.lifespan = (time.time(), -1)
+            self.lifespan = (time.perf_counter(), -1)
         elif value == RequestStatus.FINISHED:
-            self.lifespan = (self.lifespan[0], time.time())
+            self.lifespan = (self.lifespan[0], time.perf_counter())
             self.log_end_of_request()
         self._status = value
 
@@ -186,7 +187,7 @@ class RequestState:
 
         # If we're recording timestamps, add the token ID and timestamp to the list
         if self.record_timestamps:
-            self._timestamps.append(time.time())
+            self._timestamps.append(time.perf_counter())
 
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
@@ -224,4 +225,5 @@ class RequestState:
             generated_tokens=self.generated_tokens,
             logprobs=[],
             error=self.error,
+            timestamps=self.timestamps,
         )

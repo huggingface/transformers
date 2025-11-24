@@ -94,20 +94,17 @@ class BenchmarkResult:
         self.shape_and_decoded_outputs = []
         self.gpu_metrics = []
 
-    def compute_itl(self, token_generation_times: list[float]) -> list[float]:
-        return (token_generation_times[-1] - token_generation_times[0]) / len(token_generation_times)
-
     def accumulate(
         self,
         e2e_latency: float,
-        token_generation_times: list[float],
+        time_to_first_token: float,
+        inter_token_latency: float,
         shape_and_decoded_output: str,
         gpu_metrics: GPURawMetrics | None,
     ) -> None:
         self.e2e_latency.append(e2e_latency)
-        self.time_to_first_token.append(token_generation_times[0])
-        # inter-token latency is already an average in itself
-        self.inter_token_latency.append(self.compute_itl(token_generation_times))
+        self.time_to_first_token.append(time_to_first_token)
+        self.inter_token_latency.append(inter_token_latency)  # inter-token latency is already an average in itself
         self.shape_and_decoded_outputs.append(shape_and_decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 

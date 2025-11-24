@@ -862,6 +862,7 @@ class ContinuousBatchingManager:
         request_id: str | None = None,
         max_new_tokens: int | None = None,
         streaming: bool = False,
+        record_timestamps: bool = False,
     ) -> str:
         """Add a new generation request to the queue.
 
@@ -883,8 +884,9 @@ class ContinuousBatchingManager:
         # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
-            tokens_to_process=list(input_ids),
             initial_tokens=list(input_ids),
+            record_timestamps=record_timestamps,
+            tokens_to_process=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
             streaming=streaming,
@@ -895,10 +897,16 @@ class ContinuousBatchingManager:
         return request_id
 
     def add_requests(
-        self, inputs: list[list[int]], max_new_tokens: int | None = None, streaming: bool = False
+        self,
+        inputs: list[list[int]],
+        max_new_tokens: int | None = None,
+        streaming: bool = False,
+        record_timestamps: bool = False,
     ) -> None:
         for input_ids in inputs:
-            self.add_request(input_ids, max_new_tokens=max_new_tokens, streaming=streaming)
+            self.add_request(
+                input_ids, max_new_tokens=max_new_tokens, streaming=streaming, record_timestamps=record_timestamps
+            )
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a request by its ID.
@@ -1119,6 +1127,8 @@ class ContinuousMixin:
         progress_bar: bool = True,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
+        allow_prefix_sharing: bool = True,
+        record_timestamps: bool = False,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1146,6 +1156,7 @@ class ContinuousMixin:
             generation_config=generation_config,
             num_q_cuda_graphs=num_q_cuda_graphs,
             num_kv_cuda_graphs=num_kv_cuda_graphs,
+            allow_prefix_sharing=allow_prefix_sharing,
         )
         manager.start()
         results = {}
@@ -1160,7 +1171,9 @@ class ContinuousMixin:
                     desc=f"Solving {num_requests} requests",
                     unit="request",
                 ) as pbar:
-                    manager.add_requests(inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"))
+                    manager.add_requests(
+                        inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"), record_timestamps=record_timestamps
+                    )
                     finished_count = 0
                     while finished_count < num_requests:
                         result = manager.get_result(timeout=1)
