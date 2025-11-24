@@ -121,7 +121,7 @@ class RequestState:
     # Optional fields
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
     # Internal fields
-    scheduled_tokens: list[int] | None = None  # Tokens IDs currently being processed
+    tokens_to_process: list[int] | None = None  # Tokens IDs currently being processed
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
     generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
@@ -206,7 +206,7 @@ class RequestState:
             f"request_id={self.request_id}",
             f"status={self._status}",
             f"out_tokens={self.generated_len()}",
-            f"query_length={len(self.scheduled_tokens)}",
+            f"query_length={len(self.tokens_to_process)}",
             f"remaining_tokens={len(self.remaining_prefill_tokens)}",
             f"kv_length={self.position_offset}",
             f"full_prompt_length={len(self.initial_tokens)}",

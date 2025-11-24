@@ -455,7 +455,7 @@ class ContinuousBatchProcessor:
         for state in self.requests_in_batch:
             # First we retrieve the lengths related to the request
             past_length = state.position_offset
-            query_length = len(state.scheduled_tokens)
+            query_length = len(state.tokens_to_process)
             seqlens_k = self.cache.get_seqlens_k(state.request_id, past_length, query_length)
 
             # Then we update the total lengths that are used for slicing
@@ -467,7 +467,7 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
             # Then we accumulate for the object used in the kwargs
-            input_ids.extend(state.scheduled_tokens)
+            input_ids.extend(state.tokens_to_process)
             position_ids.extend(range(past_length, past_length + query_length))
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
@@ -568,7 +568,7 @@ class ContinuousBatchProcessor:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
-                state.scheduled_tokens = [token]
+                state.tokens_to_process = [token]
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
                 # We mark the completed blocks as such
@@ -883,7 +883,7 @@ class ContinuousBatchingManager:
         # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
-            scheduled_tokens=list(input_ids),
+            tokens_to_process=list(input_ids),
             initial_tokens=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
