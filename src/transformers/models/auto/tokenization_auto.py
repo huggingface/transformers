@@ -366,6 +366,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
         ("layoutxlm", ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast" if is_tokenizers_available() else None)),
         ("led", ("LEDTokenizer", "LEDTokenizerFast" if is_tokenizers_available() else None)),
+        ("lfm2", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("lfm2_vl", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         (
             "lightonocr",
             (
