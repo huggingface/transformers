@@ -1406,7 +1406,7 @@ class MT5ForSequenceClassification(MT5PreTrainedModel):
 
         check_with(
             ValueError,
-            len(torch.unique_consecutive(eos_mask.sum(1))) == 1,
+            torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
             lambda: "All examples must have the same number of <eos> tokens.",
         )
         batch_size, _, hidden_size = sequence_output.shape
