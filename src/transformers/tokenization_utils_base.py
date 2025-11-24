@@ -2108,8 +2108,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
-            other_pattern = "tekken.json|tokenizer.model.*"
-            if match := re.search(other_pattern, "".join(remote_files)):
+            other_pattern = re.escape("tekken.json|tokenizer.model.*")
+            if match := re.search(other_pattern, "\n".join(remote_files)):
                 vocab_files["vocab_file"] = match.group()
 
         resolved_vocab_files = {}
@@ -2430,7 +2430,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
-        if tokenizer.vocab_size > 100000 and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None:
+
+        if (
+            tokenizer.vocab_size > 100000
+            and hasattr(tokenizer, "_tokenizer")
+            and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
+        ):
             from huggingface_hub import model_info
 
             def is_base_mistral(model_id: str) -> bool:
