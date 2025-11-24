@@ -502,7 +502,7 @@ def accelerate_disk_offload(
             weight_map = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0])
         else:
             folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
-            weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
+            weight_map = {k: os.path.join(folder, v) for k, v in sharded_metadata["weight_map"].items()}
 
         # Update the weight names according to the `weight_mapping`
         weight_renaming_map = {

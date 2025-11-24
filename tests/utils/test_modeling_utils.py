@@ -1246,7 +1246,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model_with_direct_params(self):
         from accelerate import dispatch_model
 
