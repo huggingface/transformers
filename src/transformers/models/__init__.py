@@ -166,6 +166,7 @@ if TYPE_CHECKING:
     from .herbert import *
     from .hgnet_v2 import *
     from .hiera import *
+    from .hiftnet import *
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
@@ -308,6 +309,8 @@ if TYPE_CHECKING:
     from .rt_detr import *
     from .rt_detr_v2 import *
     from .rwkv import *
+    from .s3gen import *
+    from .s3tokenizer import *
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
