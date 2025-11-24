@@ -189,6 +189,7 @@ VLMS = [
     "aria",
     "ayavision",
     "colpali",
+    "colmodernvbert",
     "emu3",
     "fuyu",
     "gotocr2",

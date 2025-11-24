@@ -4,17 +4,19 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from ..smolvlm import SmolVLMProcessor
-from .image_processing_modernvbert import ModernVBertImageProcessor
-from .video_processing_modernvbert import ModernVBertVideoProcessor
+from ..idefics3 import Idefics3Processor
 
 
-class ModernVBertProcessor(SmolVLMProcessor):
-    image_processor_class = ModernVBertImageProcessor
-    video_processor_class = ModernVBertVideoProcessor
+DEFAULT_CHAT_TEMPLATE = "<|begin_of_text|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+
+class ModernVBertProcessor(Idefics3Processor):
+    image_processor_class = "ModernVBertImageProcessor"
+
+    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
+        if chat_template is None:
+            chat_template = DEFAULT_CHAT_TEMPLATE
+        return super().apply_chat_template(conversation, chat_template, **kwargs)
 
 
 __all__ = ["ModernVBertProcessor"]

@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from .image_processing_modernvbert_fast import *
     from .modeling_modernvbert import *
     from .processing_modernvbert import *
-    from .video_processing_modernvbert import *
 else:
     import sys
 

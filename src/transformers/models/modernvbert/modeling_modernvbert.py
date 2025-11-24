@@ -189,24 +189,29 @@ class ModernVBertConnector(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.scale_factor = config.pixel_shuffle_factor
+        self.pixel_shuffle_factor = config.pixel_shuffle_factor
         self.modality_projection = ModernVBertSimpleMLP(
-            input_size=config.vision_config.hidden_size * (config.scale_factor**2),
+            input_size=config.vision_config.hidden_size * (config.pixel_shuffle_factor**2),
             output_size=config.text_config.hidden_size,
         )
 
-    def pixel_shuffle(self, x, scale_factor):
+    def pixel_shuffle(self, x, pixel_shuffle_factor):
         bsz, seq, embed_dim = x.size()
         height = width = int(seq**0.5)
         x = x.view(bsz, height, width, embed_dim)
-        x = x.view(bsz, height, int(width / scale_factor), embed_dim * scale_factor)
+        x = x.view(bsz, height, int(width / pixel_shuffle_factor), embed_dim * pixel_shuffle_factor)
         x = x.permute(0, 2, 1, 3)
-        x = x.reshape(bsz, int(width / scale_factor), int(height / scale_factor), embed_dim * (scale_factor**2))
+        x = x.reshape(
+            bsz,
+            int(width / pixel_shuffle_factor),
+            int(height / pixel_shuffle_factor),
+            embed_dim * (pixel_shuffle_factor**2),
+        )
         x = x.permute(0, 2, 1, 3)
-        return x.reshape(bsz, int(seq / (scale_factor**2)), embed_dim * (scale_factor**2))
+        return x.reshape(bsz, int(seq / (pixel_shuffle_factor**2)), embed_dim * (pixel_shuffle_factor**2))
 
     def forward(self, image_hidden_states):
-        image_hidden_states = self.pixel_shuffle(image_hidden_states, self.scale_factor)
+        image_hidden_states = self.pixel_shuffle(image_hidden_states, self.pixel_shuffle_factor)
         return self.modality_projection(image_hidden_states)
 
 
@@ -245,7 +250,8 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2)
+            / (config.pixel_shuffle_factor**2)
         )
 
         self.post_init()
@@ -270,7 +276,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             num_embeddings=text_model_config.vocab_size,
             num_additional_embeddings=config.additional_vocab_size,
             embedding_dim=config.hidden_size,
-            partially_freeze=config.freeze_config["freeze_text_layers"] if config.freeze_config is not None else False,
+            partially_freeze=getattr(config, "freeze_config", {"freeze_text_layers": False})["freeze_text_layers"],
             padding_idx=config.pad_token_id,
         )
         text_model.set_input_embeddings(embed_layer)

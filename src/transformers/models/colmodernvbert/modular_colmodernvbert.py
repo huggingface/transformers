@@ -1,0 +1,548 @@
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Optional, Union, Any
+from torch import nn
+
+from ..auto import AutoModel, AutoModelForMaskedLM
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, is_valid_image
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
+from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
+from ..modernvbert import ModernVBertProcessor, ModernVBertConfig
+from ...configuration_utils import PreTrainedConfig
+from ...utils import logging
+from ..auto import CONFIG_MAPPING
+
+if is_torch_available():
+    import torch
+
+logger = logging.get_logger(__name__)
+
+class ColModernVBertConfig(PreTrainedConfig):
+    r"""
+    Configuration class to store the configuration of a [`ColModernVBertForRetrieval`]. It is used to instantiate an instance
+    of `ColModernVBertForRetrieval` according to the specified arguments, defining the model architecture following the methodology
+    from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
+    ColModernVBert-v1.0 model, e.g. TODO: [vidore/ColModernVBert-v1.0-hf](https://huggingface.co/vidore/ColModernVBert-v1.0-hf).
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vlm_config (`PreTrainedConfig`, *optional*):
+            Configuration of the VLM backbone model.
+        embedding_dim (`int`, *optional*, defaults to 128):
+            Dimension of the multi-vector embeddings produced by the model.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    Example:
+
+    ```python
+    from transformers.models.ColModernVBert import ColModernVBertConfig, ColModernVBertForRetrieval
+
+    config = ColModernVBertConfig()
+    model = ColModernVBertForRetrieval(config)
+    ```
+    """
+
+    model_type = "colmodernvbert"
+    sub_configs: dict[str, Any] = {"vlm_config": ModernVBertConfig}
+
+    def __init__(
+        self,
+        vlm_config=None,
+        embedding_dim: int = 128,
+        initializer_range: float = 0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        if vlm_config is None:
+            vlm_config = self.sub_configs["vlm_config"]()
+            logger.info(
+                "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
+            )
+        elif isinstance(vlm_config, dict):
+            vlm_config = deepcopy(vlm_config)
+            if "model_type" not in vlm_config:
+                raise KeyError(
+                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
+                )
+            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
+        elif not isinstance(vlm_config, PreTrainedConfig):
+            raise TypeError(
+                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
+            )
+        
+        self.vlm_config = vlm_config
+        self.embedding_dim = embedding_dim
+        self.initializer_range = initializer_range
+
+class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": "longest",
+        },
+        "images_kwargs": {
+            "data_format": "channels_first",
+            "do_convert_rgb": True,
+        },
+        "common_kwargs": {"return_tensors": "pt"},
+    }
+
+
+class ColModernVBertProcessor(ModernVBertProcessor):
+    r"""
+    Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as
+    well as to compute the late-interaction retrieval score.
+
+    [`ColModernVBertProcessor`] offers all the functionalities of [`ModernVBertProcessor`]. See the [`~ModernVBertProcessor.__call__`]
+    for more information.
+
+    Args:
+        image_processor ([`ModernVBertImageProcessor`], *optional*):
+            The image processor is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*): A prefix to be used for the query.
+    """
+
+    def __init__(
+        self,
+        image_processor,
+        tokenizer=None,
+        image_seq_len: int = 64,
+        chat_template=None,
+        visual_prompt_prefix: Optional[str] = None,
+        query_prefix: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer, image_seq_len=image_seq_len, chat_template=chat_template, **kwargs)
+        self.visual_prompt_prefix = visual_prompt_prefix or "<|begin_of_text|>User:<image>Describe the image.<end_of_utterance>\nAssistant:"
+        self.query_prefix = query_prefix or "Query: "
+
+    def __call__(
+        self,
+        images: Optional[ImageInput] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
+        wrapper around the ModernVBertProcessor's [`~ModernVBertProcessor.__call__`] method adapted for the ColModernVBert model. It cannot process
+        both text and images at the same time.
+
+        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to ModernVBertTokenizerFast's
+        [`~ModernVBertTokenizerFast.__call__`].
+        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to ModernVBertImageProcessor's
+        [`~ModernVBertImageProcessor.__call__`].
+        Please refer to the doctsring of the above two methods for more information.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+            text (`str`, `list[str]`, `list[list[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+        output_kwargs = self._merge_kwargs(
+            ColModernVBertProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+
+        return_token_type_ids = suffix is not None
+
+        if text is None and images is None:
+            raise ValueError("Either text or images must be provided")
+        if text is not None and images is not None:
+            raise ValueError("Only one of text or images can be processed at a time")
+
+        if images is not None:
+            if is_valid_image(images):
+                images = [images]
+            elif isinstance(images, list) and is_valid_image(images[0]):
+                pass
+            elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
+                raise ValueError("images must be an image, list of images or list of list of images")
+
+            images = [image.convert("RGB") for image in images]
+
+            batch_doc = super().__call__(
+                text=[self.visual_prompt_prefix] * len(images),
+                images=images,
+                **output_kwargs["images_kwargs"],
+            )
+
+            if return_token_type_ids:
+                labels = batch_doc["input_ids"].masked_fill(batch_doc["token_type_ids"] == 0, -100)
+                batch_doc.update({"labels": labels})
+
+            return batch_doc
+
+        elif text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not (isinstance(text, list) and isinstance(text[0], str)):
+                raise ValueError("Text must be a string or a list of strings")
+
+            if suffix is None:
+                suffix = self.query_augmentation_token * 10
+
+            texts_query: list[str] = []
+
+            for query in text:
+                augmented_query = self.query_prefix + query + suffix
+                texts_query.append(augmented_query)
+
+            batch_query = super().__call__(
+                text=texts_query,
+                return_token_type_ids=False,
+                **output_kwargs["text_kwargs"],
+            )
+
+            return batch_query
+
+    @property
+    def query_augmentation_token(self) -> str:
+        """
+        Return the query augmentation token.
+
+        Query augmentation buffers are used as reasoning buffers during inference.
+        """
+        return self.tokenizer.pad_token
+        
+    def process_images(
+        self,
+        images: Optional[ImageInput] = None,
+        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColModernVBertProcessor's
+        [`ColModernVBertProcessor.__call__`].
+        This method forwards the `images` and `kwargs` arguments to the image processor.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+        """
+        return self.__call__(images=images, **kwargs)
+
+    def process_queries(
+        self,
+        text: Union[TextInput, list[TextInput]],
+        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColModernVBertProcessor's
+        [`ColModernVBertProcessor.__call__`].
+        This method forwards the `text` and `kwargs` arguments to the tokenizer.
+
+        Args:
+            text (`str`, `list[str]`, `list[list[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+        """
+        return self.__call__(text=text, **kwargs)
+    
+    def score_retrieval(
+        self,
+        query_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
+        passage_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
+        batch_size: int = 128,
+        output_dtype: Optional["torch.dtype"] = None,
+        output_device: Union["torch.device", str] = "cpu",
+    ) -> "torch.Tensor":
+        """
+        Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
+        query embeddings (`qs`) and passage embeddings (`ps`). For ColPali, a passage is the
+        image of a document page.
+
+        Because the embedding tensors are multi-vector and can thus have different shapes, they
+        should be fed as:
+        (1) a list of tensors, where the i-th tensor is of shape (sequence_length_i, embedding_dim)
+        (2) a single tensor of shape (n_passages, max_sequence_length, embedding_dim) -> usually
+            obtained by padding the list of tensors.
+
+        Args:
+            query_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Query embeddings.
+            passage_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Passage embeddings.
+            batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
+            output_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): The dtype of the output tensor.
+                If `None`, the dtype of the input embeddings is used.
+            output_device (`torch.device` or `str`, *optional*, defaults to "cpu"): The device of the output tensor.
+
+        Returns:
+            `torch.Tensor`: A tensor of shape `(n_queries, n_passages)` containing the scores. The score
+            tensor is saved on the "cpu" device.
+        """
+
+        if len(query_embeddings) == 0:
+            raise ValueError("No queries provided")
+        if len(passage_embeddings) == 0:
+            raise ValueError("No passages provided")
+
+        if query_embeddings[0].device != passage_embeddings[0].device:
+            raise ValueError("Queries and passages must be on the same device")
+
+        if query_embeddings[0].dtype != passage_embeddings[0].dtype:
+            raise ValueError("Queries and passages must have the same dtype")
+
+        if output_dtype is None:
+            output_dtype = query_embeddings[0].dtype
+
+        scores: list[torch.Tensor] = []
+
+        for i in range(0, len(query_embeddings), batch_size):
+            batch_scores: list[torch.Tensor] = []
+            batch_queries = torch.nn.utils.rnn.pad_sequence(
+                query_embeddings[i : i + batch_size], batch_first=True, padding_value=0
+            )
+            for j in range(0, len(passage_embeddings), batch_size):
+                batch_passages = torch.nn.utils.rnn.pad_sequence(
+                    passage_embeddings[j : j + batch_size], batch_first=True, padding_value=0
+                )
+                batch_scores.append(
+                    torch.einsum("bnd,csd->bcns", batch_queries, batch_passages).max(dim=3)[0].sum(dim=2)
+                )
+            scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
+
+        return torch.cat(scores, dim=0)
+
+
+@auto_docstring
+class ColModernVBertPreTrainedModel(PreTrainedModel):
+    config: ColModernVBertConfig
+    base_model_prefix = "model"
+    input_modalities = ["image", "text"]
+    _no_split_modules = []
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+
+    def _init_weights(self, module):
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.vlm_config.text_config.initializer_range
+        )
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for ColModernVBert embeddings output.
+    """
+)
+class ColModernVBertForRetrievalOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The embeddings of the model.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    embeddings: Optional[torch.Tensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Following the ColPali approach, ColModernVBert leverages VLMs to construct efficient multi-vector embeddings directly
+    from document images (“screenshots”) for document retrieval. The model is trained to maximize the similarity
+    between these document embeddings and the corresponding query embeddings, using the late interaction method
+    introduced in ColBERT.
+
+    Using ColModernVBert removes the need for potentially complex and brittle layout recognition and OCR pipelines with
+    a single model that can take into account both the textual and visual content (layout, charts, ...) of a document.
+
+    ColModernVBert is trained on top of ModernVBert, and was introduced in the following paper:
+    TODO: Include paper.
+
+    ColModernVBert is part of the ColVision model family, which was introduced with ColPali in the following paper:
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
+    """
+)
+class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        "custom_text_proj": "embedding_proj_layer",
+    }
+
+    def __init__(self, config: ColModernVBertConfig):
+        super().__init__(config)
+        self.config = config
+        self.vocab_size = config.vlm_config.text_config.vocab_size
+
+        self.model = AutoModel.from_config(config.vlm_config)
+        self._tied_weights_keys = [f"model.text_model.{k}" for k in (self.model._tied_weights_keys or [])]
+
+        self.embedding_dim = self.config.embedding_dim
+        self.embedding_proj_layer = nn.Linear(
+            self.config.vlm_config.text_config.hidden_size,
+            self.embedding_dim,
+        )
+
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> ColModernVBertForRetrievalOutput:
+        if pixel_values is not None:
+            pixel_values = pixel_values.to(dtype=self.dtype)
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vlm_output = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            output_hidden_states=True,
+            return_dict=True,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
+        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
+
+        last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
+        proj_dtype = self.embedding_proj_layer.weight.dtype
+        embeddings = self.embedding_proj_layer(last_hidden_states.to(proj_dtype))  # (batch_size, sequence_length, dim)
+
+        # L2 normalization
+        embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
+
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
+
+        return ColModernVBertForRetrievalOutput(
+            embeddings=embeddings,
+            hidden_states=vlm_hidden_states,
+            attentions=vlm_output.attentions,
+            image_hidden_states=vlm_image_hidden_states,
+        )
+    
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.model.set_output_embeddings(new_embeddings)
+
+    def tie_weights(self):
+        return self.model.tie_weights()
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        model_embeds = self.model.resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
+
+        self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
+        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
+        self.model.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
+
+        return model_embeds
+
+
+__all__ = [
+    "ColModernVBertForRetrieval",
+    "ColModernVBertPreTrainedModel",
+    "ColModernVBertProcessor",
+]
