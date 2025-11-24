@@ -824,7 +824,6 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         )
 
 __all__ = [
-    "ModernVBertVideoProcessor",
     "ModernVBertImageProcessor",
     "ModernVBertImageProcessorFast",
     "ModernVBertProcessor",
