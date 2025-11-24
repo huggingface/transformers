@@ -163,7 +163,7 @@ class Concatenate(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
         self.reverse_op = Chunk
-    
+
     # @torch.no_grad
     def convert(
         self,
