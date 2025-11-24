@@ -94,10 +94,8 @@ class BenchmarkResult:
         self.shape_and_decoded_outputs = []
         self.gpu_metrics = []
 
-    def compute_itls(self, token_generation_times: list[float]) -> list[float]:
-        return [
-            t1 - t0 for t0, t1 in zip(token_generation_times[:-1], token_generation_times[1:])
-        ]
+    def compute_itl(self, token_generation_times: list[float]) -> list[float]:
+        return (token_generation_times[-1] - token_generation_times[0]) / len(token_generation_times)
 
     def accumulate(
         self,
@@ -108,7 +106,8 @@ class BenchmarkResult:
     ) -> None:
         self.e2e_latency.append(e2e_latency)
         self.time_to_first_token.append(token_generation_times[0])
-        self.inter_token_latency.append(compute_basic_statistics(self.compute_itls(token_generation_times)))
+        # inter-token latency is already an average in itself
+        self.inter_token_latency.append(self.compute_itl(token_generation_times))
         self.shape_and_decoded_outputs.append(shape_and_decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 
@@ -153,9 +152,8 @@ class BenchmarkResult:
             "E2E Latency": add_unit_to_duration(compute_basic_statistics(self.e2e_latency)),
             "Time to First Token": add_unit_to_duration(compute_basic_statistics(self.time_to_first_token)),
         }
-        itl_avg_values = [itl_stats["avg"] for itl_stats in self.inter_token_latency]
-        if len(itl_avg_values) > 0:
-            measurements["Inter-Token Latency"] = add_unit_to_duration(compute_basic_statistics(itl_avg_values))
+        if len(self.inter_token_latency) > 0:
+            measurements["Inter-Token Latency"] = add_unit_to_duration(compute_basic_statistics(self.inter_token_latency))
         if batch_size > 0:
             throughput_stats = compute_basic_statistics(self.get_throughput(batch_size * num_generated_tokens))
             measurements["Throughput"] = {key: f"{value:.2f}tok/s" for key, value in throughput_stats.items()}
