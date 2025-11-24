@@ -167,6 +167,7 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         else {}
     )
     _is_composite = True
+    model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
 
     def setUp(self):
         self.model_tester = DeepseekVLHybridModelTester(self)
