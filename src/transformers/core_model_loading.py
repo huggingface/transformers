@@ -437,7 +437,7 @@ def log_to_misc(
 
 def set_param_for_module(
     model: PreTrainedModel,
-    full_param_name: str,
+    target_name: str,
     param_value: torch.Tensor,
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
@@ -446,13 +446,13 @@ def set_param_for_module(
     distributed_operation: Optional[TensorParallelLayer],
     hf_quantizer: HfQuantizer,
 ):
-    with log_to_misc(full_param_name, misc, full_param_name):
-        module_path, _, param_name = full_param_name.rpartition(".")
+    with log_to_misc(target_name, misc, target_name):
+        module_path, _, param_name = target_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
 
         ref = getattr(module_obj, param_name)
         if ref is None:
-            unexpected_keys.add(full_param_name)
+            unexpected_keys.add(target_name)
         else:
             use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
             if not isinstance(param_value, torch.nn.Parameter):
@@ -472,14 +472,33 @@ def set_param_for_module(
                     param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
             # Remove from missing keys (it's either mismatched, or all good)
-            missing_keys.discard(full_param_name)
+            missing_keys.discard(target_name)
             if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
-                mismatch_keys.add((full_param_name, param_value.shape, ref.shape))
+                mismatch_keys.add((target_name, param_value.shape, ref.shape))
                 module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
             else:
                 # super important otherwise _init_weight will re-init the param
                 param_value._is_hf_initialized = True
                 setattr(module_obj, param_name, param_value)
+
+
+def offload_and_maybe_resave_param(
+    target_name: str,
+    param: torch.Tensor,
+    missing_keys: MutableSet[str],
+    disk_offload_folder: str,
+    disk_offload_index: dict,
+    applied_ops: WeightConverter | WeightRenaming,
+) -> dict:
+    """Takes care of correctly offloading `param`. If it's not already present in the `disk_offload_index`, or if any
+    WeightConverter operations have been applied, it will resave the new parameter. Otherwise, it will use the original
+    `disk_offload_index` for this given param."""
+    # We need to remove from missing keys
+    missing_keys.discard(target_name)
+    # If not already offloaded, or if we applied any special Operation except Renaming, we need to re-save
+    if target_name not in disk_offload_index or isinstance(applied_ops, WeightConverter):
+        disk_offload_index = offload_weight(param, target_name, disk_offload_folder, disk_offload_index)
+    return disk_offload_index
 
 
 class SkipLayer(Exception):
@@ -738,12 +757,9 @@ def convert_and_load_state_dict_in_model(
                     param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
                     # Offloading support
                     if param_device == "disk":
-                        missing_keys.discard(target_name)
-                        # If not already offloaded, or if we applied any special Operation except Renaming, we need to re-save
-                        if target_name not in disk_offload_index or isinstance(mapping, WeightConverter):
-                            disk_offload_index = offload_weight(
-                                param, target_name, disk_offload_folder, disk_offload_index
-                            )
+                        disk_offload_index = offload_and_maybe_resave_param(
+                            target_name, param, missing_keys, disk_offload_folder, disk_offload_index, mapping
+                        )
                     else:
                         set_param_for_module(
                             model,
