@@ -1809,6 +1809,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 applicable_attn_implementation = "kernels-community/flash-attn2"
                 if is_torch_xpu_available():
                     # On XPU, kernels library is the native implementation
+                    # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
                     requested_original_flash_attn = False
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
