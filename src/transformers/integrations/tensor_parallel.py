@@ -36,6 +36,12 @@ _torch_distributed_available = torch.distributed.is_available()
 
 if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+else:
+    # Provide dummy classes for older PyTorch versions
+    DTensor = None
+    Placement = None
+    Replicate = None
+    Shard = None
 
 
 def initialize_tensor_parallelism(
