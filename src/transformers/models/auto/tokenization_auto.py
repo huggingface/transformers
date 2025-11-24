@@ -430,6 +430,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         (
+            "minimax_m2",
+            (
+                "GPT2Tokenizer" if is_sentencepiece_available() else None,
+                "GPT2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "mistral",
             (
                 "MistralCommonTokenizer"

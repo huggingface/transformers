@@ -16,15 +16,11 @@
 
 import unittest
 
-import pytest
-
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -53,26 +49,6 @@ class MiniMaxM2ModelTester(CausalLMModelTester):
 @require_torch
 class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MiniMaxM2ModelTester
-
-    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="MiniMaxM2 flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
