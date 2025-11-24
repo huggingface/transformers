@@ -2109,7 +2109,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
             other_pattern = "tekken.json|tokenizer.model.*"
-            if match:= re.search(other_pattern, "".join(remote_files)):
+            if match := re.search(other_pattern, "".join(remote_files)):
                 vocab_files["vocab_file"] = match.group()
 
         resolved_vocab_files = {}
