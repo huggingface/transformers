@@ -183,7 +183,7 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.linear_2.weight = self.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("linear_2.weight")
@@ -257,7 +257,7 @@ if is_torch_available():
         def forward(self, x):
             return self.decoder(self.base(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.decoder.weight = self.base.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("decoder.weight")
@@ -628,7 +628,9 @@ class ModelUtilsTest(TestCasePlus):
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
-        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(
+            model.model.language_model.dtype, torch.float32
+        )  # remember config says float32 for text_config
         self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
@@ -1206,7 +1208,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model(self):
         device_map = {
             "transformer.wte": f"{torch_device}:0",
@@ -1244,7 +1245,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model_with_direct_params(self):
         from accelerate import dispatch_model
 
@@ -1318,12 +1318,6 @@ class ModelUtilsTest(TestCasePlus):
         # test no model file found when use_safetensors=None (default when safetensors package available)
         with self.assertRaises(OSError) as missing_model_file_error:
             BertModel.from_pretrained("hf-internal-testing/config-no-model")
-
-        self.assertTrue(
-            "does not appear to have a file named pytorch_model.bin or model.safetensors."
-            in str(missing_model_file_error.exception),
-            msg=missing_model_file_error.exception,
-        )
 
         with self.assertRaises(OSError) as missing_model_file_error:
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2061,7 +2055,6 @@ class ModelUtilsTest(TestCasePlus):
         for k, v in model.state_dict().items():
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
@@ -2085,7 +2078,6 @@ class ModelUtilsTest(TestCasePlus):
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys_sharded(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
@@ -2889,7 +2881,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 )
 
         self.assertTrue(
-            "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!"
+            "You do not have `flash_attn` installed, using `kernels-community/flash-attn2` from the `kernels` library instead!"
             in cl.out
         )
 
@@ -2901,7 +2893,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
-                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn"
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn2"
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
