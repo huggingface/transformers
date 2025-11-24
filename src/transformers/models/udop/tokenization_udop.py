@@ -265,7 +265,7 @@ class UdopTokenizer(TokenizersBackend):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
         self.init_kwargs["vocab"] = vocab
-        
+
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
     @add_end_docstrings(UDOP_ENCODE_KWARGS_DOCSTRING)
@@ -465,9 +465,7 @@ class UdopTokenizer(TokenizersBackend):
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         batched_input = [(text, pair)] if pair else [text]
 
-        self._tokenizer.encode_special_tokens = kwargs.pop(
-            "split_special_tokens", self.split_special_tokens
-        )
+        self._tokenizer.encode_special_tokens = kwargs.pop("split_special_tokens", self.split_special_tokens)
 
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs

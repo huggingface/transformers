@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from parameterized import parameterized
 
 from transformers import TokenizersBackend
-from transformers.tokenization_python import AddedToken
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
@@ -48,11 +47,12 @@ class TokenizersBackendTesterMixin:
             for pretrained_id in (cls.from_pretrained_id or [])
         ]
         cls.tmpdirname = tempfile.mkdtemp()
-        
+
         # save the first pretrained tokenizer to tmpdirname for tests to use
         if cls.from_pretrained_id and tokenizer_class is not None:
             try:
                 from transformers import AutoTokenizer
+
                 tokenizer = AutoTokenizer.from_pretrained(
                     cls.from_pretrained_id[0],
                     **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),

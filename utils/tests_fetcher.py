@@ -1029,7 +1029,7 @@ def infer_tests_to_run(
         doctest_list = []
 
     print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
-    if len(doctest_list):
+    if doctest_list:
         doctest_file = Path(output_file).parent / "doctest_list.txt"
         with open(doctest_file, "w", encoding="utf-8") as f:
             f.write(" ".join(doctest_list))

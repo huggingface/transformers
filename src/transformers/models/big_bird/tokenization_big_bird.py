@@ -117,7 +117,7 @@ class BigBirdTokenizer(TokenizersBackend):
         unk_token_content = str(unk_token)
         unk_id = next((idx for idx, (token, _) in enumerate(vocab_scores) if token == unk_token_content), None)
         if unk_id is None:
-            unk_id = 100 if len(vocab_scores) > 100 else len(vocab_scores)
+            unk_id = min(len(vocab_scores), 100)
             if len(vocab_scores) > 100:
                 vocab_scores.insert(100, (unk_token_content, 0.0))
             else:
@@ -128,7 +128,7 @@ class BigBirdTokenizer(TokenizersBackend):
         sep_token_str = str(sep_token)
         cls_token_id = next((idx for idx, (token, _) in enumerate(vocab_scores) if token == cls_token_str), None)
         sep_token_id = next((idx for idx, (token, _) in enumerate(vocab_scores) if token == sep_token_str), None)
-        
+
         if cls_token_id is None:
             cls_token_id = len(vocab_scores)
             vocab_scores.append((cls_token_str, 0.0))
