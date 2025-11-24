@@ -868,8 +868,6 @@ def check_model_inputs(tie_last_hidden_states=True):
             collected_outputs = defaultdict(tuple)
             monkey_patched_layers = []
 
-            # NOTE: Generic output_attentions warning removed (was too broad for custom backends).
-            # Per-backend warnings (SDPA/Flash Attention) remain in their respective modules.
 
             def make_capture_wrapper(module, orig_forward, key, index):
                 @wraps(orig_forward)
