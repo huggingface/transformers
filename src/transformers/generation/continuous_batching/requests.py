@@ -19,6 +19,7 @@ from typing import Optional
 
 import torch
 
+from ...utils import is_torch_xpu_available
 from ...utils.logging import logging
 from ...utils.metrics import traced
 
@@ -35,6 +36,13 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         total_memory = torch.cuda.get_device_properties(device).total_memory
         reserved_memory = torch.cuda.memory_reserved(device)
         allocated_memory = torch.cuda.memory_allocated(device)
+    elif is_torch_xpu_available():
+        device = torch.device("xpu")
+        torch.xpu.empty_cache()
+        torch.xpu.synchronize()
+        total_memory = torch.xpu.get_device_properties(device).total_memory
+        reserved_memory = torch.xpu.memory_reserved(device)
+        allocated_memory = torch.xpu.memory_allocated(device)
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
         # MPS memory reporting (PyTorch 2.0+)
@@ -83,6 +91,9 @@ class GenerationOutput:
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
 
+    def is_finished(self) -> bool:
+        return self.status == RequestStatus.FINISHED
+
 
 @dataclass
 class RequestState:
@@ -105,10 +116,10 @@ class RequestState:
         error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
     """
 
-    # Required fields
+    # Required fields # TODO: come up with better names / not sure prompt_ids and such are not redundant
     request_id: str
     full_prompt_ids: Optional[list[int]] = None  # Full initial prompt
-    prompt_ids: Optional[list[int]] = None  # Tokens IDs currently being processed (initial + generated)
+    prompt_ids: Optional[list[int]] = None  # Tokens IDs currently being processed
     remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests, prefill left to process
     static_outputs: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
@@ -153,7 +164,7 @@ class RequestState:
 
     # TODO: this logic seems one token off, check it out
     @traced
-    def update_with_token(self, token_id: int) -> bool:
+    def update_and_check_completion(self, token_id: int) -> bool:
         """Update the request with a newly generated token and check for completion.
 
         Args:

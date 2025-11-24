@@ -514,6 +514,8 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
+        elif isinstance(e, ValueError):
+            raise OSError(f"{e}") from e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [

@@ -52,9 +52,6 @@ class Sam2Processor(ProcessorMixin):
             The value used for padding input points.
     """
 
-    attributes = ["image_processor"]
-    image_processor_class = "Sam2ImageProcessorFast"
-
     def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
         super().__init__(image_processor, **kwargs)
         self.point_pad_value = point_pad_value
@@ -97,7 +94,6 @@ class Sam2Processor(ProcessorMixin):
             A [`BatchEncoding`] with the following fields:
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
-            - `reshaped_input_sizes` (`torch.Tensor`): The reshaped input sizes of the images.
             - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
             - `input_points` (`torch.Tensor`): The processed points.
             - `input_labels` (`torch.Tensor`): The processed labels.

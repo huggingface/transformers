@@ -50,7 +50,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .utils.import_utils import is_rocm_platform
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling
 
 
 if is_vision_available():
@@ -166,6 +166,129 @@ def divide_to_patches(
 
 @auto_docstring
 class BaseImageProcessorFast(BaseImageProcessor):
+    r"""
+    Base class for fast image processors using PyTorch and TorchVision for image transformations.
+
+    This class provides a complete implementation for standard image preprocessing operations (resize, crop, rescale,
+    normalize) with GPU support and batch processing optimizations. Most image processors can be implemented by simply
+    setting class attributes; only processors requiring custom logic need to override methods.
+
+    Basic Implementation
+    --------------------
+
+    For processors that only need standard operations (resize, center crop, rescale, normalize), define class
+    attributes:
+
+        class MyImageProcessorFast(BaseImageProcessorFast):
+            resample = PILImageResampling.BILINEAR
+            image_mean = IMAGENET_DEFAULT_MEAN
+            image_std = IMAGENET_DEFAULT_STD
+            size = {"height": 224, "width": 224}
+            do_resize = True
+            do_rescale = True
+            do_normalize = True
+
+    Custom Processing
+    -----------------
+
+    Override `_preprocess` (most common):
+        For custom image processing logic, override `_preprocess`. This method receives a list of torch tensors with
+        channel dimension first and should return a BatchFeature. Use `group_images_by_shape` and `reorder_images` for
+        efficient batch processing:
+
+            def _preprocess(
+                self,
+                images: list[torch.Tensor],
+                do_resize: bool,
+                size: SizeDict,
+                # ... other parameters
+                **kwargs,
+            ) -> BatchFeature:
+                # Group images by shape for batched operations
+                grouped_images, indices = group_images_by_shape(images)
+                processed_groups = {}
+
+                for shape, stacked_images in grouped_images.items():
+                    if do_resize:
+                        stacked_images = self.resize(stacked_images, size)
+                    # Custom processing here
+                    processed_groups[shape] = stacked_images
+
+                processed_images = reorder_images(processed_groups, indices)
+                return BatchFeature(data={"pixel_values": torch.stack(processed_images)})
+
+    Override `_preprocess_image_like_inputs` (for additional inputs):
+        For processors handling multiple input types (e.g., images + segmentation maps), override this method:
+
+            def _preprocess_image_like_inputs(
+                self,
+                images: ImageInput,
+                segmentation_maps: Optional[ImageInput] = None,
+                do_convert_rgb: bool,
+                input_data_format: ChannelDimension,
+                device: Optional[torch.device] = None,
+                **kwargs,
+            ) -> BatchFeature:
+                images = self._prepare_image_like_inputs(images, do_convert_rgb, input_data_format, device)
+                batch_feature = self._preprocess(images, **kwargs)
+
+                if segmentation_maps is not None:
+                    # Process segmentation maps separately
+                    maps = self._prepare_image_like_inputs(segmentation_maps, ...)
+                    batch_feature["labels"] = self._preprocess(maps, ...)
+
+                return batch_feature
+
+    Override `_further_process_kwargs` (for custom kwargs formatting):
+        To format custom kwargs before validation:
+
+            def _further_process_kwargs(self, custom_param=None, **kwargs):
+                kwargs = super()._further_process_kwargs(**kwargs)
+                if custom_param is not None:
+                    kwargs["custom_param"] = self._format_custom_param(custom_param)
+                return kwargs
+
+    Override `_validate_preprocess_kwargs` (for custom validation):
+        To add custom validation logic:
+
+            def _validate_preprocess_kwargs(self, custom_param=None, **kwargs):
+                super()._validate_preprocess_kwargs(**kwargs)
+                if custom_param is not None and custom_param < 0:
+                    raise ValueError("custom_param must be non-negative")
+
+    Override `_prepare_images_structure` (for nested inputs):
+        By default, nested image lists are flattened. Override to preserve structure:
+
+            def _prepare_images_structure(self, images, expected_ndims=3):
+                # Custom logic to handle nested structure
+                return images  # Return as-is or with custom processing
+
+    Custom Parameters
+    -----------------
+
+    To add parameters beyond `ImagesKwargs`, create a custom kwargs class and set it as `valid_kwargs`:
+
+        class MyImageProcessorKwargs(ImagesKwargs):
+            custom_param: Optional[int] = None
+            another_param: Optional[bool] = None
+
+        class MyImageProcessorFast(BaseImageProcessorFast):
+            valid_kwargs = MyImageProcessorKwargs
+            custom_param = 10  # default value
+
+            def _preprocess(self, images, custom_param, **kwargs):
+                # Use custom_param in processing
+                ...
+
+    Key Notes
+    ---------
+
+    - Images in `_preprocess` are always torch tensors with channel dimension first, regardless of input format
+    - Arguments not provided by users default to class attribute values
+    - Use batch processing utilities (`group_images_by_shape`, `reorder_images`) for GPU efficiency
+    - Image loading, format conversion, and argument handling are automatic - focus only on processing logic
+    """
+
     resample = None
     image_mean = None
     image_std = None
@@ -185,6 +308,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     input_data_format = None
     device = None
     model_input_names = ["pixel_values"]
+    image_seq_length = None
     valid_kwargs = ImagesKwargs
     unused_kwargs = None
 
@@ -227,6 +351,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         padding_mode: Optional[str] = "constant",
         return_mask: bool = False,
         disable_grouping: Optional[bool] = False,
+        is_nested: Optional[bool] = False,
         **kwargs,
     ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
         """
@@ -257,7 +382,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         else:
             pad_size = get_max_height_width(images)
 
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, disable_grouping=disable_grouping, is_nested=is_nested
+        )
         processed_images_grouped = {}
         processed_masks_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -280,9 +407,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 stacked_masks[..., : image_size[0], : image_size[1]] = 1
                 processed_masks_grouped[shape] = stacked_masks
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=is_nested)
         if return_mask:
-            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
+            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index, is_nested=is_nested)
             return processed_images, processed_masks
 
         return processed_images
@@ -305,6 +432,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            antialias (`bool`, *optional*, defaults to `True`):
+                Whether to use antialiasing.
 
         Returns:
             `torch.Tensor`: The resized image.
@@ -337,7 +466,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
         # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
         # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
-        if torch.compiler.is_compiling() and is_rocm_platform():
+        if is_torchdynamo_compiling() and is_rocm_platform():
             return self.compile_friendly_resize(image, new_size, interpolation, antialias)
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 

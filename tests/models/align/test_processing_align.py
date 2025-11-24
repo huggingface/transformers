@@ -70,6 +70,11 @@ class AlignProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = AlignProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 
+        image_processor = EfficientNetImageProcessor.from_pretrained(self.tmpdirname)
+        image_processor.save_pretrained(self.tmpdirname)
+        tokenizer = BertTokenizer.from_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
