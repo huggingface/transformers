@@ -67,6 +67,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
     patch_size = 16
     patch_size_side = 640
     max_crops = 9
+    downsample_ratio = 4
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
     do_resize = True
@@ -214,7 +215,7 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
     ):
         patch_image_size = patch_size_side
         base_image_size = base_size.height
-        downsample_ratio = 4
+        downsample_ratio = self.downsample_ratio
 
         grouped_originals, grouped_orig_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}

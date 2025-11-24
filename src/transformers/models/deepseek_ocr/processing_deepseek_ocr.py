@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import math
 import re
 from textwrap import dedent
 from typing import Optional, Union
@@ -21,7 +22,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import is_torch_available, is_vision_available, logging
 from ..auto.tokenization_auto import AutoTokenizer
@@ -38,6 +39,7 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)
 
+DEEPSEEK_OCR_MIN_DYNAMIC_CROPS = 2
 
 DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE = dedent(
     """
@@ -65,7 +67,7 @@ DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE = dedent(
 
 
 class DeepseekOcrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {"text_kwargs": {"return_mm_token_type_ids": False}}
 
 
 class DeepseekOcrProcessor(ProcessorMixin):
@@ -110,6 +112,7 @@ class DeepseekOcrProcessor(ProcessorMixin):
                 f"The tokenizer does not contain the special image token `{self.image_token}`. "
                 "Please make sure it is added to the vocabulary before instantiating the processor."
             )
+        self.image_token_ids = [self.image_token_id]
         tokenizer_chat_template = getattr(tokenizer, "chat_template", None)
         if "chat_template" not in kwargs:
             if tokenizer_chat_template is not None:
@@ -187,11 +190,13 @@ class DeepseekOcrProcessor(ProcessorMixin):
         ]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(
             processed_text,
             **output_kwargs["text_kwargs"],
             return_tensors=return_tensors,
         )
+        self._check_special_mm_tokens(processed_text, text_inputs, modalities=["image"])
 
         input_ids = text_inputs["input_ids"]
         if isinstance(input_ids, torch.Tensor):
@@ -203,6 +208,12 @@ class DeepseekOcrProcessor(ProcessorMixin):
                 image_attention_mask.append(mask)
         else:
             raise TypeError("Unsupported type for input_ids returned by the tokenizer.")
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         data = {
             **text_inputs,
@@ -236,6 +247,87 @@ class DeepseekOcrProcessor(ProcessorMixin):
                 tokenizer_input_names + image_processor_input_names + ["image_attention_mask", "num_img_tokens"]
             )
         )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """Compute placeholder counts needed per image for vLLM multimodal scheduling."""
+
+        vision_data = {}
+        if image_sizes is None:
+            return MultiModalData(**vision_data)
+
+        base_size = getattr(self.image_processor, "base_size", {"height": 0})
+        base_image_size = self._extract_dimension(base_size)
+        patch_image_size = getattr(self.image_processor, "patch_size_side", None)
+        if patch_image_size is None:
+            patch_image_size = self._extract_dimension(getattr(self.image_processor, "size", {"height": 0}))
+        max_crops = getattr(self.image_processor, "max_crops", 1)
+        ratio_candidates = self._build_ratio_candidates(max_crops)
+        downsample_ratio = getattr(self.image_processor, "downsample_ratio", 4)
+
+        num_image_tokens = []
+        num_image_patches = []
+        for image_size in image_sizes:
+            height, width = self._coerce_hw_tuple(image_size)
+            if width <= patch_image_size and height <= patch_image_size:
+                crop_ratio = (1, 1)
+            elif ratio_candidates:
+                aspect_ratio = width / height
+                crop_ratio = self.image_processor.find_closest_aspect_ratio(
+                    aspect_ratio, ratio_candidates, width, height, patch_image_size
+                )
+            else:
+                crop_ratio = (1, 1)
+
+            width_crop_num, height_crop_num = crop_ratio
+
+            num_queries_base = math.ceil((base_image_size // 16) / downsample_ratio)
+            num_queries = math.ceil((patch_image_size // 16) / downsample_ratio)
+            tokenized_image_len = (num_queries_base + 1) * num_queries_base + 1
+            if width_crop_num > 1 or height_crop_num > 1:
+                tokenized_image_len += (num_queries * width_crop_num + 1) * (num_queries * height_crop_num)
+
+            num_image_tokens.append(tokenized_image_len)
+            num_local_patches = max(width_crop_num * height_crop_num, 1)
+            num_image_patches.append(num_local_patches)
+
+        vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
+
+    def _build_ratio_candidates(self, max_crops):
+        if max_crops < DEEPSEEK_OCR_MIN_DYNAMIC_CROPS:
+            return []
+        target_ratios = {
+            (i, j)
+            for n in range(DEEPSEEK_OCR_MIN_DYNAMIC_CROPS, max_crops + 1)
+            for i in range(1, n + 1)
+            for j in range(1, n + 1)
+            if DEEPSEEK_OCR_MIN_DYNAMIC_CROPS <= i * j <= max_crops
+        }
+        return sorted(target_ratios, key=lambda x: x[0] * x[1])
+
+    @staticmethod
+    def _extract_dimension(size_dict):
+        if isinstance(size_dict, dict):
+            return size_dict.get("height") or size_dict.get("shortest_edge") or size_dict.get("width", 0)
+        height = getattr(size_dict, "height", None)
+        if height is not None:
+            return height
+        shortest = getattr(size_dict, "shortest_edge", None)
+        if shortest is not None:
+            return shortest
+        width = getattr(size_dict, "width", None)
+        return width or 0
+
+    @staticmethod
+    def _coerce_hw_tuple(image_size):
+        if isinstance(image_size, dict):
+            height = image_size.get("height")
+            width = image_size.get("width")
+        elif hasattr(image_size, "tolist"):
+            height, width = image_size.tolist()
+        else:
+            height, width = image_size
+        return int(height), int(width)
 
     # All that follows is the original post-processing a bit tweaked that allows to have a nice OCR output on images.
     # unsure to keep there, why not, still belongs to processing utils.
