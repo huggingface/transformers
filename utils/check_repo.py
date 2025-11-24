@@ -90,6 +90,8 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
+    "SiglipVisionTransformer",
+    "Siglip2VisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -140,7 +142,10 @@ IGNORE_NON_TESTED = (
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
         "Sam2HieraDetModel",  # Building part of bigger (tested) model.
+        "Sam3TrackerVideoModel",  # Partly tested in Sam3TrackerModel, not regular model.
         "Sam2VideoModel",  # Partly tested in Sam2Model, not regular model.
+        "Sam3ViTModel",  # Building part of bigger (tested) model.
+        "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
@@ -210,6 +215,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
     "models/llama4/test_modeling_llama4.py",
     "models/sam2_video/test_modeling_sam2_video.py",
+    "models/sam3_tracker_video/test_modeling_sam3_tracker_video.py",
+    "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
 ]
 
@@ -358,7 +365,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
+    "SiglipVisionTransformer",
     "Siglip2VisionModel",
+    "Siglip2VisionTransformer",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
@@ -948,9 +957,6 @@ DEPRECATED_OBJECTS = [
     "DataCollatorForSOP",
     "GlueDataset",
     "GlueDataTrainingArguments",
-    "LineByLineTextDataset",
-    "LineByLineWithRefDataset",
-    "LineByLineWithSOPTextDataset",
     "NerPipeline",
     "OwlViTFeatureExtractor",
     "PretrainedBartModel",
@@ -962,8 +968,6 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
-    "TextDataset",
-    "TextDatasetForNextSentencePrediction",
     "Wav2Vec2ForMaskedLM",
     "Wav2Vec2Tokenizer",
     "glue_compute_metrics",

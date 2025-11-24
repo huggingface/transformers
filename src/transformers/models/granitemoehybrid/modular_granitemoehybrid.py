@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
@@ -36,6 +37,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
+    GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
     eager_attention_forward,
 )
@@ -107,6 +109,10 @@ class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
+class GraniteMoeHybridMoE(GraniteMoeSharedMoE):
+    pass
+
+
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -120,6 +126,9 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
+
+        # Allow non-MoE (dense)
+        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
@@ -176,14 +185,15 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
 
 
 class GraniteMoeHybridModel(GraniteMoeSharedModel):
@@ -273,7 +283,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)

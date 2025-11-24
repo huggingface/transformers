@@ -465,10 +465,6 @@ class T5ModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
@@ -485,10 +481,6 @@ class T5ModelTester:
                 tied_model.to(torch_device)
                 tied_model.eval()
 
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -750,6 +742,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         model_name = "google-t5/t5-small"
         model = T5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="T5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
 
 
 class T5EncoderOnlyModelTester:

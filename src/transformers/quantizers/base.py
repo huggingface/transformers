@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from ..utils import is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
 from .quantizers_utils import get_module_from_name
 
+
+if is_accelerate_available():
+    from accelerate.utils import find_tied_parameters
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -39,6 +43,52 @@ def _assign_original_dtype(module, original_dtype):
         if isinstance(child, PreTrainedModel):
             child.config._pre_quantization_dtype = original_dtype
         _assign_original_dtype(child, original_dtype)
+
+
+def get_keys_to_not_convert(model):
+    r"""
+    An utility function to get the key of the module to keep in full precision if any For example for CausalLM modules
+    we may want to keep the lm_head in full precision for numerical stability reasons. For other architectures, we want
+    to keep the tied weights of the model. The function will return a list of the keys of the modules to not convert in
+    int8.
+
+    Parameters:
+    model (`torch.nn.Module`):
+        Input model
+    """
+    # Create a copy of the model and tie the weights, then
+    # check if it contains tied weights
+    tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
+    tied_model.tie_weights()
+
+    tied_params = find_tied_parameters(tied_model)
+    tied_keys = sum(tied_params, [])
+    has_tied_params = len(tied_keys) > 0
+
+    # If there is not tied weights, we want to keep the lm_head（output_embedding) in full precision
+    if not has_tied_params:
+        output_emb = model.get_output_embeddings()
+        if output_emb is not None:
+            list_last_module = [name for name, module in model.named_modules() if id(module) == id(output_emb)]
+            return list_last_module
+
+    # otherwise, no tied weights, no output embedding defined, simply keep the last module in full precision
+    list_modules = list(model.named_parameters())
+    list_last_module = [list_modules[-1][0]]
+    # add last module together with tied weights
+    intersection = set(list_last_module) - set(tied_keys)
+    list_untouched = list(set(tied_keys)) + list(intersection)
+
+    # remove ".weight" from the keys
+    names_to_remove = [".weight", ".bias"]
+    filtered_module_names = []
+    for name in list_untouched:
+        for name_to_remove in names_to_remove:
+            if name_to_remove in name:
+                name = name.replace(name_to_remove, "")
+        filtered_module_names.append(name)
+
+    return filtered_module_names
 
 
 class HfQuantizer(ABC):
@@ -155,23 +205,6 @@ class HfQuantizer(ABC):
 
     def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
         return unexpected_keys
-
-    def get_special_dtypes_update(self, model, dtype: "torch.dtype") -> dict[str, "torch.dtype"]:
-        """
-        returns dtypes for modules that are not quantized - used for the computation of the device_map in case
-        one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
-        in `_process_model_before_weight_loading`.
-
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            dtype (`torch.dtype`):
-                The dtype passed in `from_pretrained` method.
-        """
-
-        return {
-            name: dtype for name, _ in model.named_parameters() if any(m in name for m in self.modules_to_not_convert)
-        }
 
     def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
@@ -315,8 +348,6 @@ class HfQuantizer(ABC):
         keep_in_fp32_modules: Optional[list[str]] = None,
         add_default_skips: bool = False,
     ):
-        from ..integrations import get_keys_to_not_convert
-
         if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
         else:
@@ -369,6 +400,11 @@ class HfQuantizer(ABC):
                     parent_module._modules[name] = MODULES_TO_PATCH_FOR_QUANTIZATION[module_class_name]["module_name"](
                         model.config.get_text_config()
                     )
+
+    def get_quantize_ops(self):
+        raise NotImplementedError(
+            f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
+        )
 
 
 class SequentialLlama4TextExperts(ModuleList):
