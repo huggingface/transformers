@@ -131,15 +131,14 @@ class NanoChatDecoderLayer(LlamaDecoderLayer):
 @auto_docstring
 class NanoChatPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
 
-        for name, param in module.named_parameters():
-            if name == "o_proj.weight":
-                nn.init.normal_(
-                    param,
-                    mean=0.0,
-                    std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers),
-                )
+        if isinstance(module, NanoChatAttention):
+            nn.init.normal_(
+                module.o_proj.weight,
+                mean=0.0,
+                std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers),
+            )
 
 
 @auto_docstring
@@ -147,7 +146,6 @@ class NanoChatModel(LlamaModel):
     def __init__(self, config: NanoChatConfig):
         super().__init__(config)
 
-        self.initial_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
     def forward(
@@ -191,7 +189,7 @@ class NanoChatModel(LlamaModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        hidden_states = self.initial_norm(hidden_states)  # Additional norm before the layers
+        hidden_states = self.norm(hidden_states)  # Additional norm before the layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
