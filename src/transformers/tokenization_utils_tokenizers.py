@@ -761,7 +761,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Use self.split_special_tokens as default if not explicitly provided
         if split_special_tokens is None:
             split_special_tokens = self.split_special_tokens
-        
+
         if self._tokenizer.encode_special_tokens != split_special_tokens:
             self._tokenizer.encode_special_tokens = split_special_tokens
 
