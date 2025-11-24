@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -39,8 +39,10 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 from .image_processing_lightglue import LightGlueImageProcessorKwargs
-from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
+
+if TYPE_CHECKING:
+    from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
 if is_vision_available():
     from PIL import Image, ImageDraw
@@ -178,15 +180,15 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_keypoint_matching(
         self,
-        outputs: LightGlueKeypointMatchingOutput,
+        outputs: "LightGlueKeypointMatchingOutput",
         target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`LightGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`LightGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
