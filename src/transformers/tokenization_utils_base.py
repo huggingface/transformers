@@ -2419,6 +2419,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
+        # Expose the `fix_regex` flag on the tokenizer when provided, even if no correction is applied.
+        if "fix_regex" in kwargs and not getattr(tokenizer, "fix_regex", False):
+            setattr(tokenizer, "fix_regex", kwargs["fix_regex"])
+
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
@@ -2433,7 +2437,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         return True
                 return False
 
-            if is_base_mistral(pretrained_model_name_or_path) and not kwargs.get("fix_regex"):
+            if is_base_mistral(pretrained_model_name_or_path):
                 mistral_config_file = cached_file(
                     pretrained_model_name_or_path,
                     "config.json",
@@ -2453,16 +2457,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         pass
 
                 if mistral_transformers_version and version.parse(mistral_transformers_version) <= version.parse("4.57"):
-                    fix_regex = kwargs.get("fix_regex", False)
-                    if fix_regex is False and not getattr(tokenizer, "fix_regex", False):
-                        tokenizer.fix_regex = False
+                    fix_regex = kwargs.get("fix_regex")
+                    # only warn if its not explicitly passed
+                    if fix_regex is None and not getattr(tokenizer, "fix_regex", False):
+                        setattr(tokenizer, "fix_regex", False)
                         logger.warning(
                             f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
                             f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
                             " This will lead to incorrect tokenization. You should set the `fix_regex=True` flag when loading this tokenizer to fix this issue."
                         )
-                    else:
-                        tokenizer.fix_regex = True
+                    elif fix_regex is True:
+                        setattr(tokenizer, "fix_regex", True)
                         import tokenizers
                         tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
                             pattern=tokenizers.Regex(r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"),
