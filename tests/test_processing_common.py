@@ -488,6 +488,25 @@ class ProcessorTesterMixin:
         if has_video_processor:
             self.assertEqual(processor_second.video_processor.do_normalize, False)
 
+    def test_processor_from_pretrained_vs_from_components(self):
+        """
+        Tests that loading a processor fully with from_pretrained produces the same result as
+        loading each component individually with from_pretrained and building the processor from them.
+        """
+        # Load processor fully with from_pretrained
+        processor_full = self.get_processor()
+
+        # Load each component individually with from_pretrained
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        # Build processor from components + prepare_processor_dict() kwargs
+        processor_kwargs = self.prepare_processor_dict()
+        processor_from_components = self.processor_class(**components, **processor_kwargs)
+
+        self.assertEqual(processor_from_components.to_dict(), processor_full.to_dict())
+
     def test_model_input_names(self):
         processor = self.get_processor()
 

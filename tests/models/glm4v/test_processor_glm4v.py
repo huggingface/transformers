@@ -50,10 +50,6 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **kwargs,
         )
 
-    @unittest.skip("")
-    def test_processor_with_multiple_inputs(self):
-        pass
-
     @require_torch
     @require_av
     def _test_apply_chat_template(
