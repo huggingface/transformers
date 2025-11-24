@@ -98,7 +98,7 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-دعونا نستدعي [`torch.cuda.max_memory_allocated`](https://pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html) لقياس ذروة تخصيص ذاكرة وحدة معالجة الرسومات (GPU).
+دعونا نستدعي [`torch.cuda.memory.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_allocated.html) لقياس ذروة تخصيص ذاكرة وحدة معالجة الرسومات (GPU).
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
