@@ -102,7 +102,7 @@ class BenchmarkConfig:
                 logger.warning(
                     "when continuous batching is enabled, sdpa_backend must be None because of the attention mask, setting it to None"
                 )
-                self.sdpa_backend = "math"
+                self.sdpa_backend = None
 
     @property
     def hash(self) -> str:
@@ -240,5 +240,5 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
         configs.append(BenchmarkConfig(attn_implementation="sdpa", compile_mode="default"))
         configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", kernelize=True))
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True))
-        configs.append(BenchmarkConfig(attn_implementation="paged|sdpa", continuous_batching=True))
+        configs.append(BenchmarkConfig(attn_implementation="sdpa", continuous_batching=True))
     return configs
