@@ -25,6 +25,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
+    is_torch_xpu_available,
     logging,
 )
 
@@ -46,7 +47,12 @@ def flash_attn_supports_top_left_mask():
 
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
-    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available()
+    return (
+        is_flash_attn_3_available()
+        or is_flash_attn_2_available()
+        or is_torch_npu_available()
+        or is_torch_xpu_available()
+    )
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves

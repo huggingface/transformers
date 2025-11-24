@@ -105,16 +105,11 @@ from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
-    is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
 
 from .generation.test_utils import GenerationTesterMixin
-
-
-if is_accelerate_available():
-    from accelerate.utils import compute_module_sizes
 
 
 if is_torch_available():
@@ -125,6 +120,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.integrations.accelerate import compute_module_sizes
     from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
@@ -2357,7 +2353,6 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_disk_offload_bin(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2371,7 +2366,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
 
@@ -2379,12 +2374,14 @@ class ModelTesterMixin:
                     max_size = int(self.model_split_percents[0] * model_size)
                     max_memory = {0: max_size, "cpu": max_size}
                     # This errors out cause it's missing an offload folder
-                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    new_model = model_class.from_pretrained(
+                        tmp_dir, device_map="auto", max_memory=max_memory, use_safetensors=False
+                    )
 
                 max_size = int(self.model_split_percents[1] * model_size)
                 max_memory = {0: max_size, "cpu": max_size}
                 new_model = model_class.from_pretrained(
-                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir, use_safetensors=False
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
@@ -2402,7 +2399,6 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_disk_offload_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2416,7 +2412,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2441,7 +2437,6 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2456,7 +2451,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2499,7 +2494,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2737,6 +2732,12 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
+                if torch_device == "xpu" and (
+                    attn_implementation == "kernels-community/flash-attn2"
+                    or attn_implementation == "flash_attention_2"
+                ):
+                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
+
             model = model_class(config)
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
@@ -2878,7 +2879,7 @@ class ModelTesterMixin:
         )
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -2886,7 +2887,7 @@ class ModelTesterMixin:
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -3030,7 +3031,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = model_sdpa.base_model
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
@@ -3048,7 +3049,7 @@ class ModelTesterMixin:
                 self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
+                model_eager = model_eager.base_model
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 
@@ -3278,7 +3279,7 @@ class ModelTesterMixin:
                         raise ValueError(f"The {attn_implementation} model should have {attn_implementation} layers")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_flash_attn_2_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_2")
@@ -3290,7 +3291,7 @@ class ModelTesterMixin:
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow
@@ -3433,7 +3434,7 @@ class ModelTesterMixin:
                 self.assertTrue(model_from_pretrained.config._attn_implementation != attn_implementation)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_from_config(self):
