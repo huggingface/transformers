@@ -69,7 +69,6 @@ model = AutoModelForCausalLM.from_pretrained(
     dtype=torch.bfloat16,
     device_map="auto",
 )
-model.eval()
 
 conversation = [
     {"role": "user", "content": "What is the capital of France?"},
