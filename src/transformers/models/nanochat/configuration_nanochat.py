@@ -115,7 +115,7 @@ class NanoChatConfig(PretrainedConfig):
         attention_dropout: float = 0.0,
         rms_norm_eps: float = 1e-6,
         initializer_range: float = 0.02,
-        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
+        rope_parameters: RopeParameters | dict | None = None,
         use_cache: bool = True,
         final_logit_softcapping: float | None = 15.0,
         attention_bias: bool = False,

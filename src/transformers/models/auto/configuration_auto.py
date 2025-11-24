@@ -726,7 +726,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mvp", "MVP"),
         ("myt5", "myt5"),
         ("nanochat", "NanoChat"),
-        ("nanochat", "NanoChatForCausalLM"),
         ("nemotron", "Nemotron"),
         ("nllb", "NLLB"),
         ("nllb-moe", "NLLB-MOE"),
