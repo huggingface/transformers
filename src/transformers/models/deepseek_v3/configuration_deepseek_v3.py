@@ -131,19 +131,16 @@ class DeepseekV3Config(PreTrainedConfig):
 
     model_type = "deepseek_v3"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
-        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
-        "layers.*.mlp.experts.*.up_proj": "local_colwise",
-        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
-        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
-        "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.up_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
-        "layers.*.mlp.shared_experts": "local",
-        "layers.*.mlp.gate_proj": "local_colwise",
-        "layers.*.mlp.up_proj": "local_colwise",
-        "layers.*.mlp.down_proj": "local_rowwise",
-        "layers.*.mlp": "gather",  # This is the only moment where results are gathered
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

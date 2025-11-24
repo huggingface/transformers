@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     _COMMON_MODEL_NAMES_MAP,
     is_flaky,
     require_flash_attn,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
 )
 
@@ -248,6 +248,7 @@ class CausalLMModelTester:
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
         self.mamba_chunk_size = mamba_chunk_size
+        self.tie_word_embeddings = False
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -549,7 +550,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @is_flaky()
     @slow

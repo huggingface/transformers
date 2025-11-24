@@ -32,6 +32,7 @@ from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_vision,
     slow,
@@ -376,6 +377,10 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
+    @unittest.skip(reason="Kosmos2-3 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -411,7 +416,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                         msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}",
                     )
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(infos["missing_keys"], set())
 
     # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
     def test_hidden_states_output(self):
@@ -623,7 +628,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT[self.cuda_compute_capability_major_version])
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):

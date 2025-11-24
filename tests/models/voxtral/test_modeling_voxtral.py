@@ -189,6 +189,10 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
+    @unittest.skip(reason="Voxtral has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Voxtral is audio+text model (not vision+text)
         if not self.has_attentions:
