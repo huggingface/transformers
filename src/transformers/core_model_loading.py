@@ -29,16 +29,17 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 import torch
 
 from .integrations.accelerate import offload_weight
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicate, TensorParallelLayer
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_torch_greater_or_equal, logging
 
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor import DTensor, Replicate
 
 if TYPE_CHECKING:
+    from .integrations.tensor_parallel import TensorParallelLayer
     from .modeling_utils import PreTrainedModel
     from .quantizers import HfQuantizer
 
