@@ -31,9 +31,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional, Union, overload
-from huggingface_hub import list_repo_files
 
 import numpy as np
+from huggingface_hub import list_repo_files
 from packaging import version
 
 from . import __version__
@@ -2430,6 +2430,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
         if tokenizer.vocab_size > 100000 and getattr(tokenizer.backend_tokenizer, "pre_tokenizer", None) is not None:
             from huggingface_hub import model_info
+
             def is_base_mistral(model_id: str) -> bool:
                 model = model_info(model_id)
                 if model.tags is not None:
@@ -2456,7 +2457,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     except (OSError, ValueError):
                         pass
 
-                if mistral_transformers_version and version.parse(mistral_transformers_version) <= version.parse("4.57"):
+                if mistral_transformers_version and version.parse(mistral_transformers_version) <= version.parse(
+                    "4.57"
+                ):
                     fix_regex = kwargs.get("fix_regex")
                     # only warn if its not explicitly passed
                     if fix_regex is None and not getattr(tokenizer, "fix_regex", False):
@@ -2469,8 +2472,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     elif fix_regex is True:
                         setattr(tokenizer, "fix_regex", True)
                         import tokenizers
+
                         tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
-                            pattern=tokenizers.Regex(r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"),
+                            pattern=tokenizers.Regex(
+                                r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+                            ),
                             behavior="isolated",
                         )
         return tokenizer

@@ -19,12 +19,13 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
-from typing import Optional
-from tqdm import tqdm
 from functools import lru_cache
+from typing import Optional
+
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
+from tqdm import tqdm
 
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
@@ -1692,6 +1693,7 @@ class TikTokenConverter:
 
         return tokenizer
 
+
 class MistralConverter:
     def __init__(
         self,
@@ -1711,13 +1713,15 @@ class MistralConverter:
         )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
-        import json
         import base64
+        import json
 
         with open(self.vocab_file, "r", encoding="utf-8") as f:
             untyped = json.load(f)
-        self.pattern = untyped['config']['pattern']
-        self.additional_special_tokens = [AddedToken(k['token_str'], special=k["is_control"]) for k in untyped['special_tokens']]
+        self.pattern = untyped["config"]["pattern"]
+        self.additional_special_tokens = [
+            AddedToken(k["token_str"], special=k["is_control"]) for k in untyped["special_tokens"]
+        ]
         bpe_ranks = untyped["vocab"]
         byte_encoder = bytes_to_unicode()
 
@@ -1767,6 +1771,7 @@ class MistralConverter:
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
         return tokenizer
+
 
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
