@@ -593,7 +593,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn")
+        get_kernel("kernels-community/flash-attn2")
     except Exception as _:
         kernels_available = False
 
