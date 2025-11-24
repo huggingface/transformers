@@ -398,6 +398,7 @@ OBJECTS_TO_IGNORE = {
     "SpeechT5Model",
     "SplinterConfig",
     "SplinterTokenizerFast",
+    "S3TokenizerModel",
     "SqueezeBertTokenizerFast",
     "SummarizationPipeline",
     "Swin2SRImageProcessor",
