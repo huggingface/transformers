@@ -128,5 +128,6 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "hello world"
 
         outputs = processor(text=input_str, max_length=20, return_tensors="np")
+        self.assertEqual(processor.num_query_tokens, 32)
         self.assertIn("input_ids", outputs)
         self.assertIn("attention_mask", outputs)
