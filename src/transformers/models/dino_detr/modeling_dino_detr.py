@@ -18,6 +18,7 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
@@ -189,10 +190,10 @@ def replace_batch_norm(model):
             new_module = DinoDetrFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -728,8 +729,8 @@ class DinoDetrLearnedPositionEmbedding(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.uniform_(self.row_embed.weight)
-        nn.init.uniform_(self.col_embed.weight)
+        init.uniform_(self.row_embed.weight)
+        init.uniform_(self.col_embed.weight)
 
     def forward(self, pixel_values: torch.FloatTensor, pixel_mask: torch.LongTensor):
         height, width = pixel_values.shape[-2:]
@@ -762,10 +763,10 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
 
         if isinstance(module, DinoDetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -778,26 +779,26 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if hasattr(module, "level_embed"):
-            nn.init.normal_(module.level_embed)
+            init.normal_(module.level_embed)
 
 
 class DinoDetrDecoderLayer(nn.Module):
@@ -1485,7 +1486,7 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
             else:
                 self.level_embed = None
         self.content_query_embeddings = nn.Embedding(self.num_queries, config.d_model)
-        nn.init.normal_(self.content_query_embeddings.weight.data)
+        init.normal_(self.content_query_embeddings.weight)
         # Define layers for the two stage Dino method
         self.enc_output = nn.Linear(config.d_model, config.d_model)
         self.enc_output_norm = nn.LayerNorm(config.d_model)
@@ -1872,15 +1873,13 @@ DINO_DETR_INPUTS_DOCSTRING = r"""
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrModel(DinoDetrPreTrainedModel):
+    _tied_weights_keys = {
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.0",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.1",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.2",
+        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.0",
+    }
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = [
-        "bbox_embed",
-        "class_embed",
-        r"bbox_embed\.[1-9]\d*",
-        r"class_embed\.[1-9]\d*",
-        r"transformer\.decoder\.bbox_embed\.[1-9]\d*",
-        r"transformer\.decoder\.class_embed\.[1-9]\d*",
-    ]
     _can_record_outputs = {
         "encoder_self_attentions": OutputRecorder(
             DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1
@@ -1949,16 +1948,16 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
             )
 
         # Prepare class & box embed
-        self.class_embed = nn.Linear(config.d_model, config.num_classes)
-        self.bbox_embed = DinoDetrMLPPredictionHead(d_model, d_model, 4, 3)
+        class_embed = nn.Linear(config.d_model, config.num_classes)
+        bbox_embed = DinoDetrMLPPredictionHead(d_model, d_model, 4, 3)
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data.fill_(bias_value)
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
+        class_embed.bias.data.fill_(bias_value)
+        init.constant_(bbox_embed.layers[-1].weight, 0)
+        init.constant_(bbox_embed.layers[-1].bias, 0)
 
-        self.bbox_embed = _get_clones(self.bbox_embed, config.num_decoder_layers, layer_share=True)
-        self.class_embed = _get_clones(self.class_embed, config.num_decoder_layers, layer_share=True)
+        self.bbox_embed = _get_clones(bbox_embed, config.num_decoder_layers, layer_share=True)
+        self.class_embed = _get_clones(class_embed, config.num_decoder_layers, layer_share=True)
         self.transformer.decoder.bbox_embed = self.bbox_embed
         self.transformer.decoder.class_embed = self.class_embed
 
@@ -2139,14 +2138,12 @@ def denoising_post_process(
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
-    _tied_weights_keys = [
-        "bbox_embed",
-        "class_embed",
-        r"bbox_embed\.[1-9]\d*",
-        r"class_embed\.[1-9]\d*",
-        r"transformer\.decoder\.bbox_embed\.[1-9]\d*",
-        r"transformer\.decoder\.class_embed\.[1-9]\d*",
-    ]
+    _tied_weights_keys = {
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.0",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.1",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.2",
+        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.0",
+    }
     _can_record_outputs = {
         "encoder_self_attentions": OutputRecorder(
             DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1

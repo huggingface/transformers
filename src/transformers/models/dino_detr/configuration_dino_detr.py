@@ -238,6 +238,7 @@ class DinoDetrConfig(PretrainedConfig):
         self.pe_temperature_H = pe_temperature_H
         self.pe_temperature_W = pe_temperature_W
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_encoder_decoder = True
 
     @property
     def encoder_attention_heads(self) -> int:
