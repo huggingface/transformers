@@ -2099,13 +2099,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
-        remote_files = list_repo_files(pretrained_model_name_or_path)
+        if not is_local:
+            remote_files = list_repo_files(pretrained_model_name_or_path)
+
+        else:
+            remote_files = os.listdir(pretrained_model_name_or_path)
+
         if not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
             other_pattern = "tekken.json|tokenizer.model.*"
             vocab_files["vocab_file"] = re.search(other_pattern, "".join(remote_files)).group()
-
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():
             if file_path is None:
@@ -2419,9 +2423,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
-        # Expose the `fix_regex` flag on the tokenizer when provided, even if no correction is applied.
-        if "fix_regex" in kwargs and not getattr(tokenizer, "fix_regex", False):
-            setattr(tokenizer, "fix_regex", kwargs["fix_regex"])
+        # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
+        if "fix_mistral_regex" in kwargs and not getattr(tokenizer, "fix_mistral_regex", False):
+            setattr(tokenizer, "fix_mistral_regex", kwargs["fix_mistral_regex"])
 
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
@@ -2438,7 +2442,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         return True
                 return False
 
-            if is_base_mistral(pretrained_model_name_or_path):
+            if _is_local or is_base_mistral(pretrained_model_name_or_path):
                 mistral_config_file = cached_file(
                     pretrained_model_name_or_path,
                     "config.json",
@@ -2460,17 +2464,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if mistral_transformers_version and version.parse(mistral_transformers_version) <= version.parse(
                     "4.57"
                 ):
-                    fix_regex = kwargs.get("fix_regex")
+                    fix_mistral_regex = kwargs.get("fix_mistral_regex")
                     # only warn if its not explicitly passed
-                    if fix_regex is None and not getattr(tokenizer, "fix_regex", False):
-                        setattr(tokenizer, "fix_regex", False)
+                    if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
+                        setattr(tokenizer, "fix_mistral_regex", False)
                         logger.warning(
                             f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
                             f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
-                            " This will lead to incorrect tokenization. You should set the `fix_regex=True` flag when loading this tokenizer to fix this issue."
+                            " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
                         )
-                    elif fix_regex is True:
-                        setattr(tokenizer, "fix_regex", True)
+                    elif fix_mistral_regex is True:
+                        setattr(tokenizer, "fix_mistral_regex", True)
                         import tokenizers
 
                         tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
