@@ -474,6 +474,12 @@ def accelerate_disk_offload(
     dtype: torch.dtype | None,
     weight_mapping=None,
 ):
+    """
+    Prepare the `disk_offload_index` that will be used for reading offloaded parameters. If reading from a safetensors
+    file, parameters which do not need any special WeightConverter operation during loading (i.e. they are used as-is, or only
+    renamed) will be mapped to where they already reside on disk. Otherwise, the parameters will be resaved inside
+    `disk_offload_folder` during loading.
+    """
     from ..core_model_loading import WeightRenaming, build_glob_alternation, repl
 
     if disk_offload_folder is not None:
