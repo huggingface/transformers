@@ -61,7 +61,6 @@ from .utils import (
     logging,
 )
 from .utils.chat_template_utils import render_jinja_template
-from .utils.deprecation import deprecate_kwarg
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -77,6 +76,8 @@ from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_torch_available():
+    import torch
+
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
 if is_vision_available():
@@ -268,7 +269,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_center_crop: Optional[bool]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[str], device_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     disable_grouping: Optional[bool]
     image_seq_length: Optional[int]
@@ -342,7 +343,7 @@ class VideosKwargs(TypedDict, total=False):
     crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[str], device_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
     do_sample_frames: Optional[bool]
     video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
     fps: Annotated[Optional[Union[int, float]], positive_any_number()]
@@ -630,6 +631,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
         """
+        if "audios" in kwargs and audio is None:
+            raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
+
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
@@ -1534,12 +1538,6 @@ class ProcessorMixin(PushToHubMixin):
 
         return unused_kwargs, valid_kwargs
 
-    @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
-    @deprecate_kwarg(
-        "video_load_backend",
-        version="4.59",
-        additional_message=". This function will use `torchcodec` by default, or `torchvision` if `torchcodec` is not installed.",
-    )
     def apply_chat_template(
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
@@ -1626,9 +1624,6 @@ class ProcessorMixin(PushToHubMixin):
                 value = kwargs.pop(key, default_value)
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
-
-        # pop unused and deprecated kwarg
-        kwargs.pop("video_load_backend", None)
 
         # Pass unprocessed custom kwargs
         processed_kwargs["template_kwargs"].update(kwargs)

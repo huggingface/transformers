@@ -29,6 +29,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -524,17 +525,18 @@ class DogePreTrainedModel(PreTrainedModel):
         "attentions": DogeAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
-                module.A.data.zero_()
+                init.zeros_(module.A)
         elif isinstance(module, DogeDecoderLayer):
             if hasattr(module, "input_residual"):
-                module.input_residual.data.fill_(1.0)
+                init.ones_(module.input_residual)
             if hasattr(module, "post_attention_residual"):
-                module.post_attention_residual.data.fill_(1.0)
+                init.ones_(module.post_attention_residual)
 
 
 @auto_docstring
@@ -726,7 +728,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

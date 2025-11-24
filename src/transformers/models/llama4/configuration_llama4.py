@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -133,19 +132,6 @@ class Llama4VisionConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
-
-        @property
-        def vision_feature_layer(self):
-            warnings.warn(
-                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
-                FutureWarning,
-            )
-            return self._vision_feature_layer
-
-        @vision_feature_layer.setter
-        def vision_feature_layer(self, value):
-            self._vision_feature_layer = value
-
         super().__init__(**kwargs)
 
 
@@ -205,7 +191,7 @@ class Llama4TextConfig(PreTrainedConfig):
         router_aux_loss_coef (`int`, *optional*, defaults to 0.001): TODO
         router_jitter_noise (`int`, *optional*, defaults to 0.0): TODO
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
             <TODO>
