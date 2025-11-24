@@ -213,7 +213,7 @@ class BenchmarkRunner:
             e2e_latency, ttft, itl, shape_and_decoded_output, gpu_metrics = self.time_generate(
                 max_new_tokens=config.num_tokens_to_generate,
                 use_continuous_batching=config.continuous_batching,
-                gpu_monitor=None
+                gpu_monitor=None,
             )
             if e2e_latency < 0:
                 self.logger.warning(f"Skipping config {config.name}: {e2e_latency = } (no GPU monitoring)")
@@ -225,7 +225,7 @@ class BenchmarkRunner:
                 _ = self.time_generate(
                     max_new_tokens=config.num_tokens_to_generate,
                     use_continuous_batching=config.continuous_batching,
-                    gpu_monitor=None
+                    gpu_monitor=None,
                 )
             self.logger.info("Warmup over.")
 
