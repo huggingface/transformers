@@ -91,7 +91,9 @@ class NanoChatAttention(Qwen3Attention):
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -210,6 +212,8 @@ class NanoChatModel(LlamaModel):
 
 @auto_docstring
 class NanoChatForCausalLM(Gemma2ForCausalLM):
+    _tp_plan = {"lm_head": "colwise_rep", "q_norm": "replicate", "k_norm": "replicate"}
+
     def forward(self, **super_kwargs) -> CausalLMOutputWithPast:
         r"""
         Example:
