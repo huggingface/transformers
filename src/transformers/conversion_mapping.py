@@ -117,26 +117,36 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
-    mapping["deepseek_ocr"] = [
+    deepseek_ocr_mappings = []
+
+    for i in range(12):
+        deepseek_ocr_mappings.extend([
+            WeightRenaming(f".sam_model.blocks.{i}.norm1.", f".sam_model.layers.{i}.layer_norm1."),
+            WeightRenaming(f".sam_model.blocks.{i}.norm2.", f".sam_model.layers.{i}.layer_norm2."),
+            WeightRenaming(f".sam_model.blocks.{i}.attn.", f".sam_model.layers.{i}.attn."),
+            WeightRenaming(f".sam_model.blocks.{i}.mlp.", f".sam_model.layers.{i}.mlp."),
+        ])
+
+    deepseek_ocr_mappings.extend([
+        WeightRenaming(".sam_model.patch_embed.proj.", ".sam_model.patch_embed.projection."),
+        WeightRenaming(".sam_model.neck.0.", ".sam_model.neck.conv1."),
+        WeightRenaming(".sam_model.neck.1.", ".sam_model.neck.layer_norm1."),
+        WeightRenaming(".sam_model.neck.2.", ".sam_model.neck.conv2."),
+        WeightRenaming(".sam_model.neck.3.", ".sam_model.neck.layer_norm2."),
+        WeightRenaming(".vision_model.transformer.layers.", ".clip_model.vision_model.encoder.layers."),
+        WeightRenaming(".vision_model.", ".clip_model.vision_model."),
+        WeightRenaming(".projector.", ".multi_modal_projector."),
+        WeightRenaming("model.embed_tokens.", "model.language_model.embed_tokens."),
+        WeightRenaming("model.norm.", "model.language_model.norm."),
+        WeightRenaming("model.layers.", "model.language_model.layers."),
         WeightConverter(
-            source_keys="model.vision_model.transformer.layers.*.self_attn.qkv_proj.weight",
-            target_keys=[
-                "model.clip_model.vision_model.encoder.layers.*.self_attn.q_proj.weight",
-                "model.clip_model.vision_model.encoder.layers.*.self_attn.k_proj.weight",
-                "model.clip_model.vision_model.encoder.layers.*.self_attn.v_proj.weight",
-            ],
+            source_keys="qkv_proj",
+            target_keys=["q_proj", "k_proj", "v_proj"],
             operations=[Chunk(dim=0, chunks=3)],
         ),
-        WeightConverter(
-            source_keys="model.vision_model.transformer.layers.*.self_attn.qkv_proj.bias",
-            target_keys=[
-                "model.clip_model.vision_model.encoder.layers.*.self_attn.q_proj.bias",
-                "model.clip_model.vision_model.encoder.layers.*.self_attn.k_proj.bias",
-                "model.clip_model.vision_model.encoder.layers.*.self_attn.v_proj.bias",
-            ],
-            operations=[Chunk(dim=0, chunks=3)],
-        ),
-    ]
+    ])
+
+    mapping["deepseek_ocr"] = deepseek_ocr_mappings
 
     return mapping
 

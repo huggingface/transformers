@@ -378,6 +378,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         image_token_id=DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID,
         **kwargs,
     ):
+        kwargs.pop("auto_map", None)
         language_config = kwargs.pop("language_config", None)
         original_model_type = kwargs.pop("model_type", None)
         image_token_index = kwargs.pop("image_token_index", None)
@@ -404,6 +405,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
                 max_position_embeddings=8192,
             )
         elif isinstance(text_config, dict):
+            text_config.pop("auto_map", None)
             if "head_dim" not in text_config and "hidden_size" in text_config and "num_attention_heads" in text_config:
                 text_config["head_dim"] = text_config["hidden_size"] // text_config["num_attention_heads"]
             self.text_config = DeepseekOcrTextConfig(**text_config)
@@ -415,6 +417,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         if vision_config is None:
             self.vision_config = DeepseekOcrVisionConfig()
         elif isinstance(vision_config, dict):
+            vision_config.pop("auto_map", None)
             self.vision_config = DeepseekOcrVisionConfig(**vision_config)
         else:
             self.vision_config = vision_config
@@ -422,6 +425,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         if projector_config is None:
             self.projector_config = DeepseekOcrProjectorConfig()
         elif isinstance(projector_config, dict):
+            projector_config.pop("auto_map", None)
             self.projector_config = DeepseekOcrProjectorConfig(**projector_config)
         else:
             self.projector_config = projector_config

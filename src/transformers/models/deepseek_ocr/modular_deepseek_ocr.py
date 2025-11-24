@@ -54,48 +54,6 @@ from ..sam.modeling_sam import SamPatchEmbeddings, SamVisionAttention, SamVision
 logger = logging.get_logger(__name__)
 
 DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID = 128815
-DEEPSEEK_OCR_STATE_DICT_MAPPING = {
-    r"^model\.sam_model\.patch_embed\.proj\.(weight|bias)": r"model.sam_model.patch_embed.projection.\1",
-    r"^model\.sam_model\.blocks\.(\d+)\.norm1\.(weight|bias)": r"model.sam_model.layers.\1.layer_norm1.\2",
-    r"^model\.sam_model\.blocks\.(\d+)\.norm2\.(weight|bias)": r"model.sam_model.layers.\1.layer_norm2.\2",
-    r"^model\.sam_model\.blocks\.(\d+)\.attn\.qkv\.(weight|bias)": r"model.sam_model.layers.\1.attn.qkv.\2",
-    r"^model\.sam_model\.blocks\.(\d+)\.attn\.proj\.(weight|bias)": r"model.sam_model.layers.\1.attn.proj.\2",
-    r"^model\.sam_model\.blocks\.(\d+)\.attn\.rel_pos_([hw])": r"model.sam_model.layers.\1.attn.rel_pos_\2",
-    r"^model\.sam_model\.blocks\.(\d+)\.mlp\.lin(\d+)\.(weight|bias)": r"model.sam_model.layers.\1.mlp.lin\2.\3",
-    r"^model\.sam_model\.neck\.0\.weight": r"model.sam_model.neck.conv1.weight",
-    r"^model\.sam_model\.neck\.1\.(weight|bias)": r"model.sam_model.neck.layer_norm1.\1",
-    r"^model\.sam_model\.neck\.2\.weight": r"model.sam_model.neck.conv2.weight",
-    r"^model\.sam_model\.neck\.3\.(weight|bias)": r"model.sam_model.neck.layer_norm2.\1",
-    r"^model\.sam_model\.net_2\.weight": r"model.sam_model.net_2.weight",
-    r"^model\.sam_model\.net_3\.weight": r"model.sam_model.net_3.weight",
-    r"^model\.sam_model\.pos_embed": r"model.sam_model.pos_embed",
-    r"^model\.vision_model\.embeddings\.class_embedding": r"model.clip_model.vision_model.embeddings.class_embedding",
-    r"^model\.vision_model\.embeddings\.patch_embedding\.weight": r"model.clip_model.vision_model.embeddings.patch_embedding.weight",
-    r"^model\.vision_model\.embeddings\.position_embedding\.weight": r"model.clip_model.vision_model.embeddings.position_embedding.weight",
-    r"^model\.vision_model\.pre_layrnorm\.(weight|bias)": r"model.clip_model.vision_model.pre_layrnorm.\1",
-    r"^model\.vision_model\.transformer\.layers\.(\d+)\.layer_norm(\d+)\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.layer_norm\2.\3",
-    r"^model\.vision_model\.transformer\.layers\.(\d+)\.self_attn\.qkv_proj\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.self_attn.qkv_proj.\2",
-    r"^model\.vision_model\.transformer\.layers\.(\d+)\.self_attn\.out_proj\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.self_attn.out_proj.\2",
-    r"^model\.vision_model\.transformer\.layers\.(\d+)\.mlp\.fc(\d+)\.(weight|bias)": r"model.clip_model.vision_model.encoder.layers.\1.mlp.fc\2.\3",
-    r"^model\.vision_model\.post_layernorm\.(weight|bias)": r"model.clip_model.vision_model.post_layernorm.\1",
-    r"^model\.projector\.layers\.(weight|bias)": r"model.multi_modal_projector.layers.\1",
-    r"^model\.embed_tokens\.weight": r"model.language_model.embed_tokens.weight",
-    r"^model\.layers\.(\d+)\.input_layernorm\.weight": r"model.language_model.layers.\1.input_layernorm.weight",
-    r"^model\.layers\.(\d+)\.post_attention_layernorm\.weight": r"model.language_model.layers.\1.post_attention_layernorm.weight",
-    r"^model\.layers\.(\d+)\.self_attn\.(q|k|v|o)_proj\.weight": r"model.language_model.layers.\1.self_attn.\2_proj.weight",
-    r"^model\.layers\.(\d+)\.mlp\.(gate|up|down)_proj\.weight": r"model.language_model.layers.\1.mlp.\2_proj.weight",
-    r"^model\.layers\.(\d+)\.mlp\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.\2.\3",
-    r"^model\.norm\.weight": r"model.language_model.norm.weight",
-    r"^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.(gate|up|down)_proj\.(weight|bias)": r"model.language_model.layers.\1.mlp.experts.\2.\3_proj.\4",
-    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(\d+)\.(gate|up|down)_proj\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2.\3_proj.\4",
-    r"^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.experts.\2.\3.\4",
-    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(\d+)\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2.\3.\4",
-    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(gate|up|down)_proj\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2_proj.\3",
-    r"^model\.layers\.(\d+)\.mlp\.shared_experts\.(gate|up|down)\.(weight|bias)": r"model.language_model.layers.\1.mlp.shared_experts.\2.\3",
-    r"^model\.image_newline": r"model.image_newline",
-    r"^model\.view_seperator": r"model.view_seperator",
-    r"^lm_head\.weight": r"lm_head.weight",
-}
 
 
 class DeepseekOcrPatchEmbeddings(SamPatchEmbeddings):
@@ -426,6 +384,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         image_token_id=DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID,
         **kwargs,
     ):
+        kwargs.pop("auto_map", None)
         language_config = kwargs.pop("language_config", None)
         original_model_type = kwargs.pop("model_type", None)
         image_token_index = kwargs.pop("image_token_index", None)
@@ -452,6 +411,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
                 max_position_embeddings=8192,
             )
         elif isinstance(text_config, dict):
+            text_config.pop("auto_map", None)
             if "head_dim" not in text_config and "hidden_size" in text_config and "num_attention_heads" in text_config:
                 text_config["head_dim"] = text_config["hidden_size"] // text_config["num_attention_heads"]
             self.text_config = DeepseekOcrTextConfig(**text_config)
@@ -463,6 +423,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         if vision_config is None:
             self.vision_config = DeepseekOcrVisionConfig()
         elif isinstance(vision_config, dict):
+            vision_config.pop("auto_map", None)
             self.vision_config = DeepseekOcrVisionConfig(**vision_config)
         else:
             self.vision_config = vision_config
@@ -470,6 +431,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
         if projector_config is None:
             self.projector_config = DeepseekOcrProjectorConfig()
         elif isinstance(projector_config, dict):
+            projector_config.pop("auto_map", None)
             self.projector_config = DeepseekOcrProjectorConfig(**projector_config)
         else:
             self.projector_config = projector_config
@@ -486,7 +448,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
 class DeepseekOcrPreTrainedModel(PreTrainedModel):
     config_class = DeepseekOcrConfig
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = DEEPSEEK_OCR_STATE_DICT_MAPPING
+    _checkpoint_conversion_mapping = {}
 
 
 class DeepseekOcrProjector(PreTrainedModel):
@@ -946,10 +908,7 @@ class DeepseekOcrTextModel(DeepseekV2Model):
     """
 )
 class DeepseekOcrModel(LlavaNextModel):
-    _checkpoint_conversion_mapping = {
-        **DEEPSEEK_OCR_STATE_DICT_MAPPING,
-        "language_model.model": "language_model",
-    }
+    _checkpoint_conversion_mapping = {}
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -1231,10 +1190,7 @@ class DeepseekOcrModel(LlavaNextModel):
     """
 )
 class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
-    _checkpoint_conversion_mapping = {
-        **DEEPSEEK_OCR_STATE_DICT_MAPPING,
-        "language_model.model": "language_model",
-    }
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {}
     _supports_sdpa = True
     _supports_flash_attn = True
