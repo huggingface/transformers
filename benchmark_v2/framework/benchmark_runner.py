@@ -6,7 +6,6 @@ import pathlib
 import re
 import tempfile
 import time
-from contextlib import nullcontext
 from datetime import datetime
 from queue import Queue
 from typing import Any
@@ -271,7 +270,7 @@ class BenchmarkRunner:
                 # NOTE: I don't like having the extra if stmt here, but hopefully won't degrade perf too much
                 result = manager.get_result()
                 if result is not None:
-                    timestamps.append(time.perf_counter() - wall_time_0) # FIXME: the timestamps are wrong
+                    timestamps.append(time.perf_counter() - wall_time_0)  # FIXME: the timestamps are wrong
                     if result.is_finished():
                         last_result_generated_tokens = result.generated_tokens
                         unfinished_requests -= 1

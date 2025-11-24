@@ -153,7 +153,9 @@ class BenchmarkResult:
             "Time to First Token": add_unit_to_duration(compute_basic_statistics(self.time_to_first_token)),
         }
         if len(self.inter_token_latency) > 0:
-            measurements["Inter-Token Latency"] = add_unit_to_duration(compute_basic_statistics(self.inter_token_latency))
+            measurements["Inter-Token Latency"] = add_unit_to_duration(
+                compute_basic_statistics(self.inter_token_latency)
+            )
         if batch_size > 0:
             throughput_stats = compute_basic_statistics(self.get_throughput(batch_size * num_generated_tokens))
             measurements["Throughput"] = {key: f"{value:.2f}tok/s" for key, value in throughput_stats.items()}

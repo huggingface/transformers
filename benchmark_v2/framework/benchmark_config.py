@@ -27,6 +27,10 @@ def is_fa2_or_kernel_available() -> bool:
         return True
     # Early return if kernels is not available
     if not is_kernels_available():
+        logger.warning(
+            "flash_attention_2 is not available. kernels is not installed. Benchmarking flash_attention_2 will not "
+            "be possible."
+        )
         return False
     # If kernels is available, try to get the flash_attn_2 kernel
     try:
@@ -34,6 +38,10 @@ def is_fa2_or_kernel_available() -> bool:
 
         get_kernel("kernels-community/flash-attn")
     except Exception as _:
+        logger.warning(
+            "flash_attention_2 is not available. kernels is installed, but the flash_attn kernel is not available."
+            "Benchmarking flash_attention_2 will not be possible."
+        )
         return False
 
 
