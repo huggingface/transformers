@@ -2247,7 +2247,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             source_params = sorted(filter(lambda x: re.search(source_name, x), top_level_params.keys()))
             target_params = sorted(filter(lambda x: re.search(target_name, x), top_level_params.keys()))
-            if not len(source_params) > 0 or len(target_params) % len(source_params) != 0:
+            if (len(source_params) > 0 and len(target_params) !=0) and len(target_params) % len(source_params) != 0 :
                 raise ValueError(
                     f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. We found {source_params} to tie into {target_params}"
                 )
@@ -2264,14 +2264,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     self._adjust_bias(parent, top_level_params[source_n])
                     if missing_keys and source_is_there:  # test_model_weights_reload_no_missing_tied_weights
                         missing_keys.discard(target_n)
-            else:
+            elif len(source_params) > 0:
                 target_is_not_there = missing_keys and re.search(
                     target_name, "\n".join(missing_keys), flags=re.MULTILINE
                 )
                 raise ValueError(
                     "There is a problem in the way you tie your keys or the way they were saved.\n"
-                    f"source_is_there={source_is_there}, target_is_there={not target_is_not_there}, missing_keys={missing_keys},"
-                    "tie_word_embeddings/tie_encoder_decoder={(self.config.tie_word_embeddings or self.config.tie_encoder_decoder)}"
+                    f" source_is_there={source_is_there}, target_is_there={not target_is_not_there}, missing_keys={missing_keys},"
+                    f" tie_word_embeddings/tie_encoder_decoder = {(self.config.tie_word_embeddings or self.config.tie_encoder_decoder)}"
                 )
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
