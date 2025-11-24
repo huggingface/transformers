@@ -748,10 +748,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "voxtral",
             (
-                "MistralCommonTokenizer"
-                if is_mistral_common_available()
-                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
-                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
+                "MistralCommonTokenizer" if is_mistral_common_available() else None,
+                "PreTrainedTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
         ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
