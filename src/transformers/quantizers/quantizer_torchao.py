@@ -15,7 +15,7 @@ import importlib
 import re
 import types
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from packaging import version
 
@@ -49,7 +49,7 @@ if is_torchao_available():
 logger = logging.get_logger(__name__)
 
 
-def fuzzy_match_size(config_name: str) -> Optional[str]:
+def fuzzy_match_size(config_name: str) -> str | None:
     """
     Extract the size digit from strings like "4weight", "8weight".
     Returns the digit as an integer if found, otherwise None.
@@ -162,7 +162,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 dtype = torch.float32
         return dtype
 
-    def get_state_dict_and_metadata(self, model, safe_serialization: Optional[bool] = False):
+    def get_state_dict_and_metadata(self, model, safe_serialization: bool | None = False):
         """
         If the model is safe serializable, we flatten the state dict of tensor subclasses so that it is compatible with
         the safetensors format.
@@ -212,13 +212,13 @@ class TorchAoHfQuantizer(HfQuantizer):
                 "`pip install --upgrade accelerate`"
             )
 
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
     ):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
