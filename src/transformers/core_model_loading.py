@@ -398,7 +398,7 @@ def dot_natural_key(s: str):
 
 @contextmanager
 def log_to_misc(
-    all_target_keys: str,
+    first_target_key: str,
     misc: MutableMapping[str, str],
     extras: Any = None,
     op: Union[list[ConversionOps], ConversionOps, None] = None,
@@ -422,16 +422,16 @@ def log_to_misc(
         if isinstance(extras, tuple) and len(extras) == 2:
             values, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
-            misc[all_target_keys] = (
+            misc[first_target_key] = (
                 f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
-            misc[all_target_keys] = f"{e}\nError{suffix} when processing parameter {extras}"
+            misc[first_target_key] = f"{e}\nError{suffix} when processing parameter {extras}"
         elif extras is None and op_name:
-            misc[all_target_keys] = f"{op_name}: {e}"
+            misc[first_target_key] = f"{op_name}: {e}"
         else:
-            misc[all_target_keys] = f"{extras} |Error: {e}"
+            misc[first_target_key] = f"{extras} |Error: {e}"
         raise SkipLayer()
 
 
@@ -724,13 +724,13 @@ def convert_and_load_state_dict_in_model(
 
     total_entries = len(param_name_to_load)
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-        for full_param_name, mapping in param_name_to_load.items():
+        for first_param_name, mapping in param_name_to_load.items():
             pbar.update(1)
-            pbar.set_postfix({"Materializing param": full_param_name})
+            pbar.set_postfix({"Materializing param": first_param_name})
             pbar.refresh()
             try:
                 realized_value, misc = mapping.convert(
-                    full_param_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
+                    first_param_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
