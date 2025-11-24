@@ -96,9 +96,9 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         def preprocess_data(examples):
             images = [image.convert("RGB") for image in examples["image"]]
-            words = examples["words"]
-            boxes = examples["bboxes"]
-            word_labels = examples["ner_tags"]
+            words = list(examples["words"])
+            boxes = list(examples["bboxes"])
+            word_labels = list(examples["ner_tags"])
             encoded_inputs = processor(
                 images,
                 words,

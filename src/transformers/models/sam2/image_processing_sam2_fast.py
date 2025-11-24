@@ -701,9 +701,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
 
-    def pad_image(self):
-        raise NotImplementedError("No pad_image for SAM 2.")
-
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """
         Apply non-overlapping constraints to the object scores in pred_masks. Here we

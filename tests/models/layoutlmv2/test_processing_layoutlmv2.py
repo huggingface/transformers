@@ -19,10 +19,13 @@ from functools import cached_property
 from transformers.models.layoutlmv2 import LayoutLMv2Processor, LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import is_pytesseract_available
+from transformers.utils import is_pytesseract_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
+
+if is_torchvision_available():
+    from transformers import LayoutLMv2ImageProcessorFast
 
 if is_pytesseract_available():
     from transformers import LayoutLMv2ImageProcessor
@@ -80,7 +83,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # slow tokenizer
         tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30)
+        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30, use_fast=False)
 
         processor = LayoutLMv2Processor.from_pretrained(
             self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
@@ -104,8 +107,9 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutLMv2TokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorFast)
 
+    @slow
     def test_overflowing_tokens(self):
         # In the case of overflowing tokens, test that we still have 1-to-1 mapping between the images and input_ids (sequences that are too long are broken down into multiple sequences).
 
@@ -113,13 +117,13 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # set up
         datasets = load_dataset("nielsr/funsd")
-        processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+        processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", apply_ocr=False)
 
         def preprocess_data(examples):
             images = [image.convert("RGB") for image in examples["image"]]
-            words = examples["words"]
-            boxes = examples["bboxes"]
-            word_labels = examples["ner_tags"]
+            words = list(examples["words"])
+            boxes = list(examples["bboxes"])
+            word_labels = list(examples["ner_tags"])
             encoded_inputs = processor(
                 images,
                 words,

@@ -40,7 +40,8 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        # hardcode as we can't use IMAGE_PROCESSOR_MAPPING to get the class from the config (layoutxlm is not in the mapping)
+        image_processor_class = LayoutLMv2ImageProcessor
         return image_processor_class(
             do_resize=True,
             size=224,
@@ -49,7 +50,8 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        # hardcode as we can't use TOKENIZER_MAPPING to get the class from the config (layoutxlm is not in the mapping)
+        tokenizer_class = LayoutXLMTokenizer
         return tokenizer_class.from_pretrained("hf-internal-testing/tiny-random-layoutxlm")
 
     @unittest.skip("LayoutXLM Image Processor doesn't return image tensors")
@@ -107,9 +109,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         def preprocess_data(examples):
             images = [image.convert("RGB") for image in examples["image"]]
-            words = examples["words"]
-            boxes = examples["bboxes"]
-            word_labels = examples["ner_tags"]
+            words = list(examples["words"])
+            boxes = list(examples["bboxes"])
+            word_labels = list(examples["ner_tags"])
             encoded_inputs = processor(
                 images,
                 words,
