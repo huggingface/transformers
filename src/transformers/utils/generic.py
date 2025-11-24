@@ -868,7 +868,6 @@ def check_model_inputs(tie_last_hidden_states=True):
             collected_outputs = defaultdict(tuple)
             monkey_patched_layers = []
 
-
             def make_capture_wrapper(module, orig_forward, key, index):
                 @wraps(orig_forward)
                 def wrapped_forward(*args, **kwargs):
