@@ -29,7 +29,8 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from .utils.import_utils import is_torch_available
 
 
-import torch
+if is_torch_available():
+    import torch
 
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, TensorParallelLayer
 from .utils import is_torch_greater_or_equal, logging
@@ -162,8 +163,8 @@ class Concatenate(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
         self.reverse_op = Chunk
-
-    @torch.no_grad
+    
+    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
@@ -193,7 +194,7 @@ class MergeModulelist(Concatenate):
         super().__init__(dim=dim)
         self.reverse_op = SplitModulelist
 
-    @torch.no_grad
+    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
@@ -224,7 +225,7 @@ class SplitModulelist(ConversionOps):
         self.dim = dim
         self.reverse_op = MergeModulelist
 
-    @torch.no_grad
+    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
@@ -264,7 +265,7 @@ class PermuteForRope(ConversionOps):
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
         return tensor
 
-    @torch.no_grad
+    # @torch.no_grad
     def convert(
         self,
         value: dict[str, list[torch.Tensor]],
