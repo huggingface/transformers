@@ -34,11 +34,10 @@ class LayoutXLMConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`LayoutXLMModel`]. It is used to instantiate an
     LayoutXLM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LayoutXLM
-    [microsoft/layoutxlm-base-uncased](https://huggingface.co/microsoft/layoutxlm-base-uncased) architecture.
+    [microsoft/layoutxlm-base](https://huggingface.co/microsoft/layoutxlm-base) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
-
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the LayoutXLM model. Defines the number of different tokens that can be represented by
@@ -108,10 +107,10 @@ class LayoutXLMConfig(PreTrainedConfig):
     ```python
     >>> from transformers import LayoutXLMConfig, LayoutXLMModel
 
-    >>> # Initializing a LayoutXLM microsoft/layoutxlm-base-uncased style configuration
+    >>> # Initializing a LayoutXLM microsoft/layoutxlm-base style configuration
     >>> configuration = LayoutXLMConfig()
 
-    >>> # Initializing a model (with random weights) from the microsoft/layoutxlm-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/layoutxlm-base style configuration
     >>> model = LayoutXLMModel(configuration)
 
     >>> # Accessing the model configuration
