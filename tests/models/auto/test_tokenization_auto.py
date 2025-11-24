@@ -18,12 +18,9 @@ import shutil
 import sys
 import tempfile
 import unittest
-import importlib
 from pathlib import Path
-from unittest import mock
 
 import pytest
-from huggingface_hub import hf_hub_download
 
 import transformers
 from transformers import (
