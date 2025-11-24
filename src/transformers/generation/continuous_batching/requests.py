@@ -115,9 +115,12 @@ class RequestState:
         error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
     """
 
-    # Required fields # TODO: come up with better names / not sure prompt_ids and such are not redundant
+    # Required fields
     request_id: str
-    initial_tokens: list[int] | None = None  # Full initial prompt
+    initial_tokens: list[int]  # Initial prompt tokens
+    # Optional fields
+    record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
+    # Internal fields
     scheduled_tokens: list[int] | None = None  # Tokens IDs currently being processed
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
     generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
@@ -130,6 +133,7 @@ class RequestState:
     created_time: float = field(default_factory=time.time)  # Time the request was created
     error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
+    _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
 
     @property
     def status(self) -> RequestStatus:
@@ -143,6 +147,10 @@ class RequestState:
             self.lifespan = (self.lifespan[0], time.time())
             self.log_end_of_request()
         self._status = value
+
+    @property
+    def timestamps(self) -> list[float] | None:
+        return self._timestamps if self.record_timestamps else None
 
     def log_end_of_request(self):
         prefill_len = len(self.initial_tokens)
@@ -175,6 +183,10 @@ class RequestState:
         # Only update if we're in decoding state
         if self.status != RequestStatus.DECODING:
             return False
+
+        # If we're recording timestamps, add the token ID and timestamp to the list
+        if self.record_timestamps:
+            self._timestamps.append(time.time())
 
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
