@@ -106,6 +106,7 @@ class PeftAdapterMixin:
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
         hotswap: bool | Literal["auto"] = "auto",
+        local_files_only: bool = False,
         adapter_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """
@@ -236,6 +237,9 @@ class PeftAdapterMixin:
         adapter_name = adapter_name if adapter_name is not None else "default"
         if adapter_kwargs is None:
             adapter_kwargs = {}
+
+        if "local_files_only" not in adapter_kwargs:
+             adapter_kwargs["local_files_only"] = local_files_only
 
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
@@ -768,6 +772,9 @@ def maybe_load_adapters(
 ):
     if pretrained_model_name_or_path is None or not is_peft_available():
         return None, pretrained_model_name_or_path, adapter_kwargs
+    
+    if "local_files_only" not in adapter_kwargs:
+        adapter_kwargs["local_files_only"] = download_kwargs.get("local_files_only", False)
 
     token = download_kwargs.get("token")
 
