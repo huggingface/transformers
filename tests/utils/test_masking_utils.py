@@ -153,6 +153,42 @@ class MaskTest(unittest.TestCase):
         EXPECTED_SEQUENCE_INDICES = torch.tensor([[0, 0, 0, 0, 1, 1, 2, 2, 2, 2], [0, 0, 0, 0, 0, 0, 1, 1, 1, 1]])
         self.assertTrue((find_packed_sequence_indices(position_ids) == EXPECTED_SEQUENCE_INDICES).all())
 
+    def test_nonpacked_sequence_mask_skip(self):
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        batch_size = 2
+        sequence_length = 10
+        cache_position = torch.arange(sequence_length)
+
+        # Non-packed sequences
+        position_ids = torch.arange(sequence_length)[None, :]
+
+        causal_mask = create_causal_mask(
+            config=config,
+            # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            attention_mask=None,
+            cache_position=cache_position,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+        # packed sequence should be skipped
+        self.assertTrue(causal_mask is None)
+
+        create_causal_mask_compiled = torch.compile(create_causal_mask, mode="reduce-overhead")
+        causal_mask = create_causal_mask_compiled(
+            config=config,
+            # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            attention_mask=None,
+            cache_position=cache_position,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+        # cannot be skipped under compile, should result into a triu mask
+        self.assertTrue(torch.equal(~torch.ones(*causal_mask.shape).triu(diagonal=1).bool(), causal_mask))
+
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config
         config = LlamaConfig(attention_chunk_size=3, attn_implementation="sdpa")
