@@ -19,7 +19,7 @@ import textwrap
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any
 
 import typer
 
@@ -95,7 +95,7 @@ COPYRIGHT = f"""
 
 def add_new_model_like(
     repo_path: Annotated[
-        Optional[str], typer.Argument(help="When not using an editable install, the path to the Transformers repo.")
+        str | None, typer.Argument(help="When not using an editable install, the path to the Transformers repo.")
     ] = None,
 ):
     """
@@ -156,7 +156,7 @@ class ModelInfos:
         self.processor_class = PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
 
 
-def add_content_to_file(file_name: Union[str, os.PathLike], new_content: str, add_after: str):
+def add_content_to_file(file_name: str | os.PathLike, new_content: str, add_after: str):
     """
     A utility to add some content inside a given file.
 
@@ -614,9 +614,9 @@ def _add_new_model_like_internal(
 
 def get_user_field(
     question: str,
-    default_value: Optional[str] = None,
-    convert_to: Optional[Callable] = None,
-    fallback_message: Optional[str] = None,
+    default_value: str | None = None,
+    convert_to: Callable | None = None,
+    fallback_message: str | None = None,
 ) -> Any:
     """
     A utility function that asks a question to the user to get an answer, potentially looping until it gets a valid
