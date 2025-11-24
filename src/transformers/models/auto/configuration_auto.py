@@ -222,6 +222,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("layoutlm", "LayoutLMConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("layoutlmv3", "LayoutLMv3Config"),
+        ("layoutxlm", "LayoutXLMConfig"),
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
