@@ -2434,12 +2434,40 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return False
 
             if is_base_mistral(pretrained_model_name_or_path) and not kwargs.get("fix_regex"):
-                logger.warning(
-                    f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
-                    f" with an old regex pattern. This will lead to incorrect tokenization."
+                mistral_config_file = cached_file(
+                    pretrained_model_name_or_path,
+                    "config.json",
+                    cache_dir=cache_dir,
+                    token=token,
+                    local_files_only=local_files_only,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                    _commit_hash=_commit_hash,
                 )
-                import tokenizers
-                tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(pattern=tokenizers.Regex(r"[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"), behavior = "isolated")
+                mistral_transformers_version = None
+                if mistral_config_file is not None:
+                    try:
+                        with open(mistral_config_file, encoding="utf-8") as f:
+                            mistral_transformers_version = json.load(f).get("transformers_version")
+                    except (OSError, ValueError):
+                        pass
+
+                if mistral_transformers_version and version.parse(mistral_transformers_version) <= version.parse("4.57"):
+                    fix_regex = kwargs.get("fix_regex", False)
+                    if fix_regex is False and not getattr(tokenizer, "fix_regex", False):
+                        tokenizer.fix_regex = False
+                        logger.warning(
+                            f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
+                            f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
+                            " This will lead to incorrect tokenization. You should set the `fix_regex=True` flag when loading this tokenizer to fix this issue."
+                        )
+                    else:
+                        tokenizer.fix_regex = True
+                        import tokenizers
+                        tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
+                            pattern=tokenizers.Regex(r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"),
+                            behavior="isolated",
+                        )
         return tokenizer
 
     @staticmethod
