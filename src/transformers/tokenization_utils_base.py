@@ -2454,17 +2454,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         _config = json.load(f)
                     transformers_version = _config.get("transformers_version")
 
-                    if transformers_version and version.parse(transformers_version) <= version.parse(
-                        "4.57.2"
-                    ):
-                        if _is_local and _config.model_type not in ["mistral" , "mistral3" , "voxstral" , "ministral", "pixtral"]:
+                    if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                        if _is_local and _config.model_type not in [
+                            "mistral",
+                            "mistral3",
+                            "voxstral",
+                            "ministral",
+                            "pixtral",
+                        ]:
                             return tokenizer
 
                 # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
                 if "fix_mistral_regex" in init_kwargs:
                     setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
 
-                fix_mistral_regex = kwargs.get("fix_mistral_regex") # not init kwargs
+                fix_mistral_regex = kwargs.get("fix_mistral_regex")  # not init kwargs
                 # only warn if its not explicitly passed
                 if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
                     setattr(tokenizer, "fix_mistral_regex", False)
