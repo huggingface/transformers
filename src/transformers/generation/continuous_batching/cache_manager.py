@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterator
 from math import ceil
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 from .requests import logger
 
@@ -210,7 +210,7 @@ class CacheAllocator(ABC):
     block_table: dict[str, list[int]]  # request_id -> list of block_ids allocated to the request
 
     @abstractmethod
-    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
+    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> int | None:
         """Allocates (n_blocks) for a given (request_id) using the (block_manager). Returns the num of blocks allocated
         if successful and None otherwise."""
 
@@ -250,7 +250,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         self.block_size = block_size
         self.block_table = {}
 
-    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
+    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> int | None:
         """Allocate (n_blocks) for a given (request_id) using the (block_manager). Returns the number of blocks
         allocated if successful and None otherwise. For group of full attention layers, we always allocate the number of
         requested blocks."""
@@ -320,7 +320,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
         self.block_table = {}
 
-    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> Optional[int]:
+    def allocate_blocks(self, n_blocks: int, request_id: str, block_manager: BlockManager) -> int | None:
         """Allocate (n_blocks) for a given (request_id) using the (block_manager). Returns the number of blocks
         allocated otherwise. For group of sliding window attention layers, we only allocate up to the point where we can
         fit an entire sliding window in the cache tensor."""

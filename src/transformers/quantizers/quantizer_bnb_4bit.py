@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -199,7 +199,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = new_value
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -242,7 +242,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear

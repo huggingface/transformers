@@ -16,7 +16,7 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -134,7 +134,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, min_length: int, eos_token_id: Union[int, list[int], torch.Tensor], device: str = "cpu"):
+    def __init__(self, min_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
 
@@ -197,7 +197,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         self,
         prompt_length_to_skip: int,
         min_new_tokens: int,
-        eos_token_id: Union[int, list[int], torch.Tensor],
+        eos_token_id: int | list[int] | torch.Tensor,
         device: str = "cpu",
     ):
         for arg_name, arg_value in [
@@ -344,7 +344,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, penalty: float, prompt_ignore_length: Optional[int] = None):
+    def __init__(self, penalty: float, prompt_ignore_length: int | None = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
@@ -1264,7 +1264,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, sequence_bias: list[list[Union[list[int], float]]]):
+    def __init__(self, sequence_bias: list[list[list[int] | float]]):
         self.sequence_bias = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
@@ -1437,9 +1437,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     ```
     """
 
-    def __init__(
-        self, bad_words_ids: list[list[int]], eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None
-    ):
+    def __init__(self, bad_words_ids: list[list[int]], eos_token_id: int | list[int] | torch.Tensor | None = None):
         self.bad_word_ids = bad_words_ids
         self._validate_arguments()
 
@@ -1751,7 +1749,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, max_length: int, eos_token_id: Union[int, list[int], torch.Tensor], device: str = "cpu"):
+    def __init__(self, max_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         self.max_length = max_length
 
         if not isinstance(eos_token_id, torch.Tensor):
@@ -1865,7 +1863,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     def __init__(
         self,
         exponential_decay_length_penalty: tuple[int, float],
-        eos_token_id: Union[int, list[int], torch.Tensor],
+        eos_token_id: int | list[int] | torch.Tensor,
         input_ids_seq_length: int,
     ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
@@ -2087,7 +2085,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self,
         generate_config: "GenerationConfig",
         begin_index: int,
-        _detect_timestamp_from_logprob: Optional[bool] = None,
+        _detect_timestamp_from_logprob: bool | None = None,
     ):  # support for the kwargs
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
@@ -2398,8 +2396,8 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         self,
         guidance_scale: float,
         model,
-        unconditional_ids: Optional[torch.LongTensor] = None,
-        unconditional_attention_mask: Optional[torch.LongTensor] = None,
+        unconditional_ids: torch.LongTensor | None = None,
+        unconditional_attention_mask: torch.LongTensor | None = None,
         use_cache: bool = True,
     ):
         self.guidance_scale = guidance_scale
@@ -2477,7 +2475,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             Minimum end of speech threshold.
     """
 
-    def __init__(self, eos_token_id: Union[int, list[int], torch.Tensor], min_eos_p: float, device: str = "cpu"):
+    def __init__(self, eos_token_id: int | list[int] | torch.Tensor, min_eos_p: float, device: str = "cpu"):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -3146,7 +3144,7 @@ class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             the logits of the combined CFG output, but the conditioned output only.
     """
 
-    def __init__(self, guidance_scale: float, guidance_top_k: Optional[int] = None):
+    def __init__(self, guidance_scale: float, guidance_top_k: int | None = None):
         if guidance_scale > 1:
             self.guidance_scale = guidance_scale
         else:

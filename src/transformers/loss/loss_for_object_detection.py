@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -440,7 +439,7 @@ def _max_by_axis(the_list):
 
 
 class NestedTensor:
-    def __init__(self, tensors, mask: Optional[Tensor]):
+    def __init__(self, tensors, mask: Tensor | None):
         self.tensors = tensors
         self.mask = mask
 

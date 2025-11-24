@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from math import floor, gcd, sqrt
-from typing import Optional
 
 import torch
 
@@ -121,7 +120,7 @@ class PagedAttentionCache:
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,
-        tp_size: Optional[int] = None,
+        tp_size: int | None = None,
         allow_prefix_sharing: bool = True,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
@@ -460,8 +459,8 @@ class PagedAttentionMemoryHandler:
 
     def infer_num_blocks_and_max_batch_tokens(
         self,
-        num_blocks: Optional[int] = None,
-        max_batch_tokens: Optional[int] = None,
+        num_blocks: int | None = None,
+        max_batch_tokens: int | None = None,
         max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
@@ -613,8 +612,8 @@ class PagedAttentionMemoryHandler:
 
     def compute_memory_footprint(
         self,
-        num_blocks: Optional[int] = None,
-        max_batch_tokens: Optional[int] = None,
+        num_blocks: int | None = None,
+        max_batch_tokens: int | None = None,
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int, int]:
         """Calculate the memory footprint breakdown for a given number of blocks and maximum batch tokens. The memory

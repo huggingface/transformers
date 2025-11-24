@@ -16,7 +16,6 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Union
 
 import torch
 from filelock import FileLock
@@ -116,10 +115,10 @@ class SquadDataset(Dataset):
         self,
         args: SquadDataTrainingArguments,
         tokenizer: PreTrainedTokenizer,
-        limit_length: Optional[int] = None,
-        mode: Union[str, Split] = Split.train,
+        limit_length: int | None = None,
+        mode: str | Split = Split.train,
         is_language_sensitive: bool = False,
-        cache_dir: Optional[str] = None,
+        cache_dir: str | None = None,
         dataset_format: str = "pt",
     ):
         self.args = args

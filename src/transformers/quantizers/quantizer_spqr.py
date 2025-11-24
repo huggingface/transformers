@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 
@@ -65,7 +65,7 @@ class SpQRHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         self.modules_to_not_convert = self.get_modules_to_not_convert(

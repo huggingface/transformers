@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib.metadata
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from packaging import version
 
@@ -108,7 +108,7 @@ class AwqQuantizer(HfQuantizer):
         return dtype
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
     ):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
