@@ -63,6 +63,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("cohere2_vision", "Cohere2VisionProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
+        ("colmodernvbert", "ColModernVBertProcessor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
         ("dia", "DiaProcessor"),
