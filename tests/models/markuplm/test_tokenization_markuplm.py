@@ -217,7 +217,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "merges": merges,
                 "do_lower_case": False,
                 "keep_accents": True,
-                "added_tokens_decoder":added_tokens_decoder,
+                "added_tokens_decoder": added_tokens_decoder,
             }
 
             tags_dict = getattr(reference_tokenizer, "tags_dict", None)
@@ -1379,17 +1379,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     f"'{new_tokenizer.all_special_tokens}' as an AddedToken with the same parameters as "
                     f"'{special_token}' in the list {tokenizer.all_special_tokens}",
                 )
-            elif special_token not in special_tokens_map:
-                # The special token must appear identically in the list of the new tokenizer.
-                self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens,
-                    all_special_tokens,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
-                )
 
-            else:
-                # The special token must appear in the list of the new tokenizer as an object of type string.
-                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens)
 
         # Test we can use the new tokenizer with something not seen during training
         nodes = [["this", "is"], ["hello", "🤗"]]

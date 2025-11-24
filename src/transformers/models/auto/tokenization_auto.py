@@ -332,12 +332,18 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
             ),
         ),
         ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
+        ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", ("Wav2Vec2CTCTokenizer", None)),
+        ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
+        ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
+        ("wav2vec2_phoneme", "Wav2Vec2PhonemeCTCTokenizer"),
         ("wav2vec2_with_lm", ("Wav2Vec2CTCTokenizer", None)),
         ("whisper", ("WhisperTokenizer", "WhisperTokenizerFast" if is_tokenizers_available() else None)),
+        ("whisper", "WhisperTokenizer" if is_tokenizers_available() else None),
         ("xclip", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
+        ("xclip", "CLIPTokenizerFast" if is_tokenizers_available() else None),
         (
             "xglm",
             (
@@ -345,7 +351,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "XGLMTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xglm", "XGLMTokenizer" if is_tokenizers_available() else None),
         ("xlm", ("XLMTokenizer", None)),
+        ("xlm", "XLMTokenizer"),
+        ("xlm-prophetnet", "XLMProphetNetTokenizer" if is_sentencepiece_available() else None),
         (
             "xlm-roberta",
             (
@@ -353,6 +362,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xlm-roberta", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         (
             "xlm-roberta-xl",
             (
@@ -360,6 +370,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xlm-roberta-xl", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         (
             "xlnet",
             (
@@ -367,7 +378,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "XLNetTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xlnet", "XLNetTokenizer" if is_tokenizers_available() else None),
         ("xlstm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+        ("xlstm", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         (
             "xmod",
             (
@@ -375,6 +388,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xmod", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
         (
             "yoso",
             (
@@ -382,6 +396,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "AlbertTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
         (
             "zamba",
             (
@@ -389,6 +404,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("zamba", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         (
             "zamba2",
             (
@@ -396,22 +412,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
-        ("wav2vec2", "Wav2Vec2CTCTokenizer"),
-        ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
-        ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
-        ("wav2vec2_phoneme", "Wav2Vec2PhonemeCTCTokenizer"),
-        ("whisper", "WhisperTokenizer" if is_tokenizers_available() else None),
-        ("xclip", "CLIPTokenizerFast" if is_tokenizers_available() else None),
-        ("xglm", "XGLMTokenizer" if is_tokenizers_available() else None),
-        ("xlm", "XLMTokenizer"),
-        ("xlm-prophetnet", "XLMProphetNetTokenizer" if is_sentencepiece_available() else None),
-        ("xlm-roberta", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
-        ("xlm-roberta-xl", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
-        ("xlnet", "XLNetTokenizer" if is_tokenizers_available() else None),
-        ("xlstm", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-        ("xmod", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
-        ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
-        ("zamba", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("zamba2", "LlamaTokenizerFast" if is_tokenizers_available() else None),
     ]
 )

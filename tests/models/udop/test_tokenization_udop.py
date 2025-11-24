@@ -21,8 +21,8 @@ from parameterized import parameterized
 
 from transformers import (
     AddedToken,
-    UdopTokenizer,
     PreTrainedTokenizerBase,
+    UdopTokenizer,
     is_mlx_available,
     is_torch_available,
     logging,
@@ -129,7 +129,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     #     # Create tokenizer from SentencePiece model using converter
     #     from transformers.convert_slow_tokenizer import UdopConverter
     #     from transformers.tokenization_utils import PreTrainedTokenizer
-        
+
     #     # Create a minimal mock tokenizer for the converter
     #     class _MockTokenizer:
     #         def __init__(self, vocab_file_path, eos_token, sep_token):
@@ -139,10 +139,10 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     #             import sentencepiece as spm
     #             self._sp_model = spm.SentencePieceProcessor()
     #             self._sp_model.Load(vocab_file_path)
-            
+
     #         def convert_tokens_to_ids(self, token):
     #             return self._sp_model.piece_to_id(token)
-        
+
     #     mock_tokenizer = _MockTokenizer(SAMPLE_VOCAB, "</s>", "</s>")
     #     converter = UdopConverter(mock_tokenizer)
     #     tokenizer_object = converter.converted()
@@ -519,12 +519,8 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Simple input
                 words, boxes = self.get_words_and_boxes()
-                input_r = tokenizer.encode_plus_boxes(
-                    words, boxes=boxes, max_length=max_length, padding="max_length"
-                )
-                input_p = tokenizer.encode_plus_boxes(
-                    words, boxes=boxes, max_length=max_length, padding="max_length"
-                )
+                input_r = tokenizer.encode_plus_boxes(words, boxes=boxes, max_length=max_length, padding="max_length")
+                input_p = tokenizer.encode_plus_boxes(words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
                 self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
@@ -676,7 +672,6 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
-  
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -1178,9 +1173,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.get_tokenizer(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                )
+                tokenizer_r = self.get_tokenizer(pretrained_name, additional_special_tokens=added_tokens, **kwargs)
                 words = "Hey this is a <special> token".split()
                 boxes = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
                 r_output = tokenizer_r.encode_boxes(words, boxes=boxes)

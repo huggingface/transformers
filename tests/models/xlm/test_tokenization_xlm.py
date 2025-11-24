@@ -34,7 +34,7 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
+        cls.vocab = [
             "l",
             "o",
             "w",

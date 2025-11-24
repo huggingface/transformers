@@ -17,6 +17,8 @@ import shutil
 import tempfile
 import unittest
 
+from tokenizers import AddedToken
+
 from transformers import CodeLlamaTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
@@ -26,17 +28,13 @@ from transformers.testing_utils import (
     require_torch,
 )
 
-from tokenizers import AddedToken
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
-from tokenizers import AddedToken
-
 
 # impoprt convert_slow_tokenizer
-
 
 
 # impoprt convert_slow_tokenizer
