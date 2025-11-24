@@ -182,13 +182,12 @@ class Sam3VideoInferenceSession:
         self.output_dict_per_obj = {}
         self.frames_tracked_per_obj = {}
 
-        # Session state flags
-        self.has_new_text_input = False
-
-        # Detection-specific state
-        self.text_input_ids = None  # Cached text input ids for the video
-        self.text_embeddings = None  # Cached text embeddings for the video
-        self.text_attention_mask = None  # Cached text attention mask for the video
+        # Multi-prompt support
+        self.prompts = {}  # prompt_id -> prompt_text
+        self.prompt_input_ids = {}  # prompt_id -> input_ids
+        self.prompt_embeddings = {}  # prompt_id -> text embeddings
+        self.prompt_attention_masks = {}  # prompt_id -> attention_mask
+        self.obj_id_to_prompt_id = {}  # obj_id -> prompt_id (assigned at detection time)
 
         # Tracking metadata for detection-tracking fusion
         self.obj_id_to_score = {}  # Detection scores per object
@@ -212,6 +211,19 @@ class Sam3VideoInferenceSession:
     def num_frames(self) -> Optional[int]:
         """Number of frames in the video."""
         return len(self.processed_frames) if self.processed_frames is not None else None
+
+    def add_prompt(self, prompt_text: str) -> int:
+        """
+        Add a text prompt to the session and return its unique ID.
+        If the prompt already exists, returns the existing ID.
+        """
+        for prompt_id, text in self.prompts.items():
+            if text == prompt_text:
+                return prompt_id
+
+        prompt_id = len(self.prompts)
+        self.prompts[prompt_id] = prompt_text
+        return prompt_id
 
     # Object management
     def obj_id_to_idx(self, obj_id: int) -> int:
@@ -257,6 +269,7 @@ class Sam3VideoInferenceSession:
 
         Args:
             obj_id (`int`): The object ID to remove.
+            strict (`bool`, *optional*, defaults to `False`): Whether to raise an error if the object doesn't exist.
         """
         old_obj_idx_to_rm = self._obj_id_to_idx.get(obj_id, None)
         # Check whether this object_id to remove actually exists and possibly raise an error.
@@ -266,6 +279,9 @@ class Sam3VideoInferenceSession:
             raise RuntimeError(
                 f"Cannot remove object id {obj_id} as it doesn't exist. All existing object ids: {self.obj_ids}."
             )
+
+        # Clean up prompt mapping
+        self.obj_id_to_prompt_id.pop(obj_id, None)
 
         # If this is the only remaining object id, we simply reset the state.
         if len(self._obj_id_to_idx) == 1:
@@ -394,6 +410,9 @@ class Sam3VideoInferenceSession:
         self.frames_tracked_per_obj.clear()
         # Note: cache and video data are preserved
 
+        # Reset prompt mappings for objects (but keep prompts themselves)
+        self.obj_id_to_prompt_id.clear()
+
     def reset_inference_session(self):
         """Reset tracking data and cache."""
         self._obj_id_to_idx.clear()
@@ -402,6 +421,9 @@ class Sam3VideoInferenceSession:
         self.output_dict_per_obj.clear()
         self.frames_tracked_per_obj.clear()
         self.cache.clear_all()
+
+        # Reset prompt mappings for objects (but keep prompts themselves)
+        self.obj_id_to_prompt_id.clear()
 
     def reset_state(self):
         """Reset the inference session state."""
@@ -412,7 +434,6 @@ class Sam3VideoInferenceSession:
         self.frames_tracked_per_obj = {}
 
         # Reset detection-tracking fusion state
-        self.text_embeddings = None
         self.obj_id_to_score = {}
         self.obj_id_to_tracker_score_frame_wise = defaultdict(dict)
         self.obj_id_to_last_occluded = {}
@@ -424,6 +445,13 @@ class Sam3VideoInferenceSession:
         self.removed_obj_ids = set()
         self.suppressed_obj_ids = defaultdict(set)
         self.output_buffer = []
+
+        # Reset multi-prompt state
+        self.prompts.clear()
+        self.prompt_input_ids.clear()
+        self.prompt_embeddings.clear()
+        self.prompt_attention_masks.clear()
+        self.obj_id_to_prompt_id.clear()
 
         # Clear cache
         self.cache.clear_all()
@@ -541,53 +569,71 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         inference_session: Sam3VideoInferenceSession,
         vision_embeds: torch.Tensor,
     ):
-        if inference_session.has_new_text_input:
-            text_embeds = self.detector_model.get_text_features(
-                input_ids=inference_session.text_input_ids,
-                attention_mask=inference_session.text_attention_mask,
+        """
+        Run detection for all prompts efficiently by reusing vision embeddings.
+
+        Args:
+            inference_session: The inference session containing prompts and state
+            vision_embeds: Pre-computed vision embeddings to reuse across prompts
+
+        Returns:
+            Dictionary mapping prompt_id to detection outputs
+        """
+        prompt_ids = list(inference_session.prompts.keys())
+        if not prompt_ids:
+            raise ValueError("No prompts available for detection. Please add prompts to the session first.")
+
+        all_detections = {}
+
+        for prompt_id in prompt_ids:
+            # Get or compute text embeddings for this prompt
+            if prompt_id not in inference_session.prompt_embeddings:
+                text_embeds = self.detector_model.get_text_features(
+                    input_ids=inference_session.prompt_input_ids[prompt_id],
+                    attention_mask=inference_session.prompt_attention_masks[prompt_id],
+                )
+                inference_session.prompt_embeddings[prompt_id] = text_embeds
+            else:
+                text_embeds = inference_session.prompt_embeddings[prompt_id]
+
+            # Run detector with cached vision features (efficient!)
+            detector_outputs = self.detector_model(
+                vision_embeds=vision_embeds,
+                text_embeds=text_embeds,
+                attention_mask=inference_session.prompt_attention_masks[prompt_id],
             )
-            inference_session.text_embeddings = text_embeds
-            inference_session.has_new_text_input = False
-        else:
-            text_embeds = inference_session.text_embeddings
-        detector_outputs = self.detector_model(
-            vision_embeds=vision_embeds,
-            text_embeds=text_embeds,
-            attention_mask=inference_session.text_attention_mask,
-        )
 
-        pred_logits = detector_outputs.pred_logits
-        presence_logits = detector_outputs.presence_logits
+            pred_logits = detector_outputs.pred_logits
+            presence_logits = detector_outputs.presence_logits
 
-        pred_probs = pred_logits.sigmoid()
-        presence_scores = presence_logits.sigmoid()
-        pred_probs = pred_probs * presence_scores
-
-        run_nms = self.det_nms_thresh > 0.0
-        if run_nms:
-            keep = nms_masks(
-                pred_probs=pred_probs[0],
-                pred_masks=detector_outputs.pred_masks[0],
-                prob_threshold=self.score_threshold_detection,
-                iou_threshold=self.det_nms_thresh,
-            )
-            # set suppressed detections' logits to a very low value
-            detector_outputs.pred_logits[0] -= 1e4 * (~keep).float()
-            # Recompute pred_probs after NMS suppression
             pred_probs = pred_logits.sigmoid()
+            presence_scores = presence_logits.sigmoid()
             pred_probs = pred_probs * presence_scores
 
-        pred_boxes_xyxy = detector_outputs.pred_boxes
-        pred_masks = detector_outputs.pred_masks
-        # get the positive detection outputs above threshold
-        pos_pred_idx = torch.where(pred_probs > self.score_threshold_detection)
-        det_out = {
-            "bbox": pred_boxes_xyxy[pos_pred_idx[0], pos_pred_idx[1]],
-            "mask": pred_masks[pos_pred_idx[0], pos_pred_idx[1]],
-            "scores": pred_probs[pos_pred_idx[0], pos_pred_idx[1]],
-        }
+            run_nms = self.det_nms_thresh > 0.0
+            if run_nms:
+                keep = nms_masks(
+                    pred_probs=pred_probs[0],
+                    pred_masks=detector_outputs.pred_masks[0],
+                    prob_threshold=self.score_threshold_detection,
+                    iou_threshold=self.det_nms_thresh,
+                )
+                # Set suppressed detections' probabilities to 0
+                pred_probs[0][~keep] = 0.0
 
-        return det_out
+            pred_boxes_xyxy = detector_outputs.pred_boxes
+            pred_masks = detector_outputs.pred_masks
+            # get the positive detection outputs above threshold
+            pos_pred_idx = torch.where(pred_probs > self.score_threshold_detection)
+            det_out = {
+                "bbox": pred_boxes_xyxy[pos_pred_idx[0], pos_pred_idx[1]],
+                "mask": pred_masks[pos_pred_idx[0], pos_pred_idx[1]],
+                "scores": pred_probs[pos_pred_idx[0], pos_pred_idx[1]],
+            }
+
+            all_detections[prompt_id] = det_out
+
+        return all_detections
 
     def run_tracker_propagation(
         self,
@@ -638,6 +684,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_scores: Tensor,
         trk_masks: Tensor,
         trk_obj_ids: list[int],
+        det_prompt_ids: torch.Tensor,
+        trk_prompt_ids: torch.Tensor,
     ):
         """
         Match detections on the current frame with the existing masklets.
@@ -647,6 +695,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
           - det_scores: (N,) tensor of detection scores
           - trk_masks: (M, H, W) tensor of track masks
           - trk_obj_ids: (M,) list of object IDs corresponding to trk_masks
+          - det_prompt_ids: (N,) tensor of prompt IDs for each detection. Prevents cross-prompt
+            associations by zeroing IoUs between detections and tracks from different prompts.
+          - trk_prompt_ids: (M,) tensor of prompt IDs for each tracked object. Prevents cross-prompt
+            associations by zeroing IoUs between detections and tracks from different prompts.
 
         Returns:
           - new_det_out_inds: list of new object indices among in FA detection outputs
@@ -699,6 +751,10 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_masks_binary = det_masks > 0
         trk_masks_binary = trk_masks > 0
         ious = mask_iou(det_masks_binary, trk_masks_binary)  # (N, M) tensor
+
+        # Prevent cross-prompt associations by zeroing IoUs between different prompt groups.
+        prompt_match = det_prompt_ids.unsqueeze(1) == trk_prompt_ids.unsqueeze(0)
+        ious = torch.where(prompt_match, ious, torch.zeros_like(ious))
 
         # trk_is_matched: for each track, True if matched to any detection above threshold
         trk_is_matched = (ious >= iou_threshold_trk).any(dim=0)  # (M,)
@@ -1009,12 +1065,36 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 ],
                 dim=0,
             )
-            to_suppress = self._get_objects_to_suppress_based_on_most_recently_occluded(
-                binary_tracker_low_res_masks_global,
-                last_occluded_prev,
-                obj_ids_global,
-                reverse,
+
+            prompt_ids_global = torch.tensor(
+                [inference_session.obj_id_to_prompt_id[obj_id] for obj_id in obj_ids_global],
+                device=binary_tracker_low_res_masks_global.device,
+                dtype=torch.long,
             )
+            to_suppress = torch.zeros(
+                batch_size,
+                device=binary_tracker_low_res_masks_global.device,
+                dtype=torch.bool,
+            )
+
+            # Only suppress overlaps within the same prompt group.
+            unique_prompts = prompt_ids_global.unique(sorted=True)
+            for prompt_id in unique_prompts:
+                prompt_mask = prompt_ids_global == prompt_id
+                prompt_indices = torch.nonzero(prompt_mask, as_tuple=True)[0]
+                if prompt_indices.numel() <= 1:
+                    continue
+
+                prompt_masks = binary_tracker_low_res_masks_global[prompt_indices]
+                prompt_last_occ = last_occluded_prev[prompt_indices]
+                prompt_obj_ids = [obj_ids_global[idx] for idx in prompt_indices.tolist()]
+                prompt_suppress = self._get_objects_to_suppress_based_on_most_recently_occluded(
+                    prompt_masks,
+                    prompt_last_occ,
+                    prompt_obj_ids,
+                    reverse,
+                )
+                to_suppress[prompt_indices] = prompt_suppress
 
             # Update metadata with occlusion information
             is_obj_occluded = ~(binary_tracker_low_res_masks_global.any(dim=(-1, -2)))
@@ -1062,15 +1142,35 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         pred_masks_after = torch.where(keep_mask, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks_after
 
-    def _suppress_object_pw_area_shrinkage(self, pred_masks):
+    def _suppress_object_pw_area_shrinkage(
+        self,
+        pred_masks,
+        prompt_ids: Optional[list[int]] = None,
+    ):
         """
-        This function suppresses masks that shrink in area after applying pixelwise non-overlapping constriants.
-        Note that the final output can still be overlapping.
+        This function suppresses masks that shrink in area after applying pixelwise non-overlapping constraints.
+        When `prompt_ids` are provided, constraints are enforced independently per prompt group.
         """
-        # Apply pixel-wise non-overlapping constraint based on mask scores
+        if prompt_ids is None:
+            return self._suppress_object_pw_area_shrinkage_impl(pred_masks)
+
+        if len(prompt_ids) != pred_masks.size(0):
+            raise ValueError("prompt_ids must have the same length as pred_masks")
+
+        prompt_ids_tensor = torch.tensor(prompt_ids, device=pred_masks.device, dtype=torch.long)
+        pred_masks_grouped = pred_masks.clone()
+        for prompt_id in prompt_ids_tensor.unique(sorted=True):
+            indices = torch.nonzero(prompt_ids_tensor == prompt_id, as_tuple=True)[0]
+            if indices.numel() == 0:
+                continue
+            pred_masks_grouped[indices] = self._suppress_object_pw_area_shrinkage_impl(pred_masks_grouped[indices])
+        return pred_masks_grouped
+
+    def _suppress_object_pw_area_shrinkage_impl(self, pred_masks):
+        if pred_masks.size(0) <= 1:
+            return pred_masks
+
         pixel_level_non_overlapping_masks = self._apply_non_overlapping_constraints(pred_masks)
-        # Fully suppress masks with high shrinkage (probably noisy) based on the pixel wise non-overlapping constraints
-        # NOTE: The output of this function can be a no op if none of the masks shrinked by a large factor.
         pred_masks = self._suppress_shrinked_masks(pred_masks, pixel_level_non_overlapping_masks)
         return pred_masks
 
@@ -1109,8 +1209,13 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
                 current_out = output_dict["non_cond_frame_outputs"].pop(frame_idx)
                 output_dict["cond_frame_outputs"][frame_idx] = current_out
 
-        # Apply non-overlapping constraints before memory encoding
-        high_res_masks = self._suppress_object_pw_area_shrinkage(high_res_masks)
+        # Apply non-overlapping constraints before memory encoding.
+        # Constraints are enforced independently per prompt group.
+        # Every object ID has a prompt_id assigned when it's created.
+        prompt_ids_for_objects = [
+            inference_session.obj_id_to_prompt_id[obj_id] for obj_id in inference_session.obj_ids
+        ]
+        high_res_masks = self._suppress_object_pw_area_shrinkage(high_res_masks, prompt_ids_for_objects)
         # Use mask areas as a proxy for object scores
         object_score_logits = torch.where((high_res_masks > 0).any(dim=(-1, -2)), 10.0, -10.0)
 
@@ -1148,6 +1253,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         det_out: dict[str, Tensor],
         tracker_low_res_masks_global: Tensor,
         tracker_obj_scores_global: Tensor,
+        det_idx_to_prompt_id: dict[int, int],
         streaming: bool = False,
     ):
         # initialize new metadata from previous metadata (its values will be updated later)
@@ -1165,6 +1271,28 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # Step 1: make the update plan and resolve heuristics
         det_mask_preds: Tensor = det_out["mask"]  # low-res mask logits
         det_scores: Tensor = det_out["scores"].float()  # Keep as tensor!
+        # det_idx_to_prompt_id maps every detection index to its prompt_id (created by _merge_detections_from_prompts).
+        det_prompt_ids = (
+            torch.tensor(
+                [det_idx_to_prompt_id[idx] for idx in range(det_mask_preds.size(0))],
+                device=det_mask_preds.device,
+                dtype=torch.long,
+            )
+            if det_mask_preds.size(0) > 0
+            else torch.empty(0, device=det_mask_preds.device, dtype=torch.long)
+        )
+        # Get prompt IDs for tracked objects.
+        trk_prompt_ids = (
+            torch.tensor(
+                [inference_session.obj_id_to_prompt_id[obj_id] for obj_id in inference_session.obj_ids],
+                device=tracker_low_res_masks_global.device
+                if tracker_low_res_masks_global.numel() > 0
+                else det_mask_preds.device,
+                dtype=torch.long,
+            )
+            if tracker_low_res_masks_global.numel() > 0
+            else torch.empty(0, device=det_mask_preds.device, dtype=torch.long)
+        )
         # a) match FA and SAM2 masks and find new objects
         (
             new_det_out_inds,
@@ -1177,6 +1305,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             det_scores=det_scores,
             trk_masks=tracker_low_res_masks_global,
             trk_obj_ids=inference_session.obj_ids,
+            det_prompt_ids=det_prompt_ids,
+            trk_prompt_ids=trk_prompt_ids,
         )
 
         # check whether we've hit the maximum number of objects we can track (and if so, drop some detections)
@@ -1197,6 +1327,11 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # assign object IDs to new detections
         new_det_start_obj_id = inference_session.max_obj_id + 1
         new_det_obj_ids = list(range(new_det_start_obj_id, new_det_start_obj_id + new_det_num))
+
+        # Assign prompt IDs to new objects based on which prompt detected them.
+        for obj_id, det_idx in zip(new_det_obj_ids, new_det_out_inds):
+            prompt_id = det_idx_to_prompt_id[det_idx]
+            inference_session.obj_id_to_prompt_id[obj_id] = prompt_id
 
         # b) handle hotstart heuristics to remove objects
         extra_metadata_new = deepcopy(
@@ -1412,6 +1547,53 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         return obj_id_to_mask
 
+    def _merge_detections_from_prompts(
+        self,
+        all_detections: dict[int, dict[str, Tensor]],
+        inference_session: Sam3VideoInferenceSession,
+    ) -> tuple[dict[str, Tensor], dict[int, int]]:
+        """
+        Merge detections from multiple prompts into a single detection output.
+        Assigns unique object IDs and tracks which prompt detected each object.
+
+        Args:
+            all_detections: Dictionary mapping prompt_id to detection outputs
+            inference_session: Session to track obj_id -> prompt_id mapping
+
+        Returns:
+            Tuple of (merged_det_out, det_idx_to_prompt_id) where det_idx_to_prompt_id
+            maps detection index in the merged output to the prompt that produced it.
+        """
+        merged_bboxes, merged_masks, merged_scores = [], [], []
+        det_idx_to_prompt_id = {}
+        det_idx = 0
+
+        for prompt_id, det_out in all_detections.items():
+            num_dets = len(det_out["bbox"])
+            if num_dets > 0:
+                merged_bboxes.append(det_out["bbox"])
+                merged_masks.append(det_out["mask"])
+                merged_scores.append(det_out["scores"])
+                for i in range(num_dets):
+                    det_idx_to_prompt_id[det_idx + i] = prompt_id
+                det_idx += num_dets
+
+        if merged_bboxes:
+            merged_det_out = {
+                "bbox": torch.cat(merged_bboxes),
+                "mask": torch.cat(merged_masks),
+                "scores": torch.cat(merged_scores),
+            }
+        else:
+            device = inference_session.inference_device
+            merged_det_out = {
+                "bbox": torch.zeros(0, 4, device=device),
+                "mask": torch.zeros(0, self.low_res_mask_size, self.low_res_mask_size, device=device),
+                "scores": torch.zeros(0, device=device),
+            }
+
+        return merged_det_out, det_idx_to_prompt_id
+
     def _det_track_one_frame(
         self,
         inference_session: Sam3VideoInferenceSession,
@@ -1430,13 +1612,15 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         pixel_values = inference_session.get_frame(frame_idx).unsqueeze(0)
         vision_embeds = self.detector_model.get_vision_features(pixel_values=pixel_values)
 
-        # Step 1: run detection
-        # It returns a "det_out" dict for `frame_idx`
-        # into `feature_cache`.
-        det_out = self.run_detection(
+        # Step 1: run detection for all prompts (efficiently reusing vision embeddings)
+        # Returns dict mapping prompt_id to detection outputs
+        all_detections = self.run_detection(
             inference_session=inference_session,
             vision_embeds=vision_embeds,
         )
+
+        # Merge detections from all prompts into single output for tracking
+        det_out, det_idx_to_prompt_id = self._merge_detections_from_prompts(all_detections, inference_session)
 
         # share the vision encoder outputs from the detector to the tracker
         vision_feats, vision_pos_embeds = self.get_vision_features_for_tracker(
@@ -1466,6 +1650,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             det_out=det_out,
             tracker_low_res_masks_global=tracker_low_res_masks_global,
             tracker_obj_scores_global=tracker_obj_scores_global,
+            det_idx_to_prompt_id=det_idx_to_prompt_id,
             streaming=streaming,
         )
 

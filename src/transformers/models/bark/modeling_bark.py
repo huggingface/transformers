@@ -34,7 +34,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
-from ...modeling_utils import PreTrainedModel, get_parameter_device
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     is_accelerate_available,
@@ -338,7 +338,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self, "_hf_hook"):
-            return get_parameter_device(self)
+            return super().device
         for module in self.modules():
             if (
                 hasattr(module, "_hf_hook")
@@ -347,7 +347,7 @@ class BarkPreTrainedModel(PreTrainedModel):
             ):
                 return torch.device(module._hf_hook.execution_device)
 
-        return get_parameter_device(self)
+        return super().device
 
 
 # GPT2-like autoregressive model
@@ -1318,7 +1318,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         # for bark_model, device must be verified on its sub-models
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self.semantic, "_hf_hook"):
-            return get_parameter_device(self)
+            return super().device
         for module in self.semantic.modules():
             if (
                 hasattr(module, "_hf_hook")

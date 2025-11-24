@@ -40,7 +40,7 @@ on:
         description: "The sha of the merge commit for the pull request (created by GitHub) in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
       PR_MERGE_COMMIT_BASE_SHA:
-        description: "The sha of the parent commit of the the merge commit on the target branch in the base repository"
+        description: "The sha of the parent commit of the merge commit on the target branch in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
       PR_HEAD_COMMIT_DATE:
         description: "The date of the head sha of the pull request branch in the head repository"

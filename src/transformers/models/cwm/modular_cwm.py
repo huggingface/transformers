@@ -41,7 +41,7 @@ class CwmConfig(LlamaConfig):
     """
     Configuration for Code World Model (CWM).
     This is an inherited Llama3-compatible configuration with layer-interleaved
-    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuartion mirroring the model in the
+    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuration mirroring the model in the
     [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default. Other models include:
     - [facebook/cwm-sft](https://huggingface.co/facebook/cwm-sft)
     - [facebook/cwm-pretrain](https://huggingface.co/facebook/cwm-pretrain)
@@ -92,7 +92,7 @@ class CwmConfig(LlamaConfig):
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 8192):

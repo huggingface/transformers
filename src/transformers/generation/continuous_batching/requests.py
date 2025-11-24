@@ -15,7 +15,6 @@
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import torch
 
@@ -87,7 +86,7 @@ class GenerationOutput:
     prompt_ids: list[int] = field(default_factory=list)
     generated_tokens: list[int] = field(default_factory=list)
     logprobs: list[float] = field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
 
@@ -118,8 +117,8 @@ class RequestState:
 
     # Required fields # TODO: come up with better names / not sure prompt_ids and such are not redundant
     request_id: str
-    full_prompt_ids: Optional[list[int]] = None  # Full initial prompt
-    prompt_ids: Optional[list[int]] = None  # Tokens IDs currently being processed
+    full_prompt_ids: list[int] | None = None  # Full initial prompt
+    prompt_ids: list[int] | None = None  # Tokens IDs currently being processed
     remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests, prefill left to process
     static_outputs: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
@@ -129,7 +128,7 @@ class RequestState:
     eos_token_id: int = -1  # ID of the end-of-sequence token
     streaming: bool = False  # Whether to stream tokens as they're generated
     created_time: float = field(default_factory=time.time)  # Time the request was created
-    error: Optional[str] = None  # Error message if the request failed
+    error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
 
     @property

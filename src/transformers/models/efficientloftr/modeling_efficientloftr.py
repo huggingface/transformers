@@ -40,15 +40,15 @@ from .configuration_efficientloftr import EfficientLoFTRConfig
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number
+    Base class for outputs of EfficientLoFTR keypoint matching models. Due to the nature of keypoint detection and matching, the number
     of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of
-    images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask tensor is
-    used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
-    information.
+    images, the maximum number of matches is set as the dimension of the matches and matching scores.
     """
 )
-class KeypointMatchingOutput(ModelOutput):
+class EfficientLoFTRKeypointMatchingOutput(ModelOutput):
     r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        Loss computed during training.
     matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
     matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
@@ -64,6 +64,7 @@ class KeypointMatchingOutput(ModelOutput):
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
+    loss: Optional[torch.FloatTensor] = None
     matches: Optional[torch.FloatTensor] = None
     matching_scores: Optional[torch.FloatTensor] = None
     keypoints: Optional[torch.FloatTensor] = None
@@ -1295,7 +1296,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> KeypointMatchingOutput:
+    ) -> EfficientLoFTRKeypointMatchingOutput:
         r"""
         Examples:
 
@@ -1353,7 +1354,9 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         matching_keypoints[:, :, :, 0] = matching_keypoints[:, :, :, 0] / width
         matching_keypoints[:, :, :, 1] = matching_keypoints[:, :, :, 1] / height
 
-        return KeypointMatchingOutput(
+        loss = None
+        return EfficientLoFTRKeypointMatchingOutput(
+            loss=loss,
             matches=coarse_matched_indices,
             matching_scores=coarse_matching_scores,
             keypoints=matching_keypoints,

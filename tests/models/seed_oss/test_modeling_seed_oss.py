@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -106,7 +105,7 @@ class SeedOssIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_flash_attn
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     @pytest.mark.flash_attn_test
     def test_model_36b_flash_attn(self):
         EXPECTED_TEXTS = [

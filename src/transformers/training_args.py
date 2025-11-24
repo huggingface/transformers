@@ -1139,7 +1139,7 @@ class TrainingArguments:
     )
     parallelism_config: Optional[ParallelismConfig] = field(
         default=None,
-        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.10.1`")},
+        metadata={"help": ("Parallelism configuration for the training run. Requires Accelerate `1.12.0`")},
     )
     deepspeed: Optional[Union[dict, str]] = field(
         default=None,

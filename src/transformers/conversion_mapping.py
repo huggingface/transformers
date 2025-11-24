@@ -15,7 +15,7 @@
 
 from copy import deepcopy
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter
+from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
 from .utils import is_torch_available
 
 
@@ -26,6 +26,7 @@ if is_torch_available():
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "mixtral": [
+            WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
             WeightConverter(
                 source_keys=[
                     "block_sparse_moe.experts.*.w1.weight",
@@ -50,12 +51,6 @@ def _build_checkpoint_conversion_mapping():
                     ),  # each process has two lists of tensors, we cat each list. -> we end up with 2 tensors
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
             ),
-            # WeightConverter(
-            #     ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
-            #     "self_attn.qkv_proj",
-            #     operations=[Concatenate(dim=0)],  # more like stack?
-            # ),
-            WeightConverter("*.block_sparse_moe.", "*.mlp."),
         ],
         "qwen2_moe": [
             WeightConverter(
@@ -73,11 +68,11 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "legacy": [
-            WeightConverter(
+            WeightRenaming(
                 source_keys="LayerNorm.gamma",
                 target_keys="LayerNorm.weight",
             ),
-            WeightConverter(
+            WeightRenaming(
                 source_keys="LayerNorm.beta",
                 target_keys="LayerNorm.bias",
             ),
@@ -85,22 +80,22 @@ def _build_checkpoint_conversion_mapping():
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
-            WeightConverter(
+            WeightRenaming(
                 source_keys="weight_g",
                 target_keys="parametrizations.weight.original0",
             ),
-            WeightConverter(
+            WeightRenaming(
                 source_keys="weight_v",
                 target_keys="parametrizations.weight.original1",
             ),
         ]
     else:
         mapping["legacy"] += [
-            WeightConverter(
+            WeightRenaming(
                 source_keys="parametrizations.weight.original0",
                 target_keys="weight_g",
             ),
-            WeightConverter(
+            WeightRenaming(
                 source_keys="parametrizations.weight.original1",
                 target_keys="weight_v",
             ),

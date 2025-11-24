@@ -17,7 +17,6 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Union
 
 import torch
 from filelock import FileLock
@@ -77,9 +76,9 @@ class GlueDataset(Dataset):
         self,
         args: GlueDataTrainingArguments,
         tokenizer: PreTrainedTokenizerBase,
-        limit_length: Optional[int] = None,
-        mode: Union[str, Split] = Split.train,
-        cache_dir: Optional[str] = None,
+        limit_length: int | None = None,
+        mode: str | Split = Split.train,
+        cache_dir: str | None = None,
     ):
         warnings.warn(
             "This dataset will be removed from the library soon, preprocessing should be handled with the Hugging Face Datasets "

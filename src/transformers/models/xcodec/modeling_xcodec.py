@@ -403,8 +403,9 @@ class XcodecModel(XcodecPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.pad = config.hop_length // 2
-        self.acoustic_model = AutoModel.from_config(config.acoustic_model_config)
-
+        acoustic_model = AutoModel.from_config(config.acoustic_model_config)
+        self.acoustic_encoder = acoustic_model.encoder
+        self.acoustic_decoder = acoustic_model.decoder
         self._adjust_dac_decoder(self.acoustic_decoder)
         self.encoder_semantic = SemanticEncoder(config)
         self.decoder_semantic = SemanticDecoder(config)
@@ -416,14 +417,6 @@ class XcodecModel(XcodecPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @property
-    def acoustic_encoder(self):
-        return self.acoustic_model.encoder
-
-    @property
-    def acoustic_decoder(self):
-        return self.acoustic_model.decoder
 
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):
