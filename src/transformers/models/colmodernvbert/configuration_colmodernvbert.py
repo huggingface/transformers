@@ -77,3 +77,6 @@ class ColModernVBertConfig(PreTrainedConfig):
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range
+
+
+__all__ = ["ColModernVBertConfig"]

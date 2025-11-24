@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .cohere2_vision import *
+    from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
     from .conditional_detr import *

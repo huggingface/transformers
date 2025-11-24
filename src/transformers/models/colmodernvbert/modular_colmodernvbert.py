@@ -542,6 +542,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
 
 __all__ = [
+    "ColModernVBertConfig",
     "ColModernVBertForRetrieval",
     "ColModernVBertPreTrainedModel",
     "ColModernVBertProcessor",
