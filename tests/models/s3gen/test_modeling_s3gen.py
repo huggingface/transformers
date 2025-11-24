@@ -18,7 +18,8 @@ import unittest
 
 import torch
 
-from transformers import S3GenConfig, S3GenModel
+from transformers.models.s3gen.configuration_s3gen import S3GenConfig
+from transformers.models.s3gen.modeling_s3gen import S3GenModel
 from transformers.testing_utils import require_torch, torch_device
 
 
