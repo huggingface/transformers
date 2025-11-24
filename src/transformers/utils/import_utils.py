@@ -1252,19 +1252,23 @@ def is_torchdynamo_exporting() -> bool:
 
         return torch.compiler.is_exporting()
     except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_exporting()
-        except Exception:
-            return False
+        return False
 
 
-def is_torch_fx_proxy(x):
+def is_torch_fx_proxy(x) -> bool:
     try:
         import torch.fx
 
         return isinstance(x, torch.fx.Proxy)
+    except Exception:
+        return False
+
+
+def is_fake_tensor(x) -> bool:
+    try:
+        import torch
+
+        return isinstance(x, torch._subclasses.FakeTensor)
     except Exception:
         return False
 
@@ -1279,28 +1283,32 @@ def is_jit_tracing() -> bool:
 
 
 def is_tracing(tensor=None) -> bool:
-    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx Proxy or FakeTensor."""
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
     _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
+        _is_tracing |= is_fake_tensor(tensor)
     return _is_tracing
 
 
 def check_with(error_type: Exception, cond: Any, msg: Callable[[], str]) -> None:
     """
-    Same as `torch._check_with()` but:
-    - Works with non-bool conditions (e.g. converting scalar `torch.Tensor` to bool).
-    - Can be disabled globally with `TRANSFORMERS_DISABLE_CHECKS` environment variable.
+    Same as `torch._check_with()` but supports cond being a tensor.
+    Note: `torch._check_with()` is the same as `torch_check()` but allows specifying the error type.
+    Args:
+        error_type (`Exception`): The type of the exception to raise.
+        cond (`Any`): The condition to check (`bool`, `SymBool` or `torch.Tensor`).
+        msg (`Callable[[], str]`): A callable that returns the message to display if the check fails.
+    Raises:
+        error_type: If the condition is not met.
     """
-
-    if os.getenv("TRANSFORMERS_DISABLE_CHECKS", "0") == "1":
-        return
-
     import torch
 
-    torch._check_with(error_type, bool(cond), msg)
+    if isinstance(cond, torch.Tensor):
+        cond = cond.item()
+    torch._check_with(error_type, cond, msg)
 
 
 @lru_cache
