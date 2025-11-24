@@ -48,7 +48,6 @@ class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @slow
-# @require_torch_gpu
 class HeliumIntegrationTest(unittest.TestCase):
     input_text = ["Hello, today is a great day to"]
 

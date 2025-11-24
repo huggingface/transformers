@@ -32,6 +32,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -535,21 +536,12 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
         "cross_attentions": XLMRobertaXLCrossAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, XLMRobertaXLLMHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, XLMRobertaXLLMHead):
+            init.zeros_(module.bias)
 
 
 class XLMRobertaXLPooler(nn.Module):
@@ -729,7 +721,6 @@ class XLMRobertaXLLMHead(nn.Module):
 
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
@@ -740,14 +731,6 @@ class XLMRobertaXLLMHead(nn.Module):
         x = self.decoder(x)
 
         return x
-
-    def _tie_weights(self) -> None:
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-            self.bias = self.decoder.bias
 
 
 class XLMRobertaXLClassificationHead(nn.Module):
@@ -778,7 +761,10 @@ class XLMRobertaXLClassificationHead(nn.Module):
     """
 )
 class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -789,7 +775,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.lm_head = XLMRobertaXLLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -875,7 +861,10 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -889,7 +878,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.lm_head = XLMRobertaXLLMHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -960,7 +949,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.classifier = XLMRobertaXLClassificationHead(config)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -1032,7 +1021,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -1123,7 +1112,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -1187,7 +1176,7 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
         self.roberta = XLMRobertaXLModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring

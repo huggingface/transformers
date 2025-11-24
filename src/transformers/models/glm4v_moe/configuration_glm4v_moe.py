@@ -32,39 +32,35 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the encoder layers and the pooler layer.
-        depth (`int`, *optional*, defaults to 24):
-            Number of layers (depth) in the model.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the queries, keys and values.
-        intermediate_size (`int`, *optional*, defaults to 13696):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"selu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the projection layer.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        image_size (`int` or `list[int]`, *optional*, defaults to `[336, 336]`):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `14`):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        out_hidden_size (`int`, *optional*, defaults to 4096):
-            The output hidden size of the vision model.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The size used for patches along the temporal dimension.
+            depth (`int`, *optional*, defaults to 24):
+                Number of layers (depth) in the model.
+            hidden_size (`int`, *optional*, defaults to 1536):
+                Dimensionality of the encoder layers and the pooler layer.
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            attention_bias (`bool`, *optional*, defaults to `False`):
+                Whether to add a bias to the queries, keys and values.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                Dropout probability for attention weights.
+            num_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
+            in_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+            image_size (`int` or `list[int]`, *optional*, defaults to 336):
+                The size (resolution) of each image.
+            patch_size (`int`, *optional*, defaults to 14):
+                The size (resolution) of each patch.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+                The epsilon used by the rms normalization layers.
+            spatial_merge_size (`int`, *optional*, defaults to 2):
+                The size used for merging spatial dimensions.
+            temporal_patch_size (`int`, *optional*, defaults to 2):
+                The size used for patches along the temporal dimension.
+            out_hidden_size (`int`, *optional*, defaults to 4096):
+                The output hidden size of the vision model.
+            intermediate_size (`int`, *optional*, defaults to 13696):
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -80,7 +76,7 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm4v_moe"
+    model_type = "glm4v_moe_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -206,7 +202,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Glm4vMoe_text"
+    model_type = "glm4v_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Glm4vMoe`
     base_model_tp_plan = {
@@ -214,8 +210,9 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -242,7 +239,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = True,
         attention_dropout: Optional[float] = 0.0,
         moe_intermediate_size: Optional[int] = 1408,
@@ -373,4 +370,4 @@ class Glm4vMoeConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["Glm4vMoeConfig", "Glm4vMoeTextConfig"]
+__all__ = ["Glm4vMoeConfig", "Glm4vMoeTextConfig", "Glm4vMoeVisionConfig"]

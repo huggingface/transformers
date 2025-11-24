@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -30,7 +31,7 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -428,29 +429,21 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
     config: JetMoeConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, JetMoeRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, JetMoeParallelExperts):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, JetMoeParallelExperts):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, JetMoeMoA | JetMoeMoE):
-            module.bias.data.zero_()
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -532,7 +525,7 @@ class JetMoeModel(MixtralModel):
 
 
 class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

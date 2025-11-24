@@ -18,6 +18,7 @@ import gc
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -214,6 +215,17 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         base_config.patch_size = 8
         self.assertEqual(base_config.patch_size, 8)
         self.assertNotEqual(base_config.vision_config.patch_size, 8)
+
+        # Test for making sure config save and load preserves correct model type
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        self.assertEqual(config.model_type, "qwen2_vl")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+
+            loaded_config = Qwen2VLConfig.from_pretrained(tmp_dir)
+            self.assertEqual(loaded_config.model_type, "qwen2_vl")
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -551,6 +563,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",
@@ -578,6 +591,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",

@@ -379,6 +379,6 @@ if __name__ == "__main__":
     with open("doc_test_results/doc_test_results.json", "w", encoding="UTF-8") as fp:
         json.dump(doc_test_results, fp, ensure_ascii=False, indent=4)
 
-    message = Message("🤗 Results of the doc tests.", doc_test_results)
+    message = Message("[INFO] Results of the doc tests.", doc_test_results)
     message.post()
     message.post_reply()

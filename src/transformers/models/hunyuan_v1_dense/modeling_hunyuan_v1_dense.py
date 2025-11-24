@@ -290,17 +290,6 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
         "attentions": HunYuanDenseV1Attention,
     }
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
 
 class HunYuanDenseV1RotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
@@ -445,6 +434,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )
@@ -458,7 +448,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
 
 @auto_docstring
 class HunYuanDenseV1ForCausalLM(HunYuanDenseV1PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

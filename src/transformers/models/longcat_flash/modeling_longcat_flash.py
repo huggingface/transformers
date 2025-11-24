@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -164,7 +165,7 @@ class LongcatFlashTopkRouter(nn.Module):
         topk_indices = self.get_topk_indices(scores)
         topk_weights = scores.gather(1, topk_indices)
         topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
+        return topk_weights.to(router_logits.dtype), topk_indices
 
     @torch.no_grad()
     def get_topk_indices(self, scores):
@@ -173,29 +174,51 @@ class LongcatFlashTopkRouter(nn.Module):
         return topk_indices
 
 
-class LongcatFlashExperts(nn.ModuleList):
+class LongcatFlashExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_size = config.expert_ffn_hidden_size
         self.hidden_size = config.hidden_size
-        self.num_experts = config.n_routed_experts + config.zero_expert_num
-        self.zero_expert_num = config.zero_expert_num
+        self.num_routed_experts = config.n_routed_experts
+        self.zero_expert_num = config.zero_expert_num or 0
+        self.total_experts = self.num_routed_experts + self.zero_expert_num
+        self.act_fn = ACT2FN[config.hidden_act]
 
-        self.extend(
-            [LongcatFlashMLP(config, intermediate_size=self.intermediate_size) for _ in range(self.num_experts)]
-            + [nn.Identity() for _ in range(self.zero_expert_num)]
-        )
+        if self.num_routed_experts > 0:
+            self.gate_up_proj = nn.Parameter(
+                torch.empty(self.total_experts, 2 * self.intermediate_size, self.hidden_size)
+            )
+            self.down_proj = nn.Parameter(
+                torch.empty(self.num_routed_experts, self.hidden_size, self.intermediate_size)
+            )
+        else:
+            self.register_parameter("gate_up_proj", None)
+            self.register_parameter("down_proj", None)
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+        if top_k_index.numel() == 0:
+            return final_hidden_states
 
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.total_experts).permute(2, 1, 0)
+
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False)
+        for expert_idx_tensor in expert_hit:
+            expert_idx = int(expert_idx_tensor.item())
+            selection_idx, token_idx = torch.where(expert_mask[expert_idx].squeeze(0))
+            if token_idx.numel() == 0:
+                continue
+            current_state = hidden_states[token_idx]
+
+            if expert_idx >= self.num_routed_experts or self.gate_up_proj is None:
+                current_hidden_states = current_state
+            else:
+                gate, up = F.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+                current_hidden_states = self.act_fn(gate) * up
+                current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
+
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, selection_idx, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
 
 
@@ -215,7 +238,7 @@ class LongcatFlashMoE(nn.Module):
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.router(hidden_states)
+        topk_weights, topk_indices = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         return hidden_states
@@ -535,10 +558,15 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         "attentions": LongcatFlashMLA,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LongcatFlashTopkRouter):
-            module.classifier.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, LongcatFlashExperts):
+            if module.gate_up_proj is not None:
+                init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+                init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -630,7 +658,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
 
 @auto_docstring
 class LongcatFlashForCausalLM(LongcatFlashPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
