@@ -518,7 +518,8 @@ def accelerate_disk_offload(
                 "dtype": str_dtype,
             }
             for target_name, source_name in weight_renaming_map.items()
-            if param_device_map[target_name] == "disk"
+            # Need to check if it's in the mapping in case of unexpected keys that would result in KeyError (we skip them)
+            if target_name in param_device_map and param_device_map[target_name] == "disk"
         }
     # In this case we will resave every offloaded weight
     else:
