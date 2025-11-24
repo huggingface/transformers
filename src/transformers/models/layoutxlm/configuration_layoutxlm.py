@@ -65,6 +65,8 @@ class LayoutXLMConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever be used with. Typically set this to something
             large just in case (e.g., 1024).
@@ -78,7 +80,9 @@ class LayoutXLMConfig(PreTrainedConfig):
             The maximum number of relative 2D positions in the self-attention mechanism.
         rel_2d_pos_bins (`int`, *optional*, defaults to 64):
             The number of 2D relative position bins in the self-attention mechanism.
-        image_feature_pool_shape (`list[int]`, *optional*, defaults to [7, 7, 256]):
+        convert_sync_batchnorm (`bool`, *optional*, defaults to `True`):
+            Whether or not to convert batch normalization layers to synchronized batch normalization layers.
+        image_feature_pool_shape (`list[int]`, *optional*, defaults to `[7, 7, 256]`):
             The shape of the average-pooled feature map.
         coordinate_size (`int`, *optional*, defaults to 128):
             Dimension of the coordinate embeddings.
