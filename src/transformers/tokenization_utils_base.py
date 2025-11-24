@@ -2423,10 +2423,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
-        # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
-        if "fix_mistral_regex" in kwargs and not getattr(tokenizer, "fix_mistral_regex", False):
-            setattr(tokenizer, "fix_mistral_regex", kwargs["fix_mistral_regex"])
-
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
@@ -2443,7 +2439,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 return False
 
             if _is_local or is_base_mistral(pretrained_model_name_or_path):
-                mistral_config_file = cached_file(
+                _config_file = cached_file(
                     pretrained_model_name_or_path,
                     "config.json",
                     cache_dir=cache_dir,
@@ -2453,36 +2449,41 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     _raise_exceptions_for_connection_errors=False,
                     _commit_hash=_commit_hash,
                 )
-                mistral_transformers_version = None
-                if mistral_config_file is not None:
-                    try:
-                        with open(mistral_config_file, encoding="utf-8") as f:
-                            mistral_transformers_version = json.load(f).get("transformers_version")
-                    except (OSError, ValueError):
-                        pass
+                if _config_file is not None:
+                    with open(_config_file, encoding="utf-8") as f:
+                        _config = json.load(f)
+                    transformers_version = _config.get("transformers_version")
 
-                if mistral_transformers_version and version.parse(mistral_transformers_version) <= version.parse(
-                    "4.57"
-                ):
-                    fix_mistral_regex = kwargs.get("fix_mistral_regex")
-                    # only warn if its not explicitly passed
-                    if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
-                        setattr(tokenizer, "fix_mistral_regex", False)
-                        logger.warning(
-                            f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
-                            f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
-                            " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
-                        )
-                    elif fix_mistral_regex is True:
-                        setattr(tokenizer, "fix_mistral_regex", True)
-                        import tokenizers
+                    if transformers_version and version.parse(transformers_version) <= version.parse(
+                        "4.57.2"
+                    ):
+                        if _is_local and _config.model_type not in ["mistral" , "mistral3" , "voxstral" , "ministral", "pixtral"]:
+                            return tokenizer
 
-                        tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
-                            pattern=tokenizers.Regex(
-                                r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
-                            ),
-                            behavior="isolated",
-                        )
+                # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
+                if "fix_mistral_regex" in init_kwargs:
+                    setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
+
+                fix_mistral_regex = kwargs.get("fix_mistral_regex") # not init kwargs
+                # only warn if its not explicitly passed
+                if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", False)
+                    logger.warning(
+                        f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
+                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
+                        " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
+                    )
+                elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", True)
+                    import tokenizers
+
+                    tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
+                        pattern=tokenizers.Regex(
+                            r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+                        ),
+                        behavior="isolated",
+                    )
+
         return tokenizer
 
     @staticmethod
