@@ -32,7 +32,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 from .image_processing_superglue import SuperGlueImageProcessorKwargs
-from .modeling_superglue import KeypointMatchingOutput
+from .modeling_superglue import SuperGlueKeypointMatchingOutput
 
 
 def _is_valid_image(image):
@@ -167,15 +167,15 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
 
     def post_process_keypoint_matching(
         self,
-        outputs: "KeypointMatchingOutput",
+        outputs: "SuperGlueKeypointMatchingOutput",
         target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`SuperGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`SuperGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
