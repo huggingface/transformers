@@ -19,25 +19,27 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import OutputRecorder
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
+    MixtralDecoderLayer,
     MixtralForCausalLM,
     MixtralForQuestionAnswering,
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
     MixtralModel,
-    MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
 )
@@ -230,8 +232,57 @@ class MiniMaxM2Config(PreTrainedConfig):
         )
 
 
-class MiniMaxM2Experts(MixtralExperts):
-    pass
+class MiniMaxM2MLP(nn.Module):
+    def __init__(self, config: MiniMaxM2Config):
+        super().__init__()
+        self.ffn_dim = config.intermediate_size
+        self.hidden_dim = config.hidden_size
+
+        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
+        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
+        current_hidden_states = self.w2(current_hidden_states)
+        return current_hidden_states
+
+
+class MiniMaxM2Experts(nn.ModuleList):
+    """
+    ModuleList of experts.
+    """
+
+    def __init__(self, config: MiniMaxM2Config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        for _ in range(self.num_experts):
+            self.append(MiniMaxM2MLP(config))
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: (batch_size * sequence_length, hidden_dim)
+            selected_experts: (batch_size * sequence_length, top_k)
+            routing_weights: (batch_size * sequence_length, top_k)
+        Returns:
+            (batch_size * sequence_length, hidden_dim)
+        """
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
+            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        return final_hidden_states
 
 
 class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
@@ -250,6 +301,17 @@ class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
         top_k_weights = routing_weights.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
         return top_k_index, top_k_weights.to(router_logits.dtype)
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        router_logits = self.gate(hidden_states)
+        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
 
 
 class MiniMaxM2RMSNorm(MixtralRMSNorm):
@@ -329,8 +391,58 @@ class MiniMaxM2Attention(Qwen3MoeAttention):
         return attn_output, attn_weights
 
 
-class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
-    pass
+class MiniMaxM2DecoderLayer(MixtralDecoderLayer):
+    def __init__(self, config: MiniMaxM2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        del self.mlp
+        self.block_sparse_moe = MiniMaxM2SparseMoeBlock(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
+@auto_docstring
+class MiniMaxM2PreTrainedModel(PreTrainedModel):
+    config: MiniMaxM2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MiniMaxM2DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(nn.Linear, layer_name="block_sparse_moe.gate", index=0),
+        "hidden_states": MiniMaxM2DecoderLayer,
+        "attentions": MiniMaxM2Attention,
+    }
 
 
 class MiniMaxM2Model(MixtralModel):

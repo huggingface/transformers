@@ -108,14 +108,6 @@ class MiniMaxM2SparseMoeBlock(nn.Module):
         self.experts = MiniMaxM2Experts(config)
         self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
 
-    def route_tokens_to_experts(self, router_logits):
-        routing_weights = torch.nn.functional.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
-        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return top_k_index, top_k_weights.to(router_logits.dtype)
-
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
@@ -126,6 +118,14 @@ class MiniMaxM2SparseMoeBlock(nn.Module):
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
+
+    def route_tokens_to_experts(self, router_logits):
+        routing_weights = torch.nn.functional.sigmoid(router_logits.float())
+        scores_for_choice = routing_weights + self.e_score_correction_bias
+        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
+        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        return top_k_index, top_k_weights.to(router_logits.dtype)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -381,10 +381,9 @@ class MiniMaxM2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = MiniMaxM2Attention(config, layer_idx)
-
-        self.block_sparse_moe = MiniMaxM2SparseMoeBlock(config)
         self.input_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.block_sparse_moe = MiniMaxM2SparseMoeBlock(config)
 
     def forward(
         self,
@@ -599,7 +598,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class MiniMaxM2ForCausalLM(MiniMaxM2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
