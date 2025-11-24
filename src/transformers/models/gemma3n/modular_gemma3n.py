@@ -2116,7 +2116,6 @@ class Gemma3nTextModel(Gemma3TextModel):
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
     _checkpoint_conversion_mapping = {"model.language_model": "model"}
-    base_model_prefix = "model"
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -2324,6 +2323,7 @@ class Gemma3nModel(PaliGemmaModel):
             dummy_vision_token_id = self.embed_vision.vocab_offset + self.embed_vision.vocab_size - 1
             vision_input_ids = torch.where(vision_mask, input_ids, dummy_vision_token_id).to(inputs_embeds.device)
             vision_embeds = self.embed_vision(input_ids=vision_input_ids)
+            vision_embeds = vision_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             expanded_vision_mask = vision_mask.unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = torch.where(expanded_vision_mask, vision_embeds, inputs_embeds)
 
@@ -2332,6 +2332,7 @@ class Gemma3nModel(PaliGemmaModel):
             dummy_audio_token_id = self.embed_audio.vocab_offset + self.embed_audio.vocab_size - 1
             audio_input_ids = torch.where(audio_mask, input_ids, dummy_audio_token_id).to(inputs_embeds.device)
             audio_embeds = self.embed_audio(input_ids=audio_input_ids)
+            audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             expanded_audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = torch.where(expanded_audio_mask, audio_embeds, inputs_embeds)
         else:
@@ -2421,15 +2422,6 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
-    base_model_prefix = "model"
-
-    @property
-    def audio_tower(self):
-        return self.model.audio_tower
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Use embed_vision instead of multi_modal_projector.")
 
     @can_return_tuple
     @auto_docstring

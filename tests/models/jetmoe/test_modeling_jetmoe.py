@@ -22,7 +22,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -107,11 +107,15 @@ class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = JetMoeModelTester
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="JetMoe flash attention does not support right padding")
+
+    @unittest.skip(reason="JetMoe has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
 
 
 @require_torch

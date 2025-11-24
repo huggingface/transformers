@@ -1531,13 +1531,19 @@ class EdgeTamVideoImageSegmentationOutput(ModelOutput):
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
 class EdgeTamVideoSegmentationOutput(ModelOutput):
     r"""
+    object_ids (`list[int]`, *optional*):
+        List of object IDs being tracked in the current frame.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
         The predicted masks stored at the model's resolution.
+    object_score_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        Logits for the object scores, indicating if objects are present.
     frame_idx (`int`):
         The frame index of the video.
     """
 
+    object_ids: Optional[list[int]] = None
     pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     frame_idx: Optional[int] = None
 
 
@@ -2131,6 +2137,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
 
         num_objects = inference_session.get_obj_num()
         pred_masks_per_obj = [None] * num_objects
+        object_score_logits_per_obj = [None] * num_objects
         # Note: We avoid batched inference here because per-object inputs (clicks/masks)
         # can differ across objects.
         for obj_idx in range(num_objects):
@@ -2141,6 +2148,9 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             # conditioning output, reuse the cached masks instead of recomputing.
             if (not has_new_inputs) and has_cond_output:
                 pred_masks = inference_session.get_output(obj_idx, frame_idx, "pred_masks", is_conditioning_frame=True)
+                object_score_logits = inference_session.get_output(
+                    obj_idx, frame_idx, "object_score_logits", is_conditioning_frame=True
+                )
                 is_init_cond_frame = True
             else:
                 # Defaults when there are no new inputs
@@ -2173,8 +2183,10 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
                     obj_idx, frame_idx, output_value=current_out, is_conditioning_frame=is_init_cond_frame
                 )
                 pred_masks = current_out["pred_masks"]
+                object_score_logits = current_out["object_score_logits"]
 
             pred_masks_per_obj[obj_idx] = pred_masks
+            object_score_logits_per_obj[obj_idx] = object_score_logits.squeeze(-1)
             if not is_init_cond_frame:
                 # only for tracked frames, not for initial conditioning frames
                 inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
@@ -2183,10 +2195,17 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         # the mask scores on GPU for output to avoid any CPU conversion in between)
         if len(pred_masks_per_obj) > 1:
             all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
+            all_object_score_logits = torch.cat(object_score_logits_per_obj, dim=0)
         else:
             all_pred_masks = pred_masks_per_obj[0]
+            all_object_score_logits = object_score_logits_per_obj[0]
 
-        return EdgeTamVideoSegmentationOutput(pred_masks=all_pred_masks, frame_idx=frame_idx)
+        return EdgeTamVideoSegmentationOutput(
+            object_ids=inference_session.obj_ids.copy(),
+            pred_masks=all_pred_masks,
+            object_score_logits=all_object_score_logits,
+            frame_idx=frame_idx,
+        )
 
     def get_image_features(
         self,
@@ -2507,6 +2526,46 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             image_embeddings=high_res_features + [backbone_features],
         )
 
+    def _select_closest_cond_frames(self, frame_idx, cond_frame_outputs, max_cond_frame_num):
+        """
+        Select up to `max_cond_frame_num` conditioning frames from `cond_frame_outputs`
+        that are temporally closest to the current frame at `frame_idx`. Here, we take
+        - a) the closest conditioning frame before `frame_idx` (if any);
+        - b) the closest conditioning frame after `frame_idx` (if any);
+        - c) any other temporally closest conditioning frames until reaching a total
+            of `max_cond_frame_num` conditioning frames.
+
+        Outputs:
+        - selected_outputs: selected items (keys & values) from `cond_frame_outputs`.
+        - unselected_outputs: items (keys & values) not selected in `cond_frame_outputs`.
+        """
+        if max_cond_frame_num == -1 or len(cond_frame_outputs) <= max_cond_frame_num:
+            selected_outputs = cond_frame_outputs
+            unselected_outputs = {}
+        else:
+            selected_outputs = {}
+            # the closest conditioning frame before `frame_idx` (if any)
+            idx_before = max((t for t in cond_frame_outputs if t < frame_idx), default=None)
+            if idx_before is not None:
+                selected_outputs[idx_before] = cond_frame_outputs[idx_before]
+
+            # the closest conditioning frame after `frame_idx` (if any)
+            idx_after = min((t for t in cond_frame_outputs if t >= frame_idx), default=None)
+            if idx_after is not None:
+                selected_outputs[idx_after] = cond_frame_outputs[idx_after]
+
+            # add other temporally closest conditioning frames until reaching a total
+            # of `max_cond_frame_num` conditioning frames.
+            num_remain = max_cond_frame_num - len(selected_outputs)
+            inds_remain = sorted(
+                (t for t in cond_frame_outputs if t not in selected_outputs),
+                key=lambda x: abs(x - frame_idx),
+            )[:num_remain]
+            selected_outputs.update((t, cond_frame_outputs[t]) for t in inds_remain)
+            unselected_outputs = {t: v for t, v in cond_frame_outputs.items() if t not in selected_outputs}
+
+        return selected_outputs, unselected_outputs
+
     def _gather_memory_frame_outputs(
         self,
         inference_session: EdgeTamVideoInferenceSession,
@@ -2522,12 +2581,15 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         """
         temporal_positions_and_previous_outputs = []
 
-        # Add conditioning frame outputs (no limit here, as is the case in the original checkpoints)
+        # Add conditioning frame outputs (limited by max_cond_frame_num)
         conditioning_outputs = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
         if not conditioning_outputs:
             raise ValueError(
                 "maskmem_features in conditioning outputs cannot be empty when not is_initial_conditioning_frame"
             )
+        conditioning_outputs, unselected_conditioning_outputs = self._select_closest_cond_frames(
+            frame_idx, conditioning_outputs, max_cond_frame_num=self.config.max_cond_frame_num
+        )
 
         # Store (temporal_position, output_data) tuples
         temporal_positions_and_previous_outputs = [(0, out) for out in conditioning_outputs.values()]
@@ -2544,7 +2606,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
 
             # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
             output_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                previous_frame_idx, None
+                previous_frame_idx, unselected_conditioning_outputs.get(previous_frame_idx, None)
             )
 
             temporal_positions_and_previous_outputs.append((relative_temporal_offset, output_data))
@@ -3003,6 +3065,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         start_frame_idx: Optional[int] = None,
         max_frame_num_to_track: Optional[int] = None,
         reverse: bool = False,
+        show_progress_bar: bool = False,
     ) -> Iterator[EdgeTamVideoSegmentationOutput]:
         r"""
         inference_session (`EdgeTamVideoInferenceSession`):
@@ -3015,6 +3078,8 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             The maximum number of frames to track.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
+        show_progress_bar (`bool`, *optional*, defaults to `False`):
+            Whether to show a progress bar during propagation.
         """
         num_frames = inference_session.num_frames
 
@@ -3044,7 +3109,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             end_frame_idx = min(start_frame_idx + max_frame_num_to_track, num_frames - 1)
             processing_order = range(start_frame_idx, end_frame_idx + 1)
 
-        for frame_idx in tqdm(processing_order, desc="propagate in video"):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             edgetam_video_output = self(inference_session, frame_idx=frame_idx, reverse=reverse)
             yield edgetam_video_output
 

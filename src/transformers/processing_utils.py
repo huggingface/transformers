@@ -76,6 +76,8 @@ from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_torch_available():
+    import torch
+
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
 if is_vision_available():
@@ -267,7 +269,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_center_crop: Optional[bool]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[str], device_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     disable_grouping: Optional[bool]
     image_seq_length: Optional[int]
@@ -341,7 +343,7 @@ class VideosKwargs(TypedDict, total=False):
     crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[str], device_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
     do_sample_frames: Optional[bool]
     video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
     fps: Annotated[Optional[Union[int, float]], positive_any_number()]

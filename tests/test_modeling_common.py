@@ -1942,6 +1942,20 @@ class ModelTesterMixin:
             observed_main_input_name = list(model_signature.parameters.keys())[1]
             self.assertEqual(model_class.main_input_name, observed_main_input_name)
 
+    def test_model_base_model_prefix(self):
+        """
+        Normally a generative model is a base model + lm_head on top. If this test
+        fails for new model, probably the model has incorrect `base_model_prefix` or
+        the you are re-defining base blocks for a generative model.
+        There are some models which might not fit this assumption, if the model
+        has a special architecture. Feel free to skip the test in that case with
+        a reason in description.
+        """
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            self.assertTrue(model.base_model is not model)
+
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
             self.skipTest(reason="test_missing_keys is set to `False`")
@@ -2723,6 +2737,12 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
+                if torch_device == "xpu" and (
+                    attn_implementation == "kernels-community/flash-attn2"
+                    or attn_implementation == "flash_attention_2"
+                ):
+                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
+
             model = model_class(config)
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
@@ -2864,7 +2884,7 @@ class ModelTesterMixin:
         )
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -2872,7 +2892,7 @@ class ModelTesterMixin:
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -3016,7 +3036,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = model_sdpa.base_model
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
@@ -3034,7 +3054,7 @@ class ModelTesterMixin:
                 self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
+                model_eager = model_eager.base_model
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 
@@ -3264,7 +3284,7 @@ class ModelTesterMixin:
                         raise ValueError(f"The {attn_implementation} model should have {attn_implementation} layers")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_flash_attn_2_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_2")
@@ -3276,7 +3296,7 @@ class ModelTesterMixin:
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow
@@ -3419,7 +3439,7 @@ class ModelTesterMixin:
                 self.assertTrue(model_from_pretrained.config._attn_implementation != attn_implementation)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_from_config(self):
