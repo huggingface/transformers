@@ -36,11 +36,11 @@ class Sam3VideoProcessor(ProcessorMixin):
     [`~Sam3ImageProcessor.__call__`] and [`~Sam3VideoProcessor.__call__`] for more information.
 
     Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
+        image_processor (`Sam3ImageProcessorFast`):
+            An instance of [`Sam3ImageProcessorFast`].
         video_processor (`Sam2VideoVideoProcessor`):
             An instance of [`Sam2VideoVideoProcessor`].
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
+        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
@@ -109,16 +109,36 @@ class Sam3VideoProcessor(ProcessorMixin):
 
         return encoding_image_processor
 
-    def add_text_prompt(self, inference_session, text):
+    def add_text_prompt(self, inference_session: Sam3VideoInferenceSession, text: Union[str, list[str]]):
         """
-        Add text prompt to the inference session.
+        Add text prompt(s) to the inference session.
+
+        Args:
+            inference_session (`Sam3VideoInferenceSession`): The inference session.
+            text (`str` or `list[str]`): The text prompt(s) to add.
+
+        Returns:
+            `Sam3VideoInferenceSession`: The inference session with the added text prompt(s).
         """
-        encoded_text = self.tokenizer(text, return_tensors="pt", padding="max_length", max_length=32).to(
-            inference_session.inference_device
-        )
-        inference_session.text_attention_mask = encoded_text.attention_mask
-        inference_session.text_input_ids = encoded_text.input_ids
-        inference_session.has_new_text_input = True
+        if isinstance(text, str):
+            text = [text]
+
+        prompt_ids = []
+        for prompt_text in text:
+            # Add prompt and get its ID (reuses existing if duplicate)
+            prompt_id = inference_session.add_prompt(prompt_text)
+
+            # Only encode if this is a new prompt (not already in prompt_input_ids)
+            if prompt_id not in inference_session.prompt_input_ids:
+                encoded_text = self.tokenizer(
+                    prompt_text, return_tensors="pt", padding="max_length", max_length=32
+                ).to(inference_session.inference_device)
+
+                inference_session.prompt_input_ids[prompt_id] = encoded_text.input_ids
+                inference_session.prompt_attention_masks[prompt_id] = encoded_text.attention_mask
+
+            prompt_ids.append(prompt_id)
+
         return inference_session
 
     def init_video_session(
@@ -194,20 +214,46 @@ class Sam3VideoProcessor(ProcessorMixin):
         pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks
 
-    def _apply_object_wise_non_overlapping_constraints(self, pred_masks, obj_scores, background_value=-10.0):
+    def _apply_object_wise_non_overlapping_constraints(
+        self,
+        pred_masks,
+        obj_scores,
+        background_value=-10.0,
+        prompt_ids=None,
+    ):
         """
-        Applies non-overlapping constraints object wise (i.e. only one object can claim the overlapping region)
+        Applies non-overlapping constraints object wise (i.e. only one object can claim the overlapping region).
+        Constraints are enforced independently for each prompt group when `prompt_ids` are provided.
         """
+        if prompt_ids is None:
+            return self._apply_object_wise_non_overlapping_constraints_impl(pred_masks, obj_scores, background_value)
+
+        if len(prompt_ids) != pred_masks.size(0):
+            raise ValueError("prompt_ids must have the same length as pred_masks")
+
+        pred_masks_grouped = pred_masks.clone()
+        prompt_ids_tensor = torch.tensor(prompt_ids, device=pred_masks.device, dtype=torch.long)
+        for prompt_id in prompt_ids_tensor.unique(sorted=True):
+            indices = torch.nonzero(prompt_ids_tensor == prompt_id, as_tuple=True)[0]
+            if indices.numel() == 0:
+                continue
+            prompt_masks = self._apply_object_wise_non_overlapping_constraints_impl(
+                pred_masks_grouped[indices],
+                obj_scores[indices],
+                background_value,
+            )
+            pred_masks_grouped[indices] = prompt_masks.to(pred_masks_grouped.dtype)
+        return pred_masks_grouped
+
+    def _apply_object_wise_non_overlapping_constraints_impl(self, pred_masks, obj_scores, background_value=-10.0):
         pred_masks_single_score = torch.where(pred_masks > 0, obj_scores[..., None, None], background_value)
-        # Apply pixel-wise non-overlapping constraint based on mask scores
         pixel_level_non_overlapping_masks = self._apply_non_overlapping_constraints(pred_masks_single_score)
-        # Replace object scores with pixel scores. Note, that now only one object can claim the overlapping region
         pred_masks = torch.where(
             pixel_level_non_overlapping_masks > 0,
             pred_masks,
             torch.clamp(pred_masks, max=background_value),
         )
-        return pred_masks
+        return pred_masks.to(pred_masks_single_score.dtype)
 
     def postprocess_outputs(
         self,
@@ -235,6 +281,8 @@ class Sam3VideoProcessor(ProcessorMixin):
                   (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
                 - **masks** (`torch.Tensor` of shape `(num_objects, height, width)`): Binary segmentation masks
                   for each object at the original video resolution.
+                - **prompt_to_obj_ids** (`dict[str, list[int]]`): Mapping from prompt text to list of
+                  object IDs detected by that prompt.
         """
         obj_id_to_mask = model_outputs["obj_id_to_mask"]  # low res masks (1, H_low, W_low)
         curr_obj_ids = sorted(obj_id_to_mask.keys())
@@ -301,22 +349,35 @@ class Sam3VideoProcessor(ProcessorMixin):
 
             out_boxes_xyxy = masks_to_boxes(out_binary_masks)
 
-        # apply non-overlapping constraints on the existing masklets
+        # Apply non-overlapping constraints on the existing masklets.
+        # Constraints are enforced independently per prompt group.
         if out_binary_masks.shape[0] > 1:
             assert len(out_binary_masks) == len(out_tracker_probs)
+            prompt_ids_filtered = [
+                inference_session.obj_id_to_prompt_id[int(obj_id)] for obj_id in out_obj_ids.tolist()
+            ]
             out_binary_masks = (
                 self._apply_object_wise_non_overlapping_constraints(
                     out_binary_masks.unsqueeze(1),
                     out_tracker_probs.unsqueeze(1).to(out_binary_masks.device),
                     background_value=0,
+                    prompt_ids=prompt_ids_filtered,
                 ).squeeze(1)
             ) > 0
+
+        # Build prompt_to_obj_ids mapping: group object IDs by their associated prompt text.
+        prompt_to_obj_ids = {}
+        for obj_id in out_obj_ids.tolist():
+            prompt_id = inference_session.obj_id_to_prompt_id[obj_id]
+            prompt_text = inference_session.prompts[prompt_id]
+            prompt_to_obj_ids.setdefault(prompt_text, []).append(obj_id)
 
         outputs = {
             "object_ids": out_obj_ids,
             "scores": out_probs,
             "boxes": out_boxes_xyxy,
             "masks": out_binary_masks,
+            "prompt_to_obj_ids": prompt_to_obj_ids,
         }
         return outputs
 
