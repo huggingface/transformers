@@ -17,7 +17,7 @@ import inspect
 import json
 import os
 import re
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional
 
 from packaging import version
 
@@ -89,20 +89,20 @@ class PeftAdapterMixin:
     """
 
     _hf_peft_config_loaded = False
-    _prepare_peft_hotswap_kwargs: Optional[dict] = None
+    _prepare_peft_hotswap_kwargs: dict | None = None
 
     def load_adapter(
         self,
-        peft_model_id: Optional[str] = None,
-        adapter_name: Optional[str] = None,
-        revision: Optional[str] = None,
-        token: Optional[str] = None,
+        peft_model_id: str | None = None,
+        adapter_name: str | None = None,
+        revision: str | None = None,
+        token: str | None = None,
         device_map: str = "auto",
-        max_memory: Optional[str] = None,
-        offload_folder: Optional[str] = None,
-        offload_index: Optional[int] = None,
-        peft_config: Optional[dict[str, Any]] = None,
-        adapter_state_dict: Optional[dict[str, "torch.Tensor"]] = None,
+        max_memory: str | None = None,
+        offload_folder: str | None = None,
+        offload_index: int | None = None,
+        peft_config: dict[str, Any] | None = None,
+        adapter_state_dict: dict[str, "torch.Tensor"] | None = None,
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
         hotswap: bool | Literal["auto"] = "auto",
@@ -516,7 +516,7 @@ class PeftAdapterMixin:
             "check_compiled": check_compiled,
         }
 
-    def add_adapter(self, adapter_config, adapter_name: Optional[str] = None) -> None:
+    def add_adapter(self, adapter_config, adapter_name: str | None = None) -> None:
         r"""
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -560,7 +560,7 @@ class PeftAdapterMixin:
 
         self.set_adapter(adapter_name)
 
-    def set_adapter(self, adapter_name: Union[list[str], str]) -> None:
+    def set_adapter(self, adapter_name: list[str] | str) -> None:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -720,9 +720,9 @@ class PeftAdapterMixin:
     def _dispatch_accelerate_model(
         self,
         device_map: str,
-        max_memory: Optional[int] = None,
-        offload_folder: Optional[str] = None,
-        offload_index: Optional[int] = None,
+        max_memory: int | None = None,
+        offload_folder: str | None = None,
+        offload_index: int | None = None,
     ) -> None:
         """
         Optional re-dispatch the model and attach new hooks to the model in case the model has been loaded with
@@ -775,7 +775,7 @@ class PeftAdapterMixin:
             **dispatch_model_kwargs,
         )
 
-    def delete_adapter(self, adapter_names: Union[list[str], str]) -> None:
+    def delete_adapter(self, adapter_names: list[str] | str) -> None:
         """
         Delete a PEFT adapter from the underlying model.
 
