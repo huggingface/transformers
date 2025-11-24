@@ -473,6 +473,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -482,12 +483,15 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
             model_inputs["high_res_pixel_values"] = high_res_pixel_values
 

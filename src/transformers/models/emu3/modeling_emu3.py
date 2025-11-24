@@ -1613,6 +1613,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         position_ids=None,
         use_cache=True,
         pixel_values=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1626,10 +1627,11 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             pixel_values=pixel_values,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
 
         return model_inputs

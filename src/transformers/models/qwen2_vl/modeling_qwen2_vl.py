@@ -42,7 +42,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
 )
 from ..qwen2.modeling_qwen2 import (
@@ -1417,6 +1416,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1433,6 +1433,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
@@ -1442,15 +1443,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             # When compiling, we can't check tensor values thus we check only input length
             # It is safe to assume that `length!=1` means we're in pre-fill because compiled
             # models currently cannot do asssisted decoding
-            prefill_compiled_stage = is_torchdynamo_compiling() and (
-                (input_ids is not None and input_ids.shape[1] != 1)
-                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-            )
-            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
-                (cache_position is not None and cache_position[0] == 0)
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.model.rope_deltas is None:
+            if (cache_position[0] == 0 or not use_cache) or self.model.rope_deltas is None:
                 vision_positions, rope_deltas = self.model.get_rope_index(
                     model_inputs.get("input_ids", None),
                     image_grid_thw=image_grid_thw,
@@ -1472,7 +1465,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             text_positions = model_inputs["position_ids"][None, ...]
             model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
 
-        if model_inputs["cache_position"][0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
