@@ -158,6 +158,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
+        rope_theta: Optional[float] = 1000000.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
@@ -191,15 +192,15 @@ class MiniMaxM2Config(PreTrainedConfig):
         self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         rotary_dim = kwargs.pop("rotary_dim", head_dim)
-        self.partial_rotary_factor = kwargs.pop("partial_rotary_factor", 1.0)
 
         if self.head_dim is not None:
             self.partial_rotary_factor = rotary_dim / self.head_dim
+        else:
+            self.partial_rotary_factor = 1.0
 
         super().__init__(
             pad_token_id=pad_token_id,

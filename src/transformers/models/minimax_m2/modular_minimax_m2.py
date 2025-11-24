@@ -26,7 +26,6 @@ from ...modeling_rope_utils import RopeParameters, rope_config_validation, stand
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeAttention,
     Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -42,6 +41,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
 )
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
 
 
 class MiniMaxM2Config(PreTrainedConfig):
@@ -177,6 +177,7 @@ class MiniMaxM2Config(PreTrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
+        rope_theta: Optional[float] = 1000000.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
@@ -210,15 +211,15 @@ class MiniMaxM2Config(PreTrainedConfig):
         self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         rotary_dim = kwargs.pop("rotary_dim", head_dim)
-        self.partial_rotary_factor = kwargs.pop("partial_rotary_factor", 1.0)
 
         if self.head_dim is not None:
             self.partial_rotary_factor = rotary_dim / self.head_dim
+        else:
+            self.partial_rotary_factor = 1.0
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -259,16 +260,9 @@ class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
     pass
 
 
-class MiniMaxM2Attention(Glm4MoeAttention):
+class MiniMaxM2Attention(Qwen3MoeAttention):
     def __init__(self, config: MiniMaxM2Config, layer_idx: int):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
@@ -276,6 +270,8 @@ class MiniMaxM2Attention(Glm4MoeAttention):
 
         self.q_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_attention_heads, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_key_value_heads, eps=config.rms_norm_eps)
+
+        del self.sliding_window
 
     def forward(
         self,
