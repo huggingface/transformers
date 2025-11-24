@@ -22,6 +22,9 @@ from ..utils.chat_template_utils import Chat, ChatType
 from .base import Pipeline
 
 
+AudioOutput = dict[str, Any]  # {"audio": np.ndarray, "sampling_rate": int}
+
+
 if is_torch_available():
     import torch
 
@@ -199,23 +202,23 @@ class TextToAudioPipeline(Pipeline):
         return output
 
     @overload
-    def __call__(self, text_inputs: str, **forward_params: Any) -> dict[str, Any]: ...
+    def __call__(self, text_inputs: str, **forward_params: Any) -> AudioOutput: ...
 
     @overload
-    def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[dict[str, Any]]: ...
+    def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[AudioOutput]: ...
 
     @overload
-    def __call__(self, text_inputs: ChatType, **forward_params: Any) -> list[dict[str, ChatType]]: ...
+    def __call__(self, text_inputs: ChatType, **forward_params: Any) -> AudioOutput: ...
 
     @overload
-    def __call__(self, text_inputs: list[ChatType], **forward_params: Any) -> list[list[dict[str, ChatType]]]: ...
+    def __call__(self, text_inputs: list[ChatType], **forward_params: Any) -> list[AudioOutput]: ...
 
-    def __call__(self, text_inputs: str | list[str], **forward_params) -> dict[str, Any] | list[dict[str, Any]]:
+    def __call__(self, text_inputs, **forward_params):
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            text_inputs (`str`, `list[str]`, list[dict[str, str]], or `list[list[dict[str, str]]]`):
+            text_inputs (`str`, `list[str]`, `ChatType`, or `list[ChatType]`):
                 One or several texts to generate. If strings or a list of string are passed, this pipeline will
                 generate the corresponding text. Alternatively, a "chat", in the form of a list of dicts with "role"
                 and "content" keys, can be passed, or a list of such chats. When chats are passed, the model's chat

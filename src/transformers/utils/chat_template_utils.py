@@ -53,7 +53,7 @@ if is_torch_available():
     from torch import Tensor
 
 
-ChatType = list[dict[str, str]]
+ChatType = list[dict[str, Any]]
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
