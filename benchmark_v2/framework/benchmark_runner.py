@@ -258,19 +258,13 @@ class BenchmarkRunner:
     ) -> tuple[float, list[float], str, GPURawMetrics | None]:
         if gpu_monitor is not None:
             gpu_monitor.start()
-        config = GenerationConfig(
-            max_new_tokens=max_new_tokens,
-            eos_token_id=self.tokenizer.eos_token_id,
-            pad_token_id=self.tokenizer.pad_token_id,
-            do_sample=True,
-        )
         # Prepare inputs
         inputs = self.inputs["input_ids"].tolist()
         timestamps = []
         last_result_generated_tokens = None
         wall_time_0 = time.perf_counter()
         # We disable prefix sharing because all prompts are the same
-        with self.model.continuous_batching_context_manager(generation_config=config, allow_prefix_sharing=False) as manager:
+        with self.model.continuous_batching_context_manager(allow_prefix_sharing=False) as manager:
             manager.add_requests(inputs, max_new_tokens=max_new_tokens, streaming=True)
             unfinished_requests = len(inputs)
             while unfinished_requests > 0:
