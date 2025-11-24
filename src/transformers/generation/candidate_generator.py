@@ -219,6 +219,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             return input_ids, None
         # Update past key values and masks
         self._update_past_and_masks(input_ids)
+        # Generate candidates
         generation_args = self._prepare_generation_args(input_ids, min_new_tokens, max_new_tokens, is_first_iteration)
         candidate_ids, candidate_logits = self._generate_candidates(generation_args)
         return candidate_ids, candidate_logits
@@ -312,16 +313,19 @@ class AssistedCandidateGenerator(CandidateGenerator):
     ) -> dict:
         """Prepare arguments for the generation call."""
         # Generate candidates. Run prefill-specific logic in first generation and prepare model kwargs.
-        # NOTE: `prepare_inputs_for_generation` creates inputs that can't be used when continuing generation with past-cache
-        # therefore we manually re-assign full input ids and other args. It is a known issue, due to legacy reasons we
-        # have to pass whole input ids to `generate()` including past tokens which are in encoded in cache
-        if is_first_iteration is None:
+        # Some models prepare inputs differently depending on first vs subsequent iterations.(e.g. VLMs)
+        # Assisted generation however calls internally `self.generate()` many times and technically will
+        # lead to many `ifirst_iteration's`. This way we can call prefill only once per assistant model
+        if is_first_iteration:
             generation_args = self.assistant_model._get_initial_cache_position(
                 input_ids.shape[1], input_ids.device, self.assistant_kwargs
             )
             generation_args = self.assistant_model.prepare_inputs_for_generation(
                 input_ids, is_first_iteration=True, **generation_args
             )
+            # NOTE: `prepare_inputs_for_generation` creates inputs that can't be used when continuing generation with past-cache
+            # therefore we manually re-assign full input ids and other args. It is a known issue, due to legacy reasons we
+            # have to pass whole input ids to `generate()` including past tokens which are in encoded in cache
             generation_args[self.input_ids_key] = input_ids
             for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
                 generation_args.pop(model_input_name, None)
@@ -339,7 +343,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
     def _generate_candidates(self, generation_args: dict) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """Generate candidate sequences using the assistant model."""
-        assistant_output = self.assistant_model.generate(**self.assistant_kwargs, **generation_args)
+        assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         if (
             is_sklearn_available()
