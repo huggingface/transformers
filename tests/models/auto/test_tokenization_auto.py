@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import json
 import os
 import shutil
@@ -19,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -184,7 +186,13 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_tokenizers
     def test_voxtral_tokenizer_converts_from_tekken(self):
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
-        tokenizer = AutoTokenizer.from_pretrained(repo_id)  # should not raise
+        tokenization_auto = transformers.models.auto.tokenization_auto
+        with mock.patch("transformers.utils.import_utils.is_mistral_common_available", return_value=False), mock.patch(
+            "transformers.models.auto.tokenization_auto.is_mistral_common_available", return_value=False
+        ):
+            tokenization_auto = importlib.reload(tokenization_auto)
+            tokenizer = tokenization_auto.AutoTokenizer.from_pretrained(repo_id)  # should not raise
+
         self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
         self.assertTrue(tokenizer.is_fast)
         self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
