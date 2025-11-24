@@ -117,10 +117,10 @@ class RequestState:
 
     # Required fields # TODO: come up with better names / not sure prompt_ids and such are not redundant
     request_id: str
-    full_prompt_ids: list[int] | None = None  # Full initial prompt
-    prompt_ids: list[int] | None = None  # Tokens IDs currently being processed
-    remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests, prefill left to process
-    static_outputs: list[int] = field(default_factory=list)  # Generated tokens
+    initial_tokens: list[int] | None = None  # Full initial prompt
+    scheduled_tokens: list[int] | None = None  # Tokens IDs currently being processed
+    remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
+    generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
@@ -145,7 +145,7 @@ class RequestState:
         self._status = value
 
     def log_end_of_request(self):
-        prefill_len = len(self.full_prompt_ids)
+        prefill_len = len(self.initial_tokens)
         decode_len = self.generated_len()
         start_time = self.lifespan[0] - self.created_time
         end_time = self.lifespan[1] - self.created_time
@@ -159,7 +159,7 @@ class RequestState:
 
     def generated_len(self) -> int:
         """Get the number of tokens generated so far."""
-        return len(self.static_outputs)
+        return len(self.generated_tokens)
 
     # TODO: this logic seems one token off, check it out
     @traced
@@ -182,7 +182,7 @@ class RequestState:
         # Only add the token if we're not finishing due to max length
         # (EOS tokens should still be added to the output)
         if not (is_max_len and not is_eos):
-            self.static_outputs.extend([token_id])
+            self.generated_tokens.extend([token_id])
 
         if is_eos or is_max_len:
             self.status = RequestStatus.FINISHED
@@ -194,12 +194,12 @@ class RequestState:
             f"request_id={self.request_id}",
             f"status={self._status}",
             f"out_tokens={self.generated_len()}",
-            f"query_length={len(self.prompt_ids)}",
-            f"remaining_tokens={len(self.remaining_prompt_ids)}",
+            f"query_length={len(self.scheduled_tokens)}",
+            f"remaining_tokens={len(self.remaining_prefill_tokens)}",
             f"kv_length={self.position_offset}",
-            f"full_prompt_length={len(self.full_prompt_ids)}",
+            f"full_prompt_length={len(self.initial_tokens)}",
             f"allocated_blocks={self.allocated_blocks}",
-            f"generated_tokens={self.static_outputs}",
+            f"generated_tokens={self.generated_tokens}",
         ]
         return "RequestState(\n\t" + ",\n\t".join(msg) + "\n)"
 
@@ -207,9 +207,9 @@ class RequestState:
         """Convert the request state to a GenerationOutput object."""
         return GenerationOutput(
             request_id=self.request_id,
-            prompt_ids=self.full_prompt_ids,
+            prompt_ids=self.initial_tokens,
             status=self.status,
-            generated_tokens=self.static_outputs,
+            generated_tokens=self.generated_tokens,
             logprobs=[],
             error=self.error,
         )

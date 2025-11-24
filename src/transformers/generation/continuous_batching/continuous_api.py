@@ -408,9 +408,9 @@ class ContinuousBatchProcessor:
 
         # Include any generated tokens if this is an active request
         if isinstance(state.request_id, str):
-            state.static_outputs = self.scheduler.get_active_request_static_outputs(state.request_id)
+            state.generated_tokens = self.scheduler.get_active_request_static_outputs(state.request_id)
         else:
-            state.static_outputs = []
+            state.generated_tokens = []
 
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
@@ -455,7 +455,7 @@ class ContinuousBatchProcessor:
         for state in self.requests_in_batch:
             # First we retrieve the lengths related to the request
             past_length = state.position_offset
-            query_length = len(state.prompt_ids)
+            query_length = len(state.scheduled_tokens)
             seqlens_k = self.cache.get_seqlens_k(state.request_id, past_length, query_length)
 
             # Then we update the total lengths that are used for slicing
@@ -467,12 +467,12 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
             # Then we accumulate for the object used in the kwargs
-            input_ids.extend(state.prompt_ids)
+            input_ids.extend(state.scheduled_tokens)
             position_ids.extend(range(past_length, past_length + query_length))
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
 
-            if not state.remaining_prompt_ids:
+            if not state.remaining_prefill_tokens:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
 
             for layer_type, layer_type_seqlen_k in seqlens_k.items():
@@ -564,11 +564,11 @@ class ContinuousBatchProcessor:
         out_tokens = self._sync()
         for i, state in enumerate(self.requests_in_batch):
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
-            if len(state.remaining_prompt_ids) == 0:
+            if len(state.remaining_prefill_tokens) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
-                state.prompt_ids = [token]
+                state.scheduled_tokens = [token]
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
                 # We mark the completed blocks as such
@@ -883,8 +883,8 @@ class ContinuousBatchingManager:
         # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
-            prompt_ids=list(input_ids),
-            full_prompt_ids=list(input_ids),
+            scheduled_tokens=list(input_ids),
+            initial_tokens=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
             streaming=streaming,
