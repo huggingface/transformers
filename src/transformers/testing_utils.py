@@ -47,14 +47,12 @@ from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
 from transformers import Trainer
 from transformers import logging as transformers_logging
-from transformers.utils.import_utils import _set_tf32_mode
 
 from .integrations import (
     is_clearml_available,
@@ -1129,34 +1127,6 @@ def require_torch_tf32(test_case):
     return unittest.skipUnless(
         is_torch_tf32_available(), "test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7"
     )(test_case)
-
-
-@pytest.mark.parametrize(
-    "torch_version,enable,expected",
-    [
-        ("2.9.0", False, "ieee"),
-        ("2.10.0", True, "tf32"),
-        ("2.10.0", False, "ieee"),
-        ("2.8.1", True, True),
-        ("2.8.1", False, False),
-        ("2.9.0", True, "tf32"),
-    ],
-)
-def test_set_tf32_mode(torch_version, enable, expected):
-    # Use the full module path for patch
-    with patch("transformers.utils.import_utils.get_torch_version", return_value=torch_version):
-        # Mock torch.backends inside the module
-        mock_torch = MagicMock()
-        with patch("transformers.utils.import_utils.torch", mock_torch):
-            _set_tf32_mode(enable)
-            pytorch_ver = version.parse(torch_version)
-            if pytorch_ver >= version.parse("2.9.0"):
-                assert mock_torch.backends.cuda.matmul.fp32_precision == expected
-                assert mock_torch.backends.cudnn.fp32_precision == expected
-            else:
-                assert mock_torch.backends.cuda.matmul.allow_tf32 == expected
-                assert mock_torch.backends.cudnn.allow_tf32 == expected
-
 
 def require_detectron2(test_case):
     """Decorator marking a test that requires detectron2."""
