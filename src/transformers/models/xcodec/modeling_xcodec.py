@@ -16,6 +16,7 @@
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Optional, Union
 
 import torch
@@ -23,6 +24,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
+from ...audio_utils import conv1d_output_length
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from ..auto import AutoModel
@@ -396,6 +398,40 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
                 if hasattr(m, "parametrizations") and "weight" in m.parametrizations:
                     torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
 
+    @lru_cache
+    def _get_conv1d_layers(self, module):
+        """
+        Recursively iterate to fetch all Conv1d layers.
+        """
+
+        def get_conv1d_layers_recursive(module: nn.Module):
+            params_list = []
+
+            if isinstance(module, nn.Conv1d):
+                params_list.append(module)
+
+            # Recursively check all child modules
+            for child in module.children():
+                params_list.extend(get_conv1d_layers_recursive(child))
+
+            return params_list
+
+        return tuple(get_conv1d_layers_recursive(module))
+
+    def _get_conv1d_output_lengths(self, input_length, module=None):
+        """
+        For a given module, compute the output length that would be obtained after all Conv1d layers.
+        """
+        if module is None:
+            module = self
+
+        conv1d_layers = self._get_conv1d_layers(module)
+
+        for layer in conv1d_layers:
+            input_length = conv1d_output_length(layer, input_length)
+
+        return input_length
+
 
 @auto_docstring(custom_intro="""The Xcodec neural audio codec model.""")
 class XcodecModel(XcodecPreTrainedModel):
@@ -476,11 +512,13 @@ class XcodecModel(XcodecPreTrainedModel):
 
         e_semantic_input = self._extract_semantic_features(input_values).detach()
         e_semantic = self.encoder_semantic(e_semantic_input.transpose(1, 2))
-        e_acoustic = self.acoustic_encoder(input_values)
 
-        if e_acoustic.shape[2] != e_semantic.shape[2]:
-            # make sure they line up if frames don't match
-            e_acoustic = self.acoustic_encoder(F.pad(input_values[:, 0, :], (self.pad, self.pad)).unsqueeze(1))
+        # orignal codebase infer to get the output length, but we can directly infer it
+        # from the model and know wether we should pad
+        if self._get_conv1d_output_lengths(input_values.shape[2], self.acoustic_encoder) != e_semantic.shape[2]:
+            e_acoustic = self.acoustic_encoder(F.pad(input_values, (self.pad, self.pad)))
+        else:
+            e_acoustic = self.acoustic_encoder(input_values)
 
         embeddings = torch.cat([e_acoustic, e_semantic], dim=1)
         embeddings = self.fc(embeddings.transpose(1, 2)).transpose(1, 2)
