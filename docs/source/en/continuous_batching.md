@@ -168,3 +168,7 @@ The [`ContinuousMixin`] class serves as the main interface for continuous batchi
 The [`Scheduler`] selects requests for processing at each step based on the token budget. [`FIFOScheduler`] is the default scheduler. It prioritizes decoding requests over prefilling requests, unlike [`PrefillFirstScheduler`], and assigns them to specific memory blocks.
 
 [`ContinuousBatchingManager`] runs the model forward pass for the scheduled requests. It then collects and returns the results.
+
+## Resources
+
+The [Continuous batching](https://huggingface.co/blog/continuous_batching) blog post explains KV caching, chunked prefill, and ragged batching with dynamic scheduling in more detail.
