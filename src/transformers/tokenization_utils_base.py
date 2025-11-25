@@ -2493,7 +2493,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                     fix_mistral_regex = True
 
-                if fix_mistral_regex or is_base_mistral(pretrained_model_name_or_path):
+                if fix_mistral_regex or (not _is_local and is_base_mistral(pretrained_model_name_or_path)):
                     # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
                     if "fix_mistral_regex" in init_kwargs:
                         setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
