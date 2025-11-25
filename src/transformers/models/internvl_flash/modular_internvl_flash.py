@@ -28,6 +28,7 @@ from ..internvl.modeling_internvl import (
     InternVLModelOutputWithPast,
     InternVLMultiModalProjector,
     InternVLVisionModel,
+    InternVLPreTrainedModel
 )
 from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
@@ -171,10 +172,11 @@ class InternvlFlashCrossAttentionPooling(nn.Module):
 class InternvlFlashConfig(InternVLConfig):
     pass
 
-
 class InternvlFlashMultiModalProjector(InternVLMultiModalProjector):
     pass
 
+class InternvlFlashPreTrainedModel(InternVLPreTrainedModel):
+    pass
 
 class InternvlFlashModelOutputWithPast(InternVLModelOutputWithPast):
     pass
