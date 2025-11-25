@@ -3889,6 +3889,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 weight_conversions.extend(
                     [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
                 )
+            if hf_quantizer is not None:
+                weight_conversions.extend(hf_quantizer.get_weight_conversions())
 
         if gguf_file:
             if hf_quantizer is not None:
