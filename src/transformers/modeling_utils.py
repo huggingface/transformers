@@ -2248,8 +2248,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return expanded_tied_weights
 
         tied_mapping = self._tied_weights_keys
+        text_config = self.config.get_text_config(decoder=True)
+        tie_word_embeddings = getattr(text_config, "tie_word_embeddings", self.config.tie_word_embeddings)
         # If the config does not specify any tying, return empty dict
-        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
+        if not tie_word_embeddings and not self.config.tie_encoder_decoder:
             return {}
         # If None, return empty dict
         elif tied_mapping is None:
@@ -3174,7 +3176,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
-            _tied_weights_keys = set(_get_tied_weight_keys(self))
+            _tied_weights_keys = set(self.all_tied_weights_keys.keys())
             error_names = []
             to_delete_names = set()
             for names in shared_ptrs.values():
