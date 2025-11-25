@@ -14,15 +14,13 @@
 
 import itertools
 import types
-from typing import Any, overload
+from typing import Any, TypedDict, overload
 
+from ..audio_utils import AudioInput
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
 from ..utils.chat_template_utils import Chat, ChatType
 from .base import Pipeline
-
-
-AudioOutput = dict[str, Any]  # {"audio": np.ndarray, "sampling_rate": int}
 
 
 if is_torch_available():
@@ -32,6 +30,17 @@ if is_torch_available():
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
+
+
+class AudioOutput(TypedDict, total=False):
+    """
+    audio (`AudioInput`):
+        The generated audio waveform.
+    sampling_rate (`int`):
+        The sampling rate of the generated audio waveform.
+    """
+    audio: AudioInput
+    sampling_rate: int
 
 
 class TextToAudioPipeline(Pipeline):
@@ -281,7 +290,6 @@ class TextToAudioPipeline(Pipeline):
         return preprocess_params, params, postprocess_params
 
     def postprocess(self, audio):
-        output_dict = {}
 
         if self.model.config.model_type == "csm":
             waveform_key = "audio"
@@ -296,9 +304,11 @@ class TextToAudioPipeline(Pipeline):
             waveform = audio
 
         if isinstance(audio, list):
-            output_dict["audio"] = [el.to(device="cpu", dtype=torch.float).numpy() for el in waveform]
+            audio = [el.to(device="cpu", dtype=torch.float).numpy() for el in waveform]
         else:
-            output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
-        output_dict["sampling_rate"] = self.sampling_rate
+            audio = waveform.to(device="cpu", dtype=torch.float).numpy()
 
-        return output_dict
+        return AudioOutput(
+            audio=audio,
+            sampling_rate=self.sampling_rate,
+        )
