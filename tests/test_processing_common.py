@@ -140,7 +140,7 @@ class ProcessorTesterMixin:
         special_token_to_add = ""
         if modalities is not None:
             for modality in modalities:
-                special_token_to_add += getattr(self, f"{modality}_token", "")
+                special_token_to_add += getattr(self, f"{modality}_token", "") or ""
 
         if batch_size is None:
             return f"lower newer {special_token_to_add}"

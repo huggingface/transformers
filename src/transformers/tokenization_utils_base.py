@@ -1155,7 +1155,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         tokens_to_add = []
         for key, value in special_tokens_dict.items():
-            if not isinstance(value, (str, AddedToken)):
+            if key == "additional_special_tokens":
+                continue
+            elif not isinstance(value, (str, AddedToken)):
                 raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
             if isinstance(value, str):
                 value = AddedToken(value, rstrip=False, lstrip=False, normalized=False, special=True)
