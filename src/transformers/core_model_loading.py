@@ -882,7 +882,9 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         weight_conversions = []
         # Hardcoded name mappings for some vlms
         if any(
-            allowed_name in class_name.__name__.lower() for class_name in model.__mro__[:-1] for allowed_name in VLMS
+            allowed_name in class_name.__name__.lower()
+            for class_name in model.__class__.__mro__[:-1]
+            for allowed_name in VLMS
         ):
             weight_conversions = [
                 WeightRenaming(source_patterns=k, target_patterns=v)
