@@ -942,6 +942,8 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         # In this case, the mapping was obtained from the loaded model, we need to reverse the ops
         if need_to_reverse:
             reversed_converter = converter.reverse_transform()
+            # The `collected_tensors` only contain the full param keys after `reverse_transform` is called, we
+            # need to populate it with the actual tensors
             reversed_converter.collected_tensors = {
                 k: [model.get_parameter_or_buffer(param) for param in params]
                 for k, params in reversed_converter.collected_tensors.items()
