@@ -106,9 +106,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if fast_tokenizer_file is not None and fast_tokenizer is None:
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
 
-        if self._tokenizer is None:
+        if self._tokenizer is None and fast_tokenizer is not None:
             self._tokenizer = fast_tokenizer
-        elif fast_tokenizer is None:
+        elif fast_tokenizer is None and self._tokenizer is None:
             raise ValueError(
                 "You have to call `super().__init__()` in your tokenizer class after your initialize `self._tokenizer`."
             )

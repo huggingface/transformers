@@ -240,9 +240,8 @@ class MarkupLMTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
         )
-
+        self._tokenizer = tokenizer
         super().__init__(
-            tokenizer_object=tokenizer,
             tags_dict=tags_dict,
             vocab=vocab,
             merges=merges,
