@@ -2466,40 +2466,46 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     with open(_config_file, encoding="utf-8") as f:
                         _config = json.load(f)
                     transformers_version = _config.get("transformers_version")
+                    transformers_model_type = _config.get("model_type")
 
+                    # Detect if we can skip the mistral fix by
+                    #   a) having a non-mistral tokenizer
+                    #   b) fixed version of transformers
                     if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
-                        if _is_local and _config.model_type not in [
+                        if _is_local and transformers_model_type is not None and transformers_model_type not in [
                             "mistral",
                             "mistral3",
-                            "voxstral",
+                            "voxtral",
                             "ministral",
                             "pixtral",
                         ]:
                             return tokenizer
+                    elif version.parse(transformers_version) > version.parse("4.57.2"):
+                        return tokenizer
 
-                # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
-                if "fix_mistral_regex" in init_kwargs:
-                    setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
+                    # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
+                    if "fix_mistral_regex" in init_kwargs:
+                        setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
 
-                fix_mistral_regex = kwargs.get("fix_mistral_regex")  # not init kwargs
-                # only warn if its not explicitly passed
-                if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
-                    setattr(tokenizer, "fix_mistral_regex", False)
-                    logger.warning(
-                        f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
-                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
-                        " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
-                    )
-                elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
-                    setattr(tokenizer, "fix_mistral_regex", True)
-                    import tokenizers
+                    fix_mistral_regex = kwargs.get("fix_mistral_regex")  # not init kwargs
+                    # only warn if its not explicitly passed
+                    if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
+                        setattr(tokenizer, "fix_mistral_regex", False)
+                        logger.warning(
+                            f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
+                            f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
+                            " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
+                        )
+                    elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
+                        setattr(tokenizer, "fix_mistral_regex", True)
+                        import tokenizers
 
-                    tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
-                        pattern=tokenizers.Regex(
-                            r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
-                        ),
-                        behavior="isolated",
-                    )
+                        tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
+                            pattern=tokenizers.Regex(
+                                r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+                            ),
+                            behavior="isolated",
+                        )
 
         return tokenizer
 

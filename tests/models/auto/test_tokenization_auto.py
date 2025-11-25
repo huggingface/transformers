@@ -34,6 +34,9 @@ from transformers import (
     GPT2Tokenizer,
     GPT2TokenizerFast,
     PreTrainedTokenizerFast,
+    Qwen2Tokenizer,
+    Qwen2TokenizerFast,
+    Qwen3MoeConfig,
     RobertaTokenizer,
     RobertaTokenizerFast,
     is_tokenizers_available,
@@ -228,6 +231,28 @@ class AutoTokenizerTest(unittest.TestCase):
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertEqual(tokenizer2.vocab_size, 12)
+
+    def test_auto_tokenizer_from_local_folder_mistral_detection(self):
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
+        config = Qwen3MoeConfig.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
+        self.assertIsInstance(tokenizer, (Qwen2Tokenizer, Qwen2TokenizerFast))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # needed to be saved along the tokenizer to detect (non)mistral
+            # for a version where the regex bug occurs
+            config_dict = config.to_diff_dict()
+            config_dict["transformers_version"] = "4.57.2"
+
+            # manually saving to avoid versioning clashes
+            config_path = os.path.join(tmp_dir, "config.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config_dict, f, indent=2, sort_keys=True)
+
+            tokenizer.save_pretrained(tmp_dir)
+            tokenizer2 = AutoTokenizer.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(tokenizer2, tokenizer.__class__)
+        self.assertTrue(tokenizer2.vocab_size > 100_000)
 
     def test_auto_tokenizer_fast_no_slow(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
