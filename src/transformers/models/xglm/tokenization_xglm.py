@@ -88,10 +88,10 @@ class XGLMTokenizer(TokenizersBackend):
             self._vocab = vocab
         else:
             self._vocab = [
-                (str(bos_token), 0.0),
-                (str(pad_token), 0.0),
-                (str(eos_token), 0.0),
-                (str(unk_token), 0.0),
+                str(bos_token),
+                str(pad_token),
+                str(eos_token),
+                str(unk_token),
             ]
 
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
