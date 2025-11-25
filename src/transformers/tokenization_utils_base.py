@@ -2451,7 +2451,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         return True
                 return False
 
-            if _is_local or is_base_mistral(pretrained_model_name_or_path):
+            is_official_mistral_tokenizer = is_base_mistral(pretrained_model_name_or_path)
+            if _is_local or is_official_mistral_tokenizer:
                 _config_file = cached_file(
                     pretrained_model_name_or_path,
                     "config.json",
@@ -2462,6 +2463,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     _raise_exceptions_for_connection_errors=False,
                     _commit_hash=_commit_hash,
                 )
+
+                # detected using a (local) mistral tokenizer
+                fix_mistral_regex = False
                 if _config_file is not None:
                     with open(_config_file, encoding="utf-8") as f:
                         _config = json.load(f)
@@ -2488,6 +2492,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
                         return tokenizer
 
+                    fix_mistral_regex = True
+
+                if fix_mistral_regex or is_official_mistral_tokenizer:
                     # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
                     if "fix_mistral_regex" in init_kwargs:
                         setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
