@@ -454,83 +454,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         tokenizer = cls(*init_inputs, **init_kwargs)
         return tokenizer
 
-    @classmethod
-    def _load_added_tokens(
-        cls,
-        init_kwargs: dict[str, Any],
-        tokenizer_json: Optional[dict[str, Any]],
-        special_tokens_map_file: Optional[str],
-        added_tokens_file: Optional[str],
-        user_kwargs: dict[str, Any],
-    ) -> tuple[dict[str, Any], dict[int, AddedToken], dict[str, AddedToken]]:
-        """
-        Prepare added tokens to pass to the tokenizer initializer.
-
-        Priority order:
-        1. `tokenizer.json` added_tokens if present.
-        2. `added_tokens_decoder` serialized in tokenizer_config.json.
-        3. Legacy `special_tokens_map.json` + `added_tokens.json` files.
-        """
-
-        added_tokens_decoder: dict[int, AddedToken] = {}
-        added_tokens_map: dict[str, AddedToken] = {}
-
-        def _record(token_obj: AddedToken, idx: int):
-            added_tokens_decoder[int(idx)] = token_obj
-            added_tokens_map[str(token_obj)] = token_obj
-
-        # Priority 1: added tokens from tokenizer.json
-        if tokenizer_json is not None:
-            json_added_tokens = tokenizer_json.get("added_tokens", [])
-            for serialized_tokens in json_added_tokens:
-                serialized_tokens = serialized_tokens.copy()
-                idx = serialized_tokens.pop("id")
-                _record(AddedToken(**serialized_tokens), idx)
-            if added_tokens_decoder:
-                return init_kwargs, added_tokens_decoder, added_tokens_map
-
-        # Priority 2: added_tokens_decoder serialized in tokenizer_config.json
-        if "added_tokens_decoder" in init_kwargs:
-            for idx, token_obj in init_kwargs["added_tokens_decoder"].items():
-                if isinstance(token_obj, dict):
-                    token_obj = AddedToken(**token_obj)
-                _record(token_obj, idx)
-            return init_kwargs, added_tokens_decoder, added_tokens_map
-
-        # Priority 3: legacy files (only if no token_mapping and no tokenizer.json mapping)
-        if tokenizer_json is None and special_tokens_map_file is not None:
-            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = json.load(special_tokens_map_handle)
-            for key, value in special_tokens_map.items():
-                if key in user_kwargs and user_kwargs[key]:
-                    continue
-                if isinstance(value, dict):
-                    value["special"] = True
-                    value = AddedToken(**value)
-                elif key == "extra_special_tokens" and isinstance(value, dict):
-                    init_kwargs.setdefault("extra_special_tokens", value)
-                    continue
-                init_kwargs.setdefault(key, value)
-
-        if added_tokens_file is not None:
-            special_tokens = []
-            for key in cls._get_special_tokens_attributes():
-                if key in init_kwargs and init_kwargs[key] is not None:
-                    special_tokens.append(str(init_kwargs[key]))
-            if "extra_special_tokens" in init_kwargs and init_kwargs["extra_special_tokens"] is not None:
-                special_tokens += [str(token) for token in init_kwargs["extra_special_tokens"]]
-
-            with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                added_tok_encoder = json.load(added_tokens_handle)
-
-            for str_token, index in added_tok_encoder.items():
-                special = str_token in special_tokens
-                added_token = AddedToken(
-                    str_token, rstrip=False, lstrip=False, normalized=not special, special=special
-                )
-                _record(added_token, index)
-
-        return init_kwargs, added_tokens_decoder, added_tokens_map
 
     @property
     def is_fast(self) -> bool:
@@ -854,7 +777,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # update _all_special_tokens_cache
         if added:
-            self._all_special_tokens_cache.add(str(new_token) for new_token in new_tokens if isinstance(new_token, AddedToken) and new_token.special)
+            self._all_special_tokens_cache|= {str(new_token) for new_token in new_tokens if isinstance(new_token, AddedToken) and new_token.special}
         return added
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
