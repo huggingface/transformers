@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Continuous batching
 
-Continuous batching maximizes GPU utilization. It increases throughput and reduces latency. It uses dynamic scheduling to rearrange the batch at each step. Completed requests are removed, and new requests are added immediately to prevent GPU idling. Chunked prefill stops expensive prefill work from stalling the batch while still allowing new requests to join.
+Continuous batching maximizes GPU utilization. It increases throughput and reduces latency. It uses dynamic scheduling to rearrange the batch at each step. The system removes completed requests and adds new ones immediately to prevent GPU idling. Chunked prefill prevents expensive prefill work from stalling the batch while still allowing new requests to join.
 
 Continuous batching works with [transformers serve](./serving), a server for deploying local models, and [`~ContinuousMixin.generate_batch`].
 
@@ -146,7 +146,7 @@ Transformers models like Mistral and Gemma 2 natively support sliding window att
 from transformers import AutoConfig
 
 config = AutoConfig.from_pretrained("google/gemma-2-2b")
-config.sliding_window = 409
+config.sliding_window = 4096
 
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-2-2b",
@@ -165,6 +165,6 @@ The [`ContinuousMixin`] class serves as the main interface for continuous batchi
 
 [`ContinuousBatchingManager`] manages requests by creating a background thread for the generation loop and adding requests to the queue. The manager is thread-safe, allowing asynchronous request addition while the model generates.
 
-The [`Scheduler`] selects requests for processing at each step based on the token budget, prioritizing decoding requests over prefilling requests and assigning specific memory blocks to them.
+The [`Scheduler`] selects requests for processing at each step based on the token budget. [`FIFOScheduler`] is the default scheduler. It prioritizes decoding requests over prefilling requests, unlike [`PrefillFirstScheduler`], and assigns them to specific memory blocks.
 
 [`ContinuousBatchingManager`] runs the model forward pass for the scheduled requests. It then collects and returns the results.
