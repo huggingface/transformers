@@ -551,6 +551,32 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def is_tensordict_available():
+    """
+    Check if tensordict is available.
+
+    Returns:
+        bool: True if tensordict can be imported, False otherwise.
+    """
+    try:
+        import tensordict  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def require_tensordict(test_case):
+    """
+    Decorator marking a test that requires tensordict.
+
+    These tests are skipped when tensordict isn't installed.
+    TensorDict is used for testing compatibility with dict-like objects
+    that implement __iter__ differently than standard dicts.
+    """
+    return unittest.skipUnless(is_tensordict_available(), "test requires tensordict")(test_case)
+
+
 def require_torch_greater_or_equal(version: str):
     """
     Decorator marking a test that requires PyTorch version >= `version`.

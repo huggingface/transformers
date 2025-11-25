@@ -122,8 +122,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
+            # Use .keys() explicitly to support dict-like objects (e.g., TensorDict) that implement
+            # __iter__ differently than standard dicts (e.g., iterating over batch dimensions)
             processed_features = {
-                key: [example[key] for example in processed_features] for key in processed_features[0]
+                key: [example[key] for example in processed_features] for key in processed_features[0].keys()
             }
 
         # The model's main input name, usually `input_values`, has be passed for padding
