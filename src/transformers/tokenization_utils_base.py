@@ -1356,9 +1356,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     # We don't define them as @property to keep the implementation simpler
 
     @property
-    def all_special_tokens(self) -> list[str]:
+    def all_special_tokens(self) -> set[str]:
         """
-        `list[str]`: A list of all unique special tokens (named + extra) as strings.
+        `set[str]`: A set of all unique special tokens (named + extra) as strings.
 
         Includes both named special tokens (bos_token, eos_token, etc.) and extra special tokens.
         Converts tokens of `tokenizers.AddedToken` type to string.
@@ -1366,33 +1366,26 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         TODO This is not really true. We should just check `added_tokens_decoder` for non `TokenizersBackend` tokenizers.
         And for `tokenizers` backend, we should probably get this info directly from the `tokenizsers` library.
         """
-        seen = set()
-        all_toks = []
+        all_toks = set()
 
         # Add named special tokens
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             value = self._special_tokens_map.get(attr)
             if value is not None:
-                token_str = str(value)
-                if token_str not in seen:
-                    all_toks.append(token_str)
-                    seen.add(token_str)
+                all_toks.add(str(value))
 
         # Add extra special tokens
         for token in self._extra_special_tokens:
-            token_str = str(token)
-            if token_str not in seen:
-                all_toks.append(token_str)
-                seen.add(token_str)
+            all_toks.add(str(token))
 
         return all_toks
 
     @property
-    def all_special_ids(self) -> list[int]:
+    def all_special_ids(self) -> set[int]:
         """
-        `list[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
+        `set[int]`: Set of ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
         """
-        return self.convert_tokens_to_ids(self.all_special_tokens)
+        return set(self.convert_tokens_to_ids(list(self.all_special_tokens)))
 
     def _set_model_specific_special_tokens(self, special_tokens: dict[str, Union[str, AddedToken]]):
         """

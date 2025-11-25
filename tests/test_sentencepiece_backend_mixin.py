@@ -80,13 +80,13 @@ class SentencePieceBackendTesterMixin:
         self.assertEqual(reverse_text, text)
 
         special_tokens = tokenizer.all_special_tokens
-        special_tokens_string = tokenizer.convert_tokens_to_string(special_tokens)
+        special_tokens_string = tokenizer.convert_tokens_to_string(list(special_tokens))
         for special_token in special_tokens:
             self.assertIn(special_token, special_tokens_string)
 
         if self.test_rust_tokenizer:
             rust_tokenizer = self.get_rust_tokenizer()
-            special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
+            special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(list(special_tokens))
             self.assertEqual(special_tokens_string, special_tokens_string_rust)
 
     def test_sentencepiece_tokenize_and_decode(self):
@@ -158,7 +158,7 @@ class SentencePieceBackendTesterMixin:
         if not hasattr(tokenizer, "do_lower_case") or not tokenizer.do_lower_case:
             self.skipTest(reason="Tokenizer does not support do_lower_case")
 
-        special_token = tokenizer.all_special_tokens[0]
+        special_token = next(iter(tokenizer.all_special_tokens))
 
         text = special_token + " aaaaa bbbbbb low cccccccccdddddddd l " + special_token
         text2 = special_token + " AAAAA BBBBBB low CCCCCCCCCDDDDDDDD l " + special_token
@@ -181,7 +181,7 @@ class SentencePieceBackendTesterMixin:
         )
 
         # Check that none of the special tokens are lowercased
-        sequence_with_special_tokens = "A " + " yEs ".join(tokenizer.all_special_tokens) + " B"
+        sequence_with_special_tokens = "A " + " yEs ".join(list(tokenizer.all_special_tokens)) + " B"
         # Convert the tokenized list to str as some special tokens are tokenized like normal tokens
         # which have a prefix spacee e.g. the mask token of Albert, and cannot match the original
         # special tokens exactly.

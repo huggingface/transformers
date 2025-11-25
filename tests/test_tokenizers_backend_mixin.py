@@ -358,10 +358,7 @@ class TokenizersBackendTesterMixin:
         self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
 
         # Assert the set of special tokens match as we didn't ask to change them
-        self.assertSequenceEqual(
-            tokenizer.all_special_tokens,
-            new_tokenizer.all_special_tokens,
-        )
+        self.assertSetEqual(set(tokenizer.all_special_tokens), set(new_tokenizer.all_special_tokens))
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
