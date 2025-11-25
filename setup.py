@@ -138,7 +138,7 @@ _deps = [
     "opencv-python",
     "optimum-benchmark>=0.3.0",
     "optuna",
-    "optax>=0.08,<=0.1.4",
+    "optax>=0.0.8,<=0.1.4",
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
@@ -461,7 +461,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.57.0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.57.3",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

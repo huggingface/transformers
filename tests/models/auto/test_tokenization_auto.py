@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import json
 import os
 import shutil
@@ -19,6 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -32,9 +34,13 @@ from transformers import (
     GPT2Tokenizer,
     GPT2TokenizerFast,
     PreTrainedTokenizerFast,
+    Qwen2Tokenizer,
+    Qwen2TokenizerFast,
+    Qwen3MoeConfig,
     RobertaTokenizer,
     RobertaTokenizerFast,
     is_tokenizers_available,
+    logging,
 )
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
@@ -47,6 +53,7 @@ from transformers.testing_utils import (
     DUMMY_DIFF_TOKENIZER_IDENTIFIER,
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
+    CaptureLogger,
     RequestCounter,
     is_flaky,
     require_tokenizers,
@@ -182,6 +189,21 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(AutoTokenizer.from_pretrained("google-bert/bert-base-cased"), BertTokenizerFast)
 
     @require_tokenizers
+    def test_voxtral_tokenizer_converts_from_tekken(self):
+        repo_id = "mistralai/Voxtral-Mini-3B-2507"
+        tokenization_auto = transformers.models.auto.tokenization_auto
+        with (
+            mock.patch("transformers.utils.import_utils.is_mistral_common_available", return_value=False),
+            mock.patch("transformers.models.auto.tokenization_auto.is_mistral_common_available", return_value=False),
+        ):
+            tokenization_auto = importlib.reload(tokenization_auto)
+            tokenizer = tokenization_auto.AutoTokenizer.from_pretrained(repo_id)  # should not raise
+
+        self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+        self.assertTrue(tokenizer.is_fast)
+        self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
+
+    @require_tokenizers
     def test_do_lower_case(self):
         tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased", do_lower_case=False)
         sample = "Hello, world. How are you?"
@@ -211,6 +233,40 @@ class AutoTokenizerTest(unittest.TestCase):
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertEqual(tokenizer2.vocab_size, 12)
+
+    def test_auto_tokenizer_from_local_folder_mistral_detection(self):
+        """See #42374 for reference, ensuring proper mistral detection on local tokenizers"""
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
+        config = Qwen3MoeConfig.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
+        self.assertIsInstance(tokenizer, (Qwen2Tokenizer, Qwen2TokenizerFast))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+
+            # Case 1: Tokenizer with no config associated
+            logger = logging.get_logger("transformers.tokenization_utils_base")
+            with CaptureLogger(logger) as cl:
+                AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertNotIn(
+                "with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e",
+                cl.out,
+            )
+
+            # Case 2: Tokenizer with config associated
+            # Needed to be saved along the tokenizer to detect (non)mistral
+            # for a version where the regex bug occurs
+            config_dict = config.to_diff_dict()
+            config_dict["transformers_version"] = "4.57.2"
+
+            # Manually saving to avoid versioning clashes
+            config_path = os.path.join(tmp_dir, "config.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config_dict, f, indent=2, sort_keys=True)
+
+            tokenizer2 = AutoTokenizer.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(tokenizer2, tokenizer.__class__)
+        self.assertTrue(tokenizer2.vocab_size > 100_000)
 
     def test_auto_tokenizer_fast_no_slow(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")

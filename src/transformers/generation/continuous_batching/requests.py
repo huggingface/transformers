@@ -28,7 +28,6 @@ logger = logging.getLogger("ContinuousBatchingLogger")
 # logger.setLevel(logging.INFO)
 
 
-@staticmethod
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     if torch.cuda.is_available():
         device = torch.device("cuda")

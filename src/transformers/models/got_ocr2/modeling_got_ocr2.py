@@ -433,7 +433,7 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> GotOcr2VisionEncoderOutput:

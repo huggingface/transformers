@@ -781,21 +781,17 @@ def _load_state_dict_into_meta_model(
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    param_name = hf_quantizer.update_param_name(param_name)
+                    param_name = hf_quantizer.get_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
-                    # special case for gpt_oss model, we wait for the param to be leave the meta device before casting it to cpu
-                    if model.config.model_type == "gpt_oss" and value.device.type == "meta":
+                    # We need to wait until the quantized value is created
+                    if value.device.type == "meta":
                         continue
-                    param_to = "cpu"
-                    if is_fsdp_enabled() and not is_local_dist_rank_0():
-                        param_to = "meta"
-                    val_kwargs = {}
-                    if (hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params") or (
-                        value.dtype == torch.uint8 or value.dtype == torch.int8
-                    ):
+                    val_kwargs = value.__dict__
+                    if not value.is_floating_point():
                         val_kwargs["requires_grad"] = False
-                    value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                    device = "meta" if is_fsdp_enabled() and not is_local_dist_rank_0() else "cpu"
+                    value = type(value)(value.data.to(device), **val_kwargs)
                     setattr(module, param_type, value)
 
         # Remove the param from the state dict if it was not loaded on the fly to avoid wasting memory
@@ -4671,6 +4667,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", True)
         _ = kwargs.pop("low_cpu_mem_usage", None)
+        _ = kwargs.pop("offload_state_dict", None)
 
         # For BC on torch_dtype argument
         if torch_dtype is not None:
@@ -6073,7 +6070,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
         # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
         if hf_quantizer is not None:
-            param_name = hf_quantizer.update_param_name(param_name)
+            param_name = hf_quantizer.get_param_name(param_name)
 
         try:
             param = model.get_parameter_or_buffer(param_name)
