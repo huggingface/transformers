@@ -174,7 +174,7 @@ class MistralModel(LlamaModel):
 
 
 class MistralForCausalLM(LlamaForCausalLM):
-    _tied_weights_keys = {}
+    pass
 
 
 class MistralForTokenClassification(LlamaForTokenClassification):
