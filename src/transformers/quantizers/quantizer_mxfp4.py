@@ -429,4 +429,5 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations.mxfp4 import Mxfp4Quantize
+
         return Mxfp4Quantize(self)
