@@ -2453,7 +2453,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 _commit_hash=_commit_hash,
                 _is_local=_is_local,
                 init_kwargs=init_kwargs,
-                **kwargs,
+                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
             )
 
         return tokenizer
@@ -2469,7 +2469,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         _commit_hash=None,
         _is_local=False,
         init_kwargs=None,
-        **kwargs,
+        fix_mistral_regex=None,
     ):
         """
         Patches mistral related tokenizers with incorrect regex if detected
@@ -2531,10 +2531,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             if fix_mistral_regex or (not _is_local and is_base_mistral(pretrained_model_name_or_path)):
                 # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
-                if "fix_mistral_regex" in init_kwargs:
+                if init_kwargs and "fix_mistral_regex" in init_kwargs:
                     setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
 
-                fix_mistral_regex = kwargs.get("fix_mistral_regex")  # not init kwargs
                 # only warn if its not explicitly passed
                 if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
                     setattr(tokenizer, "fix_mistral_regex", False)
