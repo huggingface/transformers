@@ -98,17 +98,6 @@ class PegasusTokenizer(TokenizersBackend):
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         if vocab is not None:
-            # Handle different vocab formats (dict, list of tokens, or list of tuples)
-            if isinstance(vocab, dict):
-                vocab_scores = [(str(token), float(score)) for token, score in vocab.items()]
-            elif isinstance(vocab, list) and len(vocab) > 0:
-                if isinstance(vocab[0], (tuple, list)):
-                    vocab_scores = [(str(token), float(score)) for token, score in vocab]
-                else:
-                    vocab_scores = [(str(token), 0.0) for token in vocab]
-            else:
-                vocab_scores = []
-
             # For Pegasus, insert special tokens at the beginning
             special_tokens_set = {pad_token, eos_token, mask_token_sent, mask_token, unk_token}
             special_tokens_set.update(additional_special_tokens)
@@ -128,7 +117,7 @@ class PegasusTokenizer(TokenizersBackend):
             _vocab_list.append((str(unk_token), 0.0))
 
             # Filter out special tokens from main vocab and combine
-            filtered_vocab = [(t, s) for t, s in vocab_scores if t not in special_tokens_set]
+            filtered_vocab = [(t, s) for t, s in vocab if t not in special_tokens_set]
             _vocab_list = _vocab_list + filtered_vocab
         else:
             _vocab_list = [(str(unk_token), 0.0)]
