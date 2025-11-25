@@ -106,9 +106,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if fast_tokenizer_file is not None and fast_tokenizer is None:
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
 
-        if fast_tokenizer is not None:
+        if self._tokenizer is None:
             self._tokenizer = fast_tokenizer
-        elif self._tokenizer is None:
+        elif fast_tokenizer is None:
             raise ValueError(
                 "You have to call `super().__init__()` in your tokenizer class after your initialize `self._tokenizer`."
             )
@@ -385,26 +385,24 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         )
 
         if tokenizer_json is not None:
-            if cls is TokenizersBackend:
-                tokenizer_object = TokenizerFast.from_file(tokenizer_file)
-            else:
-                tokenizer_model = tokenizer_json.get("model", {})
-                vocab = tokenizer_model.get("vocab")  # unigram needs list, bpe/wordpiece needs dict
-                if isinstance(vocab, list) and isinstance(vocab[0], list):
-                    # unigram needs list of tuples its stupid will fix in `tokenizers`
-                    vocab = list(map(tuple, vocab))
-                raw_merges = tokenizer_model.get("merges")
-                if raw_merges is not None:
-                    merges = []
-                    for merge in raw_merges:
-                        if isinstance(merge, str):
-                            parts = merge.split()
-                        elif isinstance(merge, (list, tuple)) and len(merge) >= 2:
-                            parts = merge[:2]
-                        else:
-                            continue
-                        if len(parts) == 2:
-                            merges.append((parts[0], parts[1]))
+            tokenizer_object = TokenizerFast.from_file(tokenizer_file)
+            tokenizer_model = tokenizer_json.get("model", {})
+            vocab = tokenizer_model.get("vocab")  # unigram needs list, bpe/wordpiece needs dict
+            if isinstance(vocab, list) and isinstance(vocab[0], list):
+                # unigram needs list of tuples its stupid will fix in `tokenizers`
+                vocab = list(map(tuple, vocab))
+            raw_merges = tokenizer_model.get("merges")
+            if raw_merges is not None:
+                merges = []
+                for merge in raw_merges:
+                    if isinstance(merge, str):
+                        parts = merge.split()
+                    elif isinstance(merge, (list, tuple)) and len(merge) >= 2:
+                        parts = merge[:2]
+                    else:
+                        continue
+                    if len(parts) == 2:
+                        merges.append((parts[0], parts[1]))
 
         if tokenizer_json is None and vocab_file is not None:
             files_loaded.append(os.path.basename(vocab_file))
@@ -412,10 +410,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 from .integrations.mistral import MistralConverter
 
                 converter = MistralConverter(vocab=vocab_file)
-                if cls is TokenizersBackend:
-                    tokenizer_object = converter.converted()
-                else:
-                    vocab, merges = converter.vocab, converter.merges
                 all_special = converter.additional_special_tokens
                 init_kwargs.setdefault("additional_special_tokens", all_special)
             elif os.path.basename(vocab_file).endswith(".model"):
@@ -439,10 +433,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             "`sentencepiece` dependency installed."
                         ) from e
 
-                if cls is TokenizersBackend:
-                    tokenizer_object = converter.converted()
-                else:
-                    vocab, merges = converter.vocab, converter.merges
+            tokenizer_object = converter.converted()
+            vocab, merges = converter.vocab, converter.merges
 
         if added_tokens_decoder:
             init_kwargs["added_tokens_decoder"] = added_tokens_decoder
