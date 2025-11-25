@@ -292,7 +292,7 @@ class PeftAdapterMixin:
 
             # For hotswapping, we need the adapter name to be present in the state dict keys
             if hotswap:
-                if key.endswith("lora_A.weight") or key.endswith("lora_B.weight"):
+                if key.endswith(("lora_A.weight", "lora_B.weight")):
                     new_key = new_key[: -len(".weight")] + f".{adapter_name}.weight"
                 elif key.endswith("lora_B.bias"):  # lora_bias=True option
                     new_key = new_key[: -len(".bias")] + f".{adapter_name}.bias"
