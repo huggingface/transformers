@@ -28,9 +28,9 @@ from ..utils import (
 )
 from .quantizers_utils import get_module_from_name
 
-
 if is_torch_available():
     import torch
+    from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
 triton_kernels_hub = None
@@ -156,7 +156,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import Mxfp4GptOssExperts
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
-
+        if self.pre_quantized:
+            return False
         # if we are dequantizing, the model doesn't have scales, and blocks only params like gate_up_proj and down_proj so we need to handle this case differently
         if self.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
             module, tensor_name = get_module_from_name(model, param_name[: -len("_blocks")])
@@ -431,3 +432,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..integrations.mxfp4 import Mxfp4Quantize
 
         return Mxfp4Quantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.mxfp4 import Mxfp4DequantizeOrSwizzle
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_keys=["_blocks", "_scales"],
+                    target_keys="",
+                    operations=[Mxfp4DequantizeOrSwizzle(self)],
+                )
+            ]
+        return []
