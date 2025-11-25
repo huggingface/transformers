@@ -116,22 +116,8 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
+    mapping["olmoe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
-    mapping["olmoe"] = [
-        WeightConverter(
-            source_keys=[
-                "mlp.experts.*.gate_proj.weight",
-                "mlp.experts.*.up_proj.weight",
-            ],
-            target_keys="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-        ),
-        WeightConverter(
-            source_keys=["mlp.experts.*.down_proj.weight"],
-            target_keys="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0)],
-        ),
-    ]
 
     return mapping
 
