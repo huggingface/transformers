@@ -4674,7 +4674,7 @@ class TokenizerTesterMixin:
     def test_local_files_only(self):
         from transformers import AutoTokenizer
 
-        for pretrained_name in self.from_pretrained_id:
+        for pretrained_name in getattr(self, "from_pretrained_id", []):
             with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
                 tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
