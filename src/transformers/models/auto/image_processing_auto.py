@@ -139,6 +139,7 @@ else:
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
             ("metaclip_2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("minicpm_v_4", ("MiniCPMVImageProcessor", "MiniCPMVImageProcessorFast")),
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor", "MllamaImageProcessorFast")),
