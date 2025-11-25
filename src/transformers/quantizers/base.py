@@ -165,8 +165,9 @@ class HfQuantizer(ABC):
         """
         return dtype
 
-    def param_element_size(self, model: "PreTrainedModel", param_name: str) -> float:
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
         "Return the element size (in bytes) for `param_name`."
+
         if self.param_needs_quantization(model, param_name):
             from accelerate.utils import CustomDtype
 
@@ -179,7 +180,7 @@ class HfQuantizer(ABC):
             # The value passed is actually not used when the method is overridden
             if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
                 return mapping[custom_dtype]
-        return model.get_parameter_or_buffer(param_name).element_size()
+        return param.element_size()
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         """
@@ -405,6 +406,9 @@ class HfQuantizer(ABC):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
         )
+
+    def get_weight_conversions(self):
+        return []
 
 
 class SequentialLlama4TextExperts(ModuleList):
