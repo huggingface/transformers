@@ -2472,13 +2472,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     #   a) having a non-mistral tokenizer
                     #   b) fixed version of transformers
                     if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
-                        if _is_local and transformers_model_type is not None and transformers_model_type not in [
-                            "mistral",
-                            "mistral3",
-                            "voxtral",
-                            "ministral",
-                            "pixtral",
-                        ]:
+                        if (
+                            _is_local
+                            and transformers_model_type is not None
+                            and transformers_model_type
+                            not in [
+                                "mistral",
+                                "mistral3",
+                                "voxtral",
+                                "ministral",
+                                "pixtral",
+                            ]
+                        ):
                             return tokenizer
                     elif transformers_version and version.parse(transformers_version) > version.parse("4.57.2"):
                         return tokenizer
