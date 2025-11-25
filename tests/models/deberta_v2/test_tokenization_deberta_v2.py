@@ -15,7 +15,12 @@
 import unittest
 
 from transformers import DebertaV2Tokenizer, DebertaV2TokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_sentencepiece,
+    require_tokenizers,
+    slow,
+)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -79,13 +84,11 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(rust_tokens, tokens_target)
 
-    @unittest.skip(reason="There is an inconsistency between slow and fast tokenizer due to a bug in the fast one.")
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
-        pass
+        super().test_sentencepiece_tokenize_and_convert_tokens_to_string()
 
-    @unittest.skip(reason="There is an inconsistency between slow and fast tokenizer due to a bug in the fast one.")
     def test_sentencepiece_tokenize_and_decode(self):
-        pass
+        super().test_sentencepiece_tokenize_and_decode()
 
     def test_split_by_punct(self):
         # fmt: off
