@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
     is_torch_xpu_available,
@@ -34,7 +35,8 @@ logger = logging.get_logger(__name__)
 
 # TODO Deprecate when all models have the attention interface
 def flash_attn_supports_top_left_mask():
-    if is_flash_attn_3_available():
+    # FA4 doesn't support top-left mask (similar to FA3)
+    if is_flash_attn_4_available() or is_flash_attn_3_available():
         return False
     if is_flash_attn_2_available():
         return not is_flash_attn_greater_or_equal_2_10()
@@ -47,7 +49,8 @@ def flash_attn_supports_top_left_mask():
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
     return (
-        is_flash_attn_3_available()
+        is_flash_attn_4_available()
+        or is_flash_attn_3_available()
         or is_flash_attn_2_available()
         or is_torch_npu_available()
         or is_torch_xpu_available()
@@ -82,10 +85,17 @@ def _lazy_imports(implementation: Optional[str]):
     """
     is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
+    is_fa4 = is_flash_attn_4_available()
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    if (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3):
+    # Priority order when implementation=None: FA4 > FA3 > FA2
+    # FA4 is preferred on supported hardware for optimal performance
+    if implementation == "flash_attention_4" and is_fa4:
+        # FA4 uses CuTe DSL implementation from flash_attn.cute submodule
+        from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
+        # FA4 doesn't provide pad/unpad functions, use our implementations
+    elif (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3 and not is_fa4):
         from flash_attn import flash_attn_func, flash_attn_varlen_func
         from flash_attn.bert_padding import pad_input, unpad_input
     elif is_torch_npu_available():
@@ -94,8 +104,11 @@ def _lazy_imports(implementation: Optional[str]):
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
     else:
-        if implementation == "flash_attention_3" or (implementation is None and is_fa3):
+        if implementation == "flash_attention_3" or (implementation is None and is_fa3 and not is_fa4):
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
+        elif implementation is None and is_fa4:
+            # Auto-select FA4 when no specific implementation requested and FA4 available
+            from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
         # Kernels fallback
         else:
             flash_attn_func = getattr(implementation, "flash_attn_func", None)
@@ -128,6 +141,24 @@ def _lazy_define_process_function(flash_function):
         supports_mapping[fa_param] = fa_param in flash_parameters
 
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
+
+
+def _is_using_fa4(flash_varlen_fn) -> bool:
+    """
+    Detect if we're using FA4 based on function signature.
+
+    FA4 doesn't accept max_seqlen_q/k parameters (calculates internally from cu_seqlens).
+    This function checks the signature to determine the FA version.
+
+    Args:
+        flash_varlen_fn: The flash attention varlen function to inspect.
+
+    Returns:
+        bool: True if using FA4, False otherwise.
+    """
+    flash_parameters = inspect.signature(flash_varlen_fn).parameters
+    # FA4 doesn't have max_seqlen_q parameter
+    return "max_seqlen_q" not in flash_parameters
 
 
 def lazy_import_flash_attention(implementation: Optional[str], force_import: Optional[bool] = False):
@@ -467,6 +498,9 @@ def _process_flash_attention_kwargs(
     softcap: Optional[float] = None,
     deterministic: Optional[bool] = None,
     s_aux: Optional[torch.Tensor] = None,
+    learnable_sink: Optional[torch.Tensor] = None,
+    num_splits: int = 1,
+    pack_gqa: Optional[bool] = None,
     supports_mapping: Optional[dict[str, bool]] = None,
     **kwargs,
 ):
@@ -497,6 +531,12 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
+        learnable_sink (`torch.Tensor`, *optional*):
+            FA4-specific: Learnable sink tokens for attention. Shape: (batch, num_sink_tokens, head_dim).
+        num_splits (`int`, *optional*):
+            FA4-specific: Number of splits for split-KV mode. Default: 1 (no splitting).
+        pack_gqa (`bool`, *optional*):
+            FA4-specific: Whether to use packed GQA optimization. If None, auto-detected.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -528,6 +568,16 @@ def _process_flash_attention_kwargs(
     # Only within kernel implementation atm
     if supports_mapping["s_aux"] and s_aux is not None:
         flash_kwargs["s_aux"] = s_aux
+
+    # FA4-specific parameters
+    if supports_mapping.get("learnable_sink", False) and learnable_sink is not None:
+        flash_kwargs["learnable_sink"] = learnable_sink
+
+    if supports_mapping.get("num_splits", False) and num_splits > 1:
+        flash_kwargs["num_splits"] = num_splits
+
+    if supports_mapping.get("pack_gqa", False) and pack_gqa is not None:
+        flash_kwargs["pack_gqa"] = pack_gqa
 
     return flash_kwargs
 
@@ -608,6 +658,9 @@ def _flash_attention_forward(
         kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
 
+    # Detect if we're using FA4 (which doesn't accept max_seqlen parameters)
+    is_fa4 = _is_using_fa4(flash_varlen_fn)
+
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
         q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
@@ -619,16 +672,28 @@ def _flash_attention_forward(
         if "mps" in str(q.device):
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
-        out_unpad = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            max_seqlen_q=max_length_q,
-            max_seqlen_k=max_length_k,
-            **flash_kwargs,
-        )
+        # FA4 calculates max_seqlen internally from cu_seqlens, so we don't pass it
+        if is_fa4:
+            out_unpad = flash_varlen_fn(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seq_lens_q,
+                cu_seqlens_k=cu_seq_lens_k,
+                **flash_kwargs,
+            )
+        else:
+            # FA2/FA3 require max_seqlen parameters
+            out_unpad = flash_varlen_fn(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seq_lens_q,
+                cu_seqlens_k=cu_seq_lens_k,
+                max_seqlen_q=max_length_q,
+                max_seqlen_k=max_length_k,
+                **flash_kwargs,
+            )
         if isinstance(out_unpad, tuple):
             out_unpad = out_unpad[0]
 
@@ -650,16 +715,28 @@ def _flash_attention_forward(
         if "mps" in str(q.device):
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
-        out = flash_varlen_fn(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            max_seqlen_q=max_length_q,
-            max_seqlen_k=max_length_k,
-            **flash_kwargs,
-        )
+        # FA4 calculates max_seqlen internally from cu_seqlens, so we don't pass it
+        if is_fa4:
+            out = flash_varlen_fn(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seq_lens_q,
+                cu_seqlens_k=cu_seq_lens_k,
+                **flash_kwargs,
+            )
+        else:
+            # FA2/FA3 require max_seqlen parameters
+            out = flash_varlen_fn(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seq_lens_q,
+                cu_seqlens_k=cu_seq_lens_k,
+                max_seqlen_q=max_length_q,
+                max_seqlen_k=max_length_k,
+                **flash_kwargs,
+            )
         if isinstance(out, tuple):
             out = out[0]
 
