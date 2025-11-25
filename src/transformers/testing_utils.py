@@ -44,7 +44,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 from unittest import mock
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import urllib3
@@ -1127,6 +1127,7 @@ def require_torch_tf32(test_case):
     return unittest.skipUnless(
         is_torch_tf32_available(), "test requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7"
     )(test_case)
+
 
 def require_detectron2(test_case):
     """Decorator marking a test that requires detectron2."""

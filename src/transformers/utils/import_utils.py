@@ -501,18 +501,18 @@ def is_torch_tf32_available() -> bool:
         return False
     return True
 
+
 @lru_cache
 def _set_tf32_mode(enable: bool) -> None:
     """
     Set TF32 mode using the appropriate PyTorch API.
-    
     For PyTorch 2.9+, uses the new fp32_precision API.
     For older versions, uses the legacy allow_tf32 flags.
-    
     Args:
         enable: Whether to enable TF32 mode
     """
     import torch
+
     pytorch_version = version.parse(get_torch_version())
     if pytorch_version >= version.parse("2.9.0"):
         precision_mode = "tf32" if enable else "ieee"
@@ -521,6 +521,7 @@ def _set_tf32_mode(enable: bool) -> None:
     else:
         torch.backends.cuda.matmul.allow_tf32 = enable
         torch.backends.cudnn.allow_tf32 = enable
+
 
 @lru_cache
 def is_torch_flex_attn_available() -> bool:

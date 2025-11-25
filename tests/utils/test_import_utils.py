@@ -1,6 +1,7 @@
-from curses import version
 import sys
+from curses import version
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from transformers.testing_utils import run_test_using_subprocess
@@ -27,6 +28,7 @@ def test_clear_import_cache():
 
     assert "transformers.models.auto.modeling_auto" in sys.modules
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
+
 
 @pytest.mark.parametrize(
     "torch_version,enable,expected",
