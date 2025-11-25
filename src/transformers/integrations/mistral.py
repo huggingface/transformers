@@ -3,6 +3,7 @@ from tokenizers.models import BPE
 
 from transformers import LlamaTokenizerFast
 from transformers.convert_slow_tokenizer import bytes_to_unicode
+from transformers.tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
 
 class MistralConverter:
@@ -85,7 +86,8 @@ def convert_tekken_tokenizer(tokenizer_file: str):
     # Extract vocab and special tokens
     vocab = mistral_tokenizer.instruct_tokenizer.tokenizer._tekken_token2id_nospecial
     all_special = [
-        token.value if hasattr(token, "value") else token
+        token.get("token_str", str(token)) if isinstance(token, dict)
+        else (token.value if hasattr(token, "value") else str(token))
         for token in mistral_tokenizer.instruct_tokenizer.tokenizer._all_special_tokens
     ]
     specials_tokens = {token: all_special.index(token) for token in all_special}
@@ -93,9 +95,7 @@ def convert_tekken_tokenizer(tokenizer_file: str):
     vocab = specials_tokens
 
     # Convert
-    tokenizer = LlamaTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted(),
-    )
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted())
 
     # Post-process
     tokenizer.add_special_tokens({"additional_special_tokens": all_special})

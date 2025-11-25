@@ -326,10 +326,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("vits", "VitsTokenizer"),
         (
             "voxtral",
-            (
-                "MistralCommonTokenizer" if is_mistral_common_available() else None,
-                "PreTrainedTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
-            ),
+            "MistralCommonTokenizer" if is_mistral_common_available() else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
@@ -525,6 +522,39 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         tokenizer_class = TokenizersBackend if tokenizer_class.__name__ == "PythonBackend" else tokenizer_class
         return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+    # Try tekken.json (Mistral format)
+    try:
+        tekken_json_exists = has_file(
+            pretrained_model_name_or_path,
+            "tekken.json",
+            revision=kwargs.get("revision"),
+            token=kwargs.get("token"),
+            cache_dir=kwargs.get("cache_dir"),
+            local_files_only=kwargs.get("local_files_only", False),
+        )
+    except Exception:
+        tekken_json_exists = False
+
+    if tekken_json_exists:
+        # Check if mistral_common is available before trying to import
+        if not is_mistral_common_available():
+            raise ValueError(
+                f"Could not load tokenizer from {pretrained_model_name_or_path} using tokenizers backend. "
+                "The model uses tekken.json format which requires mistral-common to be installed. "
+                "Please install it with: pip install mistral-common"
+            )
+        try:
+            from ...integrations.mistral import convert_tekken_tokenizer
+
+            tekken_file = cached_file(pretrained_model_name_or_path, "tekken.json", **{k: v for k, v in kwargs.items() if k in ["cache_dir", "force_download", "proxies", "token", "revision", "local_files_only", "subfolder"]},)
+            if tekken_file is not None:
+                files_loaded.append("tekken.json")
+                kwargs["backend"] = "tokenizers"
+                kwargs["files_loaded"] = files_loaded
+                return convert_tekken_tokenizer(tekken_file)
+        except (ImportError, Exception) as e:
+            pass
+
     # Try extracting from SentencePiece model
     spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
     if spm_file is not None:
@@ -675,7 +705,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
         files_loaded = [spm_file] if spm_file else []
         kwargs["backend"] = "sentencepiece"
         kwargs["files_loaded"] = files_loaded
-        if tokenizer_class is not None and issubclass(tokenizer_class, SentencePieceBackend):
+        if isinstance(tokenizer_class, type) and issubclass(tokenizer_class, SentencePieceBackend):
             logger.info("Loading tokenizer with SentencePiece backend using tokenizer class")
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
@@ -693,18 +723,22 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 backend_classes.append(SentencePieceBackend)
 
             # Check if it's a custom PreTrainedTokenizer (not a backend class)
-            is_custom_pre_trained = issubclass(tokenizer_class, PreTrainedTokenizer) and not any(
-                issubclass(tokenizer_class, bc) for bc in backend_classes
+            is_custom_pre_trained = (
+                isinstance(tokenizer_class, type)
+                and issubclass(tokenizer_class, PreTrainedTokenizer)
+                and not any(issubclass(tokenizer_class, bc) for bc in backend_classes)
             )
 
-            # Check if it's a completely custom tokenizer (not PreTrainedTokenizer, not backend class)
+            # Check if it's a completey custom tokenizer (not PreTrainedTokenizer, not backend class)
             # e.g., MistralCommonTokenizer which has its own from_pretrained logic
-            inherits_from_backend = False
-            for bc in backend_classes:
-                if bc and issubclass(tokenizer_class, bc):
-                    inherits_from_backend = True
-                    break
-            is_completely_custom = not issubclass(tokenizer_class, PythonBackend) and not inherits_from_backend
+            inherits_from_backend = isinstance(tokenizer_class, type) and any(
+                bc and issubclass(tokenizer_class, bc) for bc in backend_classes
+            )
+            is_completely_custom = (
+                isinstance(tokenizer_class, type)
+                and not issubclass(tokenizer_class, PythonBackend)
+                and not inherits_from_backend
+            )
 
             if is_custom_pre_trained:
                 logger.info("Loading tokenizer with custom PreTrainedTokenizer backend (edge case)")
