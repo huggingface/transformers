@@ -193,7 +193,7 @@ Linked PRs:
 
 ### Removing deprecated arguments in `Trainer`
 
-- `tokenizer` in initialization -> `processor`
+- `tokenizer` in initialization -> `processing_class`
 - `model_path` in train() -> `resume_from_checkpoint`
 
 ### Removed features for `Trainer`
