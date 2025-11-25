@@ -622,10 +622,6 @@ class SpmConverter:
     def unk_id(self, proto):
         return proto.trainer_spec.unk_id
 
-    def tokenizer_(self, proto):
-        tokenizer = self.tokenizer
-        return tokenizer
-
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         _normalizers = [
@@ -649,7 +645,7 @@ class SpmConverter:
         return decoders.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def converted(self) -> Tokenizer:
-        tokenizer = self.tokenizer(self.proto)
+        tokenizer = self.tokenizer
 
         # Tokenizer assemble
         normalizer = self.normalizer(self.proto)
@@ -658,7 +654,7 @@ class SpmConverter:
 
         replacement = "▁"
         add_prefix_space = True
-        if hasattr(self.original_tokenizer, "add_prefix_space"):
+        if hasattr(self, "original_tokenizer") and hasattr(self.original_tokenizer, "add_prefix_space"):
             add_prefix_space = self.original_tokenizer.add_prefix_space
 
         pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)

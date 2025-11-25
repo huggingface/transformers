@@ -404,6 +404,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     if len(parts) == 2:
                         merges.append((parts[0], parts[1]))
 
+        class_sig = inspect.signature(getattr(cls, "__init__", cls))
+        class_args = set(map(lambda x: x.name, class_sig.parameters.values()))
+        converter = None
         if tokenizer_json is None and vocab_file is not None:
             files_loaded.append(os.path.basename(vocab_file))
             if os.path.basename(vocab_file).startswith("tekken"):
@@ -432,8 +435,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             "Unable to read tokenizer vocabulary. Please ensure you have the required "
                             "`sentencepiece` dependency installed."
                         ) from e
-            tokenizer_object = converter.converted()
-            vocab, merges = converter.vocab, converter.merges
+            elif "vocab_file" in class_args:
+                init_kwargs.setdefault("vocab_file", vocab_file)
+                if merges is not None and "merges_file" in class_args:
+                    merges_file = resolved_vocab_files.get("merges_file")
+                    if merges_file is not None:
+                        files_loaded.append(os.path.basename(merges_file))
+                        init_kwargs.setdefault("merges_file", merges_file)
+
+            if converter is not None:
+                tokenizer_object = converter.converted()
+                vocab, merges = converter.vocab, converter.merges
 
         if added_tokens_decoder:
             init_kwargs["added_tokens_decoder"] = added_tokens_decoder
@@ -445,13 +457,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if files_loaded and "files_loaded" not in init_kwargs:
             init_kwargs["files_loaded"] = files_loaded
 
-        class_sig = inspect.signature(getattr(cls, "__init__", cls))
+
         accepts_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in class_sig.parameters.values())
         if tokenizer_object is not None:  # only when cls is self
             init_kwargs.setdefault("tokenizer_object", tokenizer_object)
-        if vocab is not None and ("vocab" in class_sig.parameters or accepts_kwargs):
+        if vocab is not None and ("vocab" in class_args or accepts_kwargs):
             init_kwargs.setdefault("vocab", vocab)
-        if merges is not None and ("merges" in class_sig.parameters or accepts_kwargs):
+        if merges is not None and ("merges" in class_args or accepts_kwargs):
             init_kwargs.setdefault("merges", merges)
 
         # TODO handle other arguments that are needed to build the tokenizer
