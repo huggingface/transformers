@@ -22,7 +22,7 @@ import os
 import re
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from safetensors import safe_open
 from safetensors.torch import save_file
@@ -550,14 +550,14 @@ def offload_weight(weight: torch.Tensor, weight_name: str, offload_folder: str |
 
 def _init_infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
-    tied_parameters: Optional[list[list[str]]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: list[str] | None = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ) -> tuple[
-    list[Union[int, str]],
-    dict[Union[int, str], Union[int, str]],
-    list[Union[int, str]],
+    list[int | str],
+    dict[int | str, int | str],
+    list[int | str],
     list[int],
     dict[str, int],
     list[list[str]],
@@ -620,12 +620,12 @@ def _init_infer_auto_device_map(
 
 def infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: list[str] | None = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
-    tied_parameters: Optional[list[list[str]]] = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ):
     """

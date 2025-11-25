@@ -177,8 +177,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
 def load_model(
     model,
     config: AutoConfig,
-    model_classes: Optional[tuple[type, ...]] = None,
-    task: Optional[str] = None,
+    model_classes: tuple[type, ...] | None = None,
+    task: str | None = None,
     **model_kwargs,
 ):
     """
@@ -270,7 +270,7 @@ def load_model(
     return model
 
 
-def get_default_model_and_revision(targeted_task: dict, task_options: Optional[Any]) -> tuple[str, str]:
+def get_default_model_and_revision(targeted_task: dict, task_options: Any | None) -> tuple[str, str]:
     """
     Select a default model to use for a given task.
 
@@ -305,9 +305,9 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Optional[A
 
 def load_assistant_model(
     model: "PreTrainedModel",
-    assistant_model: Optional[Union[str, "PreTrainedModel"]],
-    assistant_tokenizer: Optional[PreTrainedTokenizer],
-) -> tuple[Optional["PreTrainedModel"], Optional[PreTrainedTokenizer]]:
+    assistant_model: Union[str, "PreTrainedModel"] | None,
+    assistant_tokenizer: PreTrainedTokenizer | None,
+) -> tuple[Optional["PreTrainedModel"], PreTrainedTokenizer | None]:
     """
     Prepares the assistant model and the assistant tokenizer for a pipeline whose model that can call `generate`.
 
@@ -404,9 +404,9 @@ class PipelineDataFormat:
 
     def __init__(
         self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite: bool = False,
     ):
         self.output_path = output_path
@@ -430,7 +430,7 @@ class PipelineDataFormat:
         raise NotImplementedError()
 
     @abstractmethod
-    def save(self, data: Union[dict, list[dict]]):
+    def save(self, data: dict | list[dict]):
         """
         Save the provided data object with the representation for the current [`~pipelines.PipelineDataFormat`].
 
@@ -439,7 +439,7 @@ class PipelineDataFormat:
         """
         raise NotImplementedError()
 
-    def save_binary(self, data: Union[dict, list[dict]]) -> str:
+    def save_binary(self, data: dict | list[dict]) -> str:
         """
         Save the provided data object as a pickle-formatted binary data on the disk.
 
@@ -460,9 +460,9 @@ class PipelineDataFormat:
     @staticmethod
     def from_str(
         format: str,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite=False,
     ) -> "PipelineDataFormat":
         """
@@ -507,9 +507,9 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
     def __init__(
         self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
@@ -551,9 +551,9 @@ class JsonPipelineDataFormat(PipelineDataFormat):
 
     def __init__(
         self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
@@ -617,7 +617,7 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         """
         print(data)
 
-    def save_binary(self, data: Union[dict, list[dict]]) -> str:
+    def save_binary(self, data: dict | list[dict]) -> str:
         if self.output_path is None:
             raise KeyError(
                 "When using piped input on pipeline outputting large object requires an output file path. "
@@ -776,13 +776,13 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     def __init__(
         self,
         model: "PreTrainedModel",
-        tokenizer: Optional[PreTrainedTokenizer] = None,
+        tokenizer: PreTrainedTokenizer | None = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
-        image_processor: Optional[BaseImageProcessor] = None,
-        processor: Optional[ProcessorMixin] = None,
-        modelcard: Optional[ModelCard] = None,
+        image_processor: BaseImageProcessor | None = None,
+        processor: ProcessorMixin | None = None,
+        modelcard: ModelCard | None = None,
         task: str = "",
-        device: Optional[Union[int, "torch.device"]] = None,
+        device: Union[int, "torch.device"] | None = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -939,7 +939,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     def save_pretrained(
         self,
-        save_directory: Union[str, os.PathLike],
+        save_directory: str | os.PathLike,
         safe_serialization: bool = True,
         **kwargs: Any,
     ):
@@ -1085,7 +1085,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             return inputs
 
-    def check_model_type(self, supported_models: Union[list[str], dict]):
+    def check_model_type(self, supported_models: list[str] | dict):
         """
         Check if the model class is in supported by the pipeline.
 
@@ -1348,9 +1348,9 @@ class PipelineRegistry:
         self,
         task: str,
         pipeline_class: type,
-        pt_model: Optional[Union[type, tuple[type]]] = None,
-        default: Optional[dict] = None,
-        type: Optional[str] = None,
+        pt_model: type | tuple[type] | None = None,
+        default: dict | None = None,
+        type: str | None = None,
     ) -> None:
         if task in self.supported_tasks:
             logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")

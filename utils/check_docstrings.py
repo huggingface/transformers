@@ -44,7 +44,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from check_repo import ignore_undocumented
 from git import Repo
@@ -71,11 +71,11 @@ class DecoratedItem:
         int  # 1-based line number where body starts (for functions) or __init__ body start (for classes with __init__)
     )
     args: list[str]  # List of argument names (excluding self, *args, **kwargs) - for classes, these are __init__ args
-    custom_args_text: Optional[str] = None  # custom_args string if provided in decorator
+    custom_args_text: str | None = None  # custom_args string if provided in decorator
 
     # Class-specific fields (only populated when kind == 'class')
     has_init: bool = False  # Whether the class has an __init__ method
-    init_def_line: Optional[int] = None  # 1-based line number of __init__ def (if has_init)
+    init_def_line: int | None = None  # 1-based line number of __init__ def (if has_init)
     is_model_output: bool = False  # Whether the class inherits from ModelOutput
 
 
@@ -913,7 +913,7 @@ def _is_auto_docstring_decorator(dec):
     return isinstance(target, ast.Name) and target.id == "auto_docstring"
 
 
-def _extract_function_args(func_node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> list[str]:
+def _extract_function_args(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     """Extract argument names from a function node, excluding 'self', *args, **kwargs."""
     all_args = (func_node.args.posonlyargs or []) + func_node.args.args + func_node.args.kwonlyargs
     return [a.arg for a in all_args if a.arg != "self"]
