@@ -33,6 +33,12 @@ from tokenizers import Tokenizer as TokenizerFast
 from tokenizers import normalizers as tokenizers_normalizers
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+from tokenizers import AddedToken, EncodeInput, Encoding, InputSequence, Tokenizer
+from tokenizers.decoders import Decoder
+from tokenizers.models import Model
+from tokenizers.normalizers import Normalizer
+from tokenizers.pre_tokenizers import PreTokenizer
+from tokenizers.processors import PostProcessor
 
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -1407,6 +1413,45 @@ class TokenizersExtractor:
 
         return vocab_ids, vocab_scores, merges, added_tokens_decoder
 
+    @property
+    def model(self) -> Model:
+        return self._tokenizer.model
+
+    @model.setter
+    def model(self, model: Model):
+        self._tokenizer.model = model
+
+    @property
+    def normalizer(self) -> Normalizer:
+        return self._tokenizer.normalizer
+
+    @normalizer.setter
+    def normalizer(self, normalizer: Normalizer):
+        self._tokenizer.normalizer = normalizer
+
+    @property
+    def pre_tokenizer(self) -> PreTokenizer:
+        return self._tokenizer.pre_tokenizer
+
+    @pre_tokenizer.setter
+    def pre_tokenizer(self, pre_tokenizer: PreTokenizer):
+        self._tokenizer.pre_tokenizer = pre_tokenizer
+
+    @property
+    def post_processor(self) -> PostProcessor:
+        return self._tokenizer.post_processor
+
+    @post_processor.setter
+    def post_processor(self, post_processor: PostProcessor):
+        self._tokenizer.post_processor = post_processor
+
+    @property
+    def decoder(self) -> Decoder:
+        return self._tokenizer.decoder
+
+    @decoder.setter
+    def decoder(self, decoder: Decoder):
+        self._tokenizer.decoder = decoder
 
 # Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
 PreTrainedTokenizerFast = TokenizersBackend
