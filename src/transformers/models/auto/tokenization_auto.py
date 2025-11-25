@@ -762,9 +762,10 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 )
             logger.info("Loading tokenizer with tokenizers backend")
             try:
+                #TODO tokenizers backend already supports all conversion logic!
                 return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
             except ValueError as e:
-                if "You have to call `super().__init__()` in your tokenizer class after your initialize `self._tokenizer`.'" in str(e):
+                if "You have to call `super().__init__()`" in str(e):
                     raise e
                 # If tokenizers backend fails, try falling back to SentencePiece backend if available
                 spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
