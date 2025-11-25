@@ -46,7 +46,7 @@ from torch.utils.checkpoint import checkpoint
 
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
-from .conversion_mapping import get_checkpoint_conversion_mapping
+from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
@@ -186,31 +186,6 @@ TORCH_INIT_FUNCTIONS = {
     "kaiming_normal": nn.init.kaiming_normal,
     "orthogonal_": nn.init.orthogonal_,
 }
-
-# DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = [
-    "aria",
-    "ayavision",
-    "colpali",
-    "emu3",
-    "fuyu",
-    "gotocr2",
-    "gemma3",
-    "internvl",
-    "llava",  # all llava prefixed models fall under this check
-    "mistral3",
-    "mllama",
-    "paligemma",
-    "shieldgemma2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "videollava",
-    "vipllava",
-    "sam3_video",
-    "sam3",
-    "sam3_tracker",
-    "sam3_tracker_video",
-]
 
 
 @contextmanager
@@ -3773,13 +3748,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
-
         key_mapping = kwargs.pop("key_mapping", None)
-        # Load models with key mapping
-        if key_mapping is None and any(
-            allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
-        ):
-            key_mapping = copy.copy(cls._checkpoint_conversion_mapping)
 
         if distributed_config is not None and tp_plan is None:
             tp_plan = "auto"
@@ -3871,19 +3840,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
 
-        weight_conversions: Optional[list[WeightConverter | WeightRenaming]] = None
-        model_type = getattr(config, "model_type", None)
-        if model_type is not None:
-            weight_conversions = get_checkpoint_conversion_mapping(model_type)
-            if weight_conversions is None:
-                weight_conversions = get_checkpoint_conversion_mapping("legacy")
-            if key_mapping is not None:
-                weight_conversions.extend(
-                    [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
-                )
-            if hf_quantizer is not None:
-                weight_conversions.extend(hf_quantizer.get_weight_conversions())
-
         if gguf_file:
             if hf_quantizer is not None:
                 raise ValueError(
@@ -3938,6 +3894,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
+
+        # Obtain the weight conversion mapping for this model if any are registered
+        weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config

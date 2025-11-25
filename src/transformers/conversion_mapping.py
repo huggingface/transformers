@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from copy import deepcopy
+from typing import TYPE_CHECKING
 
 from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
 from .utils import is_torch_available
@@ -21,6 +22,11 @@ from .utils import is_torch_available
 
 if is_torch_available():
     import torch
+
+
+if TYPE_CHECKING:
+    from .modeling_utils import PreTrainedModel
+    from .quantizers import HfQuantizer
 
 
 def _build_checkpoint_conversion_mapping():
@@ -134,5 +140,71 @@ _checkpoint_conversion_mapping_cache = None
 def get_checkpoint_conversion_mapping(model_type):
     global _checkpoint_conversion_mapping_cache
     _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
-    globals()["_checkpoint_conversion_mapping"] = _checkpoint_conversion_mapping_cache
-    return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type, None))
+    return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
+
+
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "colpali",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "shieldgemma2",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+    "sam3_video",
+    "sam3",
+    "sam3_tracker",
+    "sam3_tracker_video",
+]
+
+
+def get_model_conversion_mapping(
+    model: PreTrainedModel,
+    key_mapping: dict[str, str] | None = None,
+    hf_quantizer: HfQuantizer | None = None,
+    add_legacy: bool = True,
+) -> list[WeightConverter | WeightRenaming]:
+    """
+    For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
+    `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
+    """
+    weight_conversions = []
+
+    # Load models with key mapping
+    if key_mapping is not None:
+        weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
+    elif any(
+        allowed_name in class_name.__name__.lower()
+        for class_name in model.__class__.__mro__[:-1]
+        for allowed_name in VLMS
+    ):
+        weight_conversions = [
+            WeightRenaming(source_patterns=k, target_patterns=v)
+            for k, v in model._checkpoint_conversion_mapping.items()
+        ]
+
+    # TODO: should be checked recursively on submodels!!
+    model_type = getattr(model.config, "model_type", None)
+    if model_type is not None:
+        model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
+        if model_specific_conversions is not None:
+            weight_conversions.extend(model_specific_conversions)
+        elif add_legacy:
+            weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
+
+    # Add the ones from the quantizer as well if provided
+    if hf_quantizer is not None:
+        weight_conversions.extend(hf_quantizer.get_weight_conversions())
+
+    return weight_conversions

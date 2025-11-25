@@ -876,27 +876,10 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     # In this case, the model was not created with `from_pretrained` -> let's check if it's in the hardcoded
     # mappings, and recreate the mapping from there if it is
     if conversion_mapping is None:
-        from .conversion_mapping import get_checkpoint_conversion_mapping
-        from .modeling_utils import VLMS
+        from .conversion_mapping import get_model_conversion_mapping
 
-        weight_conversions = []
-        # Hardcoded name mappings for some vlms
-        if any(
-            allowed_name in class_name.__name__.lower()
-            for class_name in model.__class__.__mro__[:-1]
-            for allowed_name in VLMS
-        ):
-            weight_conversions = [
-                WeightRenaming(source_patterns=k, target_patterns=v)
-                for k, v in model._checkpoint_conversion_mapping.items()
-            ]
-        # Hardcoded mapping for some models
-        # TODO: should be checked recursively on submodels, and similarly in `from_pretrained`
-        model_type = getattr(model.config, "model_type", None)
-        if model_type is not None:
-            model_conversions = get_checkpoint_conversion_mapping(model_type)
-            if model_conversions is not None:
-                weight_conversions.extend(model_conversions)
+        # Do not resave with the legacy renaming, if present
+        weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
 
         # We did not find any operations to perform -> quick escape
         if len(weight_conversions) == 0:
@@ -920,10 +903,10 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
 
         state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
         for original_key, tensor in state_dict:
-            # 1. apply all renamings
+            # apply all renamings
             renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
 
-            # 2. apply 1 weight conversion on the key
+            # apply weight conversion on the key
             matched_pattern = weight_pattern_alt.search(renamed_key) if converters != [] else None
             if matched_pattern is not None:
                 renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace(
