@@ -20,7 +20,7 @@ from ..pe_audio.modeling_pe_audio import (
     PEAudioResnetBlock1d,
 )
 from ..pe_audio.modeling_pe_audio import PEAudioEncoderEmbeddings
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3Model, Qwen3RMSNorm
+from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3Model, Qwen3RMSNorm, Qwen3RotaryEmbedding
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ...configuration_utils import PretrainedConfig
@@ -231,6 +231,8 @@ class PEAudioVideoEncoderLayer(Qwen3DecoderLayer): ...
 class PEAudioVideoRMSNorm(Qwen3RMSNorm): ...
 
 
+class PEAudioVideoRotaryEmbedding(Qwen3RotaryEmbedding): ...
+
 @auto_docstring
 class PEAudioVideoPretrainedModel(PreTrainedModel):
     config: PEAudioVideoConfig
@@ -256,6 +258,8 @@ class PEAudioVideoPretrainedModel(PreTrainedModel):
     """
 )
 class PEAudioVideoEncoder(PEAudioVideoPretrainedModel):
+    config: PEAudioVideoEncoderConfig
+
     def __init__(self, config: PEAudioVideoEncoderConfig):
         super().__init__(config)
         self.audio_encoder = AutoModel.from_config(config.audio_config)
@@ -274,6 +278,7 @@ class PEAudioVideoEncoder(PEAudioVideoPretrainedModel):
             [PEAudioVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = PEAudioVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = PEAudioVideoRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def get_audio_video_features(
@@ -288,7 +293,7 @@ class PEAudioVideoEncoder(PEAudioVideoPretrainedModel):
 
         video, video_padding_mask = self.modality_aligner(
             audio_output.last_hidden_state,
-            padding_mask,
+            audio_output.padding_mask,
             video_output.last_hidden_state,
             padding_mask_videos,
         )
@@ -297,7 +302,7 @@ class PEAudioVideoEncoder(PEAudioVideoPretrainedModel):
         inputs_embeds = self.concat_modality_proj(inputs_embeds)
         inputs_embeds = self.data_proj(inputs_embeds)
 
-        return inputs_embeds, video_padding_mask
+        return inputs_embeds
 
     @can_return_tuple
     @check_model_inputs
@@ -309,20 +314,20 @@ class PEAudioVideoEncoder(PEAudioVideoPretrainedModel):
         padding_mask_videos: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        inputs_embeds, attention_mask = self.get_audio_video_features(
+        inputs_embeds, padding_mask = self.get_audio_video_features(
             input_values,
             pixel_values_videos,
             padding_mask=padding_mask,
             padding_mask_videos=padding_mask_videos,
         )
 
-        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, attention_mask=attention_mask)
+        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        position_embeddings = self.rope_embeddings(inputs_embeds, position_ids)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
         hidden_states = inputs_embeds
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:

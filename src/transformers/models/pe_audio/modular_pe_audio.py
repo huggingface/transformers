@@ -15,6 +15,7 @@ from ..auto import AutoModel
 from ..dac.modeling_dac import DacEncoder
 from ..qwen3.modeling_qwen3 import (
     Qwen3RMSNorm,
+    Qwen3RotaryEmbedding,
     Qwen3Attention,
     Qwen3DecoderLayer,
 )
@@ -298,6 +299,14 @@ class PEAudioEncoderLayer(Qwen3DecoderLayer): ...
 class PEAudioRMSNorm(Qwen3RMSNorm): ...
 
 
+class PEAudioRotaryEmbedding(Qwen3RotaryEmbedding): ...
+
+
+@dataclass
+class PEAudioEncoderOutput(BaseModelOutputWithPooling):
+    padding_mask: Optional[torch.Tensor] = None
+
+
 @auto_docstring
 class PEAudioPretrainedModel(PreTrainedModel):
     config: PEAudioConfig
@@ -322,6 +331,8 @@ class PEAudioPretrainedModel(PreTrainedModel):
     """
 )
 class PEAudioEncoder(PEAudioPretrainedModel):
+    config: PEAudioEncoderConfig
+
     def __init__(self, config: PEAudioEncoderConfig):
         super().__init__(config)
         self.dac_encoder = PEAudioDacEncoder(config.dac_config)
@@ -338,6 +349,7 @@ class PEAudioEncoder(PEAudioPretrainedModel):
             [PEAudioEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = PEAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = PEAudioRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def get_audio_features(
@@ -349,6 +361,8 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
             hidden_states = self.dac_encoder(input_values)  # (batch_size, hidden_size, seq_len)
             hidden_states = self.bottleneck(hidden_states)  # (batch_size, hidden_size, seq_len)
+            # TODO: we might actually be able to remove half the channels
+            hidden_states, _ = hidden_states.chunk(2, dim=1)
 
         codec_features = hidden_states.transpose(1, 2)
 
@@ -368,17 +382,17 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        inputs_embeds, attention_mask = self.get_audio_features(
+        inputs_embeds, padding_mask = self.get_audio_features(
             input_values,
             padding_mask=padding_mask,
         )
-        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=attention_mask)
+        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        position_embeddings = self.rope_embeddings(inputs_embeds, position_ids)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
         hidden_states = inputs_embeds
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -392,9 +406,10 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         hidden_states = self.norm(hidden_states)
         hidden_states = self.output(hidden_states)
 
-        return BaseModelOutputWithPooling(
+        return PEAudioEncoderOutput(
             last_hidden_state=hidden_states[:, 1:],
             pooler_output=hidden_states[:, 0],
+            padding_mask=padding_mask,
         )
 
 

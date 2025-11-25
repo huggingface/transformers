@@ -14,7 +14,7 @@ from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForImageClassification
 from ..pe_audio.modeling_pe_audio import PEAudioEncoderEmbeddings
 from .configuration_pe_video import PEVideoConfig, PEVideoEncoderConfig
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm
+from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ...configuration_utils import PretrainedConfig
@@ -140,6 +140,9 @@ class PEVideoEncoderLayer(Qwen3DecoderLayer): ...
 class PEVideoRMSNorm(Qwen3RMSNorm): ...
 
 
+class PEVideoRotaryEmbedding(Qwen3RotaryEmbedding): ...
+
+
 @auto_docstring
 class PEVideoPreTrainedModel(PreTrainedModel):
     config: PEVideoConfig
@@ -165,6 +168,8 @@ class PEVideoPreTrainedModel(PreTrainedModel):
     """
 )
 class PEVideoEncoder(PEVideoPreTrainedModel):
+    config: PEVideoEncoderConfig
+
     def __init__(self, config: PEVideoEncoderConfig):
         super().__init__(config)
         # Vision feature extraction stack (pre-embeddings)
@@ -180,6 +185,7 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
             [PEVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = PEVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = PEVideoRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def get_video_features(
@@ -212,13 +218,13 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
             pixel_values_videos,
             padding_mask_videos=padding_mask_videos,
         )
-        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask_videos=attention_mask)
+        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=attention_mask)
 
         if attention_mask is not None:
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        position_embeddings = self.rope_embeddings(inputs_embeds, position_ids)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
         hidden_states = inputs_embeds
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -233,13 +239,12 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
         hidden_states = self.output(hidden_states)
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
+            last_hidden_state=hidden_states[:, 1:],
             pooler_output=hidden_states[:, 0],
         )
 
 
 __all__ = [
-    "PEVideoModel",
     "PEVideoEncoder",
     "PEVideoEncoderConfig",
     "PEVideoConfig",
