@@ -308,7 +308,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         added_tokens_decoder_rep = "\n\t".join([f"{k}: {v.__repr__()}," for k, v in self.added_tokens_decoder.items()])
         return (
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',\n"
-            f" _tokenizer={self._tokenizer},\n"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},\n"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',\n"
             " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
@@ -475,17 +474,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @property
     def can_save_slow_tokenizer(self) -> bool:
-        """
-        `bool`: Whether or not the slow tokenizer can be saved. For a sentencepiece based slow tokenizer, this
-        can only be `True` if the original `"sentencepiece.model"` was not deleted.
-        """
-        if "vocab_file" in self.vocab_files_names and self.vocab_files_names["vocab_file"].endswith(".model"):
-            if hasattr(self, "vocab_file") and self.vocab_file:
-                # If the vocab file is a sentencepiece model, we can save it
-                return os.path.isfile(self.vocab_file)
-            return False
-        else:
-            return True
+        return True
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
