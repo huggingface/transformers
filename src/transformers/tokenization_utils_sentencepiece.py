@@ -26,9 +26,8 @@ from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,
-    generate_merges,
 )
-from .utils import add_end_docstrings, logging, requires_backends
+from .utils import add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)

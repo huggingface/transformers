@@ -326,7 +326,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("vits", "VitsTokenizer"),
         (
             "voxtral",
-            "MistralCommonTokenizer" if is_mistral_common_available() else ("TokenizersBackend" if is_tokenizers_available() else None),
+            "MistralCommonTokenizer"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
@@ -546,13 +548,22 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         try:
             from ...integrations.mistral import convert_tekken_tokenizer
 
-            tekken_file = cached_file(pretrained_model_name_or_path, "tekken.json", **{k: v for k, v in kwargs.items() if k in ["cache_dir", "force_download", "proxies", "token", "revision", "local_files_only", "subfolder"]},)
+            tekken_file = cached_file(
+                pretrained_model_name_or_path,
+                "tekken.json",
+                **{
+                    k: v
+                    for k, v in kwargs.items()
+                    if k
+                    in ["cache_dir", "force_download", "proxies", "token", "revision", "local_files_only", "subfolder"]
+                },
+            )
             if tekken_file is not None:
                 files_loaded.append("tekken.json")
                 kwargs["backend"] = "tokenizers"
                 kwargs["files_loaded"] = files_loaded
                 return convert_tekken_tokenizer(tekken_file)
-        except (ImportError, Exception) as e:
+        except (ImportError, Exception):
             pass
 
     # Try extracting from SentencePiece model
@@ -575,12 +586,12 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
 
         if resolved_spm is not None:
             try:
-                from ...tokenization_utils_sentencepiece import SentencePieceExtractor
+                from ...convert_slow_tokenizer import SentencePieceExtractor
 
                 fast_sig = inspect.signature(getattr(tokenizer_class, "__init__", tokenizer_class))
                 if "vocab" in fast_sig.parameters:
                     try:
-                        vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
+                        vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
                         files_loaded.append(spm_file)
                         kwargs["backend"] = "tokenizers"
                         kwargs["files_loaded"] = files_loaded
@@ -762,7 +773,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 )
             logger.info("Loading tokenizer with tokenizers backend")
             try:
-                #TODO tokenizers backend already supports all conversion logic!
+                # TODO tokenizers backend already supports all conversion logic!
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
             except ValueError as e:
@@ -1122,7 +1133,10 @@ class AutoTokenizer:
             if fast_tokenizer_class is None:
                 tokenizer_class_candidate = config_tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
-                if tokenizer_class is None and (not tokenizer_class_candidate.endswith("Fast") or tokenizer_class_candidate == "PreTrainedTokenizer"):
+                if tokenizer_class is None and (
+                    not tokenizer_class_candidate.endswith("Fast")
+                    or tokenizer_class_candidate == "PreTrainedTokenizer"
+                ):
                     tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate + "Fast")
             else:
                 tokenizer_class = fast_tokenizer_class

@@ -1791,7 +1791,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
 
     @classmethod
-    def _load_chat_template(cls, resolved_vocab_files: dict[str, Optional[str]]) -> Optional[Union[str, dict[str, str]]]:
+    def _load_chat_template(
+        cls, resolved_vocab_files: dict[str, Optional[str]]
+    ) -> Optional[Union[str, dict[str, str]]]:
         """
         Read chat template files from the resolved vocab files and return the template content.
 
@@ -2005,7 +2007,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 " fine-tuned or trained."
             )
 
-
         return tokenizer
 
     @classmethod
@@ -2033,7 +2034,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         """
 
         return tokenizer
-
 
     @classmethod
     def _load_added_tokens(

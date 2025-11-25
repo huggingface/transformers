@@ -15,9 +15,9 @@
 
 import unittest
 
+from transformers.convert_slow_tokenizer import SentencePieceExtractor
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -47,7 +47,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # TokenizerTesterMixin passes `pretrained_name` as the first positional argument; keep using fixtures here.
 
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab_ids, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         tokenizer = MLukeTokenizer(vocab=vocab_scores, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
         return tokenizer
 

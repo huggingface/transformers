@@ -341,7 +341,7 @@ Hey how are you doing"""
                 return None
 
             extractor = TokenizersExtractor(tokenizer_json_path)
-            vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
+            vocab_scores, merges = extractor.extract()
 
             # Convert added_tokens list to added_tokens_decoder dict format
             # This matches the format used by from_pretrained() from tokenizer_config.json
@@ -350,7 +350,7 @@ Hey how are you doing"""
                 merges=merges,
                 do_lower_case=False,
                 keep_accents=True,
-                added_tokens_decoder=added_tokens_decoder,
+                added_tokens_decoder=None,
                 **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
             )
 
@@ -363,7 +363,7 @@ Hey how are you doing"""
         """
         Build a tokenizer from extracted vocab/merges using SentencePieceExtractor.
         """
-        from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
+        from transformers.convert_slow_tokenizer import SentencePieceExtractor
 
         try:
             sentencepiece_model_path = os.path.join(self.tmpdirname, "tokenizer.model")
@@ -371,9 +371,9 @@ Hey how are you doing"""
                 return None
 
             extractor = SentencePieceExtractor(sentencepiece_model_path)
-            vocab_ids, vocab_scores, merges = extractor.extract()
+            vocab_scores, merges = extractor.extract()
 
-            tokenizer_from_extractor = self.tokenizer_class(vocab=vocab_ids, merges=merges)
+            tokenizer_from_extractor = self.tokenizer_class(vocab=vocab_scores, merges=merges)
 
             return tokenizer_from_extractor
         except (TypeError, Exception):

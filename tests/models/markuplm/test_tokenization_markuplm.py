@@ -1380,7 +1380,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     f"'{special_token}' in the list {tokenizer.all_special_tokens}",
                 )
 
-
         # Test we can use the new tokenizer with something not seen during training
         nodes = [["this", "is"], ["hello", "🤗"]]
         xpaths = [["html/body"] * 2, ["html/body"] * 2]

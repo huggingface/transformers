@@ -16,7 +16,6 @@ import unittest
 
 from transformers import AlbertTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -169,7 +168,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     #     vocab_file = getattr(tokenizer, "vocab_file", None)
 
     #     extractor = SentencePieceExtractor(vocab_file)
-    #     vocab_ids, vocab_scores, merges = extractor.extract()
+    #     vocab_scores, merges = extractor.extract()
     #     tokenizer_from_vocab = AlbertTokenizer(vocab=vocab_ids, merges=merges)
     #     tokenizer_from_vocab.pad_token = tokenizer_from_vocab.eos_token
 

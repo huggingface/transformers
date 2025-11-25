@@ -16,8 +16,8 @@ import unittest
 from functools import cached_property
 
 from transformers import PegasusTokenizer
+from transformers.convert_slow_tokenizer import SentencePieceExtractor
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

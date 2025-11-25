@@ -27,6 +27,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.convert_slow_tokenizer import SentencePieceExtractor
 from transformers.testing_utils import (
     get_tests_dir,
     require_pandas,
@@ -35,7 +36,6 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import (
     TokenizerTesterMixin,
@@ -133,7 +133,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Extract vocab from SentencePiece model
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab_ids, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
 
         # Create tokenizer from vocab
         tokenizer = LayoutXLMTokenizer(vocab=vocab_scores)

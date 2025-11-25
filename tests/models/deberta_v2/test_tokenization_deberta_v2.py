@@ -15,8 +15,8 @@
 import unittest
 
 from transformers import DebertaV2Tokenizer
+from transformers.convert_slow_tokenizer import SentencePieceExtractor
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -240,7 +240,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         tokenizer = DebertaV2Tokenizer(vocab=vocab_scores, unk_token="<unk>", do_lower_case=True)
         tokens = tokenizer.convert_ids_to_tokens(tokenizer.encode(sequence, add_special_tokens=False))
 
@@ -253,7 +253,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         tokenizer = DebertaV2Tokenizer(vocab=vocab_scores, merges=merges, unk_token="<unk>", split_by_punct=True)
         tokens = tokenizer.convert_ids_to_tokens(tokenizer.encode(sequence, add_special_tokens=False))
 
@@ -266,7 +266,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         tokenizer = DebertaV2Tokenizer(
             vocab=vocab_scores, merges=merges, unk_token="<unk>", do_lower_case=True, split_by_punct=True
         )
@@ -280,7 +280,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         tokenizer = DebertaV2Tokenizer(
             vocab=vocab_scores, merges=merges, unk_token="<unk>", do_lower_case=True, split_by_punct=False
         )
@@ -294,7 +294,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens_target = ["▁", "<unk>", "▁was", "▁born", "▁in", "▁9", "2000", "▁", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", "▁", "!", ]
         # fmt: on
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         tokenizer = DebertaV2Tokenizer(
             vocab=vocab_scores, merges=merges, unk_token="<unk>", do_lower_case=False, split_by_punct=True
         )
@@ -308,7 +308,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens_target = ["▁", "<unk>", "e", "<unk>", "o", "!", "how", "▁", "<unk>", "re", "▁yo", "<unk>", "?"]
         # fmt: on
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         tokenizer = DebertaV2Tokenizer(
             vocab=vocab_scores, merges=merges, unk_token="<unk>", do_lower_case=False, split_by_punct=False
         )

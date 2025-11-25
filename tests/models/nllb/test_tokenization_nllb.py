@@ -22,6 +22,7 @@ from transformers import (
     NllbTokenizer,
     is_torch_available,
 )
+from transformers.convert_slow_tokenizer import SentencePieceExtractor
 from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES
 from transformers.testing_utils import (
     get_tests_dir,
@@ -30,7 +31,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -242,7 +242,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     #     # Extract vocab from SentencePiece model
     #     extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-    #     vocab_ids, vocab_scores, merges = extractor.extract()
+    #     vocab_scores, merges = extractor.extract()
 
     #     # Create tokenizer with extracted vocab
     #     tokenizer = NllbTokenizer(vocab=vocab_scores)
@@ -350,7 +350,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # Extract vocab and merges from sentencepiece model
             if vocab_file and os.path.exists(vocab_file):
                 extractor = SentencePieceExtractor(vocab_file)
-                vocab_ids, vocab_scores, merges = extractor.extract()
+                vocab_scores, merges = extractor.extract()
                 tok3 = NllbTokenizer(
                     vocab=vocab_scores, merges=merges, vocab_file=vocab_file, additional_special_tokens=None
                 )

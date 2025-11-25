@@ -170,9 +170,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         }
         multimodal_special_tokens_list = attribute_special_tokens_list + ["boi_token", "eoi_token", "image_token"]
         self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
-        self.assertListEqual(
-            llama_tokenizer.extra_special_tokens, ["<image_start>", "<image_end>", "<image>"]
-        )
+        self.assertListEqual(llama_tokenizer.extra_special_tokens, ["<image_start>", "<image_end>", "<image>"])
         with self.assertRaises(AttributeError):
             _ = llama_tokenizer.some_random_token
         with tempfile.TemporaryDirectory() as tmpdirname:

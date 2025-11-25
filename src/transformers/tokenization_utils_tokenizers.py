@@ -16,7 +16,6 @@ Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers l
 see tokenization_utils.py
 """
 
-import copy
 import inspect
 import json
 import os
@@ -25,9 +24,9 @@ from collections import defaultdict
 from shutil import copyfile
 from typing import Any, Optional, Union
 
+import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from huggingface_hub import model_info
 from packaging import version
-import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
@@ -249,6 +248,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             and hasattr(tokenizer, "_tokenizer")
             and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
         ):
+
             def is_base_mistral(model_id: str) -> bool:
                 model = model_info(model_id)
                 if model.tags is not None:
@@ -394,7 +394,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokenizer_object = TokenizerFast.from_file(tokenizer_file)
             else:
                 tokenizer_model = tokenizer_json.get("model", {})
-                vocab = tokenizer_model.get("vocab") # unigram needs list, bpe/wordpiece needs dict
+                vocab = tokenizer_model.get("vocab")  # unigram needs list, bpe/wordpiece needs dict
                 if isinstance(vocab, list) and isinstance(vocab[0], list):
                     # unigram needs list of tuples its stupid will fix in `tokenizers`
                     vocab = list(map(tuple, vocab))
@@ -461,7 +461,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         class_sig = inspect.signature(getattr(cls, "__init__", cls))
         accepts_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in class_sig.parameters.values())
-        if tokenizer_object is not None: # only when cls is self
+        if tokenizer_object is not None:  # only when cls is self
             init_kwargs.setdefault("tokenizer_object", tokenizer_object)
         if vocab is not None and ("vocab" in class_sig.parameters or accepts_kwargs):
             init_kwargs.setdefault("vocab", vocab)
@@ -472,7 +472,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # so regex split patterns, whether to use byte fallback, etc.
         tokenizer = cls(*init_inputs, **init_kwargs)
         return tokenizer
-
 
     @property
     def is_fast(self) -> bool:
@@ -1320,7 +1319,7 @@ class TokenizersExtractor:
         from transformers import TokenizersExtractor
 
         extractor = TokenizersExtractor("path/to/tokenizer.json")
-        vocab_ids, vocab_scores, merges = extractor.extract()
+        vocab_scores, merges = extractor.extract()
         ```
     """
 

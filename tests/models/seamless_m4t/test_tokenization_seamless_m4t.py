@@ -20,6 +20,7 @@ from transformers import (
     SeamlessM4TTokenizer,
     is_torch_available,
 )
+from transformers.convert_slow_tokenizer import SentencePieceExtractor
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

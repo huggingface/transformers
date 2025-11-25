@@ -518,8 +518,6 @@ class PythonBackend(PreTrainedTokenizerBase):
         _is_local: bool,
         **kwargs,
     ):
-
-
         if tokenizer_file is not None and hasattr(tokenizer, "_tokenizer"):
             from tokenizers import Tokenizer as TokenizerFast
 
