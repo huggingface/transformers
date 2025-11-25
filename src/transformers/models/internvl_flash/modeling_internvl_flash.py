@@ -43,7 +43,7 @@ from ..auto import AutoModel
 from .configuration_internvl_flash import InternvlFlashConfig, InternvlFlashVisionConfig
 
 
-class InternVLFlashMLP(nn.Module):
+class InternvlFlashMLP(nn.Module):
     def __init__(self, in_dim, out_dim, dropout=0.0):
         super().__init__()
         self.dense_in = nn.Linear(in_dim, out_dim)
@@ -64,7 +64,7 @@ class InternVLFlashMLP(nn.Module):
         return hidden_states
 
 
-class InternVLFlashMLP2(nn.Module):
+class InternvlFlashMLP2(nn.Module):
     def __init__(self, vit_hidden_size, llm_hidden_size, config):
         super().__init__()
 
@@ -93,16 +93,16 @@ class InternVLFlashMLP2(nn.Module):
         return hidden_states
 
 
-class InternVLFlashGating(nn.Module):
+class InternvlFlashGating(nn.Module):
     def __init__(self, hidden_size=2048, expansion_factor=4, dropout=0.1, use_checkpoint=True):
         super().__init__()
         self.use_checkpoint = use_checkpoint
         mid_dim = hidden_size * expansion_factor
 
-        self.block1 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block2 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block3 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block4 = InternVLFlashMLP(hidden_size, mid_dim)
+        self.block1 = InternvlFlashMLP(hidden_size, mid_dim)
+        self.block2 = InternvlFlashMLP(hidden_size, mid_dim)
+        self.block3 = InternvlFlashMLP(hidden_size, mid_dim)
+        self.block4 = InternvlFlashMLP(hidden_size, mid_dim)
         self.gate_norm = nn.LayerNorm(hidden_size)
         self.gate_proj = nn.Linear(hidden_size, 2)
 
@@ -116,7 +116,7 @@ class InternVLFlashGating(nn.Module):
         return probs
 
 
-class InternvlFlashMultiheadAttention(nn.Module):
+class InternvlFlashTextAttention(nn.Module):
     """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
     # Ignore copy
@@ -166,7 +166,7 @@ class InternvlFlashMultiheadAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in InternvlFlashModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in InternvlFlashTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -189,17 +189,17 @@ class InternvlFlashMultiheadAttention(nn.Module):
         return outputs
 
 
-class InternVLFlashCrossAttentionPooling(nn.Module):
+class InternvlFlashCrossAttentionPooling(nn.Module):
     def __init__(self, dim, num_heads=16):
         super().__init__()
         self.query_token = nn.Parameter(torch.randn(1, dim))  # [1, D]
-        self.attn1 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn1 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm1 = nn.LayerNorm(dim)
-        self.attn2 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn2 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm2 = nn.LayerNorm(dim)
-        self.attn3 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn3 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm3 = nn.LayerNorm(dim)
-        self.attn4 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn4 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm4 = nn.LayerNorm(dim)
 
     def forward(self, batched_tokens: list[torch.Tensor]):
@@ -226,19 +226,14 @@ class InternVLFlashCrossAttentionPooling(nn.Module):
         # 2. Query token: [B, 1, D]
         query = self.query_token.unsqueeze(0).expand(B, -1, -1)  # learnable token for each sample
 
-        # 1. 创建一个全 0 的 float tensor，类型要和 query 一致 (float16/float32)
         attention_mask = torch.zeros_like(padding_mask, dtype=query.dtype)
-
-        # 2. 将 padding_mask 为 True (即 Padding) 的位置填为负无穷 (-inf)
-        # 这样在 softmax 时，这些位置的概率会变为 0
-        min_value = torch.finfo(query.dtype).min  # 或者用 -1e9
+        min_value = torch.finfo(query.dtype).min
         attention_mask.masked_fill_(padding_mask, min_value)
 
-        # 3. 调整形状以匹配 Attention Score 的维度: [B, Num_Heads, Q_Len, K_Len]
-        # 当前 attention_mask 是 [B, K_Len]，我们需要把它变成 [B, 1, 1, K_Len]
-        # 这样它才能正确地广播到所有的 Head 和 Query 上
+        # 3. Adjust Attention Score: [B, Num_Heads, Q_Len, K_Len]
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
-        # 3. Attention layers
+
+        # 4. Attention layers
         out1 = self.attn1(query, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
         out1 = self.norm1(out1)
         out2 = self.attn2(out1, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
@@ -266,6 +261,22 @@ class InternvlFlashMultiModalProjector(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
+
+
+@auto_docstring
+class InternvlFlashPreTrainedModel(PreTrainedModel):
+    config: InternvlFlashConfig
+    base_model_prefix = ""
+    input_modalities = ["image", "text", "video"]
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
 
 @dataclass
@@ -715,22 +726,6 @@ class InternvlFlashVisionModel(InternvlFlashVisionPreTrainedModel):
         )
 
 
-@auto_docstring
-class InternvlFlashPreTrainedModel(PreTrainedModel):
-    config: InternvlFlashConfig
-    base_model_prefix = ""
-    input_modalities = ["image", "text", "video"]
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-
 @auto_docstring(
     custom_intro="""
     The InternvlFlash model which consists of a vision backbone and a language model, without a language modeling head.
@@ -746,11 +741,11 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
 
         vit_hidden_size = config.vision_config.hidden_size
-        self.pooling_before_gating = InternVLFlashCrossAttentionPooling(dim=vit_hidden_size)
-        self.gating = InternVLFlashGating(hidden_size=vit_hidden_size)
+        self.pooling_before_gating = InternvlFlashCrossAttentionPooling(dim=vit_hidden_size)
+        self.gating = InternvlFlashGating(hidden_size=vit_hidden_size)
 
         llm_hidden_size = config.text_config.hidden_size
-        self.mlp2 = InternVLFlashMLP2(vit_hidden_size, llm_hidden_size, config)
+        self.mlp2 = InternvlFlashMLP2(vit_hidden_size, llm_hidden_size, config)
         self.flash_relative_threshold = config.flash_relative_threshold
         self.flash_absolute_threshold = config.flash_absolute_threshold
         self.post_init()
@@ -898,7 +893,7 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
                 lengths=lengths_copy,
                 starts=global_starts,
             )
-            if isinstance(attention_mask, dict):
+            if isinstance(attention_mask, dict):  # add support for StaticCache
                 attention_mask = attention_mask["full_attention"]
 
             if attention_mask is not None:
@@ -1068,39 +1063,28 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         B: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Step 5: 将参差不齐的 1D 序列重组回 Batch 结构。
-        参数命名与 forward 保持一致以增强可读性。
+        Reconstructs the batch by removing compressed visual tokens based on gating results.
         """
         device = inputs_embeds.device
 
-        # 1. 计算每个样本被压缩掉了多少 Token
-
-        # lengths 在 forward 里已经被除以 256 了，所以这里直接用作 split 的依据
         gate_result_split = torch.split(gate_result, lengths.tolist())
 
-        # 统计每张图压缩的 block 数量 -> [Num_Images]
         compressed_blocks_per_image = torch.tensor(
             [g.sum().item() for g in gate_result_split], device=device, dtype=torch.int64
         )
 
-        # 聚合到每个样本 (处理单样本多图) -> [B]
         compressed_blocks_per_sample = torch.zeros(B, dtype=torch.int64, device=device)
         compressed_blocks_per_sample.index_add_(0, batch_indices, compressed_blocks_per_image)
 
-        # 计算每个样本的新长度 (每个压缩块移除 192 tokens) -> [B]
         tokens_removed = compressed_blocks_per_sample * 192
         new_lengths = N - tokens_removed
 
-        # 2. 准备输出容器 (Padding)
         max_len = int(new_lengths.max().item())
         hidden_dim = inputs_embeds.shape[-1]
 
-        # 初始化为 0 (Padding)
         out_embeds = torch.zeros((B, max_len, hidden_dim), dtype=inputs_embeds.dtype, device=device)
         out_mask = torch.zeros((B, max_len), dtype=attention_mask.dtype, device=device)
 
-        # 3. 切分并填充
-        # 根据 new_lengths 将长条切开
         split_embeds = torch.split(inputs_embeds, new_lengths.tolist())
         split_masks = torch.split(attention_mask, new_lengths.tolist())
 
