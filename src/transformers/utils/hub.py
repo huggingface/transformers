@@ -90,9 +90,6 @@ def is_offline_mode():
     return constants.HF_HUB_OFFLINE
 
 
-torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
-default_cache_path = constants.default_cache_path
-
 # Determine default cache directory.
 # The best way to set the cache path is with the environment variable HF_HOME. For more details, check out this
 # documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
@@ -103,21 +100,6 @@ SESSION_ID = uuid4().hex
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
-
-_staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
-_default_endpoint = "https://hub-ci.huggingface.co" if _staging_mode else "https://huggingface.co"
-
-HUGGINGFACE_CO_RESOLVE_ENDPOINT = _default_endpoint
-if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
-    warnings.warn(
-        "Using the environment variable `HUGGINGFACE_CO_RESOLVE_ENDPOINT` is deprecated and will be removed in "
-        "Transformers v5. Use `HF_ENDPOINT` instead.",
-        FutureWarning,
-    )
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
-HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
-HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
-HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
 
 
 def _get_cache_file_to_return(
@@ -520,7 +502,7 @@ def cached_files(
             # even when `local_files_only` is True, in which case raising for connections errors only would not make sense)
             elif _raise_exceptions_for_missing_entries:
                 raise OSError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
+                    f"We couldn't connect to '{constants.ENDPOINT}' to load the files, and couldn't find them in the"
                     f" cached files.\nCheck your internet connection or see how to run the library in offline mode at"
                     " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 ) from e
@@ -679,41 +661,6 @@ class PushToHubMixin:
     A Mixin containing the functionality to push a model or tokenizer to the hub.
     """
 
-    def _create_repo(
-        self,
-        repo_id: str,
-        private: bool | None = None,
-        token: bool | str | None = None,
-        repo_url: str | None = None,
-        organization: str | None = None,
-    ) -> str:
-        """
-        Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
-        the token.
-        """
-        if repo_url is not None:
-            warnings.warn(
-                "The `repo_url` argument is deprecated and will be removed in v5 of Transformers. Use `repo_id` "
-                "instead."
-            )
-            if repo_id is not None:
-                raise ValueError(
-                    "`repo_id` and `repo_url` are both specified. Please set only the argument `repo_id`."
-                )
-            repo_id = repo_url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
-        if organization is not None:
-            warnings.warn(
-                "The `organization` argument is deprecated and will be removed in v5 of Transformers. Set your "
-                "organization directly in the `repo_id` passed instead (`repo_id={organization}/{model_id}`)."
-            )
-            if not repo_id.startswith(organization):
-                if "/" in repo_id:
-                    repo_id = repo_id.split("/")[-1]
-                repo_id = f"{organization}/{repo_id}"
-
-        url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
-        return url.repo_id
-
     def _get_files_timestamps(self, working_dir: str | os.PathLike):
         """
         Returns the list of files with their last modification timestamp.
@@ -812,7 +759,6 @@ class PushToHubMixin:
         revision: str | None = None,
         commit_description: str | None = None,
         tags: list[str] | None = None,
-        **deprecated_kwargs,
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub.
@@ -829,9 +775,8 @@ class PushToHubMixin:
             private (`bool`, *optional*):
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `hf auth login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
-                is not specified.
+                The token to use as HTTP bearer authorization for remote files. If `True` (default), will use the token generated
+                when running `hf auth login` (stored in `~/.huggingface`).
             max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
@@ -862,45 +807,14 @@ class PushToHubMixin:
         {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
-        repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
-        if repo_path_or_name is not None:
-            # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
-            # repo_id from the folder path, if it exists.
-            warnings.warn(
-                "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
-                "`repo_id` instead.",
-                FutureWarning,
-            )
-            if repo_id is not None:
-                raise ValueError(
-                    "`repo_id` and `repo_path_or_name` are both specified. Please set only the argument `repo_id`."
-                )
-            if os.path.isdir(repo_path_or_name):
-                # repo_path: infer repo_id from the path
-                repo_id = repo_path_or_name.split(os.path.sep)[-1]
-                working_dir = repo_id
-            else:
-                # repo_name: use it as repo_id
-                repo_id = repo_path_or_name
-                working_dir = repo_id.split("/")[-1]
-        else:
-            # Repo_id is passed correctly: infer working_dir from it
-            working_dir = repo_id.split("/")[-1]
+        # Create repo if it doesn't exist yet
+        repo_id = create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
 
-        # Deprecation warning will be sent after for repo_url and organization
-        repo_url = deprecated_kwargs.pop("repo_url", None)
-        organization = deprecated_kwargs.pop("organization", None)
+        # Load model card or create a new one + eventually tag it
+        model_card = create_and_tag_model_card(repo_id, tags, token=token)
 
-        repo_id = self._create_repo(
-            repo_id, private=private, token=token, repo_url=repo_url, organization=organization
-        )
-
-        # Create a new empty model card and eventually tag it
-        model_card = create_and_tag_model_card(
-            repo_id, tags, token=token, ignore_metadata_errors=ignore_metadata_errors
-        )
-
+        # Infer working_dir from it from repo_id
+        working_dir = repo_id.split("/")[-1]
         if use_temp_dir is None:
             use_temp_dir = not os.path.isdir(working_dir)
 
@@ -1021,12 +935,7 @@ def get_checkpoint_shard_files(
     return cached_filenames, sharded_metadata
 
 
-def create_and_tag_model_card(
-    repo_id: str,
-    tags: list[str] | None = None,
-    token: str | None = None,
-    ignore_metadata_errors: bool = False,
-):
+def create_and_tag_model_card(repo_id: str, tags: list[str] | None = None, token: str | None = None) -> ModelCard:
     """
     Creates or loads an existing model card and tags it.
 
@@ -1037,13 +946,10 @@ def create_and_tag_model_card(
             The list of tags to add in the model card
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
-        ignore_metadata_errors (`bool`, *optional*, defaults to `False`):
-            If True, errors while parsing the metadata section will be ignored. Some information might be lost during
-            the process. Use it at your own risk.
     """
     try:
         # Check if the model card is present on the remote repo
-        model_card = ModelCard.load(repo_id, token=token, ignore_metadata_errors=ignore_metadata_errors)
+        model_card = ModelCard.load(repo_id, token=token)
     except EntryNotFoundError:
         # Otherwise create a simple model card from template
         model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
