@@ -2468,7 +2468,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     transformers_version = _config.get("transformers_version")
 
                     if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
-                        if _is_local and _config.model_type not in [
+                        if _is_local and _config["model_type"] not in [
                             "mistral",
                             "mistral3",
                             "voxstral",
