@@ -88,14 +88,13 @@ class Mxfp4Quantize(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        _ , value = tuple(input_dict.items())[0]
+        _, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
         module, _ = get_module_from_name(model, full_layer_name)
 
         with torch.device(value.device):
             if isinstance(module, Mxfp4GptOssExperts):
-
                 triton_weight_tensor, weight_scale = quantize_to_mxfp4(value.transpose(-1, -2), triton_kernels_hub)
                 PrecisionConfig, FlexCtx, InFlexData = (
                     triton_kernels_hub.matmul_ogs.PrecisionConfig,
@@ -123,6 +122,7 @@ class Mxfp4Quantize(ConversionOps):
 
                 return {}
 
+
 class Mxfp4DequantizeOrSwizzle(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -149,13 +149,22 @@ class Mxfp4DequantizeOrSwizzle(ConversionOps):
 
         if self.hf_quantizer.quantization_config.dequantize:
             # Here we are dequantizing the weights
-            dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device)
+            dequantized = dequantize_convertops(
+                param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device
+            )
             return {full_layer_name: dequantized}
         else:
             # Eagerly set tensors on the module and perform swizzle
             module, _ = get_module_from_name(model, full_layer_name)
             proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
-            swizzle_mxfp4_convertops(param_data["_blocks"], param_data["_scales"], module, proj, param_data["_blocks"].device, triton_kernels_hub)
+            swizzle_mxfp4_convertops(
+                param_data["_blocks"],
+                param_data["_scales"],
+                module,
+                proj,
+                param_data["_blocks"].device,
+                triton_kernels_hub,
+            )
             missing_keys.discard(f"{full_layer_name}")
             # We return an empty mapping since the module was updated in-place. This prevents
             # the loader from trying to materialize the original meta-parameter names again.
@@ -202,7 +211,7 @@ def convert_moe_packed_tensors(
     pass of GPT_OSS.
     """
     import math
-    
+
     blocks = blocks.to(torch.uint8)
     # Check if blocks and scales are on CPU, and move to GPU if so
     if not blocks.is_cuda and torch.cuda.is_available():
@@ -524,9 +533,7 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         del blocks
 
 
-def swizzle_mxfp4_convertops(
-    blocks, scales, module, proj, target_device, triton_kernels_hub
-):
+def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton_kernels_hub):
     """
     This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
     """

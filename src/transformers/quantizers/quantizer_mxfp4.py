@@ -28,8 +28,10 @@ from ..utils import (
 )
 from .quantizers_utils import get_module_from_name
 
+
 if is_torch_available():
     import torch
+
     from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
@@ -156,6 +158,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import Mxfp4GptOssExperts
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
+
         if self.pre_quantized:
             return False
         # if we are dequantizing, the model doesn't have scales, and blocks only params like gate_up_proj and down_proj so we need to handle this case differently
