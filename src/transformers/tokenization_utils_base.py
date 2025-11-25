@@ -2309,7 +2309,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenizer_config.pop("tokenizer_file", None)
         if "device_map" in tokenizer_config:
             tokenizer_config.pop("device_map")
-        if "__slow_tokenizer" in tokenizer_config: # legacy flag
+        if "__slow_tokenizer" in tokenizer_config: # legacy flag?
             tokenizer_config.pop("__slow_tokenizer")
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:

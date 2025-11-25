@@ -64,9 +64,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # We have a SentencePiece fixture for testing
         slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
-        fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
 
-        processor = Kosmos2Processor(image_processor, fast_tokenizer)
+        processor = Kosmos2Processor(image_processor, slow_tokenizer)
         processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
