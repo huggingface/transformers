@@ -33,7 +33,6 @@ from itertools import chain
 from types import ModuleType
 from typing import Any
 
-import torch
 from packaging import version
 
 from . import logging
@@ -513,6 +512,7 @@ def _set_tf32_mode(enable: bool) -> None:
     Args:
         enable: Whether to enable TF32 mode
     """
+    import torch
     pytorch_version = version.parse(get_torch_version())
     if pytorch_version >= version.parse("2.9.0"):
         precision_mode = "tf32" if enable else "ieee"
