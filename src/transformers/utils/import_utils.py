@@ -33,10 +33,11 @@ from itertools import chain
 from types import ModuleType
 from typing import Any
 
+import torch
 from packaging import version
 
 from . import logging
-import torch
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -501,14 +502,13 @@ def is_torch_tf32_available() -> bool:
         return False
     return True
 
+
 @lru_cache
 def _set_tf32_mode(enable: bool) -> None:
     """
     Set TF32 mode using the appropriate PyTorch API.
-    
     For PyTorch 2.9+, uses the new fp32_precision API.
     For older versions, uses the legacy allow_tf32 flags.
-    
     Args:
         enable: Whether to enable TF32 mode
     """
@@ -520,6 +520,7 @@ def _set_tf32_mode(enable: bool) -> None:
     else:
         torch.backends.cuda.matmul.allow_tf32 = enable
         torch.backends.cudnn.allow_tf32 = enable
+
 
 @lru_cache
 def is_torch_flex_attn_available() -> bool:
