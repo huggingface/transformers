@@ -265,7 +265,7 @@ class MLukeTokenizer(TokenizersBackend):
         # Build vocab from data (list of (token, score) tuples)
         if vocab is not None:
             # vocab is list of (token, score) tuples from SentencePieceExtractor
-            self._vocab = [(token, float(score)) for token, score in vocab]
+            self._vocab = [(token, float(score)) for token, score in vocab.items()]
             self._vocab_size = len(self._vocab)
         else:
             # Create minimal vocab with <unk> to satisfy Unigram requirements

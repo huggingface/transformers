@@ -432,7 +432,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             "Unable to read tokenizer vocabulary. Please ensure you have the required "
                             "`sentencepiece` dependency installed."
                         ) from e
-
             tokenizer_object = converter.converted()
             vocab, merges = converter.vocab, converter.merges
 

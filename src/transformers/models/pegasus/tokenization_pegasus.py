@@ -117,7 +117,7 @@ class PegasusTokenizer(TokenizersBackend):
             _vocab_list.append((str(unk_token), 0.0))
 
             # Filter out special tokens from main vocab and combine
-            filtered_vocab = [(t, s) for t, s in vocab if t not in special_tokens_set]
+            filtered_vocab = [(t, s) for t, s in _vocab_list if t not in special_tokens_set]
             _vocab_list = _vocab_list + filtered_vocab
         else:
             _vocab_list = [(str(unk_token), 0.0)]
