@@ -130,10 +130,7 @@ class CLIPTokenizer(TokenizersBackend):
             trim_offsets=False,
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

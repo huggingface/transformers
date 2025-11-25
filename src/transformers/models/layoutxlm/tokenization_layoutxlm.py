@@ -282,8 +282,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             ],
         )
 
-        tokenizer_object = self._tokenizer
-
         # additional properties
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
@@ -292,7 +290,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
         self.only_label_first_subword = only_label_first_subword
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

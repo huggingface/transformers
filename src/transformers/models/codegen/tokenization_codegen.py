@@ -148,14 +148,12 @@ class CodeGenTokenizer(TokenizersBackend):
             add_prefix_space=True, use_regex=True, trim_offsets=False
         )
 
-        tokenizer_object = self._tokenizer
 
         # Set these before calling super().__init__() so the base class _post_init() can use them
         self._add_bos_token = add_bos_token
         self._add_eos_token = False
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

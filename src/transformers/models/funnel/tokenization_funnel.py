@@ -151,10 +151,7 @@ class FunnelTokenizer(TokenizersBackend):
             ],
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,

@@ -162,10 +162,7 @@ class XLNetTokenizer(TokenizersBackend):
 
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_id=unk_id,
             do_lower_case=do_lower_case,
             remove_space=remove_space,

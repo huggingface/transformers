@@ -148,10 +148,7 @@ class RemBertTokenizer(TokenizersBackend):
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             add_prefix_space=add_prefix_space,
             do_lower_case=do_lower_case,
             keep_accents=keep_accents,

@@ -108,10 +108,7 @@ class GemmaTokenizer(TokenizersBackend):
         )
         self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
         self._tokenizer.pre_tokenizer = pre_tokenizers.Split(" ", "merged_with_previous")
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

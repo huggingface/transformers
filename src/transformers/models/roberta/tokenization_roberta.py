@@ -175,10 +175,7 @@ class RobertaTokenizer(TokenizersBackend):
             trim_offsets=trim_offsets,
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,

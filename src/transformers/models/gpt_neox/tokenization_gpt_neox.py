@@ -149,10 +149,7 @@ class GPTNeoXTokenizer(TokenizersBackend):
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=False, trim_offsets=True)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,

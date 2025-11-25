@@ -120,10 +120,7 @@ class SplinterTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.WordPiece(prefix="##")
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,

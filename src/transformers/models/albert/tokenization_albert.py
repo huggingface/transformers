@@ -156,10 +156,7 @@ class AlbertTokenizer(TokenizersBackend):
             ],
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=self.do_lower_case,
             keep_accents=self.keep_accents,
             bos_token=bos_token,
