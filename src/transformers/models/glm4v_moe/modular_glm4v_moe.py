@@ -45,6 +45,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
+    Glm4vVisionModel,
     rotate_half,
 )
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
@@ -109,7 +110,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `True`, *optional*, defaults to `True`):
@@ -150,7 +151,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "Glm4vMoe_text"
+    model_type = "glm4v_moe_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Glm4vMoe`
@@ -159,8 +160,9 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -183,7 +185,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = True,
         attention_dropout: Optional[float] = 0.0,
         moe_intermediate_size: Optional[int] = 1408,
@@ -473,7 +475,7 @@ class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
 
 class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     config: Glm4vMoeConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     input_modalities = ["text", "image", "video"]
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -486,6 +488,11 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
 
 
 class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
+    pass
+
+
+@auto_docstring
+class Glm4vMoeVisionModel(Glm4vVisionModel):
     pass
 
 
@@ -646,8 +653,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
 __all__ = [
     "Glm4vMoeConfig",
     "Glm4vMoeTextConfig",
+    "Glm4vMoeVisionConfig",
     "Glm4vMoeForConditionalGeneration",
     "Glm4vMoeModel",  # noqa: F822
     "Glm4vMoePreTrainedModel",
-    "Glm4vMoeTextModel",  # noqa: F822
+    "Glm4vMoeTextModel",
+    "Glm4vMoeVisionModel",
 ]

@@ -95,7 +95,7 @@ class Zamba2Config(PreTrainedConfig):
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -162,7 +162,7 @@ class Zamba2Config(PreTrainedConfig):
         use_shared_attention_adapter: Optional[bool] = False,
         adapter_rank: Optional[int] = 128,
         use_mem_rope: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,

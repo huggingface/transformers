@@ -87,6 +87,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+    config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
+    config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
 

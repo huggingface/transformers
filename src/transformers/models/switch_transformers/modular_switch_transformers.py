@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -339,47 +340,47 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     config: SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
-
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, SwitchTransformersLayerNorm):
-            module.weight.data.fill_(factor * 1.0)
+            init.constant_(module.weight, factor * 1.0)
         elif isinstance(
             module,
             (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
         ):
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, SwitchTransformersDenseActDense):
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, SwitchTransformersAttention):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, SwitchTransformersSparseMLP):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
+            init.normal_(module.router.classifier.weight, mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                init.normal_(module.experts[f"expert_{idx}"].wi.weight, mean=0.0, std=factor * (d_model**-0.5))
+                init.normal_(module.experts[f"expert_{idx}"].wo.weight, mean=0.0, std=factor * (d_model**-0.5))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -411,11 +412,9 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "router_logits": SwitchTransformersTop1Router,
     }
 
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.is_decoder = config.is_decoder
 
@@ -666,7 +665,10 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
 @auto_docstring
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -676,12 +678,12 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        self.decoder = SwitchTransformersStack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -693,14 +695,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     @can_return_tuple
@@ -754,7 +748,11 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
     """
 )
 class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "lm_head.weight": "shared.weight",
+    }
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -766,13 +764,13 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        self.decoder = SwitchTransformersStack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -787,14 +785,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     @can_return_tuple
@@ -915,7 +905,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
@@ -929,7 +921,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -938,13 +930,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     @check_model_inputs()

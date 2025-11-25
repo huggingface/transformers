@@ -230,6 +230,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         device_type = query.device.type if query.device.type != "mps" else "cpu"
         if query.dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -380,23 +381,6 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _can_compile_fullgraph = False  # TODO: needs a hybrid cache
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 @auto_docstring
@@ -667,7 +651,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     """
 )
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
     def __init__(self, config):
         super().__init__(config)

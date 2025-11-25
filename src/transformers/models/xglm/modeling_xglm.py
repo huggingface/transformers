@@ -361,21 +361,10 @@ class XGLMPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["XGLMDecoderLayer"]
 
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
 
 @auto_docstring
 class XGLMModel(XGLMPreTrainedModel):
-    def __init__(self, config: XGLMConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: XGLMConfig):
         r"""
         embed_tokens (`nn.Embedding`, *optional*):
             output embeddings
@@ -387,12 +376,9 @@ class XGLMModel(XGLMPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = XGLMScaledWordEmbedding(
-                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = XGLMScaledWordEmbedding(
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = XGLMSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -559,7 +545,7 @@ class XGLMModel(XGLMPreTrainedModel):
 )
 class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

@@ -75,7 +75,7 @@ class GPTNeoXConfig(PreTrainedConfig):
             Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
             speedup at large scales (e.g. 20B).
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `True`):
@@ -131,7 +131,7 @@ class GPTNeoXConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
         use_parallel_residual: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = True,
         **kwargs,
     ):

@@ -293,6 +293,10 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip("Qwen2Omni has no base model, model architecture is special")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Qwen2 is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -816,6 +820,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B",

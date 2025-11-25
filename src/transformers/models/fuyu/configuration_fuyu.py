@@ -68,7 +68,7 @@ class FuyuConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         qk_layernorm (`bool`, *optional*, defaults to `True`):
@@ -118,7 +118,7 @@ class FuyuConfig(PreTrainedConfig):
         layer_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         qk_layernorm: Optional[bool] = True,
         hidden_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,

@@ -19,6 +19,7 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -113,7 +114,7 @@ class T5GemmaModuleConfig(Gemma2Config):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -159,7 +160,7 @@ class T5GemmaModuleConfig(Gemma2Config):
         eos_token_id: Optional[int] = 1,
         bos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         query_pre_attn_scalar: Optional[int] = 256,
@@ -236,38 +237,7 @@ class T5GemmaConfig(PreTrainedConfig):
 
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {
-        # encoder
-        "encoder.layers.*.self_attn.q_proj": "colwise",
-        "encoder.layers.*.self_attn.k_proj": "colwise",
-        "encoder.layers.*.self_attn.v_proj": "colwise",
-        "encoder.layers.*.self_attn.o_proj": "rowwise",
-        "encoder.layers.*.mlp.gate_proj": "colwise",
-        "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise",
-        # decoder
-        "decoder.layers.*.self_attn.q_proj": "colwise",
-        "decoder.layers.*.self_attn.k_proj": "colwise",
-        "decoder.layers.*.self_attn.v_proj": "colwise",
-        "decoder.layers.*.self_attn.o_proj": "rowwise",
-        "decoder.layers.*.cross_attn.q_proj": "colwise",
-        "decoder.layers.*.cross_attn.k_proj": "colwise",
-        "decoder.layers.*.cross_attn.v_proj": "colwise",
-        "decoder.layers.*.cross_attn.o_proj": "rowwise",
-        "decoder.layers.*.mlp.gate_proj": "colwise",
-        "decoder.layers.*.mlp.up_proj": "colwise",
-        "decoder.layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        # encoder
-        "encoder.embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "encoder.layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "encoder.norm": (["hidden_states"], ["hidden_states"]),
-        # decoder
-        "decoder.embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "decoder.layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "decoder.norm": (["hidden_states"], ["hidden_states"]),
-    }
+    sub_configs = {"encoder": T5GemmaModuleConfig, "decoder": T5GemmaModuleConfig}
 
     def __init__(
         self,
@@ -517,11 +487,28 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
+class T5GemmaDecoderLayer(GradientCheckpointingLayer):
     """Decoder sub-layer: an extra cross-attention layer."""
 
     def __init__(self, config, layer_idx: int):
-        super().__init__(config, layer_idx)
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.config = config
+        self.layer_idx = layer_idx
+        self.attention_type = config.layer_types[layer_idx]
+
+        self.self_attn = T5GemmaSelfAttention(
+            config=config,
+            layer_idx=layer_idx,
+        )
+        self.pre_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.mlp = T5GemmaMLP(config)
+        self.pre_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.dropout = nn.Dropout(config.dropout_rate)
         self.cross_attn = T5GemmaCrossAttention(config=config, layer_idx=layer_idx)
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -616,22 +603,23 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
-            module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+            init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
+                init.zeros_(module.out_proj.bias)
         elif isinstance(module, T5GemmaLMHead):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
-                module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+                init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
 
     def _shift_right(self, input_ids):
         """
@@ -770,7 +758,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         )
 
 
-class T5GemmaDecoder(T5GemmaEncoder):
+class T5GemmaDecoder(T5GemmaPreTrainedModel):
     _can_record_outputs = {
         "attentions": OutputRecorder(T5GemmaSelfAttention, index=1),
         "cross_attentions": OutputRecorder(T5GemmaCrossAttention, index=1),
@@ -779,11 +767,20 @@ class T5GemmaDecoder(T5GemmaEncoder):
 
     def __init__(self, config):
         super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.norm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.gradient_checkpointing = False
+
         self.layers = nn.ModuleList(
             [T5GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.dropout = nn.Dropout(config.dropout_rate)
         self.rotary_emb = T5GemmaRotaryEmbedding(config=config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @check_model_inputs()
@@ -809,7 +806,9 @@ class T5GemmaDecoder(T5GemmaEncoder):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if not self.training and use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            # We do not pass the config to the cross attn cache to avoid initializing SWA
+            # --> we use full attention between our cross attentions
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache())
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -892,9 +891,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         self.decoder = T5GemmaDecoder(config.decoder)
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
@@ -1001,7 +997,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
 
 
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.decoder.embed_tokens.weight", "lm_head.out_proj.weight"]
+    _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
     _tp_plan = {"lm_head.out_proj": "colwise_rep"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
@@ -1021,17 +1017,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
-
-    def _tie_weights(self):
-        # Decoder input and output embeddings are tied.
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     @can_return_tuple
     @auto_docstring
