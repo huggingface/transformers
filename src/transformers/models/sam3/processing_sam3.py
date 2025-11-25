@@ -151,8 +151,9 @@ class Sam3Processor(ProcessorMixin):
             - `input_boxes_labels` (`torch.Tensor`): The processed labels for the bounding boxes.
             - `input_boxes` (`torch.Tensor`): The processed bounding boxes.
         """
+        encoding = None
         if images is not None:
-            encoding_image_processor = self.image_processor(
+            encoding = self.image_processor(
                 images,
                 segmentation_maps=segmentation_maps,
                 return_tensors=return_tensors,
@@ -161,24 +162,21 @@ class Sam3Processor(ProcessorMixin):
         elif original_sizes is not None:
             if isinstance(original_sizes, torch.Tensor):
                 original_sizes = original_sizes.cpu().tolist()
-            encoding_image_processor = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
-        else:
-            raise ValueError("Either images or original_sizes must be provided")
+            encoding = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
+        elif input_boxes is not None:
+            raise ValueError("Either images or original_sizes must be provided if input_boxes is not None")
 
-        original_sizes = encoding_image_processor["original_sizes"]
-        # Check original_sizes is of length 1 or len(images)
-        if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):
-            raise ValueError(
-                "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
-            )
         text = self._resolve_text_prompts(text, input_boxes)
-
-        encoding_image_processor.update(
-            self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
-        )
+        if text is not None:
+            text_inputs = self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
+            if encoding is not None:
+                encoding.update(text_inputs)
+            else:
+                encoding = text_inputs
 
         # Process input boxes if provided
         if input_boxes is not None:
+            original_sizes = encoding["original_sizes"]
             # Validate and convert inputs to standardized format
             processed_boxes = self._validate_single_input(
                 input_boxes,
@@ -215,14 +213,14 @@ class Sam3Processor(ProcessorMixin):
                     final_boxes, original_sizes, is_bounding_box=True, preserve_padding=True
                 )
                 final_boxes = box_xyxy_to_cxcywh(final_boxes)
-                encoding_image_processor.update({"input_boxes": final_boxes})
+                encoding.update({"input_boxes": final_boxes})
 
             if processed_boxes_labels is not None:
                 padded_boxes_labels = self._pad_nested_list(processed_boxes_labels, boxes_labels_max_dims)
                 final_boxes_labels = torch.tensor(padded_boxes_labels, dtype=torch.int64)
-                encoding_image_processor.update({"input_boxes_labels": final_boxes_labels})
+                encoding.update({"input_boxes_labels": final_boxes_labels})
 
-        return encoding_image_processor
+        return encoding
 
     def _normalize_coordinates(self, coords: "torch.Tensor", original_size, is_bounding_box=False) -> "torch.Tensor":
         """

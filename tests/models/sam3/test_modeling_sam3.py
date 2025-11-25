@@ -1447,3 +1447,100 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.semantic_seg.shape, (1, 1, 288, 288))
         # Check that semantic seg has same spatial size as pred_masks
         self.assertEqual(outputs.semantic_seg.shape[-2:], outputs.pred_masks.shape[-2:])
+
+    def test_efficient_multi_prompt_single_image(self):
+        """Test efficient inference with multiple prompts on a single image using get_vision_features."""
+        raw_image = prepare_coco_cat_image()
+
+        # Pre-compute vision embeddings once
+        img_inputs = self.processor(images=raw_image, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            vision_embeds = self.model.get_vision_features(pixel_values=img_inputs.pixel_values)
+
+        # Run multiple text prompts efficiently
+        text_prompts = ["ear", "eye"]
+        all_results = []
+
+        for prompt in text_prompts:
+            text_inputs = self.processor(text=prompt, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                outputs = self.model(vision_embeds=vision_embeds, **text_inputs)
+
+            results = self.processor.post_process_instance_segmentation(
+                outputs,
+                threshold=0.5,
+                mask_threshold=0.5,
+                target_sizes=img_inputs.get("original_sizes").tolist(),
+            )[0]
+            all_results.append(results)
+
+        # Check that we get results for both prompts
+        self.assertEqual(len(all_results), 2)
+
+        # Verify outputs are equivalent to running with pixel_values directly
+        text_inputs = self.processor(text="ear", return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs_with_embeds = self.model(vision_embeds=vision_embeds, **text_inputs)
+
+        inputs_direct = self.processor(images=raw_image, text="ear", return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs_direct = self.model(**inputs_direct)
+
+        # Outputs should be identical
+        torch.testing.assert_close(outputs_with_embeds.pred_logits, outputs_direct.pred_logits, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(outputs_with_embeds.pred_boxes, outputs_direct.pred_boxes, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(outputs_with_embeds.pred_masks, outputs_direct.pred_masks, atol=1e-5, rtol=1e-5)
+
+    def test_efficient_single_prompt_multi_images(self):
+        """Test efficient inference with same prompt on multiple images using get_text_features."""
+        raw_image1 = prepare_coco_cat_image()
+        raw_image2 = prepare_coco_kitchen_image()
+
+        # Pre-compute text embeddings once
+        text_prompt = "handle"
+        text_inputs = self.processor(text=text_prompt, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            text_embeds = self.model.get_text_features(**text_inputs)
+
+        # Run inference on multiple images reusing text embeddings
+        # Note: attention_mask must be passed along with text_embeds for proper masking
+        images = [raw_image1, raw_image2]
+        all_results = []
+
+        for image in images:
+            img_inputs = self.processor(images=image, return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                outputs = self.model(
+                    text_embeds=text_embeds,
+                    attention_mask=text_inputs.attention_mask,
+                    **img_inputs,
+                )
+
+            results = self.processor.post_process_instance_segmentation(
+                outputs,
+                threshold=0.5,
+                mask_threshold=0.5,
+                target_sizes=img_inputs.get("original_sizes").tolist(),
+            )[0]
+            all_results.append(results)
+
+        # Check that we get results for both images
+        self.assertEqual(len(all_results), 2)
+
+        # Verify outputs are equivalent to running with input_ids directly
+        img_inputs = self.processor(images=raw_image2, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs_with_embeds = self.model(
+                text_embeds=text_embeds,
+                attention_mask=text_inputs.attention_mask,
+                **img_inputs,
+            )
+
+        inputs_direct = self.processor(images=raw_image2, text=text_prompt, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs_direct = self.model(**inputs_direct)
+
+        # Outputs should be identical
+        torch.testing.assert_close(outputs_with_embeds.pred_logits, outputs_direct.pred_logits, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(outputs_with_embeds.pred_boxes, outputs_direct.pred_boxes, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(outputs_with_embeds.pred_masks, outputs_direct.pred_masks, atol=1e-5, rtol=1e-5)

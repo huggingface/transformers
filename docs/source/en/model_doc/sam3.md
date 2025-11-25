@@ -256,6 +256,104 @@ SAM3 also provides semantic segmentation alongside instance masks:
 >>> print(f"Semantic segmentation: {semantic_seg.shape}")
 ```
 
+### Efficient Multi-Prompt Inference on Single Image
+
+When running multiple text prompts on the same image, pre-compute vision embeddings to avoid redundant computation:
+
+```python
+>>> from transformers import Sam3Processor, Sam3Model
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+>>> model = Sam3Model.from_pretrained("facebook/sam3").to(device)
+>>> processor = Sam3Processor.from_pretrained("facebook/sam3")
+
+>>> # Load image
+>>> image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+>>> image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+
+>>> # Pre-process image and compute vision embeddings once
+>>> img_inputs = processor(images=image, return_tensors="pt").to(device)
+>>> with torch.no_grad():
+...     vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
+
+>>> # Run multiple text prompts efficiently
+>>> text_prompts = ["ear", "eye", "nose"]
+>>> all_results = []
+
+>>> for prompt in text_prompts:
+...     text_inputs = processor(text=prompt, return_tensors="pt").to(device)
+...     with torch.no_grad():
+...         outputs = model(vision_embeds=vision_embeds, **text_inputs)
+...
+...     results = processor.post_process_instance_segmentation(
+...         outputs,
+...         threshold=0.5,
+...         mask_threshold=0.5,
+...         target_sizes=img_inputs.get("original_sizes").tolist()
+...     )[0]
+...     all_results.append({"prompt": prompt, "results": results})
+
+>>> for item in all_results:
+...     print(f"Prompt '{item['prompt']}': {len(item['results']['masks'])} objects found")
+```
+
+### Efficient Single-Prompt Inference on Multiple Images
+
+When running the same text prompt on multiple images, pre-compute text embeddings to avoid redundant computation:
+
+```python
+>>> from transformers import Sam3Processor, Sam3Model
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+>>> model = Sam3Model.from_pretrained("facebook/sam3").to(device)
+>>> processor = Sam3Processor.from_pretrained("facebook/sam3")
+
+>>> # Pre-compute text embeddings once
+>>> text_prompt = "ear"
+>>> text_inputs = processor(text=text_prompt, return_tensors="pt").to(device)
+>>> with torch.no_grad():
+...     text_embeds = model.get_text_features(**text_inputs)
+
+>>> # Load multiple images
+>>> image_urls = [
+...     "http://images.cocodataset.org/val2017/000000077595.jpg",
+...     "http://images.cocodataset.org/val2017/000000039769.jpg",
+... ]
+>>> images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in image_urls]
+
+>>> # Run inference on each image reusing text embeddings
+>>> # Note: attention_mask must be passed along with text_embeds for proper masking
+>>> all_results = []
+
+>>> for image in images:
+...     img_inputs = processor(images=image, return_tensors="pt").to(device)
+...     with torch.no_grad():
+...         outputs = model(
+...             pixel_values=img_inputs.pixel_values,
+...             text_embeds=text_embeds,
+...             attention_mask=text_inputs.attention_mask,
+...         )
+...
+...     results = processor.post_process_instance_segmentation(
+...         outputs,
+...         threshold=0.5,
+...         mask_threshold=0.5,
+...         target_sizes=img_inputs.get("original_sizes").tolist()
+...     )[0]
+...     all_results.append(results)
+
+>>> for i, results in enumerate(all_results):
+...     print(f"Image {i+1}: {len(results['masks'])} '{text_prompt}' objects found")
+```
+
 ### Prompt Label Conventions
 
 SAM3 uses the following label conventions:
