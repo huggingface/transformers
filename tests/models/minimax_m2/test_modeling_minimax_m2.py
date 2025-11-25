@@ -50,7 +50,6 @@ class MiniMaxM2ModelTester(CausalLMModelTester):
 class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MiniMaxM2ModelTester
 
-    # Ignore copy
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
