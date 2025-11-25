@@ -21,7 +21,6 @@ import pytest
 from transformers import (
     InternvlFlashConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     require_torch,
@@ -38,6 +37,7 @@ if is_torch_available():
     import torch
 
     from transformers import InternvlFlashForConditionalGeneration, InternvlFlashModel
+
 
 class InternvlFlashVisionText2TextModelTester:
     def __init__(
@@ -218,6 +218,8 @@ class InternvlFlashModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip("The Flash model relies on input_ids for visual compression and cannot support multimodal generation using inputs_embeds alone.")
+    @unittest.skip(
+        "The Flash model relies on input_ids for visual compression and cannot support multimodal generation using inputs_embeds alone."
+    )
     def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
