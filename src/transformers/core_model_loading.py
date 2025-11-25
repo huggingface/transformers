@@ -136,7 +136,7 @@ class Chunk(ConversionOps):
 
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        value: dict[str, dict[str, torch.Tensor]],
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
@@ -163,7 +163,7 @@ class Concatenate(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        value: dict[str, torch.Tensor],
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
@@ -193,7 +193,7 @@ class MergeModulelist(Concatenate):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        value: dict[str, dict[str, torch.Tensor]],
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
@@ -203,7 +203,7 @@ class MergeModulelist(Concatenate):
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
         for idx, key in enumerate(value.keys()):
-            tensors = value.get(key, [])
+            tensors = list(value.get(key, {}).values())
             if len(source_keys) == 1:
                 key = full_layer_name
             stacked = torch.stack(tensors, dim=self.dim)
@@ -224,7 +224,7 @@ class SplitModulelist(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        value: dict[str, dict[str, torch.Tensor]],
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
@@ -264,7 +264,7 @@ class PermuteForRope(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        value: dict[str, dict[str, torch.Tensor]],
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
@@ -289,7 +289,7 @@ class WeightTransform:
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
 
-    collected_tensors: dict[str, list[Future]] = field(default_factory=dict, init=False)
+    collected_tensors: dict[str,  dict[str, Future]] = field(default_factory=dict, init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
@@ -299,8 +299,8 @@ class WeightTransform:
             self.target_keys = [self.target_keys]
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
-        bucket = self.collected_tensors.setdefault(source_pattern, [])
-        bucket += [future]
+        bucket = self.collected_tensors.setdefault(source_pattern, {})
+        bucket[source_key] = future
 
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(source_key)
@@ -309,6 +309,12 @@ class WeightTransform:
 @dataclass(slots=True)
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
+    collected_tensors: dict[str,  Future] = field(default_factory=dict, init=False)
+    def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
+        self.collected_tensors[target_key] = future
+
+        bucket = self.layer_targets.setdefault(target_key, set())
+        bucket.add(source_key)
 
     def convert(
         self,
@@ -319,8 +325,8 @@ class WeightRenaming(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
     ):
         misc = {}
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = [future.result() for future in futures]
+        for pattern, future in self.collected_tensors.items():
+            self.collected_tensors[pattern] = future.result()
 
         collected_tensors = self.collected_tensors
         if hf_quantizer is not None and self.quantization_operation is not None:
@@ -361,7 +367,7 @@ class WeightConverter(WeightTransform):
     ):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = [future.result() for future in futures]
+            self.collected_tensors[pattern] = {k:future.result() for k, future in futures.items()}
 
         collected_tensors = self.collected_tensors
         for op in self.operations:
@@ -784,7 +790,6 @@ def convert_and_load_state_dict_in_model(
                     missing_keys=missing_keys,
                 )
                 for target_name, param in realized_value.items():
-                    param = param[0] if isinstance(param, list) else param
                     device_match = device_map_regex.match(target_name)
                     param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
                     # Offloading support
