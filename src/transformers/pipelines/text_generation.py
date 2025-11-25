@@ -1,6 +1,4 @@
 import enum
-import itertools
-import types
 from typing import Any, overload
 
 from ..generation import GenerationConfig
@@ -13,7 +11,6 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-    from .pt_utils import KeyDataset
 
 
 class ReturnType(enum.Enum):
@@ -295,27 +292,6 @@ class TextGenerationPipeline(Pipeline):
             - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
-        if isinstance(
-            text_inputs,
-            (list, tuple, types.GeneratorType, KeyDataset)
-            if is_torch_available()
-            else (list, tuple, types.GeneratorType),
-        ):
-            if isinstance(text_inputs, types.GeneratorType):
-                text_inputs, _ = itertools.tee(text_inputs)
-                text_inputs, first_item = (x for x in text_inputs), next(_)
-            else:
-                first_item = text_inputs[0]
-            if isinstance(first_item, (list, tuple, dict)):
-                # We have one or more prompts in list-of-dicts format, so this is chat mode
-                if isinstance(first_item, dict):
-                    return super().__call__(Chat(text_inputs), **kwargs)
-                else:
-                    chats = (Chat(chat) for chat in text_inputs)  # 🐈 🐈 🐈
-                    if isinstance(text_inputs, types.GeneratorType):
-                        return super().__call__(chats, **kwargs)
-                    else:
-                        return super().__call__(list(chats), **kwargs)
         return super().__call__(text_inputs, **kwargs)
 
     def preprocess(

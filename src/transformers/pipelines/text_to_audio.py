@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
 
-import itertools
-import types
 from typing import Any, TypedDict, overload
 
 from ..audio_utils import AudioInput
@@ -242,29 +240,11 @@ class TextToAudioPipeline(Pipeline):
                 only passed to the underlying model if the latter is a generative model.
 
         Return:
-            A `dict` or a list of `dict`: The dictionaries have two keys:
+            `AudioOutput` or a list of `AudioOutput`, which is a `TypedDict` with two keys:
 
             - **audio** (`np.ndarray` of shape `(nb_channels, audio_length)`) -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
-        if isinstance(text_inputs, (list, tuple, types.GeneratorType)):
-            if isinstance(text_inputs, types.GeneratorType):
-                gen_copy1, gen_copy2 = itertools.tee(text_inputs)
-                text_inputs = (x for x in gen_copy1)
-                first_item = next(gen_copy2)
-            else:
-                first_item = text_inputs[0]
-            if isinstance(first_item, (list, tuple, dict)):
-                # We have one or more prompts in list-of-dicts format, so this is chat mode
-                if isinstance(first_item, dict):
-                    return super().__call__(Chat(text_inputs), **forward_params)
-                else:
-                    chats = (Chat(chat) for chat in text_inputs)
-                    if isinstance(text_inputs, types.GeneratorType):
-                        return super().__call__(chats, **forward_params)
-                    else:
-                        return super().__call__(list(chats), **forward_params)
-
         return super().__call__(text_inputs, **forward_params)
 
     def _sanitize_parameters(
@@ -294,6 +274,9 @@ class TextToAudioPipeline(Pipeline):
 
         if self.model.config.model_type in ["csm"]:
             audio_key = "audio"
+        elif self.model.config.model_type in ["dia"]:
+            # codes that need decoding
+            audio_key = "sequences"
         else:
             audio_key = "waveform"
 
@@ -301,7 +284,8 @@ class TextToAudioPipeline(Pipeline):
             audio = audio[audio_key]
         elif isinstance(audio, tuple):
             audio = audio[0]
-        elif self.model.config.model_type in ["dia"]:
+
+        if self.model.config.model_type in ["dia"]:
             # models that require decoding, e.g. with codec
             audio = self.processor.decode(audio)
 

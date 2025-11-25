@@ -16,6 +16,7 @@ import collections
 import copy
 import csv
 import importlib
+import itertools
 import json
 import os
 import pickle
@@ -51,6 +52,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from ..utils.chat_template_utils import Chat
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
@@ -60,6 +62,7 @@ if is_torch_available() or TYPE_CHECKING:
     from torch.utils.data import DataLoader, Dataset
 
     from ..modeling_utils import PreTrainedModel
+    from .pt_utils import KeyDataset
 else:
     Dataset = None
 
@@ -1201,6 +1204,29 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     def __call__(self, inputs, *args, num_workers=None, batch_size=None, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
+
+        # Detect if inputs is a chat-style input and cast as `Chat` or list of `Chat`
+        if isinstance(
+            inputs,
+            (list, tuple, types.GeneratorType, KeyDataset)
+            if is_torch_available()
+            else (list, tuple, types.GeneratorType),
+        ):
+            if isinstance(inputs, types.GeneratorType):
+                gen_copy1, gen_copy2 = itertools.tee(inputs)
+                inputs = (x for x in gen_copy1)
+                first_item = next(gen_copy2)
+            else:
+                first_item = inputs[0]
+            if isinstance(first_item, (list, tuple, dict)):
+                if isinstance(first_item, dict):
+                    inputs = Chat(inputs)
+                else:
+                    chats = (Chat(chat) for chat in inputs)
+                    if isinstance(inputs, types.GeneratorType):
+                        inputs = chats
+                    else:
+                        inputs = list(chats)
 
         if num_workers is None:
             if self._num_workers is None:
