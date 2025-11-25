@@ -227,4 +227,4 @@ class InternvlFlashConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["InternvlFlashConfig"]
+__all__ = ["InternvlFlashConfig", "InternvlFlashVisionConfig"]

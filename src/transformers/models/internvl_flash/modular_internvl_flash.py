@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ..internvl.configuration_internvl import InternVLConfig
+from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
 from ..internvl.modeling_internvl import (
     InternVLModel,
     InternVLModelOutputWithPast,
@@ -168,6 +168,10 @@ class InternvlFlashCrossAttentionPooling(nn.Module):
         out4 = self.attn4(out3, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
         out4 = self.norm4(out4)
         return out4.squeeze(1)
+
+
+class InternvlFlashVisionConfig(InternVLVisionConfig):
+    pass
 
 
 class InternvlFlashConfig(InternVLConfig):
@@ -567,6 +571,7 @@ class InternvlFlashForConditionalGeneration(LlavaForConditionalGeneration):
 
 __all__ = [
     "InternvlFlashConfig",
+    "InternvlFlashVisionConfig",
     "InternvlFlashVisionPreTrainedModel",
     "InternvlFlashVisionModel",
     "InternvlFlashPreTrainedModel",
