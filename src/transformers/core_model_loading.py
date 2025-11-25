@@ -315,7 +315,7 @@ class WeightTransform:
     def reverse_transform(self) -> WeightTransform:
         if self.distributed_operation is not None or self.quantization_operation is not None:
             raise ValueError("Cannot reverse the transform with TP or quantization")
-        if len(self.collected_tensors) == 0:
+        if len(self.layer_targets) == 0:
             raise ValueError(
                 "You can only call `reverse_transform` after the `WeightTransform` instance has been populated"
                 "with the keys and tensors!"
