@@ -521,7 +521,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_chat_templates(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer = LlamaTokenizer(SAMPLE_VOCAB_LLAMA, keep_accents=True)
+            tokenizer = LlamaTokenizer.from_pretrained(SAMPLE_VOCAB_LLAMA, keep_accents=True)
             image_processor = SiglipImageProcessor()
             chat_template = "default dummy template for testing purposes only"
             processor = LlavaProcessor(

@@ -105,7 +105,11 @@ class BarthezTokenizer(TokenizersBackend):
         self.vocab_file = vocab_file
 
         if vocab is not None:
-            self._vocab = vocab
+            if isinstance(vocab, dict):
+                self._vocab = [(token, 0.0) for token, _ in sorted(vocab.items(), key=lambda x: x[1])]
+            elif isinstance(vocab, list):
+                self._vocab = [tuple(item) if not isinstance(item, tuple) else item for item in vocab]
+            
         else:
             self._vocab = [
                 (str(pad_token), 0.0),

@@ -975,19 +975,26 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     model_input_names: list[str] = ["input_ids", "token_type_ids", "attention_mask"]
     padding_side: str = "right"
     truncation_side: str = "right"
-    slow_tokenizer_class = None
 
     # Special tokens support (moved from SpecialTokensMixin)
     # V5: Clean separation of named special tokens from extra special tokens
-    SPECIAL_TOKENS_ATTRIBUTES = [
-        "bos_token",
-        "eos_token",
-        "unk_token",
-        "sep_token",
-        "pad_token",
-        "cls_token",
-        "mask_token",
-    ]
+    
+    @classmethod
+    def _get_special_tokens_attributes(cls):
+        # Return common token names, override this with actual tokens
+        return ["bos_token", "eos_token", "unk_token", "sep_token", "pad_token", "cls_token", "mask_token"]
+    
+    @property
+    def SPECIAL_TOKENS_ATTRIBUTES(self):
+        """
+        Dynamically returns special token attribute names from _token_mapping.
+        """
+        if not hasattr(self, '_token_mapping'):
+            return self._get_special_tokens_attributes()
+        return [
+            key for key in self._token_mapping.keys()
+            if key.endswith('_token') and key != '_extra_special_tokens'
+        ]
 
     def __init__(self, **kwargs):
         self.init_inputs = ()
@@ -1006,8 +1013,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self._pad_token_type_id = 0
         self.verbose = kwargs.pop("verbose", False)
+        object.__setattr__(self, "_token_mapping", kwargs.pop("token_mapping", {}) or {})
 
-        # V5: Separate storage for named special tokens and extra special tokens
+        # V5: Separate storage for named special tokens and extra special tokens  
         self._special_tokens_map = dict.fromkeys(self.SPECIAL_TOKENS_ATTRIBUTES)
         self._extra_special_tokens = []  # List of extra model-specific special tokens
 
@@ -1021,14 +1029,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Directly set hidden values to allow init with tokens not yet in vocab
         for key in list(kwargs.keys()):
-            if key in self.SPECIAL_TOKENS_ATTRIBUTES:
+            if key.endswith("_token") and isinstance(kwargs[key], (str, AddedToken)):
                 value = kwargs.pop(key)
                 if value is None:
                     continue
-                if isinstance(value, (str, AddedToken)):
+                # Store as mapping; ids are set when vocab is defined later
+                self._token_mapping[key] = value if isinstance(value, int) else value
+                # Also update _special_tokens_map for BC
+                if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                     self._special_tokens_map[key] = value
-                else:
-                    raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
             elif key == "extra_special_tokens":
                 # V5: Support extra_special_tokens in __init__
                 value = kwargs.pop(key)
@@ -1045,16 +1054,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                             "extra_special_tokens must be a list/tuple of str or AddedToken, or a dict mapping names to tokens"
                         )
                     self._extra_special_tokens = list(value)
-            elif (
-                key.endswith("_token")
-                and key not in self.SPECIAL_TOKENS_ATTRIBUTES
-                and isinstance(kwargs[key], (str, AddedToken))
-            ):
-                value = kwargs.pop(key)
-                if value is None:
-                    continue
-                auto_model_specific_tokens[key] = value
-
+        
+        # Note: SPECIAL_TOKENS_ATTRIBUTES is now a property that derives from _token_mapping automatically
+        
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
@@ -1086,11 +1088,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Chat templates are stored as lists of dicts with fixed key names,
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
-
-        model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
-        if model_specific_tokens:
-            self._set_model_specific_special_tokens(special_tokens=model_specific_tokens)
-
         self.deprecation_warnings = {}
 
         # Backend information (V5: tracking which backend and files were used)
@@ -1167,44 +1164,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
-        special_tokens_dict = dict(special_tokens_dict)
-        if "additional_special_tokens" in special_tokens_dict and "extra_special_tokens" not in special_tokens_dict:
-            special_tokens_dict["extra_special_tokens"] = special_tokens_dict.pop("additional_special_tokens")
-
-        allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
         for key, value in special_tokens_dict.items():
-            if key not in allowed_keys:
-                raise ValueError(f"Key {key} is not a valid special token. Valid keys are: {allowed_keys}")
-
-            if self.verbose:
-                logger.info(f"Assigning {value} to the {key} key of the tokenizer")
-
-            if key == "extra_special_tokens":
-                if not isinstance(value, (list, tuple)) or not all(isinstance(t, (str, AddedToken)) for t in value):
-                    raise ValueError(f"Tokens {value} for key {key} should all be str or AddedToken instances")
-                new_tokens = [
-                    (
-                        AddedToken(t, rstrip=False, lstrip=False, normalized=False, special=True)
-                        if isinstance(t, str)
-                        else t
-                    )
-                    for t in value
-                    if replace_extra_special_tokens or str(t) not in self.extra_special_tokens
-                ]
-                if replace_extra_special_tokens and new_tokens:
-                    self._extra_special_tokens = list(new_tokens)
-                else:
-                    self._extra_special_tokens.extend(new_tokens)
-                tokens_to_add.extend(new_tokens)
-            else:
-                if not isinstance(value, (str, AddedToken)):
-                    raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
-                if isinstance(value, str):
-                    value = AddedToken(value, rstrip=False, lstrip=False, normalized=False, special=True)
-                setattr(self, key, value)
-                tokens_to_add.append(value)
-
+            if not isinstance(value, (str, AddedToken)):
+                raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
+            if isinstance(value, str):
+                value = AddedToken(value, rstrip=False, lstrip=False, normalized=False, special=True)
+            setattr(self, key, value)
+            tokens_to_add.append(value)
         return self.add_tokens(tokens_to_add, special_tokens=True)
 
     def add_tokens(
@@ -1259,36 +1226,25 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if key_is_special_id:
             key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
-        # Check if this is a named special token
-        if (
-            self.__dict__.get("_special_tokens_map", None) is not None
-            and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES
+        # token_mapping support (simplified special token storage)
+        # Exclude _extra_special_tokens from token_mapping
+        token_mapping = self.__dict__.get("_token_mapping", None)
+        if token_mapping is not None and key != "_extra_special_tokens" and (
+            key in token_mapping
+            or key_without_id in token_mapping
+            or key.endswith("_token")
+            or key.endswith("_tokens")
+            or key_is_special_id
         ):
-            if key_is_special_id:
-                if value is not None:
-                    value = self.convert_ids_to_tokens(value)
-                key = key_without_id
+            self._update_token_mapping(
+                mapping_key=key if key in token_mapping else key_without_id,
+                value=value,
+                as_id=key_is_special_id,
+                attr_name=key,
+            )
+            return
 
-            if not isinstance(value, (str, AddedToken)) and value is not None:
-                raise ValueError(f"Cannot set a non-string value as the {key}")
-            self._special_tokens_map[key] = value
-        # Check if this is extra_special_tokens or extra_special_tokens_ids
-        elif self.__dict__.get("_extra_special_tokens", None) is not None and key_without_id == "extra_special_tokens":
-            if key_is_special_id:
-                if value is not None:
-                    value = [self.convert_ids_to_tokens(val) for val in value]
-                key = key_without_id
-
-            if key == "extra_special_tokens":
-                if value is None:
-                    self._extra_special_tokens = []
-                elif isinstance(value, dict):
-                    # Dict is treated as model-specific special tokens (such as multimodal tokens)
-                    self._set_model_specific_special_tokens(special_tokens=value)
-                elif isinstance(value, (list, tuple)):
-                    self._extra_special_tokens = list(value)
-                else:
-                    raise ValueError(f"extra_special_tokens must be a list, tuple, or dict, got {type(value)}")
+        # Check if this is a named special token
         else:
             super().__setattr__(key, value)
 
@@ -1298,37 +1254,62 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if key_is_special_id:
             key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
-        # Check if this is a named special token
-        if (
-            self.__dict__.get("_special_tokens_map", None) is not None
-            and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES
-        ):
-            _special_tokens_map = self.__dict__["_special_tokens_map"]
-            if not key_is_special_id:
-                if _special_tokens_map[key_without_id] is None:
-                    if self.verbose:
-                        logger.error(f"Using {key}, but it is not set yet.")
-                    return None
-                value = _special_tokens_map[key_without_id]
-                return str(value)
-            else:
-                attr_as_tokens = getattr(self, key_without_id)
-                return self.convert_tokens_to_ids(attr_as_tokens) if attr_as_tokens is not None else None
-
-        # Check if this is extra_special_tokens or extra_special_tokens_ids
-        elif key_without_id == "extra_special_tokens":
-            if self.__dict__.get("_extra_special_tokens", None) is not None:
-                if not key_is_special_id:
-                    return [str(tok) for tok in self.__dict__["_extra_special_tokens"]]
-                else:
-                    # extra_special_tokens_ids
-                    tokens = self.__dict__["_extra_special_tokens"]
-                    return self.convert_tokens_to_ids([str(tok) for tok in tokens]) if tokens else []
+        token_mapping = self.__dict__.get("_token_mapping", None)
+        if token_mapping is not None and (key in token_mapping or key_without_id in token_mapping):
+            return self._resolve_token_mapping_attr(
+                key=key,
+                key_without_id=key_without_id,
+                is_id=key_is_special_id,
+                token_mapping=token_mapping,
+            )
+        elif key.endswith("_token"):
+            return None
+        elif key.endswith("_id"):
+            return -1
 
         if key not in self.__dict__:
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         else:
             return super().__getattr__(key)
+
+    # --- token_mapping helpers ---
+    def _update_token_mapping(self, mapping_key: str, value: Any, as_id: bool, attr_name: str) -> None:
+        """
+        Internal helper to keep token_mapping (name -> id) in sync with attribute writes.
+        """
+        token_mapping = self.__dict__.get("_token_mapping", None)
+        if token_mapping is None:
+            object.__setattr__(self, attr_name, value)
+            return
+        if value is None:
+            token_mapping[mapping_key] = None
+            object.__setattr__(self, attr_name, value)
+            return
+        try:
+            if isinstance(value, int):
+                token_mapping[mapping_key] = self.convert_ids_to_tokens(value)
+            else:
+                token_mapping[mapping_key] = value
+            object.__setattr__(self, attr_name, value)
+        except Exception:
+            object.__setattr__(self, attr_name, value)
+
+    def _resolve_token_mapping_attr(self, key: str, key_without_id: str, is_id: bool, token_mapping: dict) -> Any:
+        """
+        Resolve attributes backed by token_mapping (name -> id).
+        """
+        mapping_key = key if key in token_mapping else key_without_id
+        mapped_value = token_mapping.get(mapping_key)
+        if mapped_value is None:
+            if self.verbose:
+                logger.error(f"Using {key}, but it is not set yet.")
+            return None
+        return self.convert_tokens_to_ids(str(mapped_value)) if is_id else str(mapped_value)
+
+    def _get_token_mapping(self) -> dict[str, int]:
+        """Return the current token mapping as a name->id dictionary."""
+        mapping = self.__dict__.get("_token_mapping") or {}
+        return {k: int(v) if isinstance(v, int) else v for k, v in mapping.items() if v is not None}
 
     def get_special_tokens_mask(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
@@ -1376,9 +1357,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         **V5 Change**: This now returns only named tokens. Use `extra_special_tokens` for the additional tokens.
         """
         return {
-            attr: str(self._special_tokens_map[attr])
+            attr: str(self._token_mapping[attr])
             for attr in self.SPECIAL_TOKENS_ATTRIBUTES
-            if self._special_tokens_map.get(attr) is not None
+            if self._token_mapping.get(attr) is not None
         }
 
     # Note: extra_special_tokens and extra_special_tokens_ids are handled by __getattr__ and __setattr__
@@ -1430,10 +1411,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Args:
             special_tokens: Dictionary of {token_name: token_value}
         """
-        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
         for key, value in special_tokens.items():
             if isinstance(value, (str, AddedToken)):
                 self._special_tokens_map[key] = value
+                # Add to _token_mapping - SPECIAL_TOKENS_ATTRIBUTES property will automatically include it
+                self._token_mapping[key] = value
             else:
                 raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
 
@@ -1447,7 +1429,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map},"
+            f" special_tokens={self._token_mapping},"
             " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
         )
 
@@ -1801,28 +1783,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         trust_remote_code=False,
         **kwargs,
     ):
-        # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
-        # file or if `from_slow` is set to True.
-        from_slow = kwargs.get("from_slow", False)
-        gguf_file = kwargs.get("gguf_file")
+        # We instantiate `RustTokenizer` based on the format of the file and our converters
+        # if there is no `tokenizer.json` file.
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
-
-        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
-        # loaded directly from the GGUF file.
-        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
-            slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
-                copy.deepcopy(resolved_vocab_files),
-                pretrained_model_name_or_path,
-                copy.deepcopy(init_configuration),
-                *init_inputs,
-                token=token,
-                cache_dir=cache_dir,
-                local_files_only=local_files_only,
-                _commit_hash=_commit_hash,
-                **(copy.deepcopy(kwargs)),
-            )
-        else:
-            slow_tokenizer = None
 
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
@@ -1831,7 +1794,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
-            config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
             if not has_tokenizer_file:
                 init_kwargs.get("tokenizer_file", None)
@@ -1839,7 +1801,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
-            config_tokenizer_class = None
             init_kwargs = init_configuration
 
         # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
@@ -1867,54 +1828,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
 
-        if config_tokenizer_class is None:
-            # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
-            #       If not, it raises a warning, but otherwise continues. Since we mostly load tokenizers with
-            #       AutoTokenizer these days, it seems like a lot of work (and a source of bugs) for little gain.
-            #       Maybe we can just remove this entirely?
-            from .models.auto.configuration_auto import AutoConfig  # tests_ignore
-
-            # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
-            try:
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    token=token,
-                    cache_dir=cache_dir,
-                    local_files_only=local_files_only,
-                    trust_remote_code=trust_remote_code,
-                    _commit_hash=_commit_hash,
-                )
-                config_tokenizer_class = config.tokenizer_class
-            except (OSError, ValueError, KeyError):
-                # skip if an error occurred.
-                config = None
-            if config_tokenizer_class is None:
-                # Third attempt. If we have not yet found the original type of the tokenizer,
-                # we are loading we see if we can infer it from the type of the configuration file
-                from .models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES  # tests_ignore
-
-                if hasattr(config, "model_type"):
-                    model_type = config.model_type
-                else:
-                    # Fallback: use pattern matching on the string.
-                    model_type = None
-                    for pattern in TOKENIZER_MAPPING_NAMES:
-                        if pattern in str(pretrained_model_name_or_path):
-                            model_type = pattern
-                            break
-
-                if model_type is not None:
-                    config_tokenizer_class = TOKENIZER_MAPPING_NAMES.get(model_type)
-
-        if config_tokenizer_class is not None:
-            if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
-                logger.warning(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this"
-                    " function is called from. It may result in unexpected tokenization. \nThe tokenizer class you"
-                    f" load from this checkpoint is '{config_tokenizer_class}'. \nThe class this function is called"
-                    f" from is '{cls.__name__}'."
-                )
-
         # Preserve extra_special_tokens from tokenizer_config.json before updating with kwargs
         # extra_special_tokens should be a list (user-defined extra tokens)
         extra_special_tokens_from_config = init_kwargs.get("extra_special_tokens")
@@ -1939,7 +1852,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # V5: Get model-specific special tokens from config (saved as individual keys in special_tokens_map)
         # These need to be grouped as extra_special_tokens dict so __init__ can save them to attributes
         if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), dict):
-            default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
+            default_attrs = set(cls._get_special_tokens_attributes())
             model_specific_tokens = {
                 key: init_kwargs.pop(key)
                 for key in list(init_kwargs.keys())
@@ -1970,8 +1883,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 init_kwargs[args_name] = file_path
         tokenizer_file = resolved_vocab_files.get("tokenizer_file", None)
 
-        if slow_tokenizer is not None:
-            init_kwargs["__slow_tokenizer"] = slow_tokenizer
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
 
         #### Handle tokenizer serialization of added and special tokens
@@ -2049,7 +1960,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if added_tokens_file is not None:
                 special_tokens = []
                 # V5: Check both named and extra special tokens
-                for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
+                for key in cls._get_special_tokens_attributes():
                     if key in init_kwargs and init_kwargs[key] is not None:
                         special_tokens.append(str(init_kwargs[key]))
 
@@ -2085,9 +1996,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
         init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         # V5: Map special tokens from added_tokens_map (named tokens only)
-        for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
+        for key in cls._get_special_tokens_attributes():
             if key in init_kwargs and added_tokens_map != {} and init_kwargs[key] is not None:
                 init_kwargs[key] = added_tokens_map.get(str(init_kwargs[key]), init_kwargs[key])
+
+        # Remove special tokens that are explicitly None to allow class defaults to work
+        # This handles legacy tokenizers where special tokens weren't saved in tokenizer_config.json
+        for key in cls._get_special_tokens_attributes():
+            if key in init_kwargs and init_kwargs[key] is None:
+                init_kwargs.pop(key)
 
         # Track which files were loaded (if not already set by AutoTokenizer)
         if "files_loaded" not in init_kwargs:
@@ -2456,11 +2373,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
-        # Let's make sure we properly save the special tokens
-        # V5: Save both named tokens and extra tokens
-        tokenizer_config.update(self.special_tokens_map)
-        if self._extra_special_tokens:
-            tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
+        # Only slow/non-tokenizers backends need token_mapping serialized here; tokenizers will embed it in tokenizer.json
+        if not getattr(self, "is_fast", False):
+            token_mapping = self._get_token_mapping()
+            if token_mapping:
+                tokenizer_config["token_mapping"] = token_mapping
+
+        # Save current token mapping for non-fast backends
+        if not getattr(self, "is_fast", False):
+            token_mapping = self._get_token_mapping()
+            if token_mapping:
+                tokenizer_config["token_mapping"] = token_mapping
 
         save_jinja_files = kwargs.get("save_jinja_files", True)
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
@@ -2476,10 +2399,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True, save=True)
 
         # Process added tokens separately: allows previous versions to ignore it!
-        added_tokens = {}
-        for key, value in self.added_tokens_decoder.items():
-            added_tokens[key] = value.__getstate__()
-        tokenizer_config["added_tokens_decoder"] = added_tokens
+        if not getattr(self, "is_fast", False):
+            added_tokens = {}
+            for key, value in self.added_tokens_decoder.items():
+                added_tokens[key] = value.__getstate__()
+            tokenizer_config["added_tokens_decoder"] = added_tokens
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
@@ -2515,7 +2439,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Sanitize AddedTokens in special_tokens_map
 
         # Typefields are not saved for FC, special should not be saved either
-        write_dict = self.convert_added_tokens(self.special_tokens_map, save=True, add_type_field=False)
+        write_dict = self.convert_added_tokens(self._token_mapping, save=True, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
@@ -3469,7 +3393,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
-        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
+        template_kwargs = {**self._token_mapping, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
@@ -3636,61 +3560,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 )
 
         return chat_template
-
-    def save_chat_templates(
-        self,
-        save_directory: Union[str, os.PathLike],
-        tokenizer_config: dict,
-        filename_prefix: Optional[str],
-        save_jinja_files: bool,
-    ):
-        """
-        Writes chat templates out to the save directory if we're using the new format, and removes them from
-        the tokenizer config if present. If we're using the legacy format, it doesn't write any files, and instead
-        writes the templates to the tokenizer config in the correct format.
-        """
-        chat_template_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
-        )
-        chat_template_dir = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_DIR
-        )
-
-        saved_raw_chat_template_files = []
-        if save_jinja_files and isinstance(self.chat_template, str):
-            # New format for single templates is to save them as chat_template.jinja
-            with open(chat_template_file, "w", encoding="utf-8") as f:
-                f.write(self.chat_template)
-            logger.info(f"chat template saved in {chat_template_file}")
-            saved_raw_chat_template_files.append(chat_template_file)
-            if "chat_template" in tokenizer_config:
-                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
-        elif save_jinja_files and isinstance(self.chat_template, dict):
-            # New format for multiple templates is to save the default as chat_template.jinja
-            # and the other templates in the chat_templates/ directory
-            for template_name, template in self.chat_template.items():
-                if template_name == "default":
-                    with open(chat_template_file, "w", encoding="utf-8") as f:
-                        f.write(self.chat_template["default"])
-                    logger.info(f"chat template saved in {chat_template_file}")
-                    saved_raw_chat_template_files.append(chat_template_file)
-                else:
-                    Path(chat_template_dir).mkdir(exist_ok=True)
-                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
-                    with open(template_filepath, "w", encoding="utf-8") as f:
-                        f.write(template)
-                    logger.info(f"chat template saved in {template_filepath}")
-                    saved_raw_chat_template_files.append(template_filepath)
-            if "chat_template" in tokenizer_config:
-                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
-        elif isinstance(self.chat_template, dict):
-            # Legacy format for multiple templates:
-            # chat template dicts are saved to the config as lists of dicts with fixed key names.
-            tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
-        elif self.chat_template is not None:
-            # Legacy format for single templates: Just make them a key in tokenizer_config.json
-            tokenizer_config["chat_template"] = self.chat_template
-        return tokenizer_config, saved_raw_chat_template_files
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:

@@ -35,7 +35,7 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
+        cls.vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
         cls.special_tokens_map = {"unk_token": "<unk>"}
 
     @classmethod

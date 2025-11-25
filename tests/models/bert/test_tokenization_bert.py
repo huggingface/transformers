@@ -15,7 +15,6 @@
 
 import unittest
 
-from transformers import BertTokenizer
 from transformers.models.bert.tokenization_bert import (
     BertTokenizer,
 )

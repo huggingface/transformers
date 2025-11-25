@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
@@ -22,7 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
@@ -90,7 +89,6 @@ class LlamaTokenizer(TokenizersBackend):
             Whether or not the tokenizer should automatically add a prefix space
     """
 
-    vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -144,10 +142,8 @@ class LlamaTokenizer(TokenizersBackend):
             sequence += [decoders.Strip(content=" ", left=1)]
 
         self._tokenizer.decoder = decoders.Sequence(sequence)
-        tokenizer_object = self._tokenizer
-
+        self.use_default_system_prompt = use_default_system_prompt
         super().__init__(
-            tokenizer_object=tokenizer_object,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -158,22 +154,6 @@ class LlamaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-
-        self._post_init()
-
-    def _post_init(self):
-        """Post-initialization setup that needs to run after _tokenizer is set."""
-        # TODO: how to do this cleanly? Need to trigger re-adding special tokens after setting the normalizer in Tokenizers
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
-        self._tokenizer.normalizer = (
-            None  # normalizers.Sequence([normalizers.Prepend("▁"), normalizers.Replace(pattern=" ", content="▁")])
-        )
-        self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
-        self.update_post_processor()
 
 
 __all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]

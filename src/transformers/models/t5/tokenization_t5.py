@@ -113,7 +113,7 @@ class T5Tokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(
             Unigram(
-                self._vocab_scores,
+                list(self._vocab_scores.items()) if isinstance(self._vocab_scores, dict) else self._vocab_scores,
                 unk_id=2,
                 byte_fallback=False,
             )
