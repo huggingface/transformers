@@ -20,10 +20,13 @@ import copy
 import inspect
 import json
 import os
+import re
 from collections import defaultdict
 from shutil import copyfile
 from typing import Any, Optional, Union
 
+from huggingface_hub import model_info
+from packaging import version
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
@@ -40,7 +43,7 @@ from .tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from .utils import PaddingStrategy, add_end_docstrings, cached_file, logging
 
 
 logger = logging.get_logger(__name__)
@@ -91,17 +94,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def __init__(self, *args, **kwargs):
         # TokenizersBackend expects a prepared tokenizer object; subclasses build it.
-        tokenizer_object = kwargs.pop("tokenizer_object", None)
+        fast_tokenizer = kwargs.pop("tokenizer_object", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden
         add_prefix_space = kwargs.get("add_prefix_space", False)
+        self._all_special_tokens_cache = set()
 
         self._tokenizer = getattr(self, "_tokenizer", None)
-
-        if tokenizer_object is not None:
-            fast_tokenizer = tokenizer_object
-        elif fast_tokenizer_file is not None:
+        if fast_tokenizer_file is not None and fast_tokenizer is None:
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
 
         if fast_tokenizer is not None:
@@ -168,10 +169,133 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     # Ensure the special flag is set correctly for special tokens
                     if not token.special and str(token) in all_named_tokens:
                         token.special = True
-                tokens.append(token)
-            if tokens:
-                # These tokens are from the special tokens map
-                self.add_tokens(tokens, special_tokens=True)
+            tokens.append(token)
+        if tokens:
+            # These tokens are from the special tokens map
+            self.add_tokens(tokens, special_tokens=True)
+
+    @classmethod
+    def _post_process_tokenizer(
+        cls,
+        tokenizer,
+        tokenizer_file: Optional[str],
+        pretrained_model_name_or_path: str,
+        resolved_vocab_files: dict[str, Optional[str]],
+        init_inputs,
+        init_kwargs: dict[str, Any],
+        added_tokens_decoder: dict[int, AddedToken],
+        cache_dir: Optional[str],
+        token: Optional[Union[str, bool]],
+        local_files_only: bool,
+        _commit_hash: Optional[str],
+        _is_local: bool,
+        **kwargs,
+    ):
+        tokenizer = super()._post_process_tokenizer(
+            tokenizer,
+            tokenizer_file,
+            pretrained_model_name_or_path,
+            resolved_vocab_files,
+            init_inputs,
+            init_kwargs,
+            added_tokens_decoder,
+            cache_dir,
+            token,
+            local_files_only,
+            _commit_hash,
+            _is_local,
+            **kwargs,
+        )
+        cls._maybe_fix_mistral_regex(
+            tokenizer=tokenizer,
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            cache_dir=cache_dir,
+            token=token,
+            local_files_only=local_files_only,
+            _commit_hash=_commit_hash,
+            _is_local=_is_local,
+            init_kwargs=init_kwargs,
+            **kwargs,
+        )
+        return tokenizer
+
+    @classmethod
+    def _maybe_fix_mistral_regex(
+        cls,
+        tokenizer,
+        pretrained_model_name_or_path: str,
+        cache_dir: Optional[str],
+        token: Optional[Union[str, bool]],
+        local_files_only: bool,
+        _commit_hash: Optional[str],
+        _is_local: bool,
+        init_kwargs: dict[str, Any],
+        **kwargs,
+    ):
+        try:
+            vocab_size = tokenizer.vocab_size
+        except Exception:
+            vocab_size = 0
+
+        if (
+            vocab_size > 100000
+            and hasattr(tokenizer, "_tokenizer")
+            and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
+        ):
+            def is_base_mistral(model_id: str) -> bool:
+                model = model_info(model_id)
+                if model.tags is not None:
+                    if re.search("base_model:.*mistralai", "".join(model.tags)):
+                        return True
+                return False
+
+            if _is_local or is_base_mistral(pretrained_model_name_or_path):
+                _config_file = cached_file(
+                    pretrained_model_name_or_path,
+                    "config.json",
+                    cache_dir=cache_dir,
+                    token=token,
+                    local_files_only=local_files_only,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                    _commit_hash=_commit_hash,
+                )
+                if _config_file is not None:
+                    with open(_config_file, encoding="utf-8") as f:
+                        _config = json.load(f)
+                    transformers_version = _config.get("transformers_version")
+
+                    if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                        if _is_local and _config.model_type not in [
+                            "mistral",
+                            "mistral3",
+                            "voxstral",
+                            "ministral",
+                            "pixtral",
+                        ]:
+                            return
+
+                if "fix_mistral_regex" in init_kwargs:
+                    setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
+
+                fix_mistral_regex = kwargs.get("fix_mistral_regex")
+                if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", False)
+                    logger.warning(
+                        f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
+                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
+                        " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
+                    )
+                elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", True)
+                    import tokenizers
+
+                    tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
+                        pattern=tokenizers.Regex(
+                            r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+                        ),
+                        behavior="isolated",
+                    )
 
     def __repr__(self) -> str:
         added_tokens_decoder_rep = "\n\t".join([f"{k}: {v.__repr__()}," for k, v in self.added_tokens_decoder.items()])
@@ -215,24 +339,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if not init_inputs:
             init_inputs = saved_init_inputs
-
-        chat_templates = {}
-        chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
-        extra_chat_templates = [key for key in resolved_vocab_files if key.startswith("chat_template_")]
-        if chat_template_file is not None:
-            with open(chat_template_file, encoding="utf-8") as chat_template_handle:
-                chat_templates["default"] = chat_template_handle.read()
-        for extra_chat_template in extra_chat_templates:
-            template_file = resolved_vocab_files.get(extra_chat_template)
-            if template_file is None:
-                continue
-            template_name = extra_chat_template.removeprefix("chat_template_")
-            with open(template_file) as chat_template_handle:
-                chat_templates[template_name] = chat_template_handle.read()
-        if len(chat_templates) == 1 and "default" in chat_templates:
-            init_kwargs["chat_template"] = chat_templates["default"]
-        elif chat_templates:
-            init_kwargs["chat_template"] = chat_templates
 
         if not _is_local:
             if "auto_map" in init_kwargs and isinstance(init_kwargs["auto_map"], (tuple, list)):
@@ -404,7 +510,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     value["special"] = True
                     value = AddedToken(**value)
                 elif key == "extra_special_tokens" and isinstance(value, dict):
-                    init_kwargs.setdefault("model_specific_special_tokens", value)
+                    init_kwargs.setdefault("extra_special_tokens", value)
                     continue
                 init_kwargs.setdefault(key, value)
 
@@ -627,8 +733,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return self.get_vocab()
 
     @property
-    def all_special_tokens(self) -> list[str]:
-        return self._tokenizer.added_tokens_specials()
+    def all_special_tokens(self) -> set[str]:
+        if self._all_special_tokens_cache is None:
+            specials = {str(token) for _, token in self.added_tokens_decoder.items() if token.special}
+            self._all_special_tokens_cache = specials
+        return self._all_special_tokens_cache
 
     @property
     def added_tokens_encoder(self) -> dict[str, int]:
@@ -741,9 +850,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def _add_tokens(self, new_tokens: list[Union[str, AddedToken]], special_tokens=False) -> int:
         if special_tokens:
-            return self._tokenizer.add_special_tokens(new_tokens)
+            added = self._tokenizer.add_special_tokens(new_tokens)
+        else:
+            added = self._tokenizer.add_tokens(new_tokens)
 
-        return self._tokenizer.add_tokens(new_tokens)
+        # update _all_special_tokens_cache
+        if added:
+            self._all_special_tokens_cache.add(str(new_token) for new_token in new_tokens if isinstance(new_token, AddedToken) and new_token.special)
+        return added
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """

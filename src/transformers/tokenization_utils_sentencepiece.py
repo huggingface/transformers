@@ -278,32 +278,3 @@ class SentencePieceBackend(PreTrainedTokenizer):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-
-
-class SentencePieceExtractor:
-    """
-    Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
-    """
-
-    def __init__(self, model: str):
-        requires_backends(self, "sentencepiece")
-        from sentencepiece import SentencePieceProcessor
-
-        self.sp = SentencePieceProcessor()
-        self.sp.Load(model)
-
-    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
-        """
-        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
-        order the merges with respect to the piece scores instead.
-        """
-        sp = self.sp
-        vocab_ids = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
-
-        vocab_scores_dict = {sp.id_to_piece(i): sp.get_score(i) for i in range(sp.GetPieceSize())}
-
-        merges = generate_merges(vocab_ids, vocab_scores_dict)
-
-        vocab_scores_list = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.GetPieceSize())]
-
-        return vocab_ids, vocab_scores_list, merges
