@@ -1208,7 +1208,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model(self):
         device_map = {
             "transformer.wte": f"{torch_device}:0",
@@ -1246,7 +1245,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model_with_direct_params(self):
         from accelerate import dispatch_model
 
@@ -2057,7 +2055,6 @@ class ModelUtilsTest(TestCasePlus):
         for k, v in model.state_dict().items():
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
@@ -2081,7 +2078,6 @@ class ModelUtilsTest(TestCasePlus):
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys_sharded(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those

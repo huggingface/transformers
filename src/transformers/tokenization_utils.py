@@ -21,7 +21,7 @@ import itertools
 import re
 import unicodedata
 from collections import OrderedDict
-from typing import Any, Optional, Union, overload
+from typing import Any, overload
 
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -587,7 +587,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._update_total_vocab_size()
         return added_tokens
 
-    def _update_trie(self, unique_no_split_tokens: Optional[list[str]] = None):
+    def _update_trie(self, unique_no_split_tokens: list[str] | None = None):
         for token in self._added_tokens_decoder.values():
             if token.content not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
@@ -742,19 +742,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput, EncodedInput],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
+        text: TextInput | PreTokenizedInput | EncodedInput,
+        text_pair: TextInput | PreTokenizedInput | EncodedInput | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -822,25 +822,23 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-            list[PreTokenizedInputPair],
-            list[EncodedInput],
-            list[EncodedInputPair],
-        ],
+        batch_text_or_text_pairs: list[TextInput]
+        | list[TextInputPair]
+        | list[PreTokenizedInput]
+        | list[PreTokenizedInputPair]
+        | list[EncodedInput]
+        | list[EncodedInputPair],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -914,17 +912,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
         self,
-        batch_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
+        batch_ids_pairs: list[PreTokenizedInputPair | tuple[list[int], None]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -1006,7 +1004,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return (text, kwargs)
 
     def get_special_tokens_mask(
-        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list, token_ids_1: list | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -1041,9 +1039,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     @overload
     def convert_ids_to_tokens(self, ids: list[int], skip_special_tokens: bool = False) -> list[str]: ...
 
-    def convert_ids_to_tokens(
-        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
-    ) -> Union[str, list[str]]:
+    def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
         """
         Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
         added tokens.
@@ -1081,9 +1077,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         spaces_between_special_tokens: bool = True,
         **kwargs,
     ) -> str:
