@@ -115,6 +115,8 @@ class ConversionOps:
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
@@ -138,6 +140,8 @@ class Chunk(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         tensors = next(iter(value.values()))
@@ -163,6 +167,8 @@ class Concatenate(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
         if len(target_keys) != 1:
@@ -191,6 +197,8 @@ class MergeModulelist(Concatenate):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
@@ -220,6 +228,8 @@ class SplitModulelist(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         if len(value) != len(self.sizes):
@@ -258,6 +268,8 @@ class PermuteForRope(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
@@ -298,21 +310,28 @@ class WeightTransform:
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
 
-    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
+    def convert(
+        self,
+        layer_name: str,
+        model=None,
+        config=None,
+        hf_quantizer=None,
+        missing_keys: Optional[MutableSet[str]] = None,
+    ):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
 
         collected_tensors = self.collected_tensors
-        if quantizer is not None and self.quantization_operation is not None:
+        if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     self.collected_tensors,
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
                     full_layer_name=layer_name,
+                    model=model,
                     config=config,
-                    quant_config=quantizer.quantization_config,
                     missing_keys=missing_keys,
                 )
 
@@ -332,7 +351,14 @@ class WeightConverter(WeightTransform):
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
-    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
+    def convert(
+        self,
+        layer_name: str,
+        model=None,
+        config=None,
+        hf_quantizer=None,
+        missing_keys: Optional[MutableSet[str]] = None,
+    ):
         misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
@@ -345,9 +371,11 @@ class WeightConverter(WeightTransform):
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
                     full_layer_name=layer_name,
+                    model=model,
                     config=config,
+                    missing_keys=missing_keys,
                 )
-        if quantizer is not None and self.quantization_operation is not None:
+        if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
@@ -355,7 +383,7 @@ class WeightConverter(WeightTransform):
                     target_keys=self.target_keys,
                     full_layer_name=layer_name,
                     config=config,
-                    quant_config=quantizer.quantization_config,
+                    model=model,
                     missing_keys=missing_keys,
                 )
         return collected_tensors, misc
@@ -626,7 +654,6 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
@@ -750,7 +777,11 @@ def convert_and_load_state_dict_in_model(
             pbar.refresh()
             try:
                 realized_value, misc = mapping.convert(
-                    first_param_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
+                    first_param_name,
+                    model=model,
+                    config=model.config,
+                    hf_quantizer=hf_quantizer,
+                    missing_keys=missing_keys,
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
