@@ -745,7 +745,7 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                         )
-                    shard_index = len(mapping.collected_tensors)
+                    shard_index = len(mapping.collected_tensors.get(original_key, []))
                     future = spawn_tp_materialize(
                         thread_pool,
                         tensor,
