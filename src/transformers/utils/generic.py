@@ -18,11 +18,10 @@ Generic utilities
 import inspect
 import json
 import os
-import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
