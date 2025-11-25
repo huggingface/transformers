@@ -2414,7 +2414,7 @@ Hey how are you doing"""
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Test loading a tokenizer from the hub with a new eos token
                 tokenizer_r = self.get_tokenizer(pretrained_name, eos_token=new_eos)
-                self.assertEqual(tokenizer_r._token_mapping["eos_token"], new_eos)
+                self.assertEqual(tokenizer_r._special_tokens_map["eos_token"], new_eos)
                 # Check that the token content is present (may not preserve all AddedToken attributes)
                 self.assertIn(str(new_eos), [str(t) for t in tokenizer_r.added_tokens_decoder.values()])
 
