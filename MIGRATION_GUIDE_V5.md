@@ -83,10 +83,12 @@ You should be able to search and replace `use_auth_token` with `token` and get t
 
 Linked PR: https://github.com/huggingface/transformers/pull/41666
 
+### Attention-related features
+
 We decided to remove some features for the upcoming v5 as they are currently only supported in a few old models and no longer integrated in current model additions. It's recommended to stick to v4.x in case you need them. Following features are affected:
-- No more head masking, see #41076. This feature allowed to turn off certain heads during the attention calculation and only worked for eager.
-- No more relative positional biases in Bert-like models, see #41170. This feature was introduced to allow relative position scores within attention calculations (similar to T5). However, this feature is barely used in official models and a lot of complexity instead. It also only worked with eager.
-- No more head pruning, see #41417 by @gante. As the name suggests, it allowed to prune heads within your attention layers.
+- No more head masking, see [#41076](https://github.com/huggingface/transformers/pull/41076). This feature allowed to turn off certain heads during the attention calculation and only worked for eager.
+- No more relative positional biases in Bert-like models, see [#41170](https://github.com/huggingface/transformers/pull/41170). This feature was introduced to allow relative position scores within attention calculations (similar to T5). However, this feature is barely used in official models and a lot of complexity instead. It also only worked with eager.
+- No more head pruning, see [#41417](https://github.com/huggingface/transformers/pull/41417) by @gante. As the name suggests, it allowed to prune heads within your attention layers.
 
 ### Updates to supported torch APIs
 
@@ -123,7 +125,8 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 
 ## Configuration
 
-- Methods to init a nested config such as `from_xxx_config` are deleted. Configs can be init from the `__init__` method in the same way (https://github.com/huggingface/transformers/pull/41314)
+- Methods to init a nested config such as `from_xxx_config` are deleted. Configs can be init from the `__init__` method in the same way. See [#41314](https://github.com/huggingface/transformers/pull/41314).
+- It is no longer possible to load a config class from a URL file. Configs must be loaded from either a local path or a repo on the Hub. See [#42383](https://github.com/huggingface/transformers/pull/42383).
 
 ## Processing
 
@@ -206,6 +209,16 @@ Linked PRs:
 
 - `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `usel_cache` argument if needed. 
 
+## PushToHubMixin
+
+- removed deprecated `organization` and `repo_url` from `PushToHubMixin`. You must pass a `repo_id` instead.
+- removed `ignore_metadata_errors` from `PushToMixin`. In practice if we ignore errors while loading the model card, we won't be able to push the card back to the Hub so it's better to fail early and not provide the option to fail later.
+- `push_to_hub` do not accept `**kwargs` anymore. All accepted parameters are explicitly documented.
+- arguments of `push_to_hub` are now keyword-only to avoid confusion. Only `repo_id` can be positional since it's the main arg.
+- removed `use_temp_dir` argument from `push_to_hub`. We now use a tmp dir in all cases.
+
+Linked PR: https://github.com/huggingface/transformers/pull/42391.
+
 ## CLI
 
 The deprecated `transformers-cli ...` command was deprecated, `transformers ...` is now the only CLI entry point.
@@ -234,3 +247,19 @@ transformers chat https://router.huggingface.co/v1 HuggingFaceTB/SmolLM3-3B
 Linked PRs: 
 - https://github.com/huggingface/transformers/pull/40997
 - https://github.com/huggingface/transformers/pull/41487
+
+## Environment variables
+
+- Legacy environment variables like `TRANSFORMERS_CACHE`, `PYTORCH_TRANSFORMERS_CACHE`, and `PYTORCH_PRETRAINED_BERT_CACHE` have been removed. Please use `HF_HOME` instead.
+- Constants `HUGGINGFACE_CO_EXAMPLES_TELEMETRY`, `HUGGINGFACE_CO_EXAMPLES_TELEMETRY`, `HUGGINGFACE_CO_PREFIX`, and `HUGGINGFACE_CO_RESOLVE_ENDPOINT` have been removed. Please use `huggingface_hub.constants.ENDPOINT` instead.
+
+Linked PR: https://github.com/huggingface/transformers/pull/42391.
+
+## Requirements update
+
+`transformers` v5 pins the `huggingface_hub` version to `>=1.0.0`. See this [migration guide](https://huggingface.co/docs/huggingface_hub/concepts/migration) to learn more about this major release. Here are to main aspects to know about:
+- switched the HTTP backend from `requests` to `httpx`. This change was made to improve performance and to support both synchronous and asynchronous requests the same way. If you are currently catching `requests.HTTPError` errors in your codebase, you'll need to switch to `httpx.HTTPError`.
+- related to 1., it is not possible to set proxies from your script. To handle proxies, you must set the `HTTP_PROXY` / `HTTPS_PROXY` environment variables
+- `hf_transfer` and therefore `HF_HUB_ENABLE_HF_TRANSFER` have been completed dropped in favor of `hf_xet`. This should be transparent for most users. Please let us know if you notice any downside!
+
+`typer-slim` has been added as required dependency, used to implement both `hf` and `transformers` CLIs.
