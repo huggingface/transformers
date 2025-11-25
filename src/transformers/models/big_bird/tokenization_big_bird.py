@@ -148,7 +148,7 @@ class BigBirdTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=True)
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
+            
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
