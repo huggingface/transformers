@@ -49,7 +49,11 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = ["hf-internal-testing/llama-tokenizer", "meta-llama/Llama-2-7b-hf"]
+    from_pretrained_id = [
+        "hf-internal-testing/llama-tokenizer",
+        "meta-llama/Llama-2-7b-hf",
+        "meta-llama/Meta-Llama-3-8B",
+    ]
     tokenizer_class = LlamaTokenizer
     rust_tokenizer_class = LlamaTokenizerFast
 

@@ -2099,12 +2099,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
+        remote_files = []
         if not is_local and not local_files_only:
             try:
                 remote_files = list_repo_files(pretrained_model_name_or_path)
             except Exception:
                 remote_files = []
-        else:
+        elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
             remote_files = os.listdir(pretrained_model_name_or_path)
 
         if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
@@ -2437,57 +2438,108 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except NotImplementedError:
             vocab_size = 0
 
+        # Optionally patches mistral tokenizers with wrong regex
         if (
             vocab_size > 100000
             and hasattr(tokenizer, "_tokenizer")
             and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
         ):
-            from huggingface_hub import model_info
+            tokenizer = cls._patch_mistral_regex(
+                tokenizer,
+                pretrained_model_name_or_path,
+                token=token,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+                _commit_hash=_commit_hash,
+                _is_local=_is_local,
+                init_kwargs=init_kwargs,
+                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
+            )
 
-            def is_base_mistral(model_id: str) -> bool:
-                model = model_info(model_id)
-                if model.tags is not None:
-                    if re.search("base_model:.*mistralai", "".join(model.tags)):
-                        return True
-                return False
+        return tokenizer
 
-            if _is_local or is_base_mistral(pretrained_model_name_or_path):
-                _config_file = cached_file(
-                    pretrained_model_name_or_path,
-                    "config.json",
-                    cache_dir=cache_dir,
-                    token=token,
-                    local_files_only=local_files_only,
-                    _raise_exceptions_for_missing_entries=False,
-                    _raise_exceptions_for_connection_errors=False,
-                    _commit_hash=_commit_hash,
-                )
-                if _config_file is not None:
-                    with open(_config_file, encoding="utf-8") as f:
-                        _config = json.load(f)
-                    transformers_version = _config.get("transformers_version")
+    @classmethod
+    def _patch_mistral_regex(
+        cls,
+        tokenizer,
+        pretrained_model_name_or_path,
+        token=None,
+        cache_dir=None,
+        local_files_only=False,
+        _commit_hash=None,
+        _is_local=False,
+        init_kwargs=None,
+        fix_mistral_regex=None,
+    ):
+        """
+        Patches mistral related tokenizers with incorrect regex if detected
+            1) Local file with an associated config saved next to it
+                >> Model type one of the mistral models (on older versions)
+            2) Remote models on the hub from official mistral models
+                >> Tags including `base_model:.*mistralai`
+        """
+        from huggingface_hub import model_info
 
-                    if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
-                        if _is_local and _config.model_type not in [
+        def is_base_mistral(model_id: str) -> bool:
+            model = model_info(model_id)
+            if model.tags is not None:
+                if re.search("base_model:.*mistralai", "".join(model.tags)):
+                    return True
+            return False
+
+        if _is_local or is_base_mistral(pretrained_model_name_or_path):
+            _config_file = cached_file(
+                pretrained_model_name_or_path,
+                "config.json",
+                cache_dir=cache_dir,
+                token=token,
+                local_files_only=local_files_only,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                _commit_hash=_commit_hash,
+            )
+
+            # Detected using a (local) mistral tokenizer
+            mistral_config_detected = False
+            if _config_file is not None:
+                with open(_config_file, encoding="utf-8") as f:
+                    _config = json.load(f)
+                transformers_version = _config.get("transformers_version")
+                transformers_model_type = _config.get("model_type")
+
+                # Detect if we can skip the mistral fix by
+                #   a) having a non-mistral tokenizer
+                #   b) fixed version of transformers
+                if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                    if (
+                        _is_local
+                        and transformers_model_type is not None
+                        and transformers_model_type
+                        not in [
                             "mistral",
                             "mistral3",
-                            "voxstral",
+                            "voxtral",
                             "ministral",
                             "pixtral",
-                        ]:
-                            return tokenizer
+                        ]
+                    ):
+                        return tokenizer
+                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
+                    return tokenizer
 
+                mistral_config_detected = True
+
+            if mistral_config_detected or (not _is_local and is_base_mistral(pretrained_model_name_or_path)):
                 # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
-                if "fix_mistral_regex" in init_kwargs:
+                if init_kwargs and "fix_mistral_regex" in init_kwargs:
                     setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
 
-                fix_mistral_regex = kwargs.get("fix_mistral_regex")  # not init kwargs
                 # only warn if its not explicitly passed
                 if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
                     setattr(tokenizer, "fix_mistral_regex", False)
                     logger.warning(
                         f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
-                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
+                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e."
                         " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
                     )
                 elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
@@ -2500,7 +2552,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         ),
                         behavior="isolated",
                     )
-
         return tokenizer
 
     @staticmethod
