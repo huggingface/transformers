@@ -257,17 +257,5 @@ class RfDetrConfig(PreTrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         super().__init__(**kwargs)
 
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.decoder_self_attention_heads
-
-    @property
-    def num_key_value_heads(self) -> int:
-        return self.decoder_self_attention_heads
-
 
 __all__ = ["RfDetrConfig"]
