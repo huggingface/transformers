@@ -878,7 +878,7 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         if pixel_values is not None and input_ids is not None:
             lengths, starts, batch_indices = self.get_image_num_per_sample(input_ids)
             lengths_copy = lengths.clone()
-            lengths = lengths / 256
+            lengths = lengths // 256
 
             lengths_sum = torch.ones(int(lengths.sum().item()), dtype=torch.int64)
             vit_embeds, gate_result = self.get_image_features(pixel_values, lengths_sum)
@@ -898,14 +898,33 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
                 lengths=lengths_copy,
                 starts=global_starts,
             )
+            if isinstance(attention_mask, dict):
+                attention_mask = attention_mask["full_attention"]
 
-            attention_mask = attention_mask[:, keep_mask].to(inputs_embeds.device)
+            if attention_mask is not None:
+                if attention_mask.dim() > 2 or attention_mask.numel() != input_ids.numel():
+                    pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
+                    attention_mask = input_ids.ne(pad_token_id)
+                else:
+                    attention_mask = attention_mask.reshape(B * N)
+
+            attention_mask = attention_mask[keep_mask].to(inputs_embeds.device)
 
             inputs_embeds = self._scatter_image_embeddings(
                 inputs_embeds=inputs_embeds,
                 input_ids=input_ids,
                 vit_embeds=vit_embeds,
-            ).reshape(B, -1, C)
+            )
+
+            inputs_embeds, attention_mask = self._reconstruct_batch(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                gate_result=gate_result,
+                lengths=lengths,
+                batch_indices=batch_indices,
+                N=N,
+                B=B,
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -1037,6 +1056,60 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
             return inputs_embeds
         inputs_embeds[selected_mask] = vit_embeds.to(inputs_embeds.device)
         return inputs_embeds
+
+    def _reconstruct_batch(
+        self,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor,
+        gate_result: torch.Tensor,
+        lengths: torch.Tensor,
+        batch_indices: torch.Tensor,
+        N: int,
+        B: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Step 5: 将参差不齐的 1D 序列重组回 Batch 结构。
+        参数命名与 forward 保持一致以增强可读性。
+        """
+        device = inputs_embeds.device
+
+        # 1. 计算每个样本被压缩掉了多少 Token
+
+        # lengths 在 forward 里已经被除以 256 了，所以这里直接用作 split 的依据
+        gate_result_split = torch.split(gate_result, lengths.tolist())
+
+        # 统计每张图压缩的 block 数量 -> [Num_Images]
+        compressed_blocks_per_image = torch.tensor(
+            [g.sum().item() for g in gate_result_split], device=device, dtype=torch.int64
+        )
+
+        # 聚合到每个样本 (处理单样本多图) -> [B]
+        compressed_blocks_per_sample = torch.zeros(B, dtype=torch.int64, device=device)
+        compressed_blocks_per_sample.index_add_(0, batch_indices, compressed_blocks_per_image)
+
+        # 计算每个样本的新长度 (每个压缩块移除 192 tokens) -> [B]
+        tokens_removed = compressed_blocks_per_sample * 192
+        new_lengths = N - tokens_removed
+
+        # 2. 准备输出容器 (Padding)
+        max_len = int(new_lengths.max().item())
+        hidden_dim = inputs_embeds.shape[-1]
+
+        # 初始化为 0 (Padding)
+        out_embeds = torch.zeros((B, max_len, hidden_dim), dtype=inputs_embeds.dtype, device=device)
+        out_mask = torch.zeros((B, max_len), dtype=attention_mask.dtype, device=device)
+
+        # 3. 切分并填充
+        # 根据 new_lengths 将长条切开
+        split_embeds = torch.split(inputs_embeds, new_lengths.tolist())
+        split_masks = torch.split(attention_mask, new_lengths.tolist())
+
+        for i, (emb, mask, length) in enumerate(zip(split_embeds, split_masks, new_lengths)):
+            L = int(length.item())
+            out_embeds[i, :L] = emb
+            out_mask[i, :L] = mask
+
+        return out_embeds, out_mask
 
 
 @dataclass

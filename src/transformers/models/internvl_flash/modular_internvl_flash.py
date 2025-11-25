@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -36,9 +36,7 @@ from ..llava.modeling_llava import (
 )
 from ..zoedepth.modeling_zoedepth import ZoeDepthMultiheadAttention
 
-import torch.nn as nn
-
-class InternVLFlashMLP(nn.Module):
+class InternvlFlashMLP(nn.Module):
     def __init__(self, in_dim, out_dim, dropout=0.0):
         super().__init__()
         self.dense_in = nn.Linear(in_dim, out_dim)
@@ -58,7 +56,7 @@ class InternVLFlashMLP(nn.Module):
         
         return hidden_states
 
-class InternVLFlashMLP2(nn.Module):
+class InternvlFlashMLP2(nn.Module):
     def __init__(self, vit_hidden_size, llm_hidden_size, config):
         super().__init__()
         
@@ -86,16 +84,16 @@ class InternVLFlashMLP2(nn.Module):
         
         return hidden_states
     
-class InternVLFlashGating(nn.Module):
+class InternvlFlashGating(nn.Module):
     def __init__(self, hidden_size=2048, expansion_factor=4, dropout=0.1, use_checkpoint=True):
         super().__init__()
         self.use_checkpoint = use_checkpoint
         mid_dim = hidden_size * expansion_factor
 
-        self.block1 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block2 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block3 = InternVLFlashMLP(hidden_size, mid_dim)
-        self.block4 = InternVLFlashMLP(hidden_size, mid_dim)
+        self.block1 = InternvlFlashMLP(hidden_size, mid_dim)
+        self.block2 = InternvlFlashMLP(hidden_size, mid_dim)
+        self.block3 = InternvlFlashMLP(hidden_size, mid_dim)
+        self.block4 = InternvlFlashMLP(hidden_size, mid_dim)
         self.gate_norm = nn.LayerNorm(hidden_size)
         self.gate_proj = nn.Linear(hidden_size, 2)
 
@@ -108,22 +106,22 @@ class InternVLFlashGating(nn.Module):
         probs = torch.softmax(logits, dim=-1)  # 每个 token 的 expert 选择概率
         return probs
 
-class InternvlFlashMultiheadAttention(ZoeDepthMultiheadAttention):
+class InternvlFlashTextAttention(ZoeDepthMultiheadAttention):
     pass
-class InternVLFlashCrossAttentionPooling(nn.Module):
+class InternvlFlashCrossAttentionPooling(nn.Module):
     def __init__(self, dim, num_heads=16):
         super().__init__()
         self.query_token = nn.Parameter(torch.randn(1, dim))  # [1, D]
-        self.attn1 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn1 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm1 = nn.LayerNorm(dim)
-        self.attn2 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn2 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm2 = nn.LayerNorm(dim)
-        self.attn3 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn3 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm3 = nn.LayerNorm(dim)
-        self.attn4 = InternvlFlashMultiheadAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
+        self.attn4 = InternvlFlashTextAttention(hidden_size=dim, num_attention_heads=num_heads, dropout=0.0)
         self.norm4 = nn.LayerNorm(dim)
 
-    def forward(self, batched_tokens: list[torch.Tensor]):
+    def forward(self, batched_tokens: List[torch.Tensor]):
         """
         batched_tokens: List of Tensors of shape [Ti, D], length = B
         """
@@ -147,19 +145,14 @@ class InternVLFlashCrossAttentionPooling(nn.Module):
         # 2. Query token: [B, 1, D]
         query = self.query_token.unsqueeze(0).expand(B, -1, -1)  # learnable token for each sample
 
-        # 1. 创建一个全 0 的 float tensor，类型要和 query 一致 (float16/float32)
         attention_mask = torch.zeros_like(padding_mask, dtype=query.dtype)
-        
-        # 2. 将 padding_mask 为 True (即 Padding) 的位置填为负无穷 (-inf)
-        # 这样在 softmax 时，这些位置的概率会变为 0
-        min_value = torch.finfo(query.dtype).min # 或者用 -1e9
+        min_value = torch.finfo(query.dtype).min 
         attention_mask.masked_fill_(padding_mask, min_value)
 
-        # 3. 调整形状以匹配 Attention Score 的维度: [B, Num_Heads, Q_Len, K_Len]
-        # 当前 attention_mask 是 [B, K_Len]，我们需要把它变成 [B, 1, 1, K_Len]
-        # 这样它才能正确地广播到所有的 Head 和 Query 上
+        # 3. Adjust Attention Score: [B, Num_Heads, Q_Len, K_Len]
         attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
-        # 3. Attention layers
+
+        # 4. Attention layers
         out1 = self.attn1(query, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
         out1 = self.norm1(out1)
         out2 = self.attn2(out1, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
@@ -189,15 +182,14 @@ class InternvlFlashModel(InternVLModel):
         super().__init__(config)
 
         vit_hidden_size = config.vision_config.hidden_size
-        self.pooling_before_gating = InternVLFlashCrossAttentionPooling(dim=vit_hidden_size)
-        self.gating = InternVLFlashGating(hidden_size=vit_hidden_size)
+        self.pooling_before_gating = InternvlFlashCrossAttentionPooling(dim=vit_hidden_size)
+        self.gating = InternvlFlashGating(hidden_size=vit_hidden_size)
 
         llm_hidden_size = config.text_config.hidden_size
         self.multi_modal_projector = InternvlFlashMultiModalProjector(config)
-        self.mlp2 = InternVLFlashMLP2(vit_hidden_size, llm_hidden_size, config)
+        self.mlp2 = InternvlFlashMLP2(vit_hidden_size, llm_hidden_size, config)
         self.flash_relative_threshold = config.flash_relative_threshold
         self.flash_absolute_threshold = config.flash_absolute_threshold
-
 
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
@@ -386,6 +378,49 @@ class InternvlFlashModel(InternVLModel):
             inputs_embeds[selected_mask] = vit_embeds.to(inputs_embeds.device)
             return inputs_embeds
 
+    def _reconstruct_batch(
+            self,
+            inputs_embeds: torch.Tensor,   
+            attention_mask: torch.Tensor,  
+            gate_result: torch.Tensor,    
+            lengths: torch.Tensor,         
+            batch_indices: torch.Tensor,   
+            N: int,                       
+            B: int                         
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            """
+            Reconstructs the batch by removing compressed visual tokens based on gating results.
+            """
+            device = inputs_embeds.device
+
+            gate_result_split = torch.split(gate_result, lengths.tolist())
+            
+            compressed_blocks_per_image = torch.tensor(
+                [g.sum().item() for g in gate_result_split], 
+                device=device, dtype=torch.int64
+            )
+
+            compressed_blocks_per_sample = torch.zeros(B, dtype=torch.int64, device=device)
+            compressed_blocks_per_sample.index_add_(0, batch_indices, compressed_blocks_per_image)
+
+            tokens_removed = compressed_blocks_per_sample * 192
+            new_lengths = N - tokens_removed 
+
+            max_len = int(new_lengths.max().item())
+            hidden_dim = inputs_embeds.shape[-1]
+            
+            out_embeds = torch.zeros((B, max_len, hidden_dim), dtype=inputs_embeds.dtype, device=device)
+            out_mask = torch.zeros((B, max_len), dtype=attention_mask.dtype, device=device)
+            
+            split_embeds = torch.split(inputs_embeds, new_lengths.tolist())
+            split_masks = torch.split(attention_mask, new_lengths.tolist())
+            
+            for i, (emb, mask, length) in enumerate(zip(split_embeds, split_masks, new_lengths)):
+                L = int(length.item())
+                out_embeds[i, :L] = emb
+                out_mask[i, :L] = mask
+                            
+            return out_embeds, out_mask
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -408,7 +443,7 @@ class InternvlFlashModel(InternVLModel):
         if pixel_values is not None and input_ids is not None:
             lengths, starts, batch_indices= self.get_image_num_per_sample(input_ids)
             lengths_copy = lengths.clone()
-            lengths = lengths / 256
+            lengths = lengths // 256
 
             lengths_sum = torch.ones(int(lengths.sum().item()), dtype=torch.int64)
             vit_embeds, gate_result = self.get_image_features(pixel_values, lengths_sum)
@@ -428,14 +463,33 @@ class InternvlFlashModel(InternVLModel):
                 lengths=lengths_copy,
                 starts=global_starts
             )
+            if isinstance(attention_mask, dict): #add support for StaticCache
+                attention_mask = attention_mask["full_attention"]
 
-            attention_mask = attention_mask[:, keep_mask].to(inputs_embeds.device)
+            if attention_mask is not None:
+                if attention_mask.dim() > 2 or attention_mask.numel() != input_ids.numel():
+                    pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
+                    attention_mask = input_ids.ne(pad_token_id)
+                else:
+                    attention_mask = attention_mask.reshape(B * N)
+
+            attention_mask = attention_mask[keep_mask].to(inputs_embeds.device)
 
             inputs_embeds = self._scatter_image_embeddings(
                 inputs_embeds=inputs_embeds,
                 input_ids=input_ids,
                 vit_embeds=vit_embeds,
-            ).reshape(B, -1, C)
+            )
+
+            inputs_embeds, attention_mask = self._reconstruct_batch(
+                inputs_embeds=inputs_embeds,   
+                attention_mask=attention_mask, 
+                gate_result=gate_result,      
+                lengths=lengths,              
+                batch_indices=batch_indices,  
+                N=N,                           
+                B=B                            
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,

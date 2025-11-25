@@ -217,3 +217,7 @@ class InternvlFlashModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     @unittest.skip("InternVLFlash model requires input_ids to process pixel_values and merge visual features.")
     def test_inputs_embeds_matches_input_ids(self):
         pass
+
+    @unittest.skip("The Flash model relies on input_ids for visual compression and cannot support multimodal generation using inputs_embeds alone.")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
+        pass
