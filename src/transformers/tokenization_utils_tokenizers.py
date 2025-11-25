@@ -91,7 +91,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def __init__(self, *args, **kwargs):
         # TokenizersBackend expects a prepared tokenizer object; subclasses build it.
-        fast_tokenizer = None
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
@@ -101,11 +100,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         self._tokenizer = getattr(self, "_tokenizer", None)
 
         if tokenizer_object is not None:
-            fast_tokenizer = copy.deepcopy(tokenizer_object)
+            fast_tokenizer = tokenizer_object
         elif fast_tokenizer_file is not None:
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
 
-        # if the class defined it itself:
         if fast_tokenizer is not None:
             self._tokenizer = fast_tokenizer
         elif self._tokenizer is None:
@@ -330,7 +328,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if added_tokens_decoder:
             init_kwargs["added_tokens_decoder"] = added_tokens_decoder
-        
+
         # Convert all AddedToken dicts to AddedToken objects (including special tokens from tokenizer_config.json)
         init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
 
@@ -340,7 +338,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         class_sig = inspect.signature(getattr(cls, "__init__", cls))
         accepts_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in class_sig.parameters.values())
-        if tokenizer_object is not None and "tokenizer_object" in class_sig.parameters:
+        if tokenizer_object is not None: # only when cls is self
             init_kwargs.setdefault("tokenizer_object", tokenizer_object)
         if vocab is not None and ("vocab" in class_sig.parameters or accepts_kwargs):
             init_kwargs.setdefault("vocab", vocab)

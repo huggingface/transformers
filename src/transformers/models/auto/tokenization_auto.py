@@ -763,6 +763,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
             logger.info("Loading tokenizer with tokenizers backend")
             try:
                 #TODO tokenizers backend already supports all conversion logic!
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
             except ValueError as e:
                 if "You have to call `super().__init__()`" in str(e):
