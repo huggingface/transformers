@@ -317,12 +317,26 @@ class PeftAdapterMixin:
             else:
                 new_key = key
 
-            if key_mapping:  # TODO dynamic weight loader for adapters
-                for pattern, replacement in key_mapping.items():
-                    new_key, n_replace = re.subn(pattern, replacement, new_key)
-                    # Early exit of the loop
-                    if n_replace > 0:
-                        break
+            if key_mapping:
+                for weight_converter in key_mapping:
+                    patterns = weight_converter.source_keys
+                    replacements = weight_converter.target_keys
+                    # mapping is either 1:1 or 1:n or n:1
+                    if len(patterns) > 1 and len(replacements) == 1:
+                        replacements = len(patterns) * replacements
+                    elif len(patterns) == 1 and len(replacements) > 1:
+                        patterns = len(replacements) * patterns
+                    elif len(patterns) > 1 and len(replacements) > 1:
+                        raise ValueError(
+                            "WeightConversion incorrectly initialized, please open an issue and report this error "
+                            "here: https://github.com/huggingface/transformers/issues"
+                        )
+
+                    for pattern, replacement in zip(patterns, replacements, strict=True):
+                        new_key, n_replace = re.subn(pattern, replacement, new_key)
+                        # Early exit of the loop
+                        if n_replace > 0:
+                            break
 
             # For hotswapping, we need the adapter name to be present in the state dict keys
             if hotswap:
