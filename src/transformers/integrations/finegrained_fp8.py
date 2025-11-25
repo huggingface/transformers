@@ -15,7 +15,7 @@
 
 import re
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any
 
 from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
@@ -655,13 +655,13 @@ class Fp8Quantize(ConversionOps):
 class Fp8Dequantize(ConversionOps):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
 
-    def __init__(self, block_size: Optional[tuple[int, int]] = None):
+    def __init__(self, block_size: tuple[int, int] | None = None):
         self.block_size = block_size
         self.reverse_op = Fp8Quantize
 
     def convert(
         self,
-        value: Union[Sequence[torch.Tensor], dict[str, torch.Tensor]],
+        value: Sequence[torch.Tensor] | dict[str, torch.Tensor],
         *,
         context: dict[str, Any],
     ) -> torch.Tensor:
