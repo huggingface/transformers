@@ -263,22 +263,6 @@ class InternvlFlashMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@auto_docstring
-class InternvlFlashPreTrainedModel(PreTrainedModel):
-    config: InternvlFlashConfig
-    base_model_prefix = ""
-    input_modalities = ["image", "text", "video"]
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -724,6 +708,22 @@ class InternvlFlashVisionModel(InternvlFlashVisionPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+@auto_docstring
+class InternvlFlashPreTrainedModel(PreTrainedModel):
+    config: InternvlFlashConfig
+    base_model_prefix = ""
+    input_modalities = ["image", "text", "video"]
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
 
 @auto_docstring(
@@ -1315,10 +1315,4 @@ class InternvlFlashForConditionalGeneration(InternvlFlashPreTrainedModel, Genera
         return model_inputs
 
 
-__all__ = [
-    "InternvlFlashVisionPreTrainedModel",
-    "InternvlFlashVisionModel",
-    "InternvlFlashPreTrainedModel",
-    "InternvlFlashModel",
-    "InternvlFlashForConditionalGeneration",
-]
+__all__ = ["InternvlFlashVisionModel", "InternvlFlashModel", "InternvlFlashForConditionalGeneration"]
