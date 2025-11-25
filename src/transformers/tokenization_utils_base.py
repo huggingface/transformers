@@ -2504,7 +2504,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         setattr(tokenizer, "fix_mistral_regex", False)
                         logger.warning(
                             f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
-                            f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. "
+                            f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e."
                             " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
                         )
                     elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
