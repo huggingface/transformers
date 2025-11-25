@@ -55,6 +55,7 @@ from transformers import (
     MBart50TokenizerFast,
     MBartTokenizer,
     MBartTokenizerFast,
+    SentencePieceBackend,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     default_data_collator,
@@ -403,7 +404,9 @@ def main():
         model.resize_token_embeddings(len(tokenizer))
 
     # Set decoder_start_token_id
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
+    if model.config.decoder_start_token_id is None and isinstance(
+        tokenizer, (MBartTokenizer, MBartTokenizerFast, SentencePieceBackend)
+    ):
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
         else:

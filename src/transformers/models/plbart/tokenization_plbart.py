@@ -369,3 +369,6 @@ class PLBartTokenizer(SentencePieceBackend):
             clean_up_tokenization_spaces=self.clean_up_tokenization_spaces,
             **kwargs,
         )
+
+
+__all__ = ["PLBartTokenizer"]

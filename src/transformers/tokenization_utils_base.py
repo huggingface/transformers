@@ -2256,7 +2256,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         return True
                 return False
 
-            if _is_local or is_base_mistral(pretrained_model_name_or_path):
+            fix_mistral_regex_from_kwargs = kwargs.get("fix_mistral_regex")
+            fix_mistral_regex_from_init = init_kwargs.get("fix_mistral_regex")
+            
+            should_check_mistral_fix = (_is_local or is_base_mistral(pretrained_model_name_or_path) or 
+                                        fix_mistral_regex_from_kwargs is not None or 
+                                        fix_mistral_regex_from_init is not None)
+
+            if should_check_mistral_fix:
                 _config_file = cached_file(
                     pretrained_model_name_or_path,
                     "config.json",
@@ -2299,12 +2306,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     setattr(tokenizer, "fix_mistral_regex", True)
                     import tokenizers
 
-                    tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
+                    split_pretokenizer = tokenizers.pre_tokenizers.Split(
                         pattern=tokenizers.Regex(
                             r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
                         ),
                         behavior="isolated",
                     )
+                    
+                    current_pretokenizer = tokenizer.backend_tokenizer.pre_tokenizer
+                    # Check if it's already a Sequence
+                    if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Sequence):
+                        # Replace the first element (the Split pattern)
+                        tokenizer.backend_tokenizer.pre_tokenizer[0] = split_pretokenizer
+                    else:
+                        # Not a Sequence, so create one with Split + current pretokenizer
+                        tokenizer.backend_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence([
+                            split_pretokenizer,
+                            current_pretokenizer,
+                        ])
 
         return tokenizer
 

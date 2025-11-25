@@ -326,10 +326,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("vits", "VitsTokenizer"),
         (
             "voxtral",
-            (
-                "MistralCommonTokenizer" if is_mistral_common_available() else None,
-                "PreTrainedTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
-            ),
+            "MistralCommonTokenizer"
+            if is_mistral_common_available()
+            else ("PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
@@ -624,6 +623,20 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
         files_loaded = [spm_file] if spm_file else []
         kwargs["backend"] = "sentencepiece"
         kwargs["files_loaded"] = files_loaded
+        # Resolve the SPM file path and pass it as vocab_file
+        if spm_file is not None:
+            resolved_vocab_file = cached_file(
+                pretrained_model_name_or_path,
+                spm_file,
+                cache_dir=kwargs.get("cache_dir"),
+                force_download=kwargs.get("force_download", False),
+                proxies=kwargs.get("proxies"),
+                token=kwargs.get("token"),
+                revision=kwargs.get("revision"),
+                local_files_only=kwargs.get("local_files_only", False),
+                subfolder=kwargs.get("subfolder", ""),
+            )
+            kwargs["vocab_file"] = resolved_vocab_file
         if isinstance(tokenizer_class, type) and issubclass(tokenizer_class, SentencePieceBackend):
             logger.info("Loading tokenizer with SentencePiece backend using tokenizer class")
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
@@ -693,6 +706,19 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                     files_loaded = [spm_file]
                     kwargs["backend"] = "sentencepiece"
                     kwargs["files_loaded"] = files_loaded
+                    # Resolve the SPM file path and pass it as vocab_file
+                    resolved_vocab_file = cached_file(
+                        pretrained_model_name_or_path,
+                        spm_file,
+                        cache_dir=kwargs.get("cache_dir"),
+                        force_download=kwargs.get("force_download", False),
+                        proxies=kwargs.get("proxies"),
+                        token=kwargs.get("token"),
+                        revision=kwargs.get("revision"),
+                        local_files_only=kwargs.get("local_files_only", False),
+                        subfolder=kwargs.get("subfolder", ""),
+                    )
+                    kwargs["vocab_file"] = resolved_vocab_file
                     if tokenizer_class is not None and issubclass(tokenizer_class, SentencePieceBackend):
                         logger.info(
                             "Falling back to SentencePiece backend using tokenizer class that inherits from SentencePieceBackend."
@@ -721,6 +747,19 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
             files_loaded = [spm_file]
             kwargs["backend"] = "sentencepiece"
             kwargs["files_loaded"] = files_loaded
+            # Resolve the SPM file path and pass it as vocab_file
+            resolved_vocab_file = cached_file(
+                pretrained_model_name_or_path,
+                spm_file,
+                cache_dir=kwargs.get("cache_dir"),
+                force_download=kwargs.get("force_download", False),
+                proxies=kwargs.get("proxies"),
+                token=kwargs.get("token"),
+                revision=kwargs.get("revision"),
+                local_files_only=kwargs.get("local_files_only", False),
+                subfolder=kwargs.get("subfolder", ""),
+            )
+            kwargs["vocab_file"] = resolved_vocab_file
             if (
                 tokenizer_class is not None
                 and SentencePieceBackend is not None
