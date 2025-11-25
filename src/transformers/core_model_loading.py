@@ -298,7 +298,7 @@ class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
     collected_tensors: dict[str,  Future] = field(default_factory=dict, init=False)
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
-        self.collected_tensors[source_key] = future
+        self.collected_tensors[target_key] = future
 
         bucket = self.layer_targets.setdefault(target_key, set())
         bucket.add(source_key)
