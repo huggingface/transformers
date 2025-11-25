@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -160,7 +159,7 @@ class AutoHfQuantizer:
     """
 
     @classmethod
-    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, dict], **kwargs):
+    def from_config(cls, quantization_config: QuantizationConfigMixin | dict, **kwargs):
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
@@ -192,8 +191,8 @@ class AutoHfQuantizer:
     @classmethod
     def merge_quantization_configs(
         cls,
-        quantization_config: Union[dict, QuantizationConfigMixin],
-        quantization_config_from_args: Optional[QuantizationConfigMixin],
+        quantization_config: dict | QuantizationConfigMixin,
+        quantization_config_from_args: QuantizationConfigMixin | None,
     ):
         """
         handles situations where both quantization_config from args and quantization_config from model config are present.
@@ -287,7 +286,7 @@ def register_quantizer(name: str):
             raise ValueError(f"Quantizer '{name}' already registered")
 
         if not issubclass(cls, HfQuantizer):
-            raise ValueError("Quantizer must extend HfQuantizer")
+            raise TypeError("Quantizer must extend HfQuantizer")
 
         AUTO_QUANTIZER_MAPPING[name] = cls
         return cls
@@ -295,7 +294,7 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
-def get_hf_quantizer(config, quantization_config, dtype, from_tf, from_flax, device_map, weights_only, user_agent):
+def get_hf_quantizer(config, quantization_config, dtype, device_map, weights_only, user_agent):
     pre_quantized = hasattr(config, "quantization_config")
     if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
         pre_quantized = False
@@ -318,14 +317,13 @@ def get_hf_quantizer(config, quantization_config, dtype, from_tf, from_flax, dev
     if hf_quantizer is not None:
         hf_quantizer.validate_environment(
             dtype=dtype,
-            from_tf=from_tf,
-            from_flax=from_flax,
             device_map=device_map,
             weights_only=weights_only,
         )
         dtype = hf_quantizer.update_dtype(dtype)
         device_map = hf_quantizer.update_device_map(device_map)
         config = hf_quantizer.update_tp_plan(config)
+        config = hf_quantizer.update_ep_plan(config)
 
         # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
         if not getattr(hf_quantizer.quantization_config, "dequantize", False):

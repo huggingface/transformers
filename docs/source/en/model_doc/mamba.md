@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 
-
 > [!TIP]
 > This model was contributed by [Molbap](https://huggingface.co/Molbap) and [AntonV](https://huggingface.co/AntonV).
 > Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
@@ -93,6 +92,7 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
 ## Notes
 
 - The current implementation uses the original CUDA kernels. The FlashAttention equivalent implementation is hosted in the [mamba-ssm](https://github.com/state-spaces/mamba) and [causal_conv1d](https://github.com/Dao-AILab/causal-conv1d) repositories. Make sure to install them if your hardware supports it!

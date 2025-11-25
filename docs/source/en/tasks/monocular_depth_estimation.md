@@ -23,7 +23,7 @@ a single camera viewpoint.
 Monocular depth estimation has various applications, including 3D reconstruction, augmented reality, autonomous driving,
 and robotics. It is a challenging task as it requires the model to understand the complex relationships between objects
 in the scene and the corresponding depth information, which can be affected by factors such as lighting conditions,
-occlusion, and texture. 
+occlusion, and texture.
 
 There are two main depth estimation categories:
 
@@ -51,9 +51,10 @@ The simplest way to try out inference with a model supporting depth estimation i
 Instantiate a pipeline from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?pipeline_tag=depth-estimation&sort=downloads):
 
 ```py
->>> from transformers import pipeline, infer_device
+>>> from transformers import pipeline
+from accelerate import Accelerator
 >>> import torch
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> checkpoint = "depth-anything/Depth-Anything-V2-base-hf"
 >>> pipe = pipeline("depth-estimation", model=checkpoint, device=device)
 ```
@@ -143,7 +144,7 @@ Let's post-process the results to remove any padding and resize the depth map to
 
 <Tip>
 <p>In the <a href="https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131">original implementation</a> ZoeDepth model performs inference on both the original and flipped images and averages out the results. The <code>post_process_depth_estimation</code> function can handle this for us by passing the flipped outputs to the optional <code>outputs_flipped</code> argument:</p>
-<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():   
+<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():
 ...     outputs = model(pixel_values)
 ...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
 &gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(

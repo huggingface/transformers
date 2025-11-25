@@ -18,6 +18,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 from unittest.mock import patch
 
 import numpy as np
@@ -37,7 +38,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
+from transformers.utils import is_datasets_available, is_faiss_available, is_torch_available
 
 from ..bart.test_modeling_bart import BartModelTester
 from ..dpr.test_modeling_dpr import DPRModelTester
@@ -74,7 +75,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         msg = f"{a} != {b}"
         if prefix:
@@ -679,6 +680,7 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 @require_torch_non_multi_accelerator
+@slow
 class RagModelIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -750,7 +752,6 @@ class RagModelIntegrationTests(unittest.TestCase):
             dataset_revision="b24a417",
         )
 
-    @slow
     def test_rag_sequence_inference(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -789,7 +790,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor([36.7368]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
-    @slow
     def test_rag_token_inference(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -828,7 +828,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         expected_loss = torch.tensor([36.3557]).to(torch_device)
         _assert_tensors_equal(expected_loss, output.loss, atol=TOLERANCE)
 
-    @slow
     def test_rag_token_generate_beam(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -867,7 +866,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_text_1, EXPECTED_OUTPUT_TEXT_1)
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
-    @slow
     def test_rag_sequence_generate_beam(self):
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
@@ -907,7 +905,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output_text_2, EXPECTED_OUTPUT_TEXT_2)
 
     @property
-    def test_data_questions(self):
+    def questions_data(self):
         return [
             "who got the first nobel prize in physics",
             "when is the next deadpool movie being released",
@@ -919,7 +917,6 @@ class RagModelIntegrationTests(unittest.TestCase):
             "how many episodes are there in dragon ball z",
         ]
 
-    @slow
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
@@ -933,7 +930,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         )
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -962,7 +959,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-    @slow
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
@@ -976,7 +972,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         )
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,
@@ -1015,7 +1011,6 @@ class RagModelIntegrationTests(unittest.TestCase):
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
-    @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
         retriever = RagRetriever.from_pretrained(
@@ -1029,7 +1024,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             rag_token.half()
 
         input_dict = tokenizer(
-            self.test_data_questions,
+            self.questions_data,
             return_tensors="pt",
             padding=True,
             truncation=True,

@@ -36,7 +36,7 @@ in vision transformers. As a result, we propose LeVIT: a hybrid neural network f
 We consider different measures of efficiency on different hardware platforms, so as to best reflect a wide range of
 application scenarios. Our extensive experiments empirically validate our technical choices and show they are suitable
 to most architectures. Overall, LeViT significantly outperforms existing convnets and vision transformers with respect
-to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeViT is 5 times faster than EfficientNet on CPU. *
+to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeViT is 5 times faster than EfficientNet on CPU.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/levit_architecture.png"
 alt="drawing" width="600"/>
@@ -56,7 +56,7 @@ This model was contributed by [anugunj](https://huggingface.co/anugunj). The ori
   one takes the average prediction between both heads as final prediction. (2) is also called "fine-tuning with distillation",
   because one relies on a teacher that has already been fine-tuned on the downstream dataset. In terms of models, (1) corresponds
   to [`LevitForImageClassification`] and (2) corresponds to [`LevitForImageClassificationWithTeacher`].
-- All released checkpoints were pre-trained and fine-tuned on  [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k)
+- All released checkpoints were pre-trained and fine-tuned on  [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k)
   (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes). only. No external data was used. This is in
   contrast with the original ViT model, which used external data like the JFT-300M dataset/Imagenet-21k for
   pre-training.
@@ -68,7 +68,7 @@ This model was contributed by [anugunj](https://huggingface.co/anugunj). The ori
   prepare images for the model.
 - [`LevitForImageClassificationWithTeacher`] currently supports only inference and not training or fine-tuning.
 - You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer)
-  (you can just replace [`ViTFeatureExtractor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
+  (you can just replace [`ViTImageProcessor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
 
 ## Resources
 
@@ -84,11 +84,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## LevitConfig
 
 [[autodoc]] LevitConfig
-
-## LevitFeatureExtractor
-
-[[autodoc]] LevitFeatureExtractor
-    - __call__
 
 ## LevitImageProcessor
 

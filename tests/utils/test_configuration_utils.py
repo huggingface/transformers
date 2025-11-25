@@ -21,11 +21,10 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-from huggingface_hub import HfFolder
-from requests.exceptions import HTTPError
+import httpx
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
 
@@ -38,39 +37,13 @@ config_common_kwargs = {
     "return_dict": False,
     "output_hidden_states": True,
     "output_attentions": True,
-    "torchscript": True,
     "dtype": "float16",
-    "use_bfloat16": True,
-    "tf_legacy_loss": True,
-    "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
     "add_cross_attention": True,
     "tie_encoder_decoder": True,
-    "max_length": 50,
-    "min_length": 3,
-    "do_sample": True,
-    "early_stopping": True,
-    "num_beams": 3,
-    "num_beam_groups": 3,
-    "diversity_penalty": 0.5,
-    "temperature": 2.0,
-    "top_k": 10,
-    "top_p": 0.7,
-    "typical_p": 0.2,
-    "repetition_penalty": 0.8,
-    "length_penalty": 0.8,
-    "no_repeat_ngram_size": 5,
-    "encoder_no_repeat_ngram_size": 5,
-    "bad_words_ids": [1, 2, 3],
-    "num_return_sequences": 3,
     "chunk_size_feed_forward": 5,
-    "output_scores": True,
-    "return_dict_in_generate": True,
-    "forced_bos_token_id": 2,
-    "forced_eos_token_id": 3,
-    "remove_invalid_values": True,
     "architectures": ["BertModel"],
     "finetuning_task": "translation",
     "id2label": {0: "label"},
@@ -82,9 +55,6 @@ config_common_kwargs = {
     "eos_token_id": 8,
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
-    "exponential_decay_length_penalty": (5, 1.01),
-    "suppress_tokens": [0, 1],
-    "begin_suppress_tokens": 2,
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
@@ -95,7 +65,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -183,7 +152,7 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertEqual(summary_type, c.summary_type, "mismatch for key: summary_type")
 
     def test_config_common_kwargs_is_complete(self):
-        base_config = PretrainedConfig()
+        base_config = PreTrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
         # If this part of the test fails, you have arguments to add in config_common_kwargs above.
         self.assertListEqual(
@@ -224,14 +193,16 @@ class ConfigTestUtils(unittest.TestCase):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -279,19 +250,19 @@ class ConfigTestUtils(unittest.TestCase):
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
         self.assertEqual(old_configuration.hidden_size, 768)
 
-    def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
-        config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
+    def test_saving_config_with_custom_generation_kwargs_raises_error(self):
+        config = BertConfig()
+        config.min_length = 3  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertWarns(UserWarning) as cm:
+            with self.assertRaises(ValueError):
                 config.save_pretrained(tmp_dir)
-            self.assertIn("min_length", str(cm.warning))
 
     def test_get_non_default_generation_parameters(self):
         config = BertConfig()
         self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
-        config = BertConfig(min_length=3)
+        config.min_length = 3
         self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)
-        config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
+        config.min_length = 0  # `min_length = 0` is a default generation kwarg
         self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
 
     def test_loading_config_do_not_raise_future_warnings(self):
@@ -299,7 +270,7 @@ class ConfigTestUtils(unittest.TestCase):
         # Loading config should not raise a FutureWarning. It was the case before.
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            PretrainedConfig.from_pretrained("bert-base-uncased")
+            PreTrainedConfig.from_pretrained("bert-base-uncased")
 
     def test_get_text_config(self):
         """Tests the `get_text_config` method."""
@@ -337,24 +308,24 @@ class ConfigTestUtils(unittest.TestCase):
     def test_bc_torch_dtype(self):
         import torch
 
-        config = PretrainedConfig(dtype="bfloat16")
+        config = PreTrainedConfig(dtype="bfloat16")
         self.assertEqual(config.dtype, torch.bfloat16)
 
-        config = PretrainedConfig(torch_dtype="bfloat16")
+        config = PreTrainedConfig(torch_dtype="bfloat16")
         self.assertEqual(config.dtype, torch.bfloat16)
 
         # Check that if we pass both, `dtype` is used
-        config = PretrainedConfig(dtype="bfloat16", torch_dtype="float32")
+        config = PreTrainedConfig(dtype="bfloat16", torch_dtype="float32")
         self.assertEqual(config.dtype, torch.bfloat16)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             config.save_pretrained(tmpdirname)
 
-            config = PretrainedConfig.from_pretrained(tmpdirname)
+            config = PreTrainedConfig.from_pretrained(tmpdirname)
             self.assertEqual(config.dtype, torch.bfloat16)
 
-            config = PretrainedConfig.from_pretrained(tmpdirname, dtype="float32")
+            config = PreTrainedConfig.from_pretrained(tmpdirname, dtype="float32")
             self.assertEqual(config.dtype, "float32")
 
-            config = PretrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
+            config = PreTrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
             self.assertEqual(config.dtype, "float32")

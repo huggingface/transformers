@@ -114,10 +114,6 @@ print(transcription[0])
 ## Notes
 
 - HuBERT models expect raw audio input as a 1D float array sampled at 16kHz.
-- If you want to use a `head_mask`, use the model with `attn_implementation="eager"`.
-  ```python
-  model = HubertModel.from_pretrained("facebook/hubert-base-ls960", attn_implementation="eager")
-  ```
 
 ## HubertConfig
 

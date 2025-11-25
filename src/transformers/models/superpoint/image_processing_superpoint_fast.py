@@ -16,10 +16,11 @@
 
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -31,22 +32,14 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
+from .image_processing_superpoint import SuperPointImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
 
 if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
-if is_torchvision_v2_available():
-    import torchvision.transforms.v2.functional as F
-elif is_torchvision_available():
-    import torchvision.transforms.functional as F
+import torchvision.transforms.v2.functional as F
 
 
 def is_grayscale(
@@ -58,15 +51,6 @@ def is_grayscale(
     return torch.all(image[..., 0, :, :] == image[..., 1, :, :]) and torch.all(
         image[..., 1, :, :] == image[..., 2, :, :]
     )
-
-
-class SuperPointFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `True`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-
-    do_grayscale: Optional[bool] = True
 
 
 def convert_to_grayscale(
@@ -97,9 +81,9 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = None
-    valid_kwargs = SuperPointFastImageProcessorKwargs
+    valid_kwargs = SuperPointImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[SuperPointFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SuperPointImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _preprocess(

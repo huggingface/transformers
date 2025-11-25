@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from .image_processing_beit import *
     from .image_processing_beit_fast import *
     from .modeling_beit import *
-    from .modeling_flax_beit import *
 else:
     import sys
 

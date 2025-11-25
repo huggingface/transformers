@@ -20,9 +20,8 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pytest
-import requests
 
-from transformers.models.auto.processing_auto import processor_class_from_name
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     get_tests_dir,
     require_sentencepiece,
@@ -32,7 +31,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -70,23 +69,6 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Kosmos2Processor(image_processor, fast_tokenizer)
         processor.save_pretrained(cls.tmpdirname)
 
-    # We override this method to take the fast tokenizer by default
-    def get_component(self, attribute, **kwargs):
-        assert attribute in self.processor_class.attributes
-        component_class_name = getattr(self.processor_class, f"{attribute}_class")
-        if isinstance(component_class_name, tuple):
-            if attribute == "image_processor":
-                component_class_name = component_class_name[0]
-            else:
-                component_class_name = component_class_name[-1]
-
-        component_class = processor_class_from_name(component_class_name)
-        component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
-        if attribute == "tokenizer" and not component.pad_token:
-            component.pad_token = "[TEST_PAD]"
-
-        return component
-
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
@@ -97,7 +79,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def test_image_procesor_load_save_reload(self):
+    def test_image_processor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
         image_processor = CLIPImageProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
         with TemporaryDirectory() as tmp_dir:
@@ -187,7 +169,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_full_processor(self):
-        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg"
+        url = url_to_local_path("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg")
 
         processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
@@ -205,7 +187,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         # fmt: on
 
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_image(url)
         # To match the official (microsoft) Kosmos-2 demo from which the expected values here are grabbed
         image_path = os.path.join(self.tmpdirname, "image.jpg")
         image.save(image_path)
@@ -474,7 +456,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117)
@@ -499,7 +481,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
@@ -525,7 +507,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         image_processor = self.get_component("image_processor")
@@ -549,7 +531,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
@@ -567,7 +549,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
@@ -592,7 +574,7 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")

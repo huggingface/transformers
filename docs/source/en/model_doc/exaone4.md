@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 **[EXAONE 4.0](https://github.com/LG-AI-EXAONE/EXAONE-4.0)** model is the language model, which integrates a **Non-reasoning mode** and **Reasoning mode** to achieve both the excellent usability of [EXAONE 3.5](https://github.com/LG-AI-EXAONE/EXAONE-3.5) and the advanced reasoning abilities of [EXAONE Deep](https://github.com/LG-AI-EXAONE/EXAONE-Deep). To pave the way for the agentic AI era, EXAONE 4.0 incorporates essential features such as agentic tool use, and its multilingual capabilities are extended
-to support Spanish in addition to English and Korean. 
+to support Spanish in addition to English and Korean.
 
 The EXAONE 4.0 model series consists of two sizes: a mid-size **32B** model optimized for high performance, and a small-size **1.2B** model designed for on-device applications.
 
@@ -32,7 +32,6 @@ In the EXAONE 4.0 architecture, we apply new architectural changes compared to p
 For more details, please refer to our [technical report](https://huggingface.co/papers/2507.11407), [HuggingFace paper](https://huggingface.co/papers/2507.11407), [blog](https://www.lgresearch.ai/blog/view?seq=576), and [GitHub](https://github.com/LG-AI-EXAONE/EXAONE-4.0).
 
 All model weights including quantized versions are available at [Huggingface Collections](https://huggingface.co/collections/LGAI-EXAONE/exaone-40-686b2e0069800c835ed48375).
-
 
 ## Model Details
 
@@ -56,7 +55,6 @@ All model weights including quantized versions are available at [Huggingface Col
 | Vocab size | 102,400 | 102,400 |
 | Tied word embedding | False | True |
 | Knowledge cut-off | Nov. 2024 | Nov. 2024 |
-
 
 ## Usage tips
 

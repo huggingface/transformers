@@ -17,13 +17,14 @@ from functools import reduce
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torchvision.transforms import functional as F
 
 from ...image_processing_utils import (
     BatchFeature,
 )
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     get_image_size,
     group_images_by_shape,
     reorder_images,
@@ -34,23 +35,14 @@ from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms import functional as F
-
-
-class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class PerceptionLMImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     vision_input_type (`str`, *optional*, defaults to `"thumb+tile"`):
         Vision processing strategy. `"thumb+tile"` uses both thumbnails and multiple tiles for
@@ -61,9 +53,9 @@ class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Maximum number of tiles an image can be split into based on its aspect ratio.
     """
 
-    vision_input_type: str = "thumb+tile"
-    tile_size: int = 448
-    max_num_tiles: int = 36
+    vision_input_type: Optional[str]
+    tile_size: int
+    max_num_tiles: int
 
 
 @auto_docstring
@@ -76,14 +68,17 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    vision_input_type = "thumb+tile"
+    tile_size = 448
+    max_num_tiles = 36
     size = {"width": 448, "height": 448}  # for backward compatibility in tests
-    valid_kwargs = PerceptionLMFastImageProcessorKwargs
+    valid_kwargs = PerceptionLMImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[PerceptionLMImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images, **kwargs: Unpack[PerceptionLMImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     @staticmethod
@@ -200,7 +195,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
                         target_width=n_w * tile_size,
                         target_height=n_h * tile_size,
                     )
-                    # Llama3V dynamic tiling. Priortize biggest canvas.
+                    # Llama3V dynamic tiling. Prioritize biggest canvas.
                     if (scale < 1.0 and (image_width_height[0] >= optimal_image_width_height[0])) or (
                         scale >= 1.0 and (image_width_height[1] >= optimal_image_width_height[1])
                     ):
@@ -277,7 +272,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         max_num_tiles: int,
         return_tensors: Optional[Union[str, TensorType]],
         disable_grouping: bool,
-        **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs],
+        **kwargs: Unpack[PerceptionLMImageProcessorKwargs],
     ) -> BatchFeature:
         # Group images by size for batched transformation
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

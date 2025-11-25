@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 
 
 if is_torch_available():
@@ -23,6 +23,7 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 import re
+from contextlib import contextmanager
 
 
 logger = logging.get_logger(__name__)
@@ -45,6 +46,28 @@ FP4_VALUES = [
     -4.0,
     -6.0,
 ]
+
+
+@contextmanager
+def on_device(dev):
+    if is_torch_available():
+        import torch
+
+        if isinstance(dev, torch.Tensor):
+            dev = dev.device
+        elif isinstance(dev, str):
+            dev = torch.device(dev)
+        dev_type = getattr(dev, "type", None)
+        if dev_type == "cuda":
+            with torch.cuda.device(dev):
+                yield
+                return
+        if dev_type == "xpu" and hasattr(torch, "xpu"):
+            with torch.xpu.device(dev):
+                yield
+                return
+    # other: CPU
+    yield
 
 
 # Copied from GPT_OSS repo and vllm
@@ -91,6 +114,9 @@ def convert_moe_packed_tensors(
     if not blocks.is_cuda and torch.cuda.is_available():
         blocks = blocks.cuda()
         scales = scales.cuda()
+    elif (blocks.device.type != "xpu") and is_torch_xpu_available():
+        blocks = blocks.to("xpu")
+        scales = scales.to("xpu")
 
     scales = scales.to(torch.int32) - 127  # TODO that's because 128=2**7
 
@@ -173,7 +199,7 @@ class Mxfp4GptOssExperts(nn.Module):
         )
         swiglu_fn = triton_kernels_hub.swiglu.swiglu_fn
 
-        with torch.cuda.device(hidden_states.device):
+        with on_device(hidden_states.device):
             act = FusedActivation(FnSpecs("swiglu", swiglu_fn, ("alpha", "limit")), (self.alpha, self.limit), 2)
 
             intermediate_cache1 = matmul_ogs(
@@ -214,7 +240,7 @@ def routing_torch_dist(
         triton_kernels_hub.routing.compute_expt_data_torch,
     )
 
-    with torch.cuda.device(logits.device):
+    with on_device(logits.device):
         world_size = torch.distributed.get_world_size()
         rank = int(os.environ.get("LOCAL_RANK", "0"))
         replace_value = -1
@@ -281,7 +307,7 @@ def mlp_forward(self, hidden_states):
     hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
     router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
 
-    with torch.cuda.device(router_logits.device):
+    with on_device(router_logits.device):
         routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
 
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
@@ -320,7 +346,6 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                     to_contiguous,
                     rank,
                     device_mesh,
-                    set_param=False,
                 )
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"
@@ -329,6 +354,8 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
                 if target_device == "cpu" and torch.cuda.is_available():
                     torch.cuda.empty_cache()
+                elif target_device == "cpu" and is_torch_xpu_available():
+                    torch.xpu.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
@@ -373,10 +400,10 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         else:
             blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
         if getattr(target_device, "type", target_device) == "cpu":
-            target_device = "cuda"
+            target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
         blocks = blocks.to(target_device).contiguous()
         scales = scales.to(target_device).contiguous()
-        with torch.cuda.device(target_device):
+        with on_device(target_device):
             triton_weight_tensor, weight_scale = swizzle_mxfp4(
                 blocks.transpose(-2, -1), scales.transpose(-2, -1), triton_kernels_hub
             )

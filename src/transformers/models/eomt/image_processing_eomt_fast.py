@@ -18,11 +18,12 @@ import math
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -39,45 +40,14 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
 from .image_processing_eomt import (
+    EomtImageProcessorKwargs,
     compute_segments,
     convert_segmentation_map_to_binary_masks,
     get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
-            input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
-            Otherwise, the input images will be padded to the target size.
-    do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    ignore_index (`int`, *optional*):
-            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
-    """
-
-    do_split_image: bool
-    do_pad: bool
-    ignore_index: Optional[int] = None
 
 
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
@@ -113,9 +83,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     do_split_image = False
     do_pad = False
     ignore_index = None
-    valid_kwargs = EomtImageProcessorFastKwargs
+    valid_kwargs = EomtImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EomtImageProcessorFastKwargs]):
+    def __init__(self, **kwargs: Unpack[EomtImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _split_image(self, images: torch.Tensor, size: dict, image_indices: int) -> tuple[list, list]:
@@ -164,7 +134,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         segmentation_maps: Optional[list[torch.Tensor]] = None,
         instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+        **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -182,7 +152,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+        **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -209,9 +179,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
 

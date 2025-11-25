@@ -14,16 +14,14 @@
 # limitations under the License.
 """MarkupLM model configuration"""
 
-import warnings
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MarkupLMConfig(PretrainedConfig):
+class MarkupLMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MarkupLMModel`]. It is used to instantiate a
     MarkupLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -120,7 +118,6 @@ class MarkupLMConfig(PretrainedConfig):
         subs_pad_id=1001,
         xpath_unit_hidden_size=32,
         max_depth=50,
-        position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
         **kwargs,
@@ -143,7 +140,6 @@ class MarkupLMConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self._position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         # additional properties
@@ -153,18 +149,6 @@ class MarkupLMConfig(PretrainedConfig):
         self.tag_pad_id = tag_pad_id
         self.subs_pad_id = subs_pad_id
         self.xpath_unit_hidden_size = xpath_unit_hidden_size
-
-    @property
-    def position_embedding_type(self):
-        warnings.warn(
-            "The `position_embedding_type` attribute is deprecated and will be removed in v4.55.",
-            FutureWarning,
-        )
-        return self._position_embedding_type
-
-    @position_embedding_type.setter
-    def position_embedding_type(self, value):
-        self._position_embedding_type = value
 
 
 __all__ = ["MarkupLMConfig"]

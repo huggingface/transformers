@@ -31,7 +31,6 @@ You can find all of the original BARThez checkpoints under the [BARThez](https:/
 > This model was contributed by [moussakam](https://huggingface.co/moussakam).
 > Refer to the [BART](./bart) docs for more usage examples.
 
-
 The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">

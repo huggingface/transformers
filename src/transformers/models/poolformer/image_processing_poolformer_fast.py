@@ -16,7 +16,10 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
+import torch
+from torchvision.transforms.v2 import functional as F
+
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import (
     ChannelDimension,
     get_resize_output_image_size,
@@ -36,30 +39,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class PoolFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-            Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
-    """
-
-    crop_pct: Optional[float]
+from .image_processing_poolformer import PoolFormerImageProcessorKwargs
 
 
 @auto_docstring
@@ -75,13 +56,13 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = PoolFormerFastImageProcessorKwargs
+    valid_kwargs = PoolFormerImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[PoolFormerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PoolFormerImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -89,7 +70,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         crop_pct: Optional[float] = None,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":

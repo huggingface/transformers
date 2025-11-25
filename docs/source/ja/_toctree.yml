@@ -109,10 +109,6 @@
     title: チャットモデルのテンプレート
   - local: serialization
     title: ONNX へのエクスポート
-  - local: tflite
-    title: TFLite へのエクスポート
-  - local: torchscript
-    title: トーチスクリプトへのエクスポート
   - local: community
     title: コミュニティリソース
   - local: troubleshooting
@@ -132,8 +128,6 @@
       title: 分散CPUトレーニング
     - local: perf_train_tpu
       title: TPU に関するトレーニング
-    - local: perf_train_tpu_tf
-      title: TensorFlow を使用した TPU のトレーニング
     - local: perf_train_special
       title: 特殊なハードウェアに関するトレーニング
     - local: perf_hardware
@@ -153,8 +147,6 @@
     title: 推論の最適化
   - local: big_models
     title: 大きなモデルのインスタンス化
-  - local: tf_xla
-    title: TensorFlowモデルのXLA統合
   - local: perf_torch_compile
     title: torch.compile()を使用した推論の最適化
   title: パフォーマンスとスケーラビリティ
@@ -202,16 +194,12 @@
       title: 構成
     - local: main_classes/data_collator
       title: データ照合者
-    - local: main_classes/keras_callbacks
-      title: Keras コールバック
     - local: main_classes/logging
       title: ロギング
     - local: main_classes/model
       title: モデル
     - local: main_classes/text_generation
       title: テキストの生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: 最適化
     - local: main_classes/output
@@ -264,8 +252,6 @@
         title: Blenderbot Small
       - local: model_doc/bloom
         title: BLOOM
-      - local: model_doc/bort
-        title: BORT
       - local: model_doc/byt5
         title: ByT5
       - local: model_doc/camembert
@@ -309,8 +295,6 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
-      - local: model_doc/deta
-        title: DETA
       - local: model_doc/detr
         title: DETR
       - local: model_doc/dinat

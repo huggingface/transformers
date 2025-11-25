@@ -17,13 +17,11 @@ import os
 import tempfile
 import unittest
 from io import BytesIO
-from typing import Optional
 
+import httpx
 import numpy as np
 import pytest
-import requests
 from huggingface_hub.file_download import hf_hub_url, http_get
-from requests import ConnectTimeout, ReadTimeout
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
@@ -47,9 +45,9 @@ if is_vision_available():
     from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
 
 
-def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: Optional[str] = None) -> "PIL.Image.Image":
+def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: str | None = None) -> "PIL.Image.Image":
     url = hf_hub_url(dataset_id, filename, repo_type="dataset", revision=revision)
-    return PIL.Image.open(BytesIO(requests.get(url).content))
+    return PIL.Image.open(BytesIO(httpx.get(url, follow_redirects=True).content))
 
 
 def get_random_image(height, width):
@@ -727,7 +725,7 @@ class LoadImageTester(unittest.TestCase):
 
     @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises((ReadTimeout, ConnectTimeout)):
+        with self.assertRaises(httpx.ConnectTimeout):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):

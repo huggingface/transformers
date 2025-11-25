@@ -18,8 +18,8 @@ from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_timm_available, requires_backends
@@ -56,9 +56,33 @@ class TimmWrapperModelOutput(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_kwargs):
+    """
+    Creates a timm model and provides a clear error message if the model is not found,
+    suggesting a library update.
+    """
+    try:
+        model = timm.create_model(
+            config.architecture,
+            pretrained=False,
+            **model_kwargs,
+        )
+        return model
+    except RuntimeError as e:
+        if "Unknown model" in str(e):
+            # A good general check for unknown models.
+            raise ImportError(
+                f"The model architecture '{config.architecture}' is not supported in your version of timm ({timm.__version__}). "
+                "Please upgrade timm to a more recent version with `pip install -U timm`."
+            ) from e
+        raise e
+
+
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
+    base_model_prefix = "timm_model"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     config: TimmWrapperConfig
     _no_split_modules = []
     model_tags = ["timm"]
@@ -100,6 +124,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize weights function to properly initialize Linear layer weights.
@@ -107,9 +132,9 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         initialization, while all other weights should be loaded from the checkpoint.
         """
         if isinstance(module, (nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -139,7 +164,8 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
+        self.features_only = extra_init_kwargs.get("features_only", False)
+        self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
     @auto_docstring
@@ -212,20 +238,25 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
 
         pixel_values = pixel_values.to(self.device, self.dtype)
 
-        if output_hidden_states:
-            # to enable hidden states selection
-            if isinstance(output_hidden_states, (list, tuple)):
-                kwargs["indices"] = output_hidden_states
-            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
-        else:
-            last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
-            hidden_states = None
-
-        if do_pooling:
-            # classification head is not created, applying pooling only
-            pooler_output = self.timm_model.forward_head(last_hidden_state)
-        else:
+        if self.features_only:
+            last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
+            hidden_states = last_hidden_state if output_hidden_states else None
             pooler_output = None
+        else:
+            if output_hidden_states:
+                # to enable hidden states selection
+                if isinstance(output_hidden_states, (list, tuple)):
+                    kwargs["indices"] = output_hidden_states
+                last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            else:
+                last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
+                hidden_states = None
+
+            if do_pooling:
+                # classification head is not created, applying pooling only
+                pooler_output = self.timm_model.forward_head(last_hidden_state)
+            else:
+                pooler_output = None
 
         if not return_dict:
             outputs = (last_hidden_state, pooler_output, hidden_states)
@@ -255,8 +286,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             )
 
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(
-            config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
+        self.timm_model = _create_timm_model_with_error_handling(
+            config, num_classes=config.num_labels, **extra_init_kwargs
         )
         self.num_labels = config.num_labels
         self.post_init()
@@ -344,25 +375,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             outputs = (loss, logits, hidden_states)

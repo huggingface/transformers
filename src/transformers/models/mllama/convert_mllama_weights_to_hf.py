@@ -235,7 +235,7 @@ def write_model(
     cross_attention_num_layers = params["vision_num_cross_attention_layers"]
 
     # some constants from original code
-    rope_scaling = {
+    rope_parameters = {
         "rope_type": "llama3",
         "factor": 8.0,
         "low_freq_factor": 1.0,
@@ -280,7 +280,7 @@ def write_model(
         cross_attention_layers=cross_attention_layers_shift,
         intermediate_size=text_intermediate_size,
         max_position_embeddings=max_position_embeddings,
-        rope_scaling=rope_scaling,
+        rope_parameters=rope_parameters,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
@@ -496,7 +496,7 @@ class MllamaConverter(TikTokenConverter):
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     model_max_length = CONTEXT_LENGTH
-    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
+    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
 
     # Special tokens
     num_reserved_special_tokens = 256

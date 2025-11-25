@@ -16,11 +16,13 @@
 import json
 import os
 import warnings
+from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
 from .image_processing_utils import (
@@ -46,33 +48,31 @@ from .utils import (
     is_remote_url,
     is_torch_available,
     is_torchcodec_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
+    safe_load_json_file,
 )
-from .utils.hub import cached_files
+from .utils.hub import cached_file
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
     VideoMetadata,
     group_videos_by_shape,
+    infer_channel_dimension_format,
     is_valid_video,
     load_video,
     make_batched_metadata,
     make_batched_videos,
     reorder_videos,
-    to_channel_dimension_format,
 )
 
 
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+
 
 logger = logging.get_logger(__name__)
 
@@ -95,8 +95,6 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
         do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
             Whether to center crop the video to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
-        do_pad (`bool`, *optional*):
-            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         crop_size (`dict[str, int]` *optional*, defaults to `self.crop_size`):
             Size of the output video after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
             method.
@@ -164,7 +162,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     crop_size = None
     do_resize = None
     do_center_crop = None
-    do_pad = None
     do_rescale = None
     rescale_factor = 1 / 255
     do_normalize = None
@@ -305,10 +302,14 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         # Only sample frames if an array video is passed, otherwise first decode -> then sample
         if is_valid_video(videos[0]) and do_sample_frames:
             sampled_videos = []
+            sampled_metadata = []
             for video, metadata in zip(videos, video_metadata):
                 indices = sample_indices_fn(metadata=metadata)
+                metadata.frames_indices = indices
                 sampled_videos.append(video[indices])
+                sampled_metadata.append(metadata)
             videos = sampled_videos
+            video_metadata = sampled_metadata
         elif not is_valid_video(videos[0]):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
@@ -338,9 +339,15 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for video in videos:
             # `make_batched_videos` always returns a 4D array per video
             if isinstance(video, np.ndarray):
-                video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_data_format)
                 # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
                 video = torch.from_numpy(video).contiguous()
+
+            # Infer the channel dimension format if not provided
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(video)
+
+            if input_data_format == ChannelDimension.LAST:
+                video = video.permute(0, 3, 1, 2).contiguous()
 
             if device is not None:
                 video = video.to(device)
@@ -360,6 +367,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             captured_kwargs=kwargs.keys(),
             valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
         )
+
+        # Perform type validation on received kwargs
+        validate_typed_dict(self.valid_kwargs, kwargs)
+
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
@@ -397,12 +408,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        size_divisor: Optional[int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
-        do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
@@ -417,9 +426,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(
-                    stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
-                )
+                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 
@@ -472,9 +479,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the video processor files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -536,18 +540,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         if token is not None:
             kwargs["token"] = token
 
@@ -570,19 +562,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -636,27 +615,14 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "video processor", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -670,22 +636,23 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_video_processor_file = pretrained_model_name_or_path
+            resolved_processor_file = None
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             video_processor_file = pretrained_model_name_or_path
+            resolved_processor_file = None
             resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             video_processor_file = VIDEO_PROCESSOR_NAME
             try:
-                # Try to load with a new config name first and if not successfull try with the old file name
-                # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
-                resolved_video_processor_files = cached_files(
+                # Try to load with a new config name first and if not successful try with the old file name
+                # NOTE: we save all processor configs as nested dict in PROCESSOR_NAME from v5, which is the standard
+                resolved_processor_file = cached_file(
                     pretrained_model_name_or_path,
-                    filenames=[VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME],
+                    filename=PROCESSOR_NAME,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -693,9 +660,31 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
                 )
-                resolved_video_processor_file = resolved_video_processor_files[0]
-            except EnvironmentError:
-                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                resolved_video_processor_files = [
+                    resolved_file
+                    for filename in [video_processor_file, IMAGE_PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
+                resolved_video_processor_file = (
+                    resolved_video_processor_files[0] if resolved_video_processor_files else None
+                )
+            except OSError:
+                # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
@@ -704,19 +693,27 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     f"Can't load video processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {VIDEO_PROCESSOR_NAME} file"
+                    f" directory containing a {video_processor_file} file"
                 )
 
-        try:
-            # Load video_processor dict
-            with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
-                text = reader.read()
-            video_processor_dict = json.loads(text)
-            video_processor_dict = video_processor_dict.get("video_processor", video_processor_dict)
+        # Load video_processor dict. Priority goes as (nested config if found -> video processor config -> image processor config)
+        # We are downloading both configs because almost all models have a `processor_config.json` but
+        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        video_processor_dict = None
+        if resolved_processor_file is not None:
+            processor_dict = safe_load_json_file(resolved_processor_file)
+            if "video_processor" in processor_dict:
+                video_processor_dict = processor_dict["video_processor"]
 
-        except json.JSONDecodeError:
+        if resolved_video_processor_file is not None and video_processor_dict is None:
+            video_processor_dict = safe_load_json_file(resolved_video_processor_file)
+
+        if video_processor_dict is None:
             raise OSError(
-                f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
+                f"Can't load video processor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                f" directory containing a {video_processor_file} file"
             )
 
         if is_local:

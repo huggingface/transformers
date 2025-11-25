@@ -18,8 +18,7 @@ rendered properly in your Markdown viewer.
 
 Multimodal chat models accept inputs like images, audio or video, in addition to text. The `content` key in a multimodal chat history is a list containing multiple items of different types. This is unlike text-only chat models whose `content` key is a single string.
 
-
-In the same way the [Tokenizer](./fast_tokenizer) class handles chat templates and tokenization for text-only models, 
+In the same way the [Tokenizer](./fast_tokenizer) class handles chat templates and tokenization for text-only models,
 the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Their [`~ProcessorMixin.apply_chat_template`] methods are almost identical.
 
 This guide will show you how to chat with multimodal models with the high-level [`ImageTextToTextPipeline`] and at a lower level using the [`~ProcessorMixin.apply_chat_template`] and [`~GenerationMixin.generate`] methods.
@@ -46,7 +45,7 @@ messages = [
 ]
 ```
 
-Create an [`ImageTextToTextPipeline`] and pass the chat to it. For large models, setting [device_map=“auto”](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Setting the data type to [auto](./models#model-data-type) also helps save memory and improve speed.
+Create an [`ImageTextToTextPipeline`] and pass the chat to it. For large models, setting [device_map="auto"](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Setting the data type to [auto](./models#model-data-type) also helps save memory and improve speed.
 
 ```python
 import torch
@@ -57,8 +56,7 @@ out = pipe(text=messages, max_new_tokens=128)
 print(out[0]['generated_text'][-1]['content'])
 ```
 
-
-```
+```text
 Ahoy, me hearty! These be two feline friends, likely some tabby cats, taking a siesta on a cozy pink blanket. They're resting near remote controls, perhaps after watching some TV or just enjoying some quiet time together. Cats sure know how to find comfort and relaxation, don't they?
 ```
 
@@ -66,9 +64,8 @@ Aside from the gradual descent from pirate-speak into modern American English (i
 
 ## Using `apply_chat_template`
 
-Like [text-only models](./chat_templating), use the [`~ProcessorMixin.apply_chat_template`] method to prepare the chat messages for multimodal models. 
+Like [text-only models](./chat_templating), use the [`~ProcessorMixin.apply_chat_template`] method to prepare the chat messages for multimodal models.
 This method handles the tokenization and formatting of the chat messages, including images and other media types. The resulting inputs are passed to the model for generation.
-
 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -99,8 +96,7 @@ processed_chat = processor.apply_chat_template(messages, add_generation_prompt=T
 print(list(processed_chat.keys()))
 ```
 
-
-```
+```text
 ['input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw']
 ```
 
@@ -113,14 +109,13 @@ print(processor.decode(out[0]))
 
 The decoded output contains the full conversation so far, including the user message and the placeholder tokens that contain the image information. You may need to trim the previous conversation from the output before displaying it to the user.
 
-
 ## Video inputs
 
 Some vision models also support video inputs. The message format is very similar to the format for [image inputs](#image-inputs).
 
 - The content `"type"` should be `"video"` to indicate the content is a video.
 - For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos loaded from a URL can only be decoded with [PyAV](https://pyav.basswood-io.com/docs/stable/) or [Decord](https://github.com/dmlc/decord).
-- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you’ve already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
+- In addition to loading videos from a URL or file path, you can also pass decoded video data directly. This is useful if you've already preprocessed or decoded video frames elsewhere in memory (e.g., using OpenCV, decord, or torchvision). You don't need to save to files or store it in an URL.
 
 > [!WARNING]
 > Loading a video from `"url"` is only supported by the PyAV or Decord backends.
@@ -148,6 +143,7 @@ messages = [
 ```
 
 ### Example: Passing decoded video objects
+
 ```python
 import numpy as np
 
@@ -167,7 +163,9 @@ messages = [
     },
 ]
 ```
+
 You can also use existing (`"load_video()"`) function to load a video, edit the video in memory and pass it in the messages.
+
 ```python
 
 # Make sure a video backend library (pyav, decord, or torchvision) is available.
@@ -195,15 +193,10 @@ messages = [
 
 Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. There are a few extra parameters to include in [`~ProcessorMixin.apply_chat_template`] that controls the sampling process.
 
-The `video_load_backend` parameter refers to a specific framework to load a video. It supports [PyAV](https://pyav.basswood-io.com/docs/stable/), [Decord](https://github.com/dmlc/decord), [OpenCV](https://github.com/opencv/opencv), and [torchvision](https://pytorch.org/vision/stable/index.html).
-
-The examples below use Decord as the backend because it is a bit faster than PyAV.
-
 <hfoptions id="sampling">
 <hfoption id="fixed number of frames">
 
 The `num_frames` parameter controls how many frames to uniformly sample from the video. Each checkpoint has a maximum frame count it was pretrained with and exceeding this count can significantly lower generation quality. It's important to choose a frame count that fits both the model capacity and your hardware resources. If `num_frames` isn't specified, the entire video is loaded without any frame sampling.
-
 
 ```python
 processed_chat = processor.apply_chat_template(
@@ -213,7 +206,6 @@ processed_chat = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     num_frames=32,
-    video_load_backend="decord",
 )
 print(processed_chat.keys())
 ```
@@ -223,7 +215,7 @@ These inputs are now ready to be used in [`~GenerationMixin.generate`].
 </hfoption>
 <hfoption id="fps">
 
-For longer videos, it may be better to sample more frames for better representation with the `video_fps` parameter. This determines how many frames per second to extract. As an example, if a video is 10 seconds long and `video_fps=2`, then the model samples 20 frames. In other words, 2 frames are uniformly sampled every 10 seconds.
+For longer videos, it may be better to sample more frames for better representation with the `fps` parameter. This determines how many frames per second to extract. As an example, if a video is 10 seconds long and `fps=2`, then the model samples 20 frames. In other words, 2 frames are uniformly sampled every 10 seconds.
 
 ```py
 processed_chat = processor.apply_chat_template(
@@ -231,8 +223,7 @@ processed_chat = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
-    video_fps=16,
-    video_load_backend="decord",
+    fps=16,
 )
 print(processed_chat.keys())
 ```
@@ -271,4 +262,3 @@ print(processed_chat.keys())
 
 </hfoption>
 </hfoptions>
-

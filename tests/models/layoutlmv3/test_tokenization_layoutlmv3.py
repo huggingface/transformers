@@ -19,7 +19,6 @@ import re
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
 
 from parameterized import parameterized
 
@@ -27,7 +26,7 @@ from transformers import (
     AddedToken,
     LayoutLMv3TokenizerFast,
     SpecialTokensMixin,
-    is_tf_available,
+    is_mlx_available,
     is_torch_available,
     logging,
 )
@@ -43,7 +42,6 @@ from ...test_tokenization_common import (
     SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     merge_model_tokenizer_mappings,
-    use_cache_if_possible,
 )
 
 
@@ -94,6 +92,38 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
+    def get_empty_words_and_boxes(self):
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+
+        return words, boxes
+
+    def get_empty_words_and_boxes_batch(self):
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
+        ]
+
+        return words, boxes
+
+    def get_empty_question_words_and_boxes(self):
+        question = ""
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+
+        return question, words, boxes
+
+    def get_empty_question_words_and_boxes_batch(self):
+        questions = ["what's his name?", ""]
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
+        ]
+
+        return questions, words, boxes
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -133,16 +163,12 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write("\n".join(merges))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
@@ -1228,7 +1254,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key][0])
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             self.skipTest(reason="test_slow_tokenizer is set to False")
@@ -1577,12 +1603,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
-                if is_torch_available():
-                    returned_tensor = "pt"
-                elif is_tf_available():
-                    returned_tensor = "tf"
-                else:
-                    returned_tensor = "jax"
+                returned_tensor = "pt"
 
                 # Single example
                 words = ["HuggingFace", "is", "solving", "NLP", "one", "commit", "at", "a", "time"]
@@ -1629,7 +1650,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(tokens[key].shape[-1], 4)
 
     @unittest.skip(reason="TO DO: overwrite this very extensive test.")
-    def test_alignement_methods(self):
+    def test_alignment_methods(self):
         pass
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
@@ -1676,11 +1697,11 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         words_without_space = tokens_to_add + list(tokenizer_s.added_tokens_encoder.keys())
         boxes = [[i, i, i, i] for i in range(len(words_with_space))]
 
-        tokens_to_add_formated = [
+        tokens_to_add_formatted = [
             AddedToken(token, rstrip=True, lstrip=True, single_word=False) for token in tokens_to_add
         ]
-        tokenizer_s.add_tokens(tokens_to_add_formated)
-        tokenizer_f.add_tokens(tokens_to_add_formated)
+        tokenizer_s.add_tokens(tokens_to_add_formatted)
+        tokenizer_f.add_tokens(tokens_to_add_formatted)
 
         ids_s = tokenizer_s(words_with_space, boxes=boxes).input_ids
         ids_f = tokenizer_f(words_with_space, boxes=boxes).input_ids
@@ -2301,7 +2322,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip(reason="Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support returning Numpy arrays")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
@@ -2316,3 +2337,48 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Chat is not supported")
     def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass
+
+    def test_empty_input_string(self):
+        tokenizer_return_type = []
+        output_tensor_type = []
+
+        if is_torch_available():
+            import numpy as np
+            import torch
+
+            tokenizer_return_type.append("pt")
+            output_tensor_type.append(torch.int64)
+            tokenizer_return_type.append("np")
+            output_tensor_type.append(np.int64)
+
+        if is_mlx_available():
+            import mlx.core as mx
+
+            tokenizer_return_type.append("mlx")
+            output_tensor_type.append(mx.int32)
+
+        if len(tokenizer_return_type) == 0:
+            self.skipTest(reason="No expected framework from PT, or MLX found")
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                words, boxes = self.get_empty_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                words, boxes = self.get_empty_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)

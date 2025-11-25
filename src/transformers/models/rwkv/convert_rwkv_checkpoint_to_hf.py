@@ -36,7 +36,7 @@ NUM_HIDDEN_LAYERS_MAPPING = {
     "14B": 40,
 }
 
-HIDEN_SIZE_MAPPING = {
+HIDDEN_SIZE_MAPPING = {
     "169M": 768,
     "430M": 1024,
     "1B5": 2048,
@@ -106,7 +106,7 @@ def convert_rmkv_checkpoint_to_hf_format(
     config = RwkvConfig(
         vocab_size=vocab_size,
         num_hidden_layers=NUM_HIDDEN_LAYERS_MAPPING[size],
-        hidden_size=HIDEN_SIZE_MAPPING[size],
+        hidden_size=HIDDEN_SIZE_MAPPING[size],
     )
     config.save_pretrained(output_dir)
 

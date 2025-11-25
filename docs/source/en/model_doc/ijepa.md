@@ -31,9 +31,7 @@ You can find the original I-JEPA checkpoints under the [AI at Meta](https://hugg
 > [!TIP]
 > This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
 
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ijepa_architecture.jpg">
-
 
 > Click on the I-JEPA models in the right sidebar for more examples of how to apply I-JEPA to different image representation and classification tasks.
 
@@ -88,9 +86,9 @@ embed_2 = infer(image_2)
 similarity = cosine_similarity(embed_1, embed_2)  
 print(similarity)
 ```
+
 </hfoption>
 </hfoptions>
-
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
@@ -142,4 +140,3 @@ print(similarity)
 
 [[autodoc]] IJepaForImageClassification
     - forward
-

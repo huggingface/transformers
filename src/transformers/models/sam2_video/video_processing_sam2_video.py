@@ -17,32 +17,15 @@
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torch.nn import functional as F_t
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    SizeDict,
-)
-from ...utils import (
-    TensorType,
-    is_torch_available,
-    is_vision_available,
-)
-from ...utils.import_utils import requires
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
+from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 
 
-if is_torch_available():
-    import torch
-    from torch.nn import functional as F_t
-
-
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-
-
-@requires(backends=("torchvision",))
 class Sam2VideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -109,7 +92,7 @@ class Sam2VideoVideoProcessor(BaseVideoProcessor):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F_t.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
             interpolated_mask = F_t.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)

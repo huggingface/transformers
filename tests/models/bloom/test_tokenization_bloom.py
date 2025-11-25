@@ -14,14 +14,13 @@
 
 import copy
 import unittest
-from functools import lru_cache
 
 from datasets import load_dataset
 
 from transformers import BloomTokenizerFast
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.testing_utils import require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
@@ -42,8 +41,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         _kwargs = copy.deepcopy(cls.special_tokens_map)
         _kwargs.update(kwargs)
@@ -139,28 +136,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_tokens = list(map(tokenizer.encode, input_text))
         predicted_text = [tokenizer.decode(x, clean_up_tokenization_spaces=False) for x in output_tokens]
         self.assertListEqual(predicted_text, input_text)
-
-    @require_jinja
-    def test_tokenization_for_chat(self):
-        tokenizer = self.get_rust_tokenizer()
-        tokenizer.chat_template = "{% for message in messages %}{{ message.content }}{{ eos_token }}{% endfor %}"
-        test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
-            [
-                {"role": "system", "content": "You are a helpful chatbot."},
-                {"role": "user", "content": "Hello!"},
-                {"role": "assistant", "content": "Nice to meet you."},
-            ],
-            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
-        ]
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
-        expected_tokens = [
-            [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2],
-            [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2, 229126, 427, 11890, 1152, 17, 2],
-            [229126, 427, 11890, 1152, 17, 2, 59414, 4, 2],
-        ]
-        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
-            self.assertListEqual(tokenized_chat, expected_tokens)
 
     def test_add_prefix_space_fast(self):
         tokenizer_w_prefix = self.get_rust_tokenizer(add_prefix_space=True)

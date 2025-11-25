@@ -16,10 +16,12 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -35,30 +37,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class ConvNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    crop_pct (`float`, *optional*):
-        Percentage of the image to crop. Only has an effect if size < 384. Can be
-        overridden by `crop_pct` in the`preprocess` method.
-    """
-
-    crop_pct: Optional[float]
+from .image_processing_convnext import ConvNextImageProcessorKwargs
 
 
 @auto_docstring
@@ -72,13 +52,13 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     crop_pct = 224 / 256
-    valid_kwargs = ConvNextFastImageProcessorKwargs
+    valid_kwargs = ConvNextImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[ConvNextImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -155,6 +135,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

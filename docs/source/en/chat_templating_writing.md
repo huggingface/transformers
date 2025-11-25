@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 
 A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templates/) template stored in the tokenizer's [chat_template](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.PreTrainedTokenizer.chat_template) attribute. Jinja is a templating language that allows you to write Python-like code and syntax.
 
-
 ```jinja
 {%- for message in messages %}
     {{- '<|' + message['role'] + |>\n' }}
@@ -30,8 +29,8 @@ A chat template is a [Jinja](https://jinja.palletsprojects.com/en/stable/templat
 ```
 
 If you stare at this for a while, you should realize that this is actually very like Python, albeit with some strange
-`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of 
-the message, followed by an end-of-sequence token. If `add_generation_prompt=True`, it adds 
+`{%-` syntax. The template iterates over a list of messages, and for each message, it prints the role and content of
+the message, followed by an end-of-sequence token. If `add_generation_prompt=True`, it adds
 the starting header for an assistant message to the end of the conversation.
 
 Load the written template as a string and assign it to the tokenizer's `chat_template` attribute. Once set, the template is used whenever you call [`~PreTrainedTokenizerBase.apply_chat_template`]. It is also saved
@@ -42,7 +41,7 @@ edit this file directly to change the template, which is often easier than manip
 
 The easiest way to start writing Jinja templates is to refer to existing templates. Use `print(tokenizer.chat_template)` on any chat model to see the template it's using. Try starting with simple models that don't call any tools or support RAG because tool-use models can have very complex templates. Finally, take a look at the [Jinja documentation](https://jinja.palletsprojects.com/en/stable/templates/#synopsis) for more details about formatting and syntax.
 
-There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail. 
+There are some specific tips and pitfalls you may encounter while writing chat templates specifically, though, and this section will cover some of them in more detail.
 
 ### Writing multimodal chat templates
 
@@ -108,7 +107,6 @@ We strongly recommend using `-` to ensure only the intended content is printed.
 
 ### Special variables and callables
 
-
 The only constants in a template are the `messages` variable and the `add_generation_prompt` boolean. However, you have
 access to **any other keyword arguments that are passed** to the [`~PreTrainedTokenizerBase.apply_chat_template`] method.
 
@@ -133,7 +131,7 @@ Make the changes below to ensure compatibility across all Jinja implementations.
 
 ### Big templates
 
-Newer models or models with features like [tool-calling](./chat_extras#tools) and [RAG](./chat_extras#retrieval-augmented-generation-rag) require larger templates that can be longer than 100 lines. It may be easier to write larger templates in a separate file. The line numbers in the separate file corresponds exactly to the line numbers in template parsing or execution errors, making it easier to debug any potential issues.
+Newer models or models with features like [tool-calling](./chat_extras) and RAG require larger templates that can be longer than 100 lines. It may be easier to write larger templates in a separate file. The line numbers in the separate file corresponds exactly to the line numbers in template parsing or execution errors, making it easier to debug any potential issues.
 
 Write the template in a separate file and extract it to the chat template.
 
@@ -166,22 +164,22 @@ The example below shows how a tool is defined in JSON schema format.
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
@@ -190,7 +188,7 @@ The example below shows how a tool is defined in JSON schema format.
 
 An example of handling tool definitions in a chat template is shown below. The specific tokens and layouts should be changed to match the ones the model was trained with.
 
-```
+```jinja
 {%- if tools %}
     {%- for tool in tools %}
         {{- '<tool>' + tool['function']['name'] + '\n' }}
@@ -228,7 +226,7 @@ Tool calls are generally passed in the `tool_calls` key of an `"assistant”` me
 
 A common pattern for handling tool calls is shown below. You can use this as a starting point, but make sure you template actually matches the format the model was trained with!
 
-```
+```jinja
 {%- if message['role'] == 'assistant' and 'tool_calls' in message %}
     {%- for tool_call in message['tool_calls'] %}
             {{- '<tool_call>' + tool_call['function']['name'] + '\n' + tool_call['function']['arguments']|tojson + '\n</tool_call>' }}
@@ -251,7 +249,7 @@ Tool responses are message dicts with the `tool` role. They are much simpler tha
 
 Some templates may not even need the `name` key, in which case, you can write your template to only read the `content` key.
 
-```
+```jinja
 {%- if message['role'] == 'tool' %}
     {{- "<tool_result>" + message['content'] + "</tool_result>" }}
 {%- endif %}

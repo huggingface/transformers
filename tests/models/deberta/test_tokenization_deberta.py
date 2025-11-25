@@ -16,13 +16,12 @@
 import json
 import os
 import unittest
-from functools import lru_cache
 
 from transformers import DebertaTokenizer, DebertaTokenizerFast
 from transformers.models.deberta.tokenization_deberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -70,8 +69,6 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write("\n".join(merges))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname

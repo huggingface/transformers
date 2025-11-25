@@ -17,7 +17,6 @@
 import json
 import os
 import re
-import warnings
 from functools import lru_cache
 from typing import Optional
 
@@ -210,7 +209,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Compute offsets for a given tokenized input
 
         Args:
-            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
@@ -291,7 +290,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
 
         Args:
-            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens from the token ids. If `True`, the prompt token ids will be
@@ -329,7 +328,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
@@ -393,29 +392,13 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         text = super()._decode(*args, **kwargs)
 
         if normalize:
-            clean_text = self._normalize(text)
+            clean_text = self.normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
-    def _normalize(self, text):
-        warnings.warn(
-            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
-        )
-        return self.normalize(text)
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
-    def _basic_normalize(self, text, remove_diacritics=False):
-        warnings.warn(
-            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
-        )
-        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
     def normalize(self, text):
@@ -624,12 +607,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     def _convert_to_list(token_ids):
         # convert type to ndarray if necessary
         if hasattr(token_ids, "numpy"):
-            if "torch" in str(type(token_ids)):
-                token_ids = token_ids.cpu().numpy()
-            elif "tensorflow" in str(type(token_ids)):
-                token_ids = token_ids.numpy()
-        elif "jaxlib" in str(type(token_ids)):
-            token_ids = token_ids.tolist()
+            token_ids = token_ids.cpu().numpy()
         # now the token ids are either a numpy array, or a list of lists
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()

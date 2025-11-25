@@ -116,8 +116,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 يقوم `DataCollatorForMultipleChoice` بتجميع جميع مدخلات النموذج، ويطبق الحشو، ثم يعيد تجميع النتائج في شكلها الأصلي:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from dataclasses import dataclass
@@ -158,50 +156,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...         batch["labels"] = torch.tensor(labels, dtype=torch.int64)
 ...         return batch
 ```
-</pt>
-<tf>
- 
-```py
->>> from dataclasses import dataclass
->>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
->>> from typing import Optional, Union
->>> import tensorflow as tf
-
->>> @dataclass
-... class DataCollatorForMultipleChoice:
-...     """
-...     Data collator that will dynamically pad the inputs for multiple choice received.
-...     """
-
-...     tokenizer: PreTrainedTokenizerBase
-...     padding: Union[bool, str, PaddingStrategy] = True
-...     max_length: Optional[int] = None
-...     pad_to_multiple_of: Optional[int] = None
-
-...     def __call__(self, features):
-...         label_name = "label" if "label" in features[0].keys() else "labels"
-...         labels = [feature.pop(label_name) for feature in features]
-...         batch_size = len(features)
-...         num_choices = len(features[0]["input_ids"])
-...         flattened_features = [
-...             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
-...         ]
-...         flattened_features = sum(flattened_features, [])
-
-...         batch = self.tokenizer.pad(
-...             flattened_features,
-...             padding=self.padding,
-...             max_length=self.max_length,
-...             pad_to_multiple_of=self.pad_to_multiple_of,
-...             return_tensors="tf",
-...         )
-
-...         batch = {k: tf.reshape(v, (batch_size, num_choices, -1)) for k, v in batch.items()}
-...         batch["labels"] = tf.convert_to_tensor(labels, dtype=tf.int64)
-...         return batch
-```
-</tf>
-</frameworkcontent>
 
 ## التقييم (Evaluate)
 
@@ -228,8 +182,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -283,93 +235,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج باستخدام Keras، فراجع الدرس الأساسي [هنا](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-لضبط نموذج في TensorFlow، ابدأ بإعداد دالة مُحسِّن وجدول معدل التعلم وبعض معلمات التدريب:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 2
->>> total_train_steps = (len(tokenized_swag["train"]) // batch_size) * num_train_epochs
->>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-ثم يمكنك تحميل BERT باستخدام [`TFAutoModelForMultipleChoice`]:
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
-```
-
-حوّل مجموعات البيانات الخاصة بك إلى تنسيق `tf.data.Dataset` باستخدام [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_swag["train"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_swag["validation"],
-...     shuffle=False,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-```
-
-قم بتهيئة النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن جميع نماذج Transformers تحتوي على دالة خسارة مناسبة للمهمة بشكل افتراضي، لذلك لا تحتاج إلى تحديد واحدة ما لم ترغب في ذلك:
-
-```py
->>> model.compile(optimizer=optimizer)  # لا توجد وسيطة خسارة!
-```
-
-الخطوتان الأخيرتان قبل بدء التدريب هما: حساب دقة التنبؤات، وتوفير طريقة لرفع النموذج إلى Hub. ويمكن تحقيق ذلك باستخدام [استدعاءات Keras](../main_classes/keras_callbacks)
-
-مرر دالتك `compute_metrics` إلى [`~transformers.KerasMetricCallback`]:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-حدد مكان دفع نموذجك ومعالجك في [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-ثم قم بتضمين الاستدعاءات معًا:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-أخيرًا، أنت جاهز لبدء تدريب نموذجك! استدعِ[`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق من الصحة وعدد الحقب والاستدعاءات لضبط النموذج:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2, callbacks=callbacks)
-```
-
-بمجرد اكتمال التدريب، يتم تحميل نموذجك تلقائيًا إلى Hub حتى يتمكن الجميع من استخدامه!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -390,8 +255,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> candidate2 = "The law applies to baguettes."
 ```
 
-<frameworkcontent>
-<pt>
 قم بتحليل كل مطالبة وزوج إجابة مرشح وأعد تنسورات PyTorch. يجب عليك أيضًا إنشاء بعض `العلامات`:
 
 ```py
@@ -419,34 +282,3 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> predicted_class
 0
 ```
-</pt>
-<tf>
-قم بتحليل كل مطالبة وزوج إجابة مرشح وأعد موترات TensorFlow:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_swag_model")
->>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="tf", padding=True)
-```
-
-مرر مدخلاتك إلى النموذج وأعد القيم logits:
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("username/my_awesome_swag_model")
->>> inputs = {k: tf.expand_dims(v, 0) for k, v in inputs.items()}
->>> outputs = model(inputs)
->>> logits = outputs.logits
-```
-
-استخرج الفئة ذات الاحتمالية الأكبر:
-
-```py
->>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
->>> predicted_class
-0
-```
-</tf>
-</frameworkcontent>

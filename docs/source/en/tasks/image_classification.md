@@ -175,7 +175,6 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -212,7 +211,7 @@ At this point, only three steps remain:
 ...     gradient_accumulation_steps=4,
 ...     per_device_eval_batch_size=16,
 ...     num_train_epochs=3,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
@@ -237,7 +236,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-
 
 <Tip>
 

@@ -14,12 +14,11 @@
 
 
 import unittest
-from functools import lru_cache
 
 from transformers.models.mluke.tokenization_mluke import MLukeTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -39,8 +38,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         cls.special_tokens_map = {"entity_token_1": "<ent>", "entity_token_2": "<ent2>"}
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, task=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         kwargs.update({"task": task})
@@ -100,7 +97,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pretokenized_inputs(self):
         pass
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)

@@ -56,9 +56,7 @@ def get_align_config():
     vision_config.depthwise_padding = []
 
     text_config = BertConfig()
-    config = AlignConfig.from_text_vision_configs(
-        text_config=text_config, vision_config=vision_config, projection_dim=640
-    )
+    config = AlignConfig(text_config=text_config, vision_config=vision_config, projection_dim=640)
     return config
 
 

@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -33,7 +34,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging
 from .configuration_mpnet import MPNetConfig
 
@@ -46,23 +46,12 @@ class MPNetPreTrainedModel(PreTrainedModel):
     config: MPNetConfig
     base_model_prefix = "mpnet"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, MPNetLMHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, MPNetLMHead):
+            init.zeros_(module.bias)
 
 
 class MPNetEmbeddings(nn.Module):
@@ -148,7 +137,6 @@ class MPNetSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         position_bias=None,
         output_attentions=False,
         **kwargs,
@@ -186,9 +174,6 @@ class MPNetSelfAttention(nn.Module):
 
         attention_probs = self.dropout(attention_probs)
 
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         c = torch.matmul(attention_probs, v)
 
         c = c.permute(0, 2, 1, 3).contiguous()
@@ -208,29 +193,10 @@ class MPNetAttention(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attn.num_attention_heads, self.attn.attention_head_size, self.pruned_heads
-        )
-
-        self.attn.q = prune_linear_layer(self.attn.q, index)
-        self.attn.k = prune_linear_layer(self.attn.k, index)
-        self.attn.v = prune_linear_layer(self.attn.v, index)
-        self.attn.o = prune_linear_layer(self.attn.o, index, dim=1)
-
-        self.attn.num_attention_heads = self.attn.num_attention_heads - len(heads)
-        self.attn.all_head_size = self.attn.attention_head_size * self.attn.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
     def forward(
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         position_bias=None,
         output_attentions=False,
         **kwargs,
@@ -238,7 +204,6 @@ class MPNetAttention(nn.Module):
         self_outputs = self.attn(
             hidden_states,
             attention_mask,
-            head_mask,
             position_bias,
             output_attentions=output_attentions,
         )
@@ -289,7 +254,6 @@ class MPNetLayer(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         position_bias=None,
         output_attentions=False,
         **kwargs,
@@ -297,7 +261,6 @@ class MPNetLayer(nn.Module):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             position_bias=position_bias,
             output_attentions=output_attentions,
         )
@@ -322,7 +285,6 @@ class MPNetEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
@@ -338,7 +300,6 @@ class MPNetEncoder(nn.Module):
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
-                head_mask[i],
                 position_bias,
                 output_attentions=output_attentions,
                 **kwargs,
@@ -438,21 +399,12 @@ class MPNetModel(MPNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -481,12 +433,10 @@ class MPNetModel(MPNetPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -506,7 +456,10 @@ class MPNetModel(MPNetPreTrainedModel):
 
 
 class MPNetForMaskedLM(MPNetPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "mpnet.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -530,7 +483,6 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -549,7 +501,6 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -584,14 +535,8 @@ class MPNetLMHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
@@ -627,7 +572,6 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -647,7 +591,6 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -708,7 +651,6 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -754,7 +696,6 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
             flat_input_ids,
             position_ids=flat_position_ids,
             attention_mask=flat_attention_mask,
-            head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -802,7 +743,6 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -820,7 +760,6 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -886,7 +825,6 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -900,7 +838,6 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

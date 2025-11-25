@@ -40,6 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -59,6 +60,25 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
+        If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
+        for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
+        within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
+        size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
+        Can be overridden by `keep_aspect_ratio` in `preprocess`.
+    ensure_multiple_of (`int`, *optional*, defaults to 32):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
+        the height and width to the nearest multiple of this value.
+        Works both with and without `keep_aspect_ratio` being set to `True`.
+        Can be overridden by `ensure_multiple_of` in `preprocess`.
+    """
+
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
 
 
 def get_resize_output_image_size(
@@ -145,6 +165,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ZoeDepthImageProcessorKwargs
 
     def __init__(
         self,
@@ -247,7 +268,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
     def pad_image(
         self,
-        image: np.array,
+        image: np.ndarray,
         mode: PaddingMode = PaddingMode.REFLECT,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -309,7 +330,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         size: Optional[int] = None,
         keep_aspect_ratio: Optional[bool] = None,
         ensure_multiple_of: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -357,10 +378,8 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -388,10 +407,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

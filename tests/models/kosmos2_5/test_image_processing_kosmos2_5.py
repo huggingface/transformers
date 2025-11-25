@@ -18,13 +18,14 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from packaging import version
 
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -70,8 +71,10 @@ class Kosmos2_5ImageProcessingTester:
         return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
 
     def prepare_dummy_image(self):
-        img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        )
+        raw_image = load_image(img_url).convert("RGB")
         return raw_image
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -111,9 +114,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
@@ -175,12 +176,6 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self._assert_slow_fast_tensors_equivalence(
             output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
-
-    @unittest.skip(
-        reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU."
-    )
-    def test_fast_is_faster_than_slow(self):
-        super().test_fast_is_faster_than_slow()
 
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
@@ -356,9 +351,7 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
@@ -376,12 +369,6 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
     @unittest.skip(reason="Kosmos2_5ImageProcessor does not support 4 channels yet")
     def test_can_compile_fast_image_processor(self):
         return super().test_can_compile_fast_image_processor()
-
-    @unittest.skip(
-        reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU."
-    )
-    def test_fast_is_faster_than_slow(self):
-        super().test_fast_is_faster_than_slow()
 
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)

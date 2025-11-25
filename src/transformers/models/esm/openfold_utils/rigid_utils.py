@@ -15,9 +15,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import cache
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import torch

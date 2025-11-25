@@ -17,6 +17,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
@@ -27,7 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -61,7 +62,9 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
 
         tokenizer = cls.get_tokenizer()
+        tokenizer.save_pretrained(cls.tmpdirname)
         image_processor = cls.get_image_processor()
+        image_processor.save_pretrained(cls.tmpdirname)
         processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 

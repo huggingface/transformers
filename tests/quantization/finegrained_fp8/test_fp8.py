@@ -64,6 +64,11 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 @require_accelerate
 @require_read_token
 @require_torch_accelerator
+@unittest.skipIf(
+    get_device_properties()[0] == "cuda"
+    and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
+    "Skipping FP8QuantizerTest because it is not supported on GPU with capability < 8.9",
+)
 class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
     input_text = "Once upon a time"
@@ -88,8 +93,8 @@ class FP8QuantizerTest(unittest.TestCase):
         "model.layers.13": "cpu",
         "model.layers.14": "cpu",
         "model.layers.15": "cpu",
-        "model.rotary_emb": "disk",
-        "model.norm": "disk",
+        "model.rotary_emb": "cpu",
+        "model.norm": "cpu",
         "lm_head": 0,
     }
 
@@ -133,7 +138,7 @@ class FP8QuantizerTest(unittest.TestCase):
         for module in model.modules():
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
-
+        print(model)
         self.assertEqual(nb_linears - 1, nb_fp8_linear)
 
         with init_empty_weights():
@@ -204,6 +209,7 @@ class FP8QuantizerTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map="auto", quantization_config=quantization_config
         )
+        print("hf_device_map", quantized_model.hf_device_map)
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
@@ -251,13 +257,14 @@ class FP8QuantizerTest(unittest.TestCase):
 
 
 @require_torch_accelerator
+@unittest.skipIf(
+    get_device_properties()[0] == "cuda"
+    and (get_device_properties()[1] < 8 or (get_device_properties()[1] == 8 and get_device_properties()[2] < 9)),
+    "Skipping FP8LinearTest because it is not supported on GPU with capability < 8.9",
+)
 class FP8LinearTest(unittest.TestCase):
     device = torch_device
 
-    @unittest.skipIf(
-        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 9,
-        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
-    )
     def test_linear_preserves_shape(self):
         """
         Test that FP8Linear preserves shape when in_features == out_features.
@@ -270,10 +277,6 @@ class FP8LinearTest(unittest.TestCase):
         x_ = linear(x)
         self.assertEqual(x_.shape, x.shape)
 
-    @unittest.skipIf(
-        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 9,
-        "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
-    )
     def test_linear_with_diff_feature_size_preserves_shape(self):
         """
         Test that FP8Linear generates the correct shape when in_features != out_features.

@@ -40,7 +40,6 @@ Other models from the family can be found at [Ernie 4.5](./ernie4_5).
     <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
 </div>
 
-
 ## Usage Tips
 
 ### Generate text
@@ -166,7 +165,6 @@ generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 
 This model was contributed by [Anton Vlasjuk](https://huggingface.co/AntonV).
 The original code can be found [here](https://github.com/PaddlePaddle/ERNIE).
-
 
 ## Ernie4_5_MoeConfig
 

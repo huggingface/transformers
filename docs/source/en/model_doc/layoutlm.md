@@ -116,7 +116,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb) for an example of how to fine-tune LayoutLM for token classification.
 - Read [Deploy LayoutLM with Hugging Face Inference Endpoints](https://www.philschmid.de/inference-endpoints-layoutlm) to learn how to deploy LayoutLM.
 
-
 ## LayoutLMConfig
 
 [[autodoc]] LayoutLMConfig

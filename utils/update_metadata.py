@@ -51,10 +51,7 @@ TRANSFORMERS_PATH = "src/transformers"
 transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
-# Regexes that match TF/Flax/PT model names.
-_re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
-_re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
-# Will match any TF or Flax model too so need to be in an else branch afterthe two previous regexes.
+# Regexes that match model names
 _re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration|ForRetrieval)")
 
 
@@ -152,26 +149,17 @@ def get_frameworks_table() -> pd.DataFrame:
     modules.
     """
     # Dictionary model names to config.
-    config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
+    config_mapping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
     model_prefix_to_model_type = {
-        config.replace("Config", ""): model_type for model_type, config in config_maping_names.items()
+        config.replace("Config", ""): model_type for model_type, config in config_mapping_names.items()
     }
 
-    # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
     pt_models = collections.defaultdict(bool)
-    tf_models = collections.defaultdict(bool)
-    flax_models = collections.defaultdict(bool)
 
     # Let's lookup through all transformers object (once) and find if models are supported by a given backend.
     for attr_name in dir(transformers_module):
         lookup_dict = None
-        if _re_tf_models.match(attr_name) is not None:
-            lookup_dict = tf_models
-            attr_name = _re_tf_models.match(attr_name).groups()[0]
-        elif _re_flax_models.match(attr_name) is not None:
-            lookup_dict = flax_models
-            attr_name = _re_flax_models.match(attr_name).groups()[0]
-        elif _re_pt_models.match(attr_name) is not None:
+        if _re_pt_models.match(attr_name) is not None:
             lookup_dict = pt_models
             attr_name = _re_pt_models.match(attr_name).groups()[0]
 
@@ -183,14 +171,12 @@ def get_frameworks_table() -> pd.DataFrame:
                 # Try again after removing the last word in the name
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
 
-    all_models = set(list(pt_models.keys()) + list(tf_models.keys()) + list(flax_models.keys()))
+    all_models = set(pt_models.keys())
     all_models = list(all_models)
     all_models.sort()
 
     data = {"model_type": all_models}
     data["pytorch"] = [pt_models[t] for t in all_models]
-    data["tensorflow"] = [tf_models[t] for t in all_models]
-    data["flax"] = [flax_models[t] for t in all_models]
 
     # Now let's find the right processing class for each model. In order we check if there is a Processor, then a
     # Tokenizer, then a FeatureExtractor, then an ImageProcessor
@@ -225,29 +211,20 @@ def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> d
     Returns:
         `Dict[str, Tuple[str, str]]`: The updated table in the same format.
     """
-    auto_modules = [
-        transformers_module.models.auto.modeling_auto,
-        transformers_module.models.auto.modeling_tf_auto,
-        transformers_module.models.auto.modeling_flax_auto,
-    ]
-    for pipeline_tag, model_mapping, auto_class in PIPELINE_TAGS_AND_AUTO_MODELS:
-        model_mappings = [model_mapping, f"TF_{model_mapping}", f"FLAX_{model_mapping}"]
-        auto_classes = [auto_class, f"TF_{auto_class}", f"Flax_{auto_class}"]
-        # Loop through all three frameworks
-        for module, cls, mapping in zip(auto_modules, auto_classes, model_mappings):
-            # The type of pipeline may not exist in this framework
-            if not hasattr(module, mapping):
-                continue
-            # First extract all model_names
-            model_names = []
-            for name in getattr(module, mapping).values():
-                if isinstance(name, str):
-                    model_names.append(name)
-                else:
-                    model_names.extend(list(name))
+    module = transformers_module.models.auto.modeling_auto
+    for pipeline_tag, model_mapping, cls in PIPELINE_TAGS_AND_AUTO_MODELS:
+        if not hasattr(module, model_mapping):
+            continue
+        # First extract all model_names
+        model_names = []
+        for name in getattr(module, model_mapping).values():
+            if isinstance(name, str):
+                model_names.append(name)
+            else:
+                model_names.extend(list(name))
 
-            # Add pipeline tag and auto model class for those models
-            table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
+        # Add pipeline tag and auto model class for those models
+        table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
 
     return table
 

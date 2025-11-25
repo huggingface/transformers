@@ -19,7 +19,6 @@ from huggingface_hub import ImageClassificationOutputElement
 
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     PreTrainedTokenizerBase,
     is_torch_available,
     is_vision_available,
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
     require_torch,
-    require_torch_or_tf,
     require_vision,
     slow,
 )
@@ -52,11 +50,10 @@ else:
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 @require_vision
 class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     _dataset = None
 
     @classmethod
