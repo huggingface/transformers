@@ -424,6 +424,14 @@ class PreTrainedConfig(PushToHubMixin):
     def rope_scaling(self, value):
         self.rope_parameters = value
 
+    @property
+    def rope_theta(self):
+        return self.rope_parameters["rope_theta"]
+    
+    @rope_theta.setter
+    def rope_theta(self, value):
+        self.rope_parameters["rope_theta"] = value
+
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
