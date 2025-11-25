@@ -1133,10 +1133,7 @@ class AutoTokenizer:
             if fast_tokenizer_class is None:
                 tokenizer_class_candidate = config_tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
-                if tokenizer_class is None and (
-                    not tokenizer_class_candidate.endswith("Fast")
-                    or tokenizer_class_candidate == "PreTrainedTokenizer"
-                ):
+                if (tokenizer_class is None and not tokenizer_class_candidate.endswith("Fast")) or tokenizer_class_candidate == "PreTrainedTokenizer":
                     tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate + "Fast")
             else:
                 tokenizer_class = fast_tokenizer_class
