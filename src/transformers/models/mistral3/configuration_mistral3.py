@@ -110,7 +110,7 @@ class Mistral3Config(PreTrainedConfig):
 
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "mistral")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config, tie_word_embeddings=False)
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["mistral"](
                 attention_dropout=0.0,
