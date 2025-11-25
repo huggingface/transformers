@@ -3476,7 +3476,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(encoded_inputs, (list, tuple)) and len(encoded_inputs) > 0 and isinstance(encoded_inputs[0], Mapping):
+        if (
+            isinstance(encoded_inputs, (list, tuple))
+            and len(encoded_inputs) > 0
+            and isinstance(encoded_inputs[0], Mapping)
+        ):
             # Use .keys() explicitly to support dict-like objects (e.g., TensorDict) that implement
             # __iter__ differently than standard dicts (e.g., iterating over batch dimensions)
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}

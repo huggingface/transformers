@@ -74,6 +74,7 @@ class TensorDictCompatibilityTest(unittest.TestCase):
 
         # Verify the output is correctly padded (can be dict or Mapping like BatchEncoding)
         from collections.abc import Mapping
+
         self.assertIsInstance(result, Mapping)
         self.assertIn("input_ids", result)
         self.assertIn("attention_mask", result)
@@ -98,9 +99,7 @@ class TensorDictCompatibilityTest(unittest.TestCase):
                 {"input_ids": torch.tensor([1, 2, 3, 4, 5]), "attention_mask": torch.tensor([1, 1, 1, 1, 1])},
                 batch_size=[],
             ),
-            self.TensorDict(
-                {"input_ids": torch.tensor([6]), "attention_mask": torch.tensor([1])}, batch_size=[]
-            ),
+            self.TensorDict({"input_ids": torch.tensor([6]), "attention_mask": torch.tensor([1])}, batch_size=[]),
             self.TensorDict(
                 {"input_ids": torch.tensor([7, 8, 9]), "attention_mask": torch.tensor([1, 1, 1])}, batch_size=[]
             ),
