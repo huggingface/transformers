@@ -1,8 +1,10 @@
+from curses import version
 import sys
+from unittest.mock import MagicMock, patch
 import pytest
 
 from transformers.testing_utils import run_test_using_subprocess
-from transformers.utils.import_utils import clear_import_cache
+from transformers.utils.import_utils import _set_tf32_mode, clear_import_cache
 
 
 @run_test_using_subprocess
