@@ -19,12 +19,10 @@ import json
 import os
 import re
 import sys
-import tempfile
 import warnings
 from concurrent import futures
 from pathlib import Path
 from typing import TypedDict
-from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
