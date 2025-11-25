@@ -18,7 +18,6 @@ import csv
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import Optional, Union
 
 from ...utils import is_torch_available, logging
 
@@ -43,8 +42,8 @@ class InputExample:
 
     guid: str
     text_a: str
-    text_b: Optional[str] = None
-    label: Optional[str] = None
+    text_b: str | None = None
+    label: str | None = None
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
@@ -68,9 +67,9 @@ class InputFeatures:
     """
 
     input_ids: list[int]
-    attention_mask: Optional[list[int]] = None
-    token_type_ids: Optional[list[int]] = None
-    label: Optional[Union[int, float]] = None
+    attention_mask: list[int] | None = None
+    token_type_ids: list[int] | None = None
+    label: int | float | None = None
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""

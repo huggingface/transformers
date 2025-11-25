@@ -198,10 +198,6 @@ class MllamaProcessor(ProcessorMixin):
 
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "MllamaImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
-
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"

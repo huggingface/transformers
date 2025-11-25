@@ -6,7 +6,6 @@ import pathlib
 import re
 import tempfile
 import time
-from contextlib import nullcontext
 from datetime import datetime
 from queue import Queue
 from typing import Any
@@ -79,24 +78,6 @@ def get_git_revision() -> str:
         return git_hash.readline().strip()
 
 
-def get_sdpa_backend(backend_name: str | None) -> torch.nn.attention.SDPBackend | None:
-    """Get the SDPA backend enum from string name."""
-    if backend_name is None:
-        return None
-
-    try:
-        backend_map = {
-            "math": torch.nn.attention.SDPBackend.MATH,
-            "flash_attention": torch.nn.attention.SDPBackend.FLASH_ATTENTION,
-            "efficient_attention": torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION,
-            "cudnn_attention": torch.nn.attention.SDPBackend.CUDNN_ATTENTION,
-        }
-        return backend_map.get(backend_name.lower())
-    except AttributeError:
-        # torch.nn.attention.SDPBackend not available in older torch versions
-        return None
-
-
 def flush_memory():
     """Flush GPU memory and run garbage collection."""
     gc.collect()
@@ -117,8 +98,6 @@ def flush_memory():
     # Clear CUDA cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        torch.cuda.reset_max_memory_allocated()
-        torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
     gc.collect()
 
@@ -225,17 +204,13 @@ class BenchmarkRunner:
         self, model_id: str, config: BenchmarkConfig, num_tokens_to_profile: int = 0
     ) -> dict[str, Any] | None:
         """Run a single benchmark with the given model ID and config."""
-        sdpa_ctx = nullcontext()
-        if config.attn_implementation == "sdpa":
-            sdpa_backend = get_sdpa_backend(config.sdpa_backend)
-            sdpa_ctx = torch.nn.attention.sdpa_kernel(sdpa_backend)
-
-        with sdpa_ctx, torch.no_grad():
+        with torch.no_grad():
             self.logger.info(f"Running benchmark scenario: {config.name}")
 
             # Quick validation: try one measurement first to see if this scenario works
+            generate_fn = self.time_generate_batch if config.continuous_batching else self.time_generate
             flush_memory()
-            e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = self.time_generate(
+            e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = generate_fn(
                 max_new_tokens=1, gpu_monitor=None
             )
             if e2e_latency < 0:
@@ -244,15 +219,15 @@ class BenchmarkRunner:
 
             # Warmup runs
             self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
-            for _ in trange(config.warmup_iterations):
-                _ = self.time_generate(max_new_tokens=config.num_tokens_to_generate)
+            for _ in trange(config.warmup_iterations, desc="Warmup"):
+                _ = generate_fn(max_new_tokens=config.num_tokens_to_generate)
             self.logger.info("Warmup over.")
 
             # Measurement runs
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
-            for _ in trange(config.measurement_iterations):
-                e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = self.time_generate(
+            for _ in trange(config.measurement_iterations, desc="Benchmarking"):
+                e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = generate_fn(
                     max_new_tokens=config.num_tokens_to_generate,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
                 )
@@ -273,6 +248,41 @@ class BenchmarkRunner:
                 "measurements": result,
                 "config": config,
             }
+
+    # TODO: refactor `generate_batch` to handle streaming so we can use it here
+    def time_generate_batch(
+        self,
+        max_new_tokens: int,
+        gpu_monitor: GPUMonitor | None = None,
+    ) -> tuple[float, list[float], str, GPURawMetrics | None]:
+        if gpu_monitor is not None:
+            gpu_monitor.start()
+        # Prepare inputs
+        inputs = self.inputs["input_ids"].tolist()
+        timestamps = []
+        last_result_generated_tokens = None
+        wall_time_0 = time.perf_counter()
+        # We disable prefix sharing because all prompts are the same
+        with self.model.continuous_batching_context_manager(allow_prefix_sharing=False) as manager:
+            manager.add_requests(inputs, max_new_tokens=max_new_tokens, streaming=True)
+            unfinished_requests = len(inputs)
+            while unfinished_requests > 0:
+                # NOTE: I don't like having the extra if stmt here, but hopefully won't degrade perf too much
+                result = manager.get_result()
+                if result is not None:
+                    timestamps.append(time.perf_counter() - wall_time_0)  # FIXME: the timestamps are wrong
+                    if result.is_finished():
+                        last_result_generated_tokens = result.generated_tokens
+                        unfinished_requests -= 1
+                elif not manager.is_running():
+                    raise RuntimeError("Generation thread exited unexpectedly")
+        # Post-processing
+        wall_time_1 = time.perf_counter()
+        e2e_latency = wall_time_1 - wall_time_0
+        gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
+        decoded_output = self.tokenizer.decode(last_result_generated_tokens, skip_special_tokens=True)
+        shape_and_decoded_output = f"{(1, len(last_result_generated_tokens))} | {decoded_output}"
+        return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def time_generate(
         self,
@@ -339,12 +349,6 @@ class BenchmarkRunner:
 
         n_configs = len(benchmark_configs)
         for i, config in enumerate(benchmark_configs):
-            # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
-            if config.attn_implementation == "sdpa" and config.sdpa_backend is None:
-                default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
-                self.logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
-                config.sdpa_backend = default_backend
-
             # Skip if already run
             if config.hash in all_results:
                 self.logger.info(f"Skipping duplicate config {config.name} for model {model_id} ({i + 1}/{n_configs})")
@@ -368,21 +372,27 @@ class BenchmarkRunner:
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp)
 
+        if len(all_results) < 1:
+            raise RuntimeError("No benchmark was run successfully")
+
         if pretty_print_summary:
             print()
             print("=" * 100)
             print(f"Finished benchmarks in {time.perf_counter() - start_time:.2f} seconds")
             print(f"Total number of benchmarks: {len(all_results)}")
-            if len(all_results) > 0:
-                print("First run metadata:")
-                first_key = list(all_results.keys())[0]
-                first_metadata = all_results[first_key]["metadata"].to_dict()
-                hardware_info = first_metadata.pop("hardware_info")
-                pretty_print_dict(first_metadata | hardware_info, tabs=1)
+            print("First run metadata:")
+            first_key = list(all_results.keys())[0]
+            first_metadata = all_results[first_key]["metadata"].to_dict()
+            hardware_info = first_metadata.pop("hardware_info")
+            pretty_print_dict(first_metadata | hardware_info, tabs=1)
             for result in all_results.values():
                 print("=" * 100)
                 print(f"Config: {result['config'].infer_name(compact=False)}\n")
-                result["measurements"].pprint(batch_size=result["config"].batch_size, tabs=1)
+                result["measurements"].pprint(
+                    batch_size=result["config"].batch_size,
+                    num_generated_tokens=result["config"].num_tokens_to_generate,
+                    tabs=1,
+                )
             print("=" * 100)
 
         return (timestamp, all_results)
@@ -453,4 +463,4 @@ class BenchmarkRunner:
                 repo_type="dataset",
                 token=PUSH_TO_HUB_TOKEN,
             )
-        self.logger.info(f"Succesfully uploaded results to: {dataset_id}")
+        self.logger.info(f"Successfully uploaded results to: {dataset_id}")
