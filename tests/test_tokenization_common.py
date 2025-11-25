@@ -341,8 +341,7 @@ Hey how are you doing"""
                 return None
 
             extractor = TokenizersExtractor(tokenizer_json_path)
-            vocab_scores, merges = extractor.extract()
-
+            vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
             # Convert added_tokens list to added_tokens_decoder dict format
             # This matches the format used by from_pretrained() from tokenizer_config.json
             tokenizer_from_extractor = self.tokenizer_class(
@@ -350,7 +349,7 @@ Hey how are you doing"""
                 merges=merges,
                 do_lower_case=False,
                 keep_accents=True,
-                added_tokens_decoder=None,
+                added_tokens_decoder=added_tokens_decoder,
                 **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
             )
 

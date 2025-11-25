@@ -92,12 +92,10 @@ class Qwen2Tokenizer(TokenizersBackend):
                 ),
             ]
         )
-        tokenizer_object = self._tokenizer
 
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
