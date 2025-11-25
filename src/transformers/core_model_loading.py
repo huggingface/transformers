@@ -329,7 +329,7 @@ class WeightTransform:
             for source in all_sources:
                 reverse_layer_targets[source].add(target_key)
                 reverse_collected_tensors[matched_target_pattern].append(source)
-        reverse_collected_tensors = sorted(set(reverse_collected_tensors))
+        reverse_collected_tensors = {k: sorted(set(v)) for k, v in reverse_collected_tensors.items()}
         reverse_transform.layer_targets = reverse_layer_targets
         reverse_transform.collected_tensors = reverse_collected_tensors
         # Add the reverse ops if applicable
