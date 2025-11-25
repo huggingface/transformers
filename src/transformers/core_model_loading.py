@@ -317,8 +317,8 @@ class WeightRenaming(WeightTransform):
         config=None,
         hf_quantizer=None,
         missing_keys: Optional[MutableSet[str]] = None,
+        misc: Optional[MutableMapping[str, str]] = None,
     ):
-        misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
 
@@ -358,8 +358,8 @@ class WeightConverter(WeightTransform):
         config=None,
         hf_quantizer=None,
         missing_keys: Optional[MutableSet[str]] = None,
+        misc: Optional[MutableMapping[str, str]] = None,
     ):
-        misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
 
@@ -782,6 +782,7 @@ def convert_and_load_state_dict_in_model(
                     config=model.config,
                     hf_quantizer=hf_quantizer,
                     missing_keys=missing_keys,
+                    misc=misc,
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
