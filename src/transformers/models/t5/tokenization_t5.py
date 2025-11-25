@@ -113,7 +113,7 @@ class T5Tokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(
             Unigram(
-                list(self._vocab_scores.items()) if isinstance(self._vocab_scores, dict) else self._vocab_scores,
+                self._vocab_scores,
                 unk_id=2,
                 byte_fallback=False,
             )
@@ -129,11 +129,7 @@ class T5Tokenizer(TokenizersBackend):
         )
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,

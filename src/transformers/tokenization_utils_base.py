@@ -1012,7 +1012,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         additional_special_tokens_value = kwargs.pop("additional_special_tokens", None)
         if "additional_special_tokens" not in self.init_kwargs:
             self.init_kwargs["additional_special_tokens"] = additional_special_tokens_value
-        kwargs.setdefault("extra_special_tokens", additional_special_tokens_value)
 
         self._pad_token_type_id = 0
         self.verbose = kwargs.pop("verbose", False)

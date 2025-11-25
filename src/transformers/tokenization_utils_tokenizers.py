@@ -375,12 +375,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokenizer_object = TokenizerFast.from_file(tokenizer_file)
             else:
                 tokenizer_model = tokenizer_json.get("model", {})
-                vocab = tokenizer_model.get("vocab")
-                if isinstance(vocab, list):
-                    vocab = {
-                        token[0] if isinstance(token, (list, tuple)) else token: idx for idx, token in enumerate(vocab)
-                    }
-
+                vocab = tokenizer_model.get("vocab") # unigram needs list, bpe/wordpiece needs dict
+                if isinstance(vocab, list) and isinstance(vocab[0], list):
+                    # unigram needs list of tuples its stupid will fix in `tokenizers`
+                    vocab = list(map(tuple, vocab))
                 raw_merges = tokenizer_model.get("merges")
                 if raw_merges is not None:
                     merges = []
