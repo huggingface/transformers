@@ -311,7 +311,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             f" _tokenizer={self._tokenizer},\n"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},\n"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',\n"
-            f" special_tokens={self._token_mapping},\n"
             " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
         )
 
@@ -376,9 +375,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             files_loaded.append(os.path.basename(tokenizer_file))
             with open(tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
-                token_mapping = tokenizer_json.get("token_mapping")
-                if token_mapping is not None:
-                    init_kwargs.setdefault("token_mapping", token_mapping)
 
         # Populate added_tokens_decoder (legacy) while keeping token_mapping untouched; legacy files only if mapping is absent
         init_kwargs, added_tokens_decoder, added_tokens_map = cls._load_added_tokens(
