@@ -2480,7 +2480,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             "pixtral",
                         ]:
                             return tokenizer
-                    elif version.parse(transformers_version) > version.parse("4.57.2"):
+                    elif transformers_version and version.parse(transformers_version) > version.parse("4.57.2"):
                         return tokenizer
 
                     # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
