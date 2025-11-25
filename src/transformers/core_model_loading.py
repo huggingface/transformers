@@ -32,6 +32,8 @@ from .integrations.accelerate import offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_torch_greater_or_equal, logging
 
+import torch
+
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
@@ -777,7 +779,7 @@ def convert_and_load_state_dict_in_model(
             pbar.refresh()
             try:
                 realized_value, misc = mapping.convert(
-                    layer_name, model=model, config=model.config, hf_quantizer=hf_quantizer, missing_keys=missing_keys
+                    first_param_name, model=model, config=model.config, hf_quantizer=hf_quantizer, missing_keys=missing_keys
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
