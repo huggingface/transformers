@@ -2099,12 +2099,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             template = template.removesuffix(".jinja")
                             vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
+        remote_files = []
         if not is_local and not local_files_only:
             try:
                 remote_files = list_repo_files(pretrained_model_name_or_path)
             except Exception:
                 remote_files = []
-        else:
+        elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
             remote_files = os.listdir(pretrained_model_name_or_path)
 
         if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
