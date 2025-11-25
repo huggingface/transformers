@@ -3176,7 +3176,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
-            _tied_weights_keys = set(self.all_tied_weights_keys.keys())
+            tied_keys_attr = getattr(self, "all_tied_weights_keys", None)
+            if tied_keys_attr is not None:
+                _tied_weights_keys = set(tied_keys_attr.keys())
+            else:
+                _tied_weights_keys = set(_get_tied_weight_keys(self))
             error_names = []
             to_delete_names = set()
             for names in shared_ptrs.values():
@@ -4410,7 +4414,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
-        for key in missing_keys - self.all_tied_weights_keys.keys():
+        tied_keys_attr = getattr(self, "all_tied_weights_keys", {}) or {}
+        tied_keys = set(tied_keys_attr.keys())
+        for key in missing_keys - tied_keys:
             param = model_state_dict[key]
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
