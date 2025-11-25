@@ -2053,63 +2053,109 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         3. Legacy `special_tokens_map.json` + `added_tokens.json` files.
         """
 
+        #### Handle tokenizer serialization of added and special tokens
         added_tokens_decoder: dict[int, AddedToken] = {}
         added_tokens_map: dict[str, AddedToken] = {}
-
-        def _record(token_obj: AddedToken, idx: int):
-            added_tokens_decoder[int(idx)] = token_obj
-            added_tokens_map[str(token_obj)] = token_obj
-
-        # Priority 1: added tokens from tokenizer.json
-        if tokenizer_json is not None:
-            json_added_tokens = tokenizer_json.get("added_tokens", [])
-            for serialized_tokens in json_added_tokens:
-                serialized_tokens = serialized_tokens.copy()
-                idx = serialized_tokens.pop("id")
-                _record(AddedToken(**serialized_tokens), idx)
-            if added_tokens_decoder:
-                return init_kwargs, added_tokens_decoder, added_tokens_map
-
-        # Priority 2: added_tokens_decoder serialized in tokenizer_config.json
+        # if we have info on the slow added tokens
         if "added_tokens_decoder" in init_kwargs:
-            for idx, token_obj in init_kwargs["added_tokens_decoder"].items():
-                if isinstance(token_obj, dict):
-                    token_obj = AddedToken(**token_obj)
-                _record(token_obj, idx)
-            return init_kwargs, added_tokens_decoder, added_tokens_map
+            for idx, token in init_kwargs["added_tokens_decoder"].items():
+                if isinstance(token, dict):
+                    token = AddedToken(**token)
+                if isinstance(token, AddedToken):
+                    added_tokens_decoder[int(idx)] = token
+                    added_tokens_map[str(token)] = token
+                else:
+                    raise TypeError(
+                        f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary or an AddedToken instance"
+                    )
+        else:
+            # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
+            if special_tokens_map_file is not None:
+                with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
+                    special_tokens_map = json.load(special_tokens_map_handle)
+                    # Preserve extra_special_tokens from tokenizer_config.json before processing special_tokens_map
+                    extra_special_tokens_before_map = init_kwargs.get("extra_special_tokens")
+                    if isinstance(extra_special_tokens_before_map, (list, tuple)):
+                        extra_special_tokens_before_map = list(extra_special_tokens_before_map)
+                    else:
+                        extra_special_tokens_before_map = None
 
-        # Priority 3: legacy files (only if no token_mapping and no tokenizer.json mapping)
-        if tokenizer_json is None and special_tokens_map_file is not None:
-            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = json.load(special_tokens_map_handle)
-            for key, value in special_tokens_map.items():
-                if key in user_kwargs and user_kwargs[key]:
-                    continue
-                if isinstance(value, dict):
-                    value["special"] = True
-                    value = AddedToken(**value)
-                elif key == "extra_special_tokens" and isinstance(value, dict):
-                    init_kwargs.setdefault("extra_special_tokens", value)
-                    continue
-                init_kwargs.setdefault(key, value)
+                    for key, value in special_tokens_map.items():
+                        if key in user_kwargs and user_kwargs[key]:
+                            # This value has already been redefined by the kwargs
+                            # We keep this new value and ignore the one stored in the special_tokens_map_file
+                            continue
+                        # V5: Convert dict-format tokens to AddedToken
+                        if isinstance(value, dict):
+                            value["special"] = True
+                            value = AddedToken(**value)
+                        elif key == "extra_special_tokens":
+                            # Handle extra_special_tokens from special_tokens_map.json
+                            if isinstance(value, dict):
+                                # Dict format for model-specific tokens - keep as is
+                                init_kwargs[key] = value
+                                continue
+                            elif isinstance(value, list):
+                                # List format - merge with existing if present
+                                existing = init_kwargs.pop("extra_special_tokens", []) or []
+                                if not isinstance(existing, (list, tuple)):
+                                    existing = []
+                                for token in value:
+                                    if isinstance(token, dict):
+                                        token = AddedToken(**token, special=True)
+                                    if token not in existing:
+                                        existing.append(token)
+                                init_kwargs[key] = existing
+                                continue
+                        init_kwargs[key] = value
 
-        if added_tokens_file is not None:
-            special_tokens = []
-            for key in cls._get_special_tokens_attributes():
-                if key in init_kwargs and init_kwargs[key] is not None:
-                    special_tokens.append(str(init_kwargs[key]))
-            if "extra_special_tokens" in init_kwargs and init_kwargs["extra_special_tokens"] is not None:
-                special_tokens += [str(token) for token in init_kwargs["extra_special_tokens"]]
+                    # Restore extra_special_tokens from tokenizer_config.json if not in special_tokens_map.json
+                    if (
+                        "extra_special_tokens" not in special_tokens_map
+                        and extra_special_tokens_before_map is not None
+                    ):
+                        if "extra_special_tokens" not in init_kwargs or not isinstance(
+                            init_kwargs.get("extra_special_tokens"), (list, tuple)
+                        ):
+                            init_kwargs["extra_special_tokens"] = extra_special_tokens_before_map
 
-            with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                added_tok_encoder = json.load(added_tokens_handle)
+                    # Convert extra_special_tokens dict to model_specific_special_tokens if it's a dict
+                    if isinstance(init_kwargs.get("extra_special_tokens"), dict):
+                        init_kwargs["model_specific_special_tokens"] = init_kwargs.pop("extra_special_tokens")
 
-            for str_token, index in added_tok_encoder.items():
-                special = str_token in special_tokens
-                added_token = AddedToken(
-                    str_token, rstrip=False, lstrip=False, normalized=not special, special=special
-                )
-                _record(added_token, index)
+            # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
+            # this is for legacy purpose. We don't add the tokens after init for efficiency.
+            if added_tokens_file is not None:
+                special_tokens = []
+                # V5: Check both named and extra special tokens
+                for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
+                    if key in init_kwargs and init_kwargs[key] is not None:
+                        special_tokens.append(str(init_kwargs[key]))
+
+                # Handle extra_special_tokens
+                if "extra_special_tokens" in init_kwargs and init_kwargs["extra_special_tokens"] is not None:
+                    special_tokens += [str(token) for token in init_kwargs["extra_special_tokens"]]
+
+                with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
+                    added_tok_encoder = json.load(added_tokens_handle)
+                for str_token, index in added_tok_encoder.items():
+                    # if index not in added_tokens_decoder and str_token not in added_tokens_map:
+                    special = str_token in special_tokens
+                    added_tokens_decoder[index] = AddedToken(
+                        str_token, rstrip=False, lstrip=False, normalized=not special, special=special
+                    )
+                    added_tokens_map[str_token] = added_tokens_decoder[index]
+
+            # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
+            # if `tokenizer_config.json` is `None`
+            if tokenizer_json is not None:
+                # This is for slow so can be done before
+                added_tokens = tokenizer_json.pop("added_tokens")
+                for serialized_tokens in added_tokens:
+                    idx = serialized_tokens.pop("id")
+                    added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
+                    added_tokens_map[str(added_tokens_decoder[idx])] = added_tokens_decoder[idx]
+            # end legacy
 
         return init_kwargs, added_tokens_decoder, added_tokens_map
 
