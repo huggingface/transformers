@@ -119,6 +119,18 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
+  - sections:
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_one
+      title: GPU
+    - local: perf_infer_gpu_multi
+      title: Tensor parallelism
+    - local: expert_parallelism
+      title: Expert parallelism
+    - local: perf_infer_cpu
+      title: CPU
+    title: Optimization
   - local: agents
     title: Agents
   - local: tools
