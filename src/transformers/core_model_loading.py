@@ -868,7 +868,8 @@ def revert_weight_conversion(model, state_dict):
     for converter in original_mapping.values():
         reversed_converter = converter.reverse_transform()
         reversed_converter.collected_tensors = {
-            k: model.get_parameter_or_buffer(v) for k, v in reversed_converter.collected_tensors.items()
+            k: [model.get_parameter_or_buffer(param) for param in params]
+            for k, params in reversed_converter.collected_tensors.items()
         }
         first_param_name = next(iter(reversed_converter.layer_targets.keys()))
 
