@@ -782,7 +782,7 @@ def convert_and_load_state_dict_in_model(
                     config=model.config,
                     hf_quantizer=hf_quantizer,
                     missing_keys=missing_keys,
-                    misc=misc
+                    misc=misc,
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
