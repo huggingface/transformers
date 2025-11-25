@@ -3145,9 +3145,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
-        # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
-        # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
-        state_dict = self._fix_state_dict_keys_on_save(state_dict)
         # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
         # therefore we replace them with DTensors that are equivalently sharded
         if self._tp_size is not None:
@@ -4025,21 +4022,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             }
             return model, loading_info
         return model
-
-    @staticmethod
-    def _fix_state_dict_key_on_save(key) -> tuple[str, bool]:
-        """
-        Similar to `_fix_state_dict_key_on_load` allows to define hook for state dict key renaming on model save.
-        Do nothing by default, but can be overridden in particular models.
-        """
-        return key, False
-
-    def _fix_state_dict_keys_on_save(self, state_dict):
-        """
-        Similar to `_fix_state_dict_keys_on_load` allows to define hook for state dict key renaming on model save.
-        Apply `_fix_state_dict_key_on_save` to all keys in `state_dict`.
-        """
-        return {self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items()}
 
     @classmethod
     def _load_pretrained_model(

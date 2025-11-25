@@ -589,7 +589,11 @@ def repl(m, repl_map: dict[str, str]) -> str:
 
     # Exactly one match => return replacement
     name = matched_groups[0]
-    return repl_map[name]
+    replacement = repl_map[name]
+    # Allow capturing groups in patterns, i.e. to add a prefix to all keys (timm_wrapper)
+    if len(m.groups()) > 1:
+        return re.sub(rf"({m.group(1)})", replacement, m.group(0))
+    return replacement
 
 
 def convert_and_load_state_dict_in_model(

@@ -67,6 +67,13 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "timm_wrapper": [
+            # Simply add the prefix `timm_model`
+            WeightRenaming(
+                source_patterns=r"(.+)",
+                target_patterns=r"timm_model.\1",
+            )
+        ],
         "legacy": [
             WeightRenaming(
                 source_patterns="LayerNorm.gamma",
