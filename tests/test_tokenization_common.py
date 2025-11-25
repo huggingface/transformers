@@ -4672,15 +4672,14 @@ class TokenizerTesterMixin:
                     self.assertEqual(output.input_ids.dtype, target_type)
 
     def test_local_files_only(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+        from transformers import AutoTokenizer
+        for pretrained_name in self.from_pretrained_id:
+            with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
-                tokenizer_cached = tokenizer.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
 
                 # Now load with local_files_only=True
-                tokenizer_local = tokenizer.from_pretrained(
-                    pretrained_name, local_files_only=True, **kwargs
-                )
+                tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True)
 
                 # Check that the two tokenizers are identical
                 self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
