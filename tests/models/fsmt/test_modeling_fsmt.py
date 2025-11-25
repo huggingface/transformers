@@ -125,6 +125,7 @@ class FSMTModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            tie_word_embeddings=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -254,6 +255,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
         config.tie_word_embeddings = True
+        config.decoder.tie_word_embeddings = True
         model = FSMTForConditionalGeneration(config)
 
         # FSMT shares three weights.
@@ -270,6 +272,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         )
 
         config.tie_word_embeddings = False
+        config.decoder.tie_word_embeddings = False
         model = FSMTForConditionalGeneration(config)
 
         # FSMT shares three weights.
