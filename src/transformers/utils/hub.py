@@ -58,7 +58,6 @@ from huggingface_hub.utils import (
 )
 
 from . import __version__, logging
-from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     get_torch_version,
@@ -749,15 +748,18 @@ class PushToHubMixin:
     def push_to_hub(
         self,
         repo_id: str,
-        use_temp_dir: bool | None = None,
+        *,
+        # Commit details
         commit_message: str | None = None,
+        commit_description: str | None = None,
+        # Repo / upload details
         private: bool | None = None,
         token: bool | str | None = None,
-        max_shard_size: int | str | None = "5GB",
-        create_pr: bool = False,
-        safe_serialization: bool = True,
         revision: str | None = None,
-        commit_description: str | None = None,
+        create_pr: bool = False,
+        # Serialization details
+        max_shard_size: int | str | None = "5GB",
+        safe_serialization: bool = True,
         tags: list[str] | None = None,
     ) -> str:
         """
@@ -767,29 +769,26 @@ class PushToHubMixin:
             repo_id (`str`):
                 The name of the repository you want to push your {object} to. It should contain your organization name
                 when pushing to a given organization.
-            use_temp_dir (`bool`, *optional*):
-                Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
-                Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
             commit_message (`str`, *optional*):
                 Message to commit while pushing. Will default to `"Upload {object}"`.
+            commit_description (`str`, *optional*):
+                The description of the commit that will be created
             private (`bool`, *optional*):
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True` (default), will use the token generated
                 when running `hf auth login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*):
+                Branch to push the uploaded files to.
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
             max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
                 by a unit (like `"5MB"`). We default it to `"5GB"` so that users can easily load models on free-tier
                 Google Colab instances without any CPU OOM issues.
-            create_pr (`bool`, *optional*, defaults to `False`):
-                Whether or not to create a PR with the uploaded files or directly commit.
             safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether or not to convert the model weights in safetensors format for safer serialization.
-            revision (`str`, *optional*):
-                Branch to push the uploaded files to.
-            commit_description (`str`, *optional*):
-                The description of the commit that will be created
             tags (`list[str]`, *optional*):
                 List of tags to push on the Hub.
 
@@ -813,28 +812,18 @@ class PushToHubMixin:
         # Load model card or create a new one + eventually tag it
         model_card = create_and_tag_model_card(repo_id, tags, token=token)
 
-        # Infer working_dir from it from repo_id
-        working_dir = repo_id.split("/")[-1]
-        if use_temp_dir is None:
-            use_temp_dir = not os.path.isdir(working_dir)
-
-        with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
-            files_timestamps = self._get_files_timestamps(work_dir)
-
+        with tempfile.TemporaryDirectory() as tmp_dir:
             # Save all files.
-            self.save_pretrained(
-                work_dir,
-                max_shard_size=max_shard_size,
-                safe_serialization=safe_serialization,
-            )
+            self.save_pretrained(tmp_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
-            # Update model card if needed:
-            model_card.save(os.path.join(work_dir, "README.md"))
+            # Update model card
+            model_card.save(os.path.join(tmp_dir, "README.md"))
 
+            # Upload
             return self._upload_modified_files(
-                work_dir,
+                tmp_dir,
                 repo_id,
-                files_timestamps,
+                files_timestamps={},
                 commit_message=commit_message,
                 token=token,
                 create_pr=create_pr,

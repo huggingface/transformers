@@ -495,15 +495,6 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
     return dict(_flatten_dict(d, parent_key, delimiter))
 
 
-@contextmanager
-def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
-    if use_temp_dir:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            yield tmp_dir
-    else:
-        yield working_dir
-
-
 def transpose(array, axes=None):
     """
     Framework-agnostic version of transpose operation.
