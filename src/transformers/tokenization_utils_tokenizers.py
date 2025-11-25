@@ -219,7 +219,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             init_inputs = saved_init_inputs
 
         chat_templates = {}
-        chat_template_file = resolved_vocab_files.get("chat_template_file")
+        chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         extra_chat_templates = [key for key in resolved_vocab_files if key.startswith("chat_template_")]
         if chat_template_file is not None:
             with open(chat_template_file, encoding="utf-8") as chat_template_handle:
@@ -330,7 +330,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if added_tokens_decoder:
             init_kwargs["added_tokens_decoder"] = added_tokens_decoder
-            init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
+        
+        # Convert all AddedToken dicts to AddedToken objects (including special tokens from tokenizer_config.json)
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
 
         init_kwargs.setdefault("backend", "tokenizers")
         if files_loaded and "files_loaded" not in init_kwargs:
@@ -410,7 +412,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if added_tokens_file is not None:
             special_tokens = []
-            for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
+            for key in cls._get_special_tokens_attributes():
                 if key in init_kwargs and init_kwargs[key] is not None:
                     special_tokens.append(str(init_kwargs[key]))
             if "extra_special_tokens" in init_kwargs and init_kwargs["extra_special_tokens"] is not None:

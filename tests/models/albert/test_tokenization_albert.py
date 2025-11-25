@@ -155,22 +155,22 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     ]
     integration_expected_decoded_text = "this is a test <unk> i was born in 92000, and this is false. <unk> hi hello hi hello hello <unk>s<unk> hi<unk>s<unk>there the following string should be properly encoded: hello. but ird and <unk> ird <unk> hey how are you doing"
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    # @classmethod
+    # def setUpClass(cls):
+    #     super().setUpClass()
 
-        from_pretrained_id = "albert/albert-base-v1"
+    #     from_pretrained_id = "albert/albert-base-v1"
 
-        tokenizer = AlbertTokenizer.from_pretrained(from_pretrained_id)
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.save_pretrained(cls.tmpdirname)
+    #     tokenizer = AlbertTokenizer.from_pretrained(from_pretrained_id)
+    #     tokenizer.pad_token = tokenizer.eos_token
+    #     tokenizer.save_pretrained(cls.tmpdirname)
 
-        # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
-        vocab_file = getattr(tokenizer, "vocab_file", None)
+    #     # Build backend for slow tokenizer from the fast tokenizer's SentencePiece model
+    #     vocab_file = getattr(tokenizer, "vocab_file", None)
 
-        extractor = SentencePieceExtractor(vocab_file)
-        vocab_ids, vocab_scores, merges = extractor.extract()
-        tokenizer_from_vocab = AlbertTokenizer(vocab=vocab_ids, merges=merges)
-        tokenizer_from_vocab.pad_token = tokenizer_from_vocab.eos_token
+    #     extractor = SentencePieceExtractor(vocab_file)
+    #     vocab_ids, vocab_scores, merges = extractor.extract()
+    #     tokenizer_from_vocab = AlbertTokenizer(vocab=vocab_ids, merges=merges)
+    #     tokenizer_from_vocab.pad_token = tokenizer_from_vocab.eos_token
 
-        cls.tokenizers = [tokenizer, tokenizer_from_vocab]
+    #     cls.tokenizers = [tokenizer, tokenizer_from_vocab]

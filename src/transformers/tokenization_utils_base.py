@@ -978,6 +978,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     # Special tokens support (moved from SpecialTokensMixin)
     # V5: Clean separation of named special tokens from extra special tokens
+    
+    @classmethod
+    def _get_special_tokens_attributes(cls):
+        # Return common token names, override this with actual tokens
+        return ["bos_token", "eos_token", "unk_token", "sep_token", "pad_token", "cls_token", "mask_token"]
+    
+    @property
+    def SPECIAL_TOKENS_ATTRIBUTES(self):
+        """
+        Dynamically returns special token attribute names from _token_mapping.
+        """
+        if not hasattr(self, '_token_mapping'):
+            return self._get_special_tokens_attributes()
+        return [
+            key for key in self._token_mapping.keys()
+            if key.endswith('_token') and key != '_extra_special_tokens'
+        ]
+
     def __init__(self, **kwargs):
         self.init_inputs = ()
         for key in kwargs:
@@ -995,8 +1013,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self._pad_token_type_id = 0
         self.verbose = kwargs.pop("verbose", False)
+        object.__setattr__(self, "_token_mapping", kwargs.pop("token_mapping", {}) or {})
 
-        # V5: Separate storage for named special tokens and extra special tokens
+        # V5: Separate storage for named special tokens and extra special tokens  
         self._special_tokens_map = dict.fromkeys(self.SPECIAL_TOKENS_ATTRIBUTES)
         self._extra_special_tokens = []  # List of extra model-specific special tokens
 
@@ -1010,14 +1029,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Directly set hidden values to allow init with tokens not yet in vocab
         for key in list(kwargs.keys()):
-            if key in self.SPECIAL_TOKENS_ATTRIBUTES:
+            if key.endswith("_token") and isinstance(kwargs[key], (str, AddedToken)):
                 value = kwargs.pop(key)
                 if value is None:
                     continue
-                if isinstance(value, (str, AddedToken)):
+                # Store as mapping; ids are set when vocab is defined later
+                self._token_mapping[key] = value if isinstance(value, int) else value
+                # Also update _special_tokens_map for BC
+                if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                     self._special_tokens_map[key] = value
-                else:
-                    raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
             elif key == "extra_special_tokens":
                 # V5: Support extra_special_tokens in __init__
                 value = kwargs.pop(key)
@@ -1034,36 +1054,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                             "extra_special_tokens must be a list/tuple of str or AddedToken, or a dict mapping names to tokens"
                         )
                     self._extra_special_tokens = list(value)
-            elif (
-                key.endswith("_token")
-                and key not in self.SPECIAL_TOKENS_ATTRIBUTES
-                and isinstance(kwargs[key], (str, AddedToken))
-            ):
-                value = kwargs.pop(key)
-                if value is None:
-                    continue
-                auto_model_specific_tokens[key] = value
-
-        self._pad_token_type_id = 0
-        self.verbose = kwargs.pop("verbose", False)
-        object.__setattr__(self, "_token_mapping", kwargs.pop("token_mapping", {}) or {})
-
-        # V5: track both explicit and auto-detected model-specific tokens
-        explicit_model_specific_tokens = kwargs.pop("model_specific_special_tokens", None)
-        if explicit_model_specific_tokens is None:
-            explicit_model_specific_tokens = {}
-        elif not isinstance(explicit_model_specific_tokens, dict):
-            raise TypeError("model_specific_special_tokens must be a dictionary of token name to token value")
-        auto_model_specific_tokens = {}
-
-        # Directly set hidden values to allow init with tokens not yet in vocab
-        for key in list(kwargs.keys()):
-            if key.endswith("_token") and isinstance(kwargs[key], (str, AddedToken)):
-                value = kwargs.pop(key)
-                if value is None:
-                    continue
-                # Store as mapping; resolution to ids happens later when vocab is available
-                self._token_mapping[key] = value if isinstance(value, int) else value
+        
+        # Note: SPECIAL_TOKENS_ATTRIBUTES is now a property that derives from _token_mapping automatically
+        
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
@@ -1234,8 +1227,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
         # token_mapping support (simplified special token storage)
+        # Exclude _extra_special_tokens from token_mapping
         token_mapping = self.__dict__.get("_token_mapping", None)
-        if token_mapping is not None and (
+        if token_mapping is not None and key != "_extra_special_tokens" and (
             key in token_mapping
             or key_without_id in token_mapping
             or key.endswith("_token")
@@ -1417,10 +1411,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Args:
             special_tokens: Dictionary of {token_name: token_value}
         """
-        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
         for key, value in special_tokens.items():
             if isinstance(value, (str, AddedToken)):
                 self._special_tokens_map[key] = value
+                # Add to _token_mapping - SPECIAL_TOKENS_ATTRIBUTES property will automatically include it
+                self._token_mapping[key] = value
             else:
                 raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
 
@@ -1857,7 +1852,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # V5: Get model-specific special tokens from config (saved as individual keys in special_tokens_map)
         # These need to be grouped as extra_special_tokens dict so __init__ can save them to attributes
         if "extra_special_tokens" not in init_kwargs or not isinstance(init_kwargs.get("extra_special_tokens"), dict):
-            default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
+            default_attrs = set(cls._get_special_tokens_attributes())
             model_specific_tokens = {
                 key: init_kwargs.pop(key)
                 for key in list(init_kwargs.keys())
@@ -1965,7 +1960,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if added_tokens_file is not None:
                 special_tokens = []
                 # V5: Check both named and extra special tokens
-                for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
+                for key in cls._get_special_tokens_attributes():
                     if key in init_kwargs and init_kwargs[key] is not None:
                         special_tokens.append(str(init_kwargs[key]))
 
@@ -2001,9 +1996,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
         init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         # V5: Map special tokens from added_tokens_map (named tokens only)
-        for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
+        for key in cls._get_special_tokens_attributes():
             if key in init_kwargs and added_tokens_map != {} and init_kwargs[key] is not None:
                 init_kwargs[key] = added_tokens_map.get(str(init_kwargs[key]), init_kwargs[key])
+
+        # Remove special tokens that are explicitly None to allow class defaults to work
+        # This handles legacy tokenizers where special tokens weren't saved in tokenizer_config.json
+        for key in cls._get_special_tokens_attributes():
+            if key in init_kwargs and init_kwargs[key] is None:
+                init_kwargs.pop(key)
 
         # Track which files were loaded (if not already set by AutoTokenizer)
         if "files_loaded" not in init_kwargs:
