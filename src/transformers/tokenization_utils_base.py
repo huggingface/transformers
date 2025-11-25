@@ -1112,6 +1112,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def add_special_tokens(
         self,
         special_tokens_dict: dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
+        replace_extra_special_tokens=True,
     ) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls, etc.) to the encoder and link them to class attributes. If
