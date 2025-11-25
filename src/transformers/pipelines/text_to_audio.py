@@ -249,8 +249,9 @@ class TextToAudioPipeline(Pipeline):
         """
         if isinstance(text_inputs, (list, tuple, types.GeneratorType)):
             if isinstance(text_inputs, types.GeneratorType):
-                text_inputs, _ = itertools.tee(text_inputs)
-                text_inputs, first_item = (x for x in text_inputs), next(_)
+                gen_copy1, gen_copy2 = itertools.tee(text_inputs)
+                text_inputs = (x for x in gen_copy1)
+                first_item = next(gen_copy2)
             else:
                 first_item = text_inputs[0]
             if isinstance(first_item, (list, tuple, dict)):
@@ -291,22 +292,25 @@ class TextToAudioPipeline(Pipeline):
 
     def postprocess(self, audio):
 
-        if self.model.config.model_type == "csm":
-            waveform_key = "audio"
+        if self.model.config.model_type in ["csm"]:
+            audio_key = "audio"
         else:
-            waveform_key = "waveform"
+            audio_key = "waveform"
 
         if isinstance(audio, dict):
-            waveform = audio[waveform_key]
+            audio = audio[audio_key]
         elif isinstance(audio, tuple):
-            waveform = audio[0]
-        else:
-            waveform = audio
+            audio = audio[0]
+        elif self.model.config.model_type in ["dia"]:
+            # models that require decoding, e.g. with codec
+            audio = self.processor.decode(audio)
 
-        if isinstance(audio, list):
-            audio = [el.to(device="cpu", dtype=torch.float).numpy() for el in waveform]
+        if isinstance(audio, list) and len(audio) > 1:
+            audio = [el.to(device="cpu", dtype=torch.float).numpy() for el in audio]
+        elif isinstance(audio, list):
+            audio = audio[0].to(device="cpu", dtype=torch.float).numpy()
         else:
-            audio = waveform.to(device="cpu", dtype=torch.float).numpy()
+            audio = audio.to(device="cpu", dtype=torch.float).numpy()
 
         return AudioOutput(
             audio=audio,

@@ -248,20 +248,45 @@ class TextToAudioPipelineTests(unittest.TestCase):
     def test_csm_model_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b")
 
-        outputs = speech_generator("[0]This is a test")
+        outputs = speech_generator("[0]This is a test", generate_kwargs={"output_audio": True, "max_new_tokens": 32})
         self.assertEqual(outputs["sampling_rate"], 24000)
 
         audio = outputs["audio"]
         self.assertEqual(ANY(np.ndarray), audio)
+        # ensure audio and not codes
+        self.assertEqual(len(audio.shape), 1)
 
         # test two examples side-by-side
-        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"])
+        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"], generate_kwargs={"output_audio": True, "max_new_tokens": 32})
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
         # test batching
         outputs = speech_generator(["[0]This is a test", "[0]This is a second test"], batch_size=2)
         self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+
+    @slow
+    @require_torch
+    def test_dia_model(self):
+        speech_generator = pipeline(task="text-to-audio", model="nari-labs/Dia-1.6B-0626")
+
+        outputs = speech_generator(
+            "[S1] Dia is an open weights text to dialogue model.",
+            generate_kwargs={"max_new_tokens": 32},
+        )
+        self.assertEqual(outputs["sampling_rate"], 44100)
+
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
+        # ensure audio and not codes
+        self.assertEqual(len(audio.shape), 1)
+
+        # test batch
+        outputs = speech_generator(
+            ["[S1] Dia is an open weights text to dialogue model.", "[S2] This is a second example."],
+            generate_kwargs={"max_new_tokens": 32},
+        )
+        self.assertEqual(len(outputs), 2)
 
     def get_test_pipeline(
         self,
