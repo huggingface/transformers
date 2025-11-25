@@ -285,7 +285,7 @@ class BenchmarkRunner:
             timestamps = [result.timestamps for result in results.values()]
             results = torch.tensor([result.generated_tokens for result in results.values()])
         else:
-            timestamps = [streamer.timestamps]
+            timestamps = [streamer.timestamps[1:]]  # skip the first timestamp because it's the input tokens
             results = results[:, input_tokens:]
 
         # Check if generation had the right number of tokens
