@@ -22,9 +22,11 @@ import torch
 from packaging import version
 
 from transformers.utils import logging
-from transformers.utils.import_utils import is_torchao_available
+from transformers.utils.import_utils import is_torch_available, is_torchao_available
 
-from ..core_model_loading import ConversionOps
+
+if is_torch_available():
+    from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name
 
 
