@@ -58,7 +58,7 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
             distribution_name = pkg_name if pkg_name in distributions else distributions[0]
             package_version = importlib.metadata.version(distribution_name)
-        except (importlib.metadata.PackageNotFoundError, KeyError):
+        except importlib.metadata.PackageNotFoundError:
             # If we cannot find the metadata (because of editable install for example), try to import directly.
             # Note that this branch will almost never be run, so we do not import packages for nothing here
             package = importlib.import_module(pkg_name)
@@ -87,7 +87,6 @@ VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.9.0"
 
 
 @lru_cache
@@ -502,13 +501,14 @@ def is_torch_tf32_available() -> bool:
         return False
     return True
 
-
 @lru_cache
 def _set_tf32_mode(enable: bool) -> None:
     """
     Set TF32 mode using the appropriate PyTorch API.
+    
     For PyTorch 2.9+, uses the new fp32_precision API.
     For older versions, uses the legacy allow_tf32 flags.
+    
     Args:
         enable: Whether to enable TF32 mode
     """
@@ -522,7 +522,6 @@ def _set_tf32_mode(enable: bool) -> None:
         torch.backends.cuda.matmul.allow_tf32 = enable
         torch.backends.cudnn.allow_tf32 = enable
 
-
 @lru_cache
 def is_torch_flex_attn_available() -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
@@ -534,9 +533,8 @@ def is_kenlm_available() -> bool:
 
 
 @lru_cache
-def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
-    is_available, kernels_version = _is_package_available("kernels", return_version=True)
-    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
+def is_kernels_available() -> bool:
+    return _is_package_available("kernels")
 
 
 @lru_cache
@@ -993,13 +991,13 @@ def is_quark_available() -> bool:
 @lru_cache
 def is_fp_quant_available():
     is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
-    return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
+    return is_available and version.parse(fp_quant_version) >= version.parse("0.2.0")
 
 
 @lru_cache
 def is_qutlass_available():
     is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
-    return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
+    return is_available and version.parse(qutlass_version) >= version.parse("0.1.0")
 
 
 @lru_cache
@@ -1198,12 +1196,9 @@ def is_mistral_common_available() -> bool:
 
 @lru_cache
 def is_opentelemetry_available() -> bool:
-    try:
-        return _is_package_available("opentelemetry") and version.parse(
-            importlib.metadata.version("opentelemetry-api")
-        ) >= version.parse("1.30.0")
-    except Exception as _:
-        return False
+    return _is_package_available("opentelemetry") and version.parse(
+        importlib.metadata.version("opentelemetry-api")
+    ) >= version.parse("1.30.0")
 
 
 def check_torch_load_is_safe() -> None:
