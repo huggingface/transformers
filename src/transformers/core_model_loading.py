@@ -761,8 +761,8 @@ def convert_and_load_state_dict_in_model(
                 mapping = param_name_to_load.setdefault(renamed_key, new_converter)
                 source_pattern = src_group_to_glob[matched_pattern.lastgroup]
             else:
-                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
-                source_pattern = renamed_key
+                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                source_pattern = original_key
 
             # 5. Handle dtype casting
             if (
@@ -934,8 +934,8 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
                 mapping = conversion_mapping.setdefault(renamed_key, new_converter)
                 source_pattern = src_group_to_glob[matched_pattern.lastgroup]
             else:
-                mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
-                source_pattern = renamed_key
+                mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                source_pattern = original_key
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
 
