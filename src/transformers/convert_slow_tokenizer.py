@@ -556,6 +556,8 @@ class SpmConverter:
         if original_tokenizer is not None:
             self.original_tokenizer = original_tokenizer
             vocab_file = self.original_tokenizer.vocab_file
+        else:
+            self.original_tokenizer = self
 
         m = model_pb2.ModelProto()
         with open(vocab_file, "rb") as f:
