@@ -33,7 +33,7 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_tensordict, require_torch
 from transformers.utils import PaddingStrategy
 
 
@@ -1965,3 +1965,157 @@ class DataCollatorForLanguageModelingUnitTest(unittest.TestCase):
         ).astype(bool)
 
         np.testing.assert_array_equal(output_mask, expected_mask)
+
+
+@require_torch
+@require_tensordict
+class TensorDictCompatibilityTest(unittest.TestCase):
+    """Tests for TensorDict compatibility with data collators (regression tests for issue #42370)."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        from tensordict import TensorDict
+
+        from transformers import AutoTokenizer
+
+        self.TensorDict = TensorDict
+        self.tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+
+    def test_data_collator_with_padding_tensordict(self):
+        """Test DataCollatorWithPadding with TensorDict inputs (issue #42370)."""
+        collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
+
+        batch = [
+            self.TensorDict(
+                {"input_ids": torch.tensor([9, 8, 7]), "attention_mask": torch.tensor([1, 1, 1])},
+                batch_size=[],
+            ),
+            self.TensorDict(
+                {"input_ids": torch.tensor([6, 5]), "attention_mask": torch.tensor([1, 1])}, batch_size=[]
+            ),
+        ]
+
+        result = collator(batch)
+
+        from collections.abc import Mapping
+
+        self.assertIsInstance(result, Mapping)
+        self.assertIn("input_ids", result)
+        self.assertIn("attention_mask", result)
+        self.assertEqual(result["input_ids"].shape, torch.Size([2, 3]))
+        self.assertEqual(result["attention_mask"].shape, torch.Size([2, 3]))
+
+    def test_data_collator_with_padding_tensordict_variable_lengths(self):
+        """Test DataCollatorWithPadding with TensorDict inputs of variable lengths."""
+        collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
+
+        batch = [
+            self.TensorDict(
+                {"input_ids": torch.tensor([1, 2, 3, 4, 5]), "attention_mask": torch.tensor([1, 1, 1, 1, 1])},
+                batch_size=[],
+            ),
+            self.TensorDict({"input_ids": torch.tensor([6]), "attention_mask": torch.tensor([1])}, batch_size=[]),
+            self.TensorDict(
+                {"input_ids": torch.tensor([7, 8, 9]), "attention_mask": torch.tensor([1, 1, 1])}, batch_size=[]
+            ),
+        ]
+
+        result = collator(batch)
+
+        self.assertEqual(result["input_ids"].shape, torch.Size([3, 5]))
+        self.assertEqual(result["attention_mask"].shape, torch.Size([3, 5]))
+
+    def test_data_collator_language_modeling_tensordict(self):
+        """Test DataCollatorForLanguageModeling with TensorDict inputs."""
+        collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)
+
+        batch = [
+            self.TensorDict({"input_ids": torch.tensor([1, 2, 3, 4])}, batch_size=[]),
+            self.TensorDict({"input_ids": torch.tensor([5, 6])}, batch_size=[]),
+        ]
+
+        result = collator(batch)
+
+        self.assertIn("input_ids", result)
+        self.assertIn("labels", result)
+        self.assertEqual(result["input_ids"].shape[0], 2)
+        self.assertEqual(result["labels"].shape[0], 2)
+
+    def test_tokenizer_pad_method_with_tensordict(self):
+        """Test tokenizer.pad() method directly with TensorDict inputs."""
+        batch = [
+            self.TensorDict(
+                {"input_ids": torch.tensor([101, 2023, 2003, 102]), "attention_mask": torch.tensor([1, 1, 1, 1])},
+                batch_size=[],
+            ),
+            self.TensorDict(
+                {"input_ids": torch.tensor([101, 102]), "attention_mask": torch.tensor([1, 1])}, batch_size=[]
+            ),
+        ]
+
+        result = self.tokenizer.pad(batch, return_tensors="pt")
+
+        self.assertIn("input_ids", result)
+        self.assertIn("attention_mask", result)
+        self.assertEqual(result["input_ids"].shape, torch.Size([2, 4]))
+
+    def test_mixed_tensordict_and_dict_inputs(self):
+        """Test collator handles mixed TensorDict and regular dict inputs."""
+        collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
+
+        batch = [
+            self.TensorDict(
+                {"input_ids": torch.tensor([1, 2, 3]), "attention_mask": torch.tensor([1, 1, 1])}, batch_size=[]
+            ),
+            {"input_ids": torch.tensor([4, 5]), "attention_mask": torch.tensor([1, 1])},
+        ]
+
+        result = collator(batch)
+
+        self.assertEqual(result["input_ids"].shape, torch.Size([2, 3]))
+        self.assertEqual(result["attention_mask"].shape, torch.Size([2, 3]))
+
+    def test_tensordict_with_additional_fields(self):
+        """Test TensorDict inputs with additional fields beyond input_ids and attention_mask."""
+        collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
+
+        batch = [
+            self.TensorDict(
+                {
+                    "input_ids": torch.tensor([1, 2, 3]),
+                    "attention_mask": torch.tensor([1, 1, 1]),
+                    "token_type_ids": torch.tensor([0, 0, 0]),
+                    "special_tokens_mask": torch.tensor([1, 0, 1]),
+                },
+                batch_size=[],
+            ),
+            self.TensorDict(
+                {
+                    "input_ids": torch.tensor([4, 5]),
+                    "attention_mask": torch.tensor([1, 1]),
+                    "token_type_ids": torch.tensor([0, 0]),
+                    "special_tokens_mask": torch.tensor([1, 0]),
+                },
+                batch_size=[],
+            ),
+        ]
+
+        result = collator(batch)
+
+        for key in ["input_ids", "attention_mask", "token_type_ids", "special_tokens_mask"]:
+            self.assertEqual(result[key].shape, torch.Size([2, 3]))
+
+    def test_single_tensordict_input(self):
+        """Test collator with a single TensorDict input."""
+        collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
+
+        batch = [
+            self.TensorDict(
+                {"input_ids": torch.tensor([1, 2, 3]), "attention_mask": torch.tensor([1, 1, 1])}, batch_size=[]
+            ),
+        ]
+
+        result = collator(batch)
+
+        self.assertEqual(result["input_ids"].shape, torch.Size([1, 3]))
+        self.assertEqual(result["attention_mask"].shape, torch.Size([1, 3]))
