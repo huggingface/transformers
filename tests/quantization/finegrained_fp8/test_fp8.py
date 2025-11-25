@@ -93,8 +93,8 @@ class FP8QuantizerTest(unittest.TestCase):
         "model.layers.13": "cpu",
         "model.layers.14": "cpu",
         "model.layers.15": "cpu",
-        "model.rotary_emb": "disk",
-        "model.norm": "disk",
+        "model.rotary_emb": "cpu",
+        "model.norm": "cpu",
         "lm_head": 0,
     }
 
@@ -138,7 +138,7 @@ class FP8QuantizerTest(unittest.TestCase):
         for module in model.modules():
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
-
+        print(model)
         self.assertEqual(nb_linears - 1, nb_fp8_linear)
 
         with init_empty_weights():
@@ -209,6 +209,7 @@ class FP8QuantizerTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map="auto", quantization_config=quantization_config
         )
+        print("hf_device_map", quantized_model.hf_device_map)
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)

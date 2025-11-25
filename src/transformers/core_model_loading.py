@@ -28,16 +28,18 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, DTensor, Replicate, TensorParallelLayer
+from .integrations.accelerate import offload_weight
+from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_torch_greater_or_equal, logging
 
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
 if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor import DTensor, Replicate
 
 if TYPE_CHECKING:
+    from .integrations.tensor_parallel import TensorParallelLayer
     from .modeling_utils import PreTrainedModel
     from .quantizers import HfQuantizer
 
@@ -113,6 +115,8 @@ class ConversionOps:
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
@@ -136,6 +140,8 @@ class Chunk(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         tensors = next(iter(value.values()))
@@ -161,6 +167,8 @@ class Concatenate(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
         if len(target_keys) != 1:
@@ -189,6 +197,8 @@ class MergeModulelist(Concatenate):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
@@ -218,6 +228,8 @@ class SplitModulelist(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         if len(value) != len(self.sizes):
@@ -256,6 +268,8 @@ class PermuteForRope(ConversionOps):
         source_keys: list[str],
         target_keys: list[str],
         full_layer_name: str,
+        model,
+        missing_keys,
         config,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
@@ -296,21 +310,28 @@ class WeightTransform:
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
 
-    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
-        misc = {}
+    def convert(
+        self,
+        layer_name: str,
+        model=None,
+        config=None,
+        hf_quantizer=None,
+        missing_keys: Optional[MutableSet[str]] = None,
+        misc: Optional[MutableMapping[str, str]] = None,
+    ):
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
 
         collected_tensors = self.collected_tensors
-        if quantizer is not None and self.quantization_operation is not None:
+        if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     self.collected_tensors,
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
                     full_layer_name=layer_name,
+                    model=model,
                     config=config,
-                    quant_config=quantizer.quantization_config,
                     missing_keys=missing_keys,
                 )
 
@@ -330,8 +351,15 @@ class WeightConverter(WeightTransform):
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
-    def convert(self, layer_name: str, config=None, quantizer=None, missing_keys: Optional[MutableSet[str]] = None):
-        misc = {}
+    def convert(
+        self,
+        layer_name: str,
+        model=None,
+        config=None,
+        hf_quantizer=None,
+        missing_keys: Optional[MutableSet[str]] = None,
+        misc: Optional[MutableMapping[str, str]] = None,
+    ):
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
 
@@ -343,9 +371,11 @@ class WeightConverter(WeightTransform):
                     source_keys=self.source_keys,
                     target_keys=self.target_keys,
                     full_layer_name=layer_name,
+                    model=model,
                     config=config,
+                    missing_keys=missing_keys,
                 )
-        if quantizer is not None and self.quantization_operation is not None:
+        if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
@@ -353,7 +383,7 @@ class WeightConverter(WeightTransform):
                     target_keys=self.target_keys,
                     full_layer_name=layer_name,
                     config=config,
-                    quant_config=quantizer.quantization_config,
+                    model=model,
                     missing_keys=missing_keys,
                 )
         return collected_tensors, misc
@@ -397,7 +427,7 @@ def dot_natural_key(s: str):
 
 @contextmanager
 def log_to_misc(
-    layer_name: str,
+    first_target_key: str,
     misc: MutableMapping[str, str],
     extras: Any = None,
     op: Union[list[ConversionOps], ConversionOps, None] = None,
@@ -421,22 +451,22 @@ def log_to_misc(
         if isinstance(extras, tuple) and len(extras) == 2:
             values, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
-            misc[layer_name] = (
+            misc[first_target_key] = (
                 f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
-            misc[layer_name] = f"{e}\nError{suffix} when processing parameter {extras}"
+            misc[first_target_key] = f"{e}\nError{suffix} when processing parameter {extras}"
         elif extras is None and op_name:
-            misc[layer_name] = f"{op_name}: {e}"
+            misc[first_target_key] = f"{op_name}: {e}"
         else:
-            misc[layer_name] = f"{extras} |Error: {e}"
+            misc[first_target_key] = f"{extras} |Error: {e}"
         raise SkipLayer()
 
 
 def set_param_for_module(
     model: PreTrainedModel,
-    layer_name: str,
+    target_name: str,
     param_value: torch.Tensor,
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
@@ -445,17 +475,13 @@ def set_param_for_module(
     distributed_operation: Optional[TensorParallelLayer],
     hf_quantizer: HfQuantizer,
 ):
-    with log_to_misc(layer_name, misc, layer_name):
-        module_path, _, param_name = layer_name.rpartition(".")
+    with log_to_misc(target_name, misc, target_name):
+        module_path, _, param_name = target_name.rpartition(".")
         module_obj = model.get_submodule(module_path) if module_path else model
-        if isinstance(param_value, list):
-            param_value = param_value[0]
-        elif not isinstance(param_value, torch.nn.Parameter):
-            param_value = param_value[...]
 
         ref = getattr(module_obj, param_name)
         if ref is None:
-            unexpected_keys.add(layer_name)
+            unexpected_keys.add(target_name)
         else:
             use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
             if not isinstance(param_value, torch.nn.Parameter):
@@ -475,15 +501,33 @@ def set_param_for_module(
                     param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
             # Remove from missing keys (it's either mismatched, or all good)
-            missing_keys.discard(layer_name)
+            missing_keys.discard(target_name)
             if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
-                mismatch_keys.add((layer_name, param_value.shape, ref.shape))
+                mismatch_keys.add((target_name, param_value.shape, ref.shape))
                 module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
             else:
-                param_value._is_hf_initialized = (
-                    True  # super important otherwise _init_weight re-initi if bias is missing
-                )
+                # super important otherwise _init_weight will re-init the param
+                param_value._is_hf_initialized = True
                 setattr(module_obj, param_name, param_value)
+
+
+def offload_and_maybe_resave_param(
+    target_name: str,
+    param: torch.Tensor,
+    missing_keys: MutableSet[str],
+    disk_offload_folder: str,
+    disk_offload_index: dict,
+    applied_ops: WeightConverter | WeightRenaming,
+) -> dict:
+    """Takes care of correctly offloading `param`. If it's not already present in the `disk_offload_index`, or if any
+    WeightConverter operations have been applied, it will resave the new parameter. Otherwise, it will use the original
+    `disk_offload_index` for this given param."""
+    # We need to remove from missing keys
+    missing_keys.discard(target_name)
+    # If not already offloaded, or if we applied any special Operation except Renaming, we need to re-save
+    if target_name not in disk_offload_index or isinstance(applied_ops, WeightConverter):
+        disk_offload_index = offload_weight(param, target_name, disk_offload_folder, disk_offload_index)
+    return disk_offload_index
 
 
 class SkipLayer(Exception):
@@ -521,6 +565,8 @@ def convert_and_load_state_dict_in_model(
     device_map: dict | None = None,
     dtype_plan: dict | None = None,
     device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
+    disk_offload_index: dict | None = None,
+    disk_offload_folder: str | None = None,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -608,10 +654,10 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
-
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
+    # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
     device_map_regex = re.compile(
         "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
     )
@@ -699,18 +745,20 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                         )
-                    shard_index = len(mapping.collected_tensors[source_pattern])
+                    shard_index = len(mapping.collected_tensors.get(original_key, []))
                     future = spawn_tp_materialize(
                         thread_pool,
                         tensor,
-                        _dtype,
                         mapping.distributed_operation,
                         shard_index,
+                        _dtype,
                     )
 
-            if future is None:  # TODO handle disk offload
+            if future is None:
                 device_match = device_map_regex.match(renamed_key)
                 param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+                # If disk, we need to materialize on cpu first
+                param_device = "cpu" if param_device == "disk" else param_device
                 future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future)
@@ -723,30 +771,45 @@ def convert_and_load_state_dict_in_model(
 
     total_entries = len(param_name_to_load)
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-        for layer_name, mapping in param_name_to_load.items():
+        for first_param_name, mapping in param_name_to_load.items():
             pbar.update(1)
-            pbar.set_postfix({"Materializing param": layer_name})
+            pbar.set_postfix({"Materializing param": first_param_name})
             pbar.refresh()
             try:
                 realized_value, misc = mapping.convert(
-                    layer_name, config=model.config, quantizer=hf_quantizer, missing_keys=missing_keys
+                    first_param_name,
+                    model=model,
+                    config=model.config,
+                    hf_quantizer=hf_quantizer,
+                    missing_keys=missing_keys,
+                    misc=misc,
                 )
-                for k, output_value in realized_value.items():
-                    set_param_for_module(
-                        model,
-                        k,
-                        output_value,
-                        mismatch_keys,
-                        missing_keys,
-                        misc,
-                        unexpected_keys,
-                        mapping.distributed_operation,
-                        hf_quantizer,
-                    )
+                for target_name, param in realized_value.items():
+                    param = param[0] if isinstance(param, list) else param
+                    device_match = device_map_regex.match(target_name)
+                    param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+                    # Offloading support
+                    if param_device == "disk":
+                        disk_offload_index = offload_and_maybe_resave_param(
+                            target_name, param, missing_keys, disk_offload_folder, disk_offload_index, mapping
+                        )
+                    else:
+                        set_param_for_module(
+                            model,
+                            target_name,
+                            param,
+                            mismatch_keys,
+                            missing_keys,
+                            misc,
+                            unexpected_keys,
+                            mapping.distributed_operation,
+                            hf_quantizer,
+                        )
             except SkipLayer:
                 continue
+
     thread_pool.shutdown(wait=False)
-    return missing_keys, unexpected_keys, mismatch_keys, misc
+    return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, misc
 
 
 # TODO this is not done yet!
