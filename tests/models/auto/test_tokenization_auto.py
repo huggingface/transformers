@@ -233,6 +233,7 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer2.vocab_size, 12)
 
     def test_auto_tokenizer_from_local_folder_mistral_detection(self):
+        """See #42374 for reference, ensuring proper mistral detection on local tokenizers"""
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
         config = Qwen3MoeConfig.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
         self.assertIsInstance(tokenizer, (Qwen2Tokenizer, Qwen2TokenizerFast))
