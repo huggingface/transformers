@@ -241,7 +241,7 @@ def compute_module_sizes(
         if name in tied_keys:
             continue
         if hf_quantizer is not None:
-            dtype_size = hf_quantizer.param_element_size(model, name)
+            dtype_size = hf_quantizer.param_element_size(model, name, param)
         else:
             dtype_size = param.element_size()
         size = param.numel() * dtype_size
