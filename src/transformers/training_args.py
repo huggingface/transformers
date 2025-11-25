@@ -1063,7 +1063,14 @@ class TrainingArguments:
             )
         },
     )
-
+    sequential_sampling: Optional[int] = field(
+        default=False,
+        metadata={
+            "help": (
+                "Override the RandomSampler used in Trainer with SequentialSampling."
+            )
+        },
+    )
     run_name: Optional[str] = field(
         default=None,
         metadata={
