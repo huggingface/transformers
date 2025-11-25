@@ -69,6 +69,60 @@ def on_device(dev):
     # other: CPU
     yield
 
+class Mxfp4Quantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], model: Optional[torch.nn.Module] = None, missing_keys: Optional[list[str]] = None, **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+        if not self.hf_quantizer.pre_quantized:
+            module, _ = get_module_from_name(model, target_key)
+            with torch.device(value.device):
+                if isinstance(module, Mxfp4GptOssExperts):
+                    triton_weight_tensor, weight_scale = quantize_to_mxfp4(value, triton_kernels_hub)
+                    PrecisionConfig, FlexCtx, InFlexData = (
+                        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+                        triton_kernels_hub.matmul_ogs.FlexCtx,
+                        triton_kernels_hub.matmul_ogs.InFlexData,
+                    )
+                    triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                        triton_weight_tensor, weight_scale, triton_kernels_hub
+                    )
+
+                    proj = "gate_up_proj" if "gate_up_proj" in target_key else "down_proj"
+                    setattr(module, proj, triton_weight_tensor)
+                    setattr(
+                        module,
+                        f"{proj}_precision_config",
+                        PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+                    )
+                    missing_keys.discard(f"{target_key}_blocks")
+                    missing_keys.discard(f"{target_key}_scales")
+                    delattr(module, f"{proj}_blocks")
+                    delattr(module, f"{proj}_scales")
+
+        else:
+
+            if ("blocks" in target_key or "scales" in target_key) and self.hf_quantizer.quantization_config.dequantize:
+                # blocks and scales have the same length that's why this works for both
+                module, _ = get_module_from_name(model, target_key[: -len("_blocks")])
+            else:
+                module, _ = get_module_from_name(model, target_key)
+
+            if self.hf_quantizer.quantization_config.dequantize:
+                dequantize_convertops(module, target_key, value, value.device, missing_keys)
+            else:
+                # Eagerly set tensors on the module and perform swizzle; this function will
+                # set the appropriate attributes and remove *_blocks/_scales when both are loaded.
+                load_and_swizzle_mxfp4_convertops(module, target_key, value, value.device, missing_keys, triton_kernels_hub)
+
+            # We return an empty mapping since the module was updated in-place. This prevents
+            # the loader from trying to materialize the original meta-parameter names again.
+            # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
+            return {}
+
 
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):
@@ -360,6 +414,22 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
 
+def dequantize_convertops(module, param_name, param_value, target_device, missing_keys):
+    for proj in ["gate_up_proj", "down_proj"]:
+        if proj in param_name:
+            blocks_attr = f"{proj}_blocks"
+            scales_attr = f"{proj}_scales"
+            setattr(module, param_name.rsplit(".", 1)[1], param_value)
+            if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
+                dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
+                if target_device == "cpu" and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                dequantized = torch.nn.Parameter(dequantized.to(target_device))
+                dequantized = get_loaded_parameter_class(dequantized.__class__)(from_existing=dequantized)
+                setattr(module, proj, dequantized)
+                missing_keys.discard(param_name.rsplit("_", 1)[0])
+                delattr(module, blocks_attr)
+                delattr(module, scales_attr)
 
 def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, triton_kernels_hub, **kwargs):
     """
@@ -427,6 +497,66 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
         delattr(module, blocks_attr)
         del blocks
 
+def load_and_swizzle_mxfp4_convertops(module, param_name, param_value, target_device, missing_keys, triton_kernels_hub):
+    """
+    This transforms the weights obtained using `convert_gpt_oss.py` to load them into `Mxfp4GptOssExperts`.
+    """
+    PrecisionConfig, FlexCtx, InFlexData = (
+        triton_kernels_hub.matmul_ogs.PrecisionConfig,
+        triton_kernels_hub.matmul_ogs.FlexCtx,
+        triton_kernels_hub.matmul_ogs.InFlexData,
+    )
+
+    if "blocks" in param_name:
+        proj = param_name.split(".")[-1].split("_blocks")[0]
+    if "scales" in param_name:
+        proj = param_name.split(".")[-1].split("_scales")[0]
+
+    setattr(module, param_name.rsplit(".", 1)[1], torch.nn.Parameter(param_value, requires_grad=False))
+    missing_keys.discard(param_name)
+
+    blocks_attr = f"{proj}_blocks"
+    scales_attr = f"{proj}_scales"
+    blocks = getattr(module, blocks_attr)  # at this point values were loaded from ckpt
+    scales = getattr(module, scales_attr)
+
+    # check if blocks or scales are not on meta device
+    # if so, it means param_value is either a blocks or scales tensor
+    # and the other blocks or scales tensor is on the correct device
+
+    if blocks.device.type != "meta" and scales.device.type != "meta":
+        local_experts = blocks.size(0)
+        if blocks.device.type == "meta":
+            blocks = param_value
+        elif scales.device.type == "meta":
+            scales = param_value
+
+        if proj == "gate_up_proj":
+            blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
+        else:
+            blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
+        if getattr(target_device, "type", target_device) == "cpu":
+            target_device = "cuda"
+
+        blocks = blocks.to(target_device).contiguous()
+        scales = scales.to(target_device).contiguous()
+        with on_device(target_device):
+            triton_weight_tensor, weight_scale = swizzle_mxfp4(
+                blocks.transpose(-2, -1), scales.transpose(-2, -1), triton_kernels_hub
+            )
+        # need to overwrite the shapes for the kernels
+        if proj == "gate_up_proj":
+            triton_weight_tensor.shape = torch.Size([local_experts, module.hidden_size, module.intermediate_size * 2])
+        else:
+            triton_weight_tensor.shape = torch.Size([local_experts, module.intermediate_size, module.hidden_size])
+
+        # triton_weight_tensor is what needs to be passed in oai kernels. It stores the data, the shapes and any more objects. It's like a subtensor
+        setattr(module, proj, triton_weight_tensor)
+        setattr(module, f"{proj}_precision_config", PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())))
+        delattr(module, scales_attr)
+        delattr(module, blocks_attr)
+        del blocks
+        del scales
 
 def _replace_with_mxfp4_linear(
     model,

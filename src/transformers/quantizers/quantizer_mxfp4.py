@@ -426,3 +426,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             "MXFP4 quantization don't support training, please consider dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()"
         )
         return False
+
+    def get_quantize_ops(self):
+        from ..integrations.mxfp4 import Mxfp4Quantize
+        return Mxfp4Quantize(self)
