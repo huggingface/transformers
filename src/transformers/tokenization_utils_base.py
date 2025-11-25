@@ -2144,7 +2144,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     added_tokens_decoder[index] = AddedToken(
                         str_token, rstrip=False, lstrip=False, normalized=not special, special=special
                     )
-                    added_tokens_map[str_token] = added_tokens_decoder[index]
+                    added_tokens_map[str(token)] = added_tokens_decoder[index]
 
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
             # if `tokenizer_config.json` is `None`

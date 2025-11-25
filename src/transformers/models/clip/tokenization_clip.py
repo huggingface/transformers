@@ -58,7 +58,6 @@ class CLIPTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
 
     def __init__(
         self,

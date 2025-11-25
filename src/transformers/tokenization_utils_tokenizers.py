@@ -341,6 +341,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
             init_kwargs.pop("tokenizer_class", None)
+            init_kwargs.pop("tokenizer_file", None)
             saved_init_inputs = tuple(init_kwargs.pop("init_inputs", ()))
 
         if not init_inputs:
