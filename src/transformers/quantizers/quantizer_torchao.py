@@ -28,8 +28,11 @@ if TYPE_CHECKING:
 
 from safetensors import safe_open
 
-from ..core_model_loading import WeightConverter
 from ..utils import is_torch_available, is_torchao_available, logging
+
+
+if is_torch_available():
+    from ..core_model_loading import WeightConverter
 
 
 if is_torch_available():
