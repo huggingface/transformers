@@ -28,7 +28,6 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
-import huggingface_hub
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
@@ -87,11 +86,8 @@ class DownloadKwargs(TypedDict, total=False):
     commit_hash: str | None
 
 
-_is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
-
-
 def is_offline_mode():
-    return _is_offline_mode
+    return constants.HF_HUB_OFFLINE
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
