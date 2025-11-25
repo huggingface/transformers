@@ -4670,3 +4670,21 @@ class TokenizerTesterMixin:
                 for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
                     output = tokenizer(empty_input_string, return_tensors=return_type)
                     self.assertEqual(output.input_ids.dtype, target_type)
+
+    def test_local_files_only(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                # First cache the tokenizer files
+                tokenizer_cached = tokenizer.from_pretrained(pretrained_name, **kwargs)
+
+                # Now load with local_files_only=True
+                tokenizer_local = tokenizer.from_pretrained(
+                    pretrained_name, local_files_only=True, **kwargs
+                )
+
+                # Check that the two tokenizers are identical
+                self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
+                self.assertEqual(
+                    tokenizer_cached.all_special_tokens_extended,
+                    tokenizer_local.all_special_tokens_extended,
+                )
