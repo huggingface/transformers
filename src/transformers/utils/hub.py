@@ -93,30 +93,13 @@ def is_offline_mode():
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 default_cache_path = constants.default_cache_path
 
-# Determine default cache directory. Lots of legacy environment variables to ensure backward compatibility.
+# Determine default cache directory.
 # The best way to set the cache path is with the environment variable HF_HOME. For more details, check out this
 # documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
-#
-# In code, use `HF_HUB_CACHE` as the default cache path. This variable is set by the library and is guaranteed
-# to be set to the right value.
-#
-# TODO: clean this for v5?
-PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", constants.HF_HUB_CACHE)
-PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
-TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 
 HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(constants.HF_HOME, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
-
-# Add deprecation warning for old environment variables.
-for key in ("PYTORCH_PRETRAINED_BERT_CACHE", "PYTORCH_TRANSFORMERS_CACHE", "TRANSFORMERS_CACHE"):
-    if os.getenv(key) is not None:
-        warnings.warn(
-            f"Using `{key}` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.",
-            FutureWarning,
-        )
-
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
@@ -432,7 +415,7 @@ def cached_files(
         return existing_files if existing_files else None
 
     if cache_dir is None:
-        cache_dir = TRANSFORMERS_CACHE
+        cache_dir = constants.HF_HUB_CACHE
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
