@@ -131,8 +131,8 @@ class MgpstrProcessorTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_image_proc = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
