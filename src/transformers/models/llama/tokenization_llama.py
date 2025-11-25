@@ -140,7 +140,8 @@ class LlamaTokenizer(TokenizersBackend):
 
         if self.add_prefix_space:
             sequence += [decoders.Strip(content=" ", left=1)]
-
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
         self._tokenizer.decoder = decoders.Sequence(sequence)
         self.use_default_system_prompt = use_default_system_prompt
         super().__init__(
@@ -154,6 +155,7 @@ class LlamaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+        self.update_post_processor()
 
 
 __all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]

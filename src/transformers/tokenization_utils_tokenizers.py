@@ -35,6 +35,8 @@ from tokenizers import normalizers as tokenizers_normalizers
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
+from .integrations.ggml import convert_gguf_tokenizer
+from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     BatchEncoding,
@@ -152,15 +154,20 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # if some of the special tokens are not already in the tokenizer, add them
         # V5: Check both named special tokens and extra special tokens
         # Iterate over _special_tokens_map to preserve AddedToken properties (lstrip, rstrip, etc.)
-        for special_token_value in self._token_mapping.values():
+        for special_token_value in self._special_tokens_map.values():
             if special_token_value is None:
                 continue
             if str(special_token_value) not in encoder and special_token_value not in tokens_to_add:
                 tokens_to_add.append(special_token_value)
 
+        # Also check extra special tokens
+        for token in self._extra_special_tokens:
+            if str(token) not in encoder and token not in tokens_to_add:
+                tokens_to_add.append(token)
+
         if len(tokens_to_add) > 0:
             tokens = []
-            all_named_tokens = [str(t) for t in self._token_mapping.values() if t]
+            all_named_tokens = [str(t) for t in self._special_tokens_map.values() if t]
             for token in tokens_to_add:
                 if isinstance(token, str):
                     # Convert string to AddedToken, assuming it's special
@@ -169,10 +176,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     # Ensure the special flag is set correctly for special tokens
                     if not token.special and str(token) in all_named_tokens:
                         token.special = True
-            tokens.append(token)
-        if tokens:
-            # These tokens are from the special tokens map
-            self.add_tokens(tokens, special_tokens=True)
+                tokens.append(token)
+            if tokens:
+                # These tokens are from the special tokens map
+                self.add_tokens(tokens, special_tokens=True)
 
     @classmethod
     def _post_process_tokenizer(
@@ -328,6 +335,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         added_tokens_file = resolved_vocab_files.get("added_tokens_file")
         tokenizer_file = resolved_vocab_files.get("tokenizer_file")
         vocab_file = resolved_vocab_files.get("vocab_file")
+        gguf_file = resolved_vocab_files.get("gguf_file")
 
         init_kwargs = dict(init_configuration)
         saved_init_inputs = ()
@@ -352,6 +360,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         tokenizer_object = None
         vocab = None
         merges = None
+
+        if gguf_file is not None:
+            # We need to convert a slow tokenizer to build the backend
+            gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
+            architecture = gguf_param["config"]["model_type"]
+            tokenizer_dict = gguf_param["tokenizer"]
+            tokenizer_config = gguf_param["tokenizer_config"]
+            fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
+            kwargs.update(tokenizer_config)
+            if len(additional_kwargs) > 0:
+                kwargs.update(additional_kwargs)
 
         if tokenizer_file is not None and os.path.isfile(tokenizer_file):
             files_loaded.append(os.path.basename(tokenizer_file))
@@ -654,13 +673,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return self.get_vocab()
 
     @property
-    def all_special_tokens(self) -> set[str]:
-        if self._all_special_tokens_cache is None:
-            specials = {str(token) for _, token in self.added_tokens_decoder.items() if token.special}
-            self._all_special_tokens_cache = specials
-        return self._all_special_tokens_cache
-
-    @property
     def added_tokens_encoder(self) -> dict[str, int]:
         """
         Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
@@ -771,14 +783,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def _add_tokens(self, new_tokens: list[Union[str, AddedToken]], special_tokens=False) -> int:
         if special_tokens:
-            added = self._tokenizer.add_special_tokens(new_tokens)
-        else:
-            added = self._tokenizer.add_tokens(new_tokens)
+            return self._tokenizer.add_special_tokens(new_tokens)
 
-        # update _all_special_tokens_cache
-        if added:
-            self._all_special_tokens_cache|= {str(new_token) for new_token in new_tokens if isinstance(new_token, AddedToken) and new_token.special}
-        return added
+        return self._tokenizer.add_tokens(new_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
