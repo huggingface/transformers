@@ -1142,8 +1142,6 @@ def test_set_tf32_mode(torch_version, enable, expected):
     with patch("transformers.utils.import_utils.get_torch_version", return_value=torch_version):
         # Mock torch.backends inside the module
         mock_torch = MagicMock()
-        sys.modules["torch"] = mock_torch
-        _set_tf32_mode(enable)
         with patch("transformers.utils.import_utils.torch", mock_torch):
             _set_tf32_mode(enable)
             pytorch_ver = version.parse(torch_version)
@@ -1153,7 +1151,6 @@ def test_set_tf32_mode(torch_version, enable, expected):
             else:
                 assert mock_torch.backends.cuda.matmul.allow_tf32 == expected
                 assert mock_torch.backends.cudnn.allow_tf32 == expected
-        del sys.modules["torch"]
 
 def require_detectron2(test_case):
     """Decorator marking a test that requires detectron2."""

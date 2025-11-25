@@ -36,7 +36,7 @@ from typing import Any
 from packaging import version
 
 from . import logging
-
+import torch
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -512,7 +512,6 @@ def _set_tf32_mode(enable: bool) -> None:
     Args:
         enable: Whether to enable TF32 mode
     """
-    import torch
     pytorch_version = version.parse(get_torch_version())
     if pytorch_version >= version.parse("2.9.0"):
         precision_mode = "tf32" if enable else "ieee"
