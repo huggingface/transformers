@@ -28,11 +28,11 @@ def _build_checkpoint_conversion_mapping():
         "mixtral": [
             WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
             WeightConverter(
-                source_keys=[
+                source_patterns=[
                     "block_sparse_moe.experts.*.w1.weight",
                     "block_sparse_moe.experts.*.w3.weight",
                 ],  # you give me a list of 2 keys, I collect a list of a list of tensors
-                target_keys="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
+                target_patterns="mlp.experts.gate_up_proj",  # target key gets the list of two tensors
                 operations=[
                     MergeModulelist(
                         dim=0
@@ -41,10 +41,10 @@ def _build_checkpoint_conversion_mapping():
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
             ),
             WeightConverter(
-                source_keys=[
+                source_patterns=[
                     "block_sparse_moe.experts.*.w2.weight",
                 ],
-                target_keys="mlp.experts.down_proj",  # target key gets the list of two tensors
+                target_patterns="mlp.experts.down_proj",  # target key gets the list of two tensors
                 operations=[
                     MergeModulelist(
                         dim=0
@@ -54,50 +54,50 @@ def _build_checkpoint_conversion_mapping():
         ],
         "qwen2_moe": [
             WeightConverter(
-                source_keys=[
+                source_patterns=[
                     "mlp.experts.*.gate_proj.weight",
                     "mlp.experts.*.up_proj.weight",
                 ],
-                target_keys="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_keys=["mlp.experts.*.down_proj.weight"],
-                target_keys="mlp.experts.down_proj",
+                source_patterns=["mlp.experts.*.down_proj.weight"],
+                target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
         "legacy": [
             WeightRenaming(
-                source_keys="LayerNorm.gamma",
-                target_keys="LayerNorm.weight",
+                source_patterns="LayerNorm.gamma",
+                target_patterns="LayerNorm.weight",
             ),
             WeightRenaming(
-                source_keys="LayerNorm.beta",
-                target_keys="LayerNorm.bias",
+                source_patterns="LayerNorm.beta",
+                target_patterns="LayerNorm.bias",
             ),
         ],
     }
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
             WeightRenaming(
-                source_keys="weight_g",
-                target_keys="parametrizations.weight.original0",
+                source_patterns="weight_g",
+                target_patterns="parametrizations.weight.original0",
             ),
             WeightRenaming(
-                source_keys="weight_v",
-                target_keys="parametrizations.weight.original1",
+                source_patterns="weight_v",
+                target_patterns="parametrizations.weight.original1",
             ),
         ]
     else:
         mapping["legacy"] += [
             WeightRenaming(
-                source_keys="parametrizations.weight.original0",
-                target_keys="weight_g",
+                source_patterns="parametrizations.weight.original0",
+                target_patterns="weight_g",
             ),
             WeightRenaming(
-                source_keys="parametrizations.weight.original1",
-                target_keys="weight_v",
+                source_patterns="parametrizations.weight.original1",
+                target_patterns="weight_v",
             ),
         ]
 
