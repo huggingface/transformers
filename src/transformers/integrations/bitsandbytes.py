@@ -1,7 +1,6 @@
 import inspect
 from collections import defaultdict
 from inspect import signature
-from typing import Optional
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name
@@ -36,7 +35,7 @@ class Bnb4bitQuantize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def convert(
-        self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys=None, **kwargs
+        self, input_dict: torch.Tensor, model: torch.nn.Module | None = None, missing_keys=None, **kwargs
     ) -> dict[str, torch.Tensor]:
         """
         we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
@@ -87,7 +86,7 @@ class Bnb8bitQuantize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def convert(
-        self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys=None, **kwargs
+        self, input_dict: torch.Tensor, model: torch.nn.Module | None = None, missing_keys=None, **kwargs
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
