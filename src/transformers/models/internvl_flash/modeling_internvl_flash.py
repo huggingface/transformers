@@ -405,21 +405,6 @@ class InternvlFlashVisionAttention(nn.Module):
         return output, attn_weights
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of [`InternvlFlashVisionModel`].
-    """
-)
-class InternvlFlashVisionModelOutputWithPooling(BaseModelOutputWithPooling):
-    r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-        Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
-        *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
-        will be returned.
-    """
-
-
 class InternvlFlashVisionPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -616,25 +601,6 @@ class InternvlFlashVisionLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-class InternvlFlashVisionEncoder(nn.Module):
-    def __init__(self, config: InternvlFlashVisionConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([InternvlFlashVisionLayer(config) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> Union[tuple, BaseModelOutput]:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
-
-
 @auto_docstring
 class InternvlFlashVisionPreTrainedModel(PreTrainedModel):
     config: InternvlFlashVisionConfig
@@ -665,6 +631,40 @@ class InternvlFlashVisionPreTrainedModel(PreTrainedModel):
         elif isinstance(module, InternvlFlashVisionLayer):
             module.lambda_1.data.fill_(self.config.layer_scale_init_value)
             module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`InternvlFlashVisionModel`].
+    """
+)
+class InternvlFlashVisionModelOutputWithPooling(BaseModelOutputWithPooling):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
+        *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
+        will be returned.
+    """
+
+
+class InternvlFlashVisionEncoder(nn.Module):
+    def __init__(self, config: InternvlFlashVisionConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([InternvlFlashVisionLayer(config) for i in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> Union[tuple, BaseModelOutput]:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+        )
 
 
 @auto_docstring
@@ -1315,4 +1315,10 @@ class InternvlFlashForConditionalGeneration(InternvlFlashPreTrainedModel, Genera
         return model_inputs
 
 
-__all__ = ["InternvlFlashVisionModel", "InternvlFlashModel", "InternvlFlashForConditionalGeneration"]
+__all__ = [
+    "InternvlFlashVisionPreTrainedModel",
+    "InternvlFlashVisionModel",
+    "InternvlFlashPreTrainedModel",
+    "InternvlFlashModel",
+    "InternvlFlashForConditionalGeneration",
+]
