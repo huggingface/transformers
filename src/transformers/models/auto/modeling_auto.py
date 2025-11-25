@@ -355,7 +355,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
         ("resnet", "ResNetModel"),
-        ("retribert", "RetriBertModel"),
         ("rf_detr", "RfDetrModel"),
         ("roberta", "RobertaModel"),
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
