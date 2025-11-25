@@ -764,6 +764,8 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
             try:
                 return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
             except ValueError as e:
+                if "You have to call `super().__init__()` in your tokenizer class after your initialize `self._tokenizer`.'" in str(e):
+                    raise e
                 # If tokenizers backend fails, try falling back to SentencePiece backend if available
                 spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
                 if spm_file is not None and SentencePieceBackend is not None:
@@ -1118,7 +1120,7 @@ class AutoTokenizer:
             if fast_tokenizer_class is None:
                 tokenizer_class_candidate = config_tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
-                if tokenizer_class is None and not tokenizer_class_candidate.endswith("Fast"):
+                if tokenizer_class is None and (not tokenizer_class_candidate.endswith("Fast") or tokenizer_class_candidate == "PreTrainedTokenizer"):
                     tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate + "Fast")
             else:
                 tokenizer_class = fast_tokenizer_class
