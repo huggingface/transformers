@@ -2955,7 +2955,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
-        save_original_format: bool = False,  # TODO next PR will make it go to True
+        save_original_format: bool = True,
         **kwargs,
     ):
         """
@@ -3223,17 +3223,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
                 )
 
-        if (
-            any(
-                allowed_name in class_name.__name__.lower()
-                for class_name in self.__class__.__mro__[:-1]
-                for allowed_name in VLMS
-            )
-            or save_original_format
-        ):
-            # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
-            # using what was loaded. Actually self._conversion_ops wont work because we need it
-            # even if the files are not legacy -> thus no conversion happened
+        # Revert all renaming and/or weight operations
+        if save_original_format:
             state_dict = revert_weight_conversion(self, state_dict)
 
         # Shard the model if it is too big.
