@@ -20,9 +20,13 @@ import re
 from functools import partial, reduce
 from typing import Optional
 
-import torch
-import torch.distributed as dist
-from torch import nn
+from ..utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
+    import torch.distributed as dist
+    from torch import nn
 
 from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
@@ -31,12 +35,12 @@ from ..utils.generic import GeneralInterface
 
 logger = logging.get_logger(__name__)
 
-# Cache this result has it's a C FFI call which can be pretty time-consuming
-_torch_distributed_available = torch.distributed.is_available()
+if is_torch_available():
+    # Cache this result has it's a C FFI call which can be pretty time-consuming
+    _torch_distributed_available = torch.distributed.is_available()
 
-
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+    if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
 def initialize_tensor_parallelism(
@@ -169,19 +173,20 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
-str_to_dtype = {
-    "BOOL": torch.bool,
-    "U8": torch.uint8,
-    "I8": torch.int8,
-    "I16": torch.int16,
-    "F16": torch.float16,
-    "BF16": torch.bfloat16,
-    "I32": torch.int32,
-    "F32": torch.float32,
-    "F64": torch.float64,
-    "I64": torch.int64,
-    "F8_E4M3": torch.float8_e4m3fn,
-}
+if is_torch_available():
+    str_to_dtype = {
+        "BOOL": torch.bool,
+        "U8": torch.uint8,
+        "I8": torch.int8,
+        "I16": torch.int16,
+        "F16": torch.float16,
+        "BF16": torch.bfloat16,
+        "I32": torch.int32,
+        "F32": torch.float32,
+        "F64": torch.float64,
+        "I64": torch.int64,
+        "F8_E4M3": torch.float8_e4m3fn,
+    }
 
 
 def get_packed_weights(param, empty_param, device_mesh, rank, dim):

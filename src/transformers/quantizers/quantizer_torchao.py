@@ -32,6 +32,10 @@ from ..utils import is_torch_available, is_torchao_available, logging
 
 
 if is_torch_available():
+    from ..core_model_loading import WeightConverter
+
+
+if is_torch_available():
     import torch
     import torch.nn as nn
 
@@ -237,6 +241,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        if self.pre_quantized:
+            return False
         if self.quantization_config.quant_type == "autoquant":
             return False
 
@@ -245,30 +251,30 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
         elif any(param_name.endswith(f":{x}") for x in self.full_ao_keys):
             return True
-        else:
-            # we only quantize the weight of nn.Linear and nn.Embedding
-            module, tensor_name = get_module_from_name(model, param_name)
-            _QUANTIZABLE = [torch.nn.Linear]
-            if self.quantization_config.include_input_output_embeddings:
-                _QUANTIZABLE.append(torch.nn.Embedding)
 
-            # Handle FqnToConfig, introduced in torchao 0.15.0+
-            if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
-                from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
+        # we only quantize the weight of nn.Linear and nn.Embedding
+        module, tensor_name = get_module_from_name(model, param_name)
+        _QUANTIZABLE = [torch.nn.Linear]
+        if self.quantization_config.include_input_output_embeddings:
+            _QUANTIZABLE.append(torch.nn.Embedding)
 
-                if isinstance(self.quantization_config.quant_type, FqnToConfig):
-                    module_fqn, param_name_fqn = param_name.rsplit(".", 1)
-                    if (
-                        fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
-                        or fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
-                        or (
-                            "_default" in self.quantization_config.quant_type.fqn_to_config
-                            and isinstance(module, tuple(_QUANTIZABLE))
-                        )
-                    ):
-                        return True
+        # Handle FqnToConfig, introduced in torchao 0.15.0+
+        if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
+            from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
 
-            return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
+            if isinstance(self.quantization_config.quant_type, FqnToConfig):
+                module_fqn, param_name_fqn = param_name.rsplit(".", 1)
+                if (
+                    fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
+                    or fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
+                    or (
+                        "_default" in self.quantization_config.quant_type.fqn_to_config
+                        and isinstance(module, tuple(_QUANTIZABLE))
+                    )
+                ):
+                    return True
+
+        return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def create_quantized_param(
         self,
@@ -530,3 +536,27 @@ class TorchAoHfQuantizer(HfQuantizer):
                     metadata.update(metadata_)
             # Save it
             self.metadata = metadata
+
+    def get_quantize_ops(self):
+        from ..integrations.torchao import TorchAoQuantize
+
+        return TorchAoQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.torchao import TorchAoDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_keys=["weight:qdata", "weight:scale", "weight:zero_point"],
+                    target_keys="weight",
+                    operations=[TorchAoDeserialize(self)],
+                ),
+                WeightConverter(
+                    source_keys=["weight:_data"],
+                    target_keys="weight",
+                    operations=[TorchAoDeserialize(self)],
+                ),
+                # used for unsafe serialization
+            ]
+        return []
