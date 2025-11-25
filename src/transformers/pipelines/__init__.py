@@ -170,19 +170,13 @@ SUPPORTED_TASKS = {
     },
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
-        "pt": (
-            (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else ()
-        ),
+        "pt": ((AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else ()),
         "default": {"model": ("facebook/wav2vec2-base-960h", "22aad52")},
         "type": "multimodal",
     },
     "text-to-audio": {
         "impl": TextToAudioPipeline,
-        "pt": (
-            (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram)
-            if is_torch_available()
-            else ()
-        ),
+        "pt": ((AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else ()),
         "default": {"model": ("suno/bark-small", "1dbd7a1")},
         "type": "text",
     },
@@ -206,17 +200,13 @@ SUPPORTED_TASKS = {
     "token-classification": {
         "impl": TokenClassificationPipeline,
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
-        "default": {
-            "model": ("dbmdz/bert-large-cased-finetuned-conll03-english", "4c53496")
-        },
+        "default": {"model": ("dbmdz/bert-large-cased-finetuned-conll03-english", "4c53496")},
         "type": "text",
     },
     "question-answering": {
         "impl": QuestionAnsweringPipeline,
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
-        "default": {
-            "model": ("distilbert/distilbert-base-cased-distilled-squad", "564e9b5")
-        },
+        "default": {"model": ("distilbert/distilbert-base-cased-distilled-squad", "564e9b5")},
         "type": "text",
     },
     "table-question-answering": {
@@ -283,9 +273,7 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
-        "pt": (
-            (AutoModelForZeroShotImageClassification,) if is_torch_available() else ()
-        ),
+        "pt": ((AutoModelForZeroShotImageClassification,) if is_torch_available() else ()),
         "default": {"model": ("openai/clip-vit-base-patch32", "3d74acf")},
         "type": "multimodal",
     },
@@ -309,11 +297,7 @@ SUPPORTED_TASKS = {
     },
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
-        "pt": (
-            (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation)
-            if is_torch_available()
-            else ()
-        ),
+        "pt": ((AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else ()),
         "default": {"model": ("facebook/detr-resnet-50-panoptic", "d53b52a")},
         "type": "multimodal",
     },
@@ -373,9 +357,7 @@ SUPPORTED_TASKS = {
     },
 }
 
-PIPELINE_REGISTRY = PipelineRegistry(
-    supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES
-)
+PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
 
 def get_supported_tasks() -> list[str]:
@@ -387,23 +369,17 @@ def get_supported_tasks() -> list[str]:
 
 def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> str:
     if is_offline_mode():
-        raise RuntimeError(
-            "You cannot infer task automatically within `pipeline` when using offline mode"
-        )
+        raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
         info = model_info(model, token=token)
     except Exception as e:
-        raise RuntimeError(
-            f"Instantiating a pipeline without a task set raised an error: {e}"
-        )
+        raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
     if not info.pipeline_tag:
         raise RuntimeError(
             f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
         )
     if getattr(info, "library_name", "transformers") not in {"transformers", "timm"}:
-        raise RuntimeError(
-            f"This model is meant to be used with {info.library_name} not with transformers"
-        )
+        raise RuntimeError(f"This model is meant to be used with {info.library_name} not with transformers")
     task = info.pipeline_tag
     return task
 
@@ -461,9 +437,7 @@ def clean_custom_task(task_info):
     import transformers
 
     if "impl" not in task_info:
-        raise RuntimeError(
-            "This model introduces a custom pipeline without specifying its implementation."
-        )
+        raise RuntimeError("This model introduces a custom pipeline without specifying its implementation.")
     pt_class_names = task_info.get("pt", ())
     if isinstance(pt_class_names, str):
         pt_class_names = [pt_class_names]
@@ -557,9 +531,7 @@ def pipeline(
     task: Optional[str] = None,
     model: Optional[Union[str, "PreTrainedModel"]] = None,
     config: Optional[Union[str, PreTrainedConfig]] = None,
-    tokenizer: Optional[
-        Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]
-    ] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
     processor: Optional[Union[str, ProcessorMixin]] = None,
@@ -781,10 +753,7 @@ def pipeline(
         elif config is None and isinstance(model, str):
             pretrained_model_name_or_path = model
 
-        if (
-            not isinstance(config, PreTrainedConfig)
-            and pretrained_model_name_or_path is not None
-        ):
+        if not isinstance(config, PreTrainedConfig) and pretrained_model_name_or_path is not None:
             # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
             resolved_config_file = cached_file(
                 pretrained_model_name_or_path,
@@ -795,9 +764,7 @@ def pipeline(
                 cache_dir=model_kwargs.get("cache_dir"),
                 **hub_kwargs,
             )
-            hub_kwargs["_commit_hash"] = extract_commit_hash(
-                resolved_config_file, commit_hash
-            )
+            hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
         else:
             hub_kwargs["_commit_hash"] = getattr(config, "_commit_hash", None)
 
@@ -817,9 +784,7 @@ def pipeline(
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
             # `find_adapter_config_file` doesn't accept `trust_remote_code`
-            _hub_kwargs = {
-                k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"
-            }
+            _hub_kwargs = {k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"}
             maybe_adapter_path = find_adapter_config_file(
                 model,
                 token=hub_kwargs["token"],
@@ -886,9 +851,7 @@ def pipeline(
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
-        model, default_revision = get_default_model_and_revision(
-            targeted_task, task_options
-        )
+        model, default_revision = get_default_model_and_revision(targeted_task, task_options)
         revision = revision if revision is not None else default_revision
         logger.warning(
             f"No model was supplied, defaulted to {model} and revision"
@@ -897,9 +860,7 @@ def pipeline(
         )
         hub_kwargs["revision"] = revision
         if config is None and isinstance(model, str):
-            config = AutoConfig.from_pretrained(
-                model, _from_pipeline=task, **hub_kwargs, **model_kwargs
-            )
+            config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
             hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
@@ -987,9 +948,7 @@ def pipeline(
                 else:
                     tokenizer_identifier = tokenizer
                     tokenizer_kwargs = model_kwargs.copy()
-                    tokenizer_kwargs.pop("torch_dtype", None), tokenizer_kwargs.pop(
-                        "dtype", None
-                    )
+                    tokenizer_kwargs.pop("torch_dtype", None), tokenizer_kwargs.pop("dtype", None)
 
                 tokenizer = AutoTokenizer.from_pretrained(
                     tokenizer_identifier,
@@ -1014,9 +973,7 @@ def pipeline(
                     image_processor = config
                 # Backward compatibility, as `feature_extractor` used to be the name
                 # for `ImageProcessor`.
-                elif feature_extractor is not None and isinstance(
-                    feature_extractor, BaseImageProcessor
-                ):
+                elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
                     image_processor = feature_extractor
                 else:
                     # Impossible to guess what is the right image_processor here
@@ -1075,13 +1032,9 @@ def pipeline(
                                 BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY,
                                 "*",
                             )
-                            alphabet_filename = (
-                                BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
-                            )
+                            alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
                             allow_patterns = [language_model_glob, alphabet_filename]
-                            decoder = BeamSearchDecoderCTC.load_from_hf_hub(
-                                model_name, allow_patterns=allow_patterns
-                            )
+                            decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_patterns=allow_patterns)
 
                         kwargs["decoder"] = decoder
                     except ImportError as e:
@@ -1092,9 +1045,7 @@ def pipeline(
                             logger.warning("Try to install `kenlm`: `pip install kenlm")
 
                         if not is_pyctcdecode_available():
-                            logger.warning(
-                                "Try to install `pyctcdecode`: `pip install pyctcdecode"
-                            )
+                            logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
         except Exception as e:
             if load_feature_extractor:
                 raise e
@@ -1119,9 +1070,7 @@ def pipeline(
 
             # Instantiate processor if needed
             if isinstance(processor, (str, tuple)):
-                processor = AutoProcessor.from_pretrained(
-                    processor, _from_pipeline=task, **hub_kwargs, **model_kwargs
-                )
+                processor = AutoProcessor.from_pretrained(processor, _from_pipeline=task, **hub_kwargs, **model_kwargs)
                 if not isinstance(processor, ProcessorMixin):
                     raise TypeError(
                         "Processor was loaded, but it is not an instance of `ProcessorMixin`. "
