@@ -279,22 +279,12 @@ class ImageTextToTextPipeline(Pipeline):
                     "      {'type': 'image', 'url': 'image_url'}, {'type': 'text', 'text': 'Describe the image.'}}"
                     "]"
                 )
-            # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(text[0], dict):
-                return super().__call__(Chat(text), **kwargs)
-            else:
-                chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
+            return super().__call__(text, **kwargs)
 
         # Same as above, but the `images` argument contains the chat. This can happen e.g. is the user only passes a
         # chat as a positional argument.
         elif text is None and _is_chat(images):
-            # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(images[0], dict):
-                return super().__call__(Chat(images), **kwargs)
-            else:
-                chats = [Chat(image) for image in images]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
+            return super().__call__(images, **kwargs)
 
         elif images is not None and text is None and not valid_images(images):
             """
@@ -308,7 +298,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # encourage the user to use the chat format if supported
         if getattr(self.processor, "chat_template", None) is not None:
-            logger.warning_once(
+            raise ValueError(
                 "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even "
                 "though this model supports chat. Consider using the chat format for better results. For more "
                 "information, see https://huggingface.co/docs/transformers/en/chat_templating"
