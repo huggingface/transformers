@@ -70,7 +70,7 @@ class RoFormerTokenizerFast(PythonBackend):
     ):
         super().__init__(
             vocab_file,
-            tokenizer_file=tokenizer_file,
+            fast_tokenizer_file=tokenizer_file,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,
