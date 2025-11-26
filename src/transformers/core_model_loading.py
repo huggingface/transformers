@@ -333,7 +333,7 @@ class WeightTransform:
         # to create from the source as `add_tensor` will only be called once with this given source for many targets
         if (ops := getattr(self, "operations", None)) is not None:
             # TODO: Here we assume this only happens during saving if the model was created from __init__, i.e.
-            # the future are actually Tensors, and we use heuristics to grab the sizes and the names
+            # the Futures are actually Tensors, and we use heuristics to grab the sizes and the names
             # This is brittle but works for the default mappings we have now
             all_created_targets = []
             if len(ops) == 2 and isinstance(ops[0], Chunk) and isinstance(ops[1], SplitModulelist):
@@ -387,7 +387,6 @@ class WeightTransform:
                 reverse_collected_tensors[matched_target_pattern].append(target_key)
                 for source in all_sources:
                     reverse_layer_targets[source].add(target_key)
-                    # reverse_collected_tensors[matched_target_pattern].append(source)
             reverse_collected_tensors = {k: sorted(set(v)) for k, v in reverse_collected_tensors.items()}
             reverse_transform.layer_targets = reverse_layer_targets
             reverse_transform.collected_tensors = reverse_collected_tensors
