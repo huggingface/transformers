@@ -3111,6 +3111,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         metadata = {}
         if hf_quantizer is not None:
             state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self, safe_serialization)
+        print("saving")
+        print(state_dict)
         metadata["format"] = "pt"
 
         # Only save the model itself if we are using distributed training
@@ -3986,6 +3988,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 use_kernels=use_kernels,
             )
 
+        weight_conversions: Optional[list[WeightConverter | WeightRenaming]] = None
+        model_type = getattr(config, "model_type", None)
+        if model_type is not None:
+            weight_conversions = get_checkpoint_conversion_mapping(model_type)
+            if weight_conversions is None:
+                weight_conversions = get_checkpoint_conversion_mapping("legacy")
+            if key_mapping is not None:
+                weight_conversions.extend(
+                    [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
+                )
+            if hf_quantizer is not None:
+                weight_conversions.extend(hf_quantizer.get_weight_conversions())
+
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
 
@@ -3996,6 +4011,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # restore default dtype
         if dtype_orig is not None:
             torch.set_default_dtype(dtype_orig)
+
+        print("calling load pretrained model")
 
         # Finalize model weight initialization
         model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs = cls._load_pretrained_model(
@@ -4121,11 +4138,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Checkpoints are safetensors
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
                 merged_state_dict = {}
+                i = 0
                 for file in checkpoint_files:
+                    print(f"getting file {i}")
                     file_pointer = safe_open(file, framework="pt", device="cpu")
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                    i += 1
             # User passed an explicit state_dict
             elif state_dict is not None:
                 merged_state_dict = state_dict
@@ -4156,6 +4176,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # finally close all opened file pointers
             for k in all_pointer:
                 k.__exit__(None, None, None)
+
+        # from torchao.prototype.safetensors.safetensors_support import (
+        #     unflatten_tensor_state_dict,
+        # )
+        # from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
+        # if is_metadata_torchao(hf_quantizer.metadata):
+        #     print('calling unflatten', model.state_dict().keys(), hf_quantizer.metadata)
+        #     unflattened_state_dict, _ = unflatten_tensor_state_dict(model.state_dict(), hf_quantizer.metadata)
+        #     model.load_state_dict(unflattened_state_dict, strict=False)
 
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
@@ -4449,13 +4478,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.initialize_weights()
 
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str]
+        self, missing_keys: set[str], unexpected_keys: set[str],
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
         Also, set the `_is_hf_initialized` on tied weight keys, to avoid initializing them as they are going to
         be tied anyway.
         """
+
         # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns

@@ -48,14 +48,36 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def extract_concrete_key(key: str, pattern: str, pattern_regex: re.Pattern) -> str:
+    match = pattern_regex.match(key)
+    if not match:
+        return pattern
+
+    groups = match.groups()
+    wildcard_count = pattern.count("*")
+
+    if wildcard_count == 0:
+        return pattern
+    elif wildcard_count == 1:
+        return pattern.replace("*", groups[0])
+    else:
+        parts = pattern.split("*")
+        result = "*".join(parts[1:])
+        for i, captured in enumerate(groups[1:], start=0):
+            result = result.replace("*", str(captured), 1)
+        return result
+
+
 def build_glob_alternation(
     globs: list[Union[WeightRenaming, WeightConverter, str]],
-) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
+) -> tuple[re.Pattern, dict[str, str], dict[str, str], dict[str, re.Pattern]]:
     """
     Build a single alternation regex with one named group per glob.
+    Returns also a dict mapping group names to their compiled regex patterns for extracting matched parts.
     """
     src_group_to_glob: dict[str, str] = {}
     tgt_group_to_glob: dict[str, str] = {}
+    group_to_pattern: dict[str, re.Pattern] = {}
     branches: list[str] = []
     i = 0
     for glob in globs:
@@ -64,9 +86,12 @@ def build_glob_alternation(
                 group_name = f"g{i}"
                 src_group_to_glob[group_name] = src
                 i += 1
+                # Convert the glob pattern to a regex with capture groups for wildcards
+                pattern_with_captures = src.replace("*", r"(.*?)")
+                group_to_pattern[group_name] = re.compile(f"^{pattern_with_captures}$")
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index witht the first target
+                tgt_group_to_glob[group_name] = glob.target_keys[0] if isinstance(glob.target_keys, list) else glob.target_keys
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -77,7 +102,7 @@ def build_glob_alternation(
             tgt_group_to_glob[group_name] = glob
 
     alternation = re.compile("|".join(branches))
-    return alternation, src_group_to_glob, tgt_group_to_glob
+    return alternation, src_group_to_glob, tgt_group_to_glob, group_to_pattern
 
 
 class ConversionOps:
@@ -444,6 +469,7 @@ class WeightConverter(WeightTransform):
             )
 
         collected_tensors = self.collected_tensors
+
         for op in self.operations:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
                 collected_tensors = op.convert(
@@ -532,7 +558,7 @@ def log_to_misc(
     try:
         yield
     except Exception as e:
-
+        print(f"error: {e}")
         def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
             if curr_op is None:
                 return None
@@ -547,6 +573,7 @@ def log_to_misc(
         if isinstance(extras, tuple) and len(extras) == 2:
             values, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
+            # print(values)
             misc[first_target_key] = (
                 f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
             )
@@ -595,7 +622,7 @@ def set_param_for_module(
                         param_value = param_value.to_local()
                 if param_name not in module_obj._buffers:
                     param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-
+            print(f"removing {target_name} from missing keys")
             # Remove from missing keys (it's either mismatched, or all good)
             missing_keys.discard(target_name)
             if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
@@ -768,6 +795,9 @@ def convert_and_load_state_dict_in_model(
     ```
 
     """
+    print('in convert and load state dict')
+    print(f"model state_dict keys: {model.state_dict().keys()}")
+    print(f"state_dict keys: {state_dict}")
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
@@ -794,9 +824,9 @@ def convert_and_load_state_dict_in_model(
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
     if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
+        tp_plan_alt, tp_plan_by_group_name, _, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
-        dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
+        dtype_policy_alt, dtype_policy_by_group_name, _, _ = build_glob_alternation(list(dtype_plan.keys()))
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
@@ -809,6 +839,7 @@ def convert_and_load_state_dict_in_model(
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in missing_keys:
+            print(f"orignal key in state_dict: {original_key}, renamed_key: {renamed_key}, matched_pattern: {matched_pattern}")
             empty_param = meta_model_state_dict.get(renamed_key)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
@@ -839,6 +870,7 @@ def convert_and_load_state_dict_in_model(
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[matched_dtype_pattern.group()]
             elif empty_param is not None and empty_param.dtype != _dtype:
+                print("using empty param")
                 _dtype = empty_param.dtype  # usually correct when initializing
 
             # 4. Handle TP sharding or device_map placement -> scheduled materialization
@@ -866,7 +898,7 @@ def convert_and_load_state_dict_in_model(
                 # If disk, we need to materialize on cpu first
                 param_device = "cpu" if param_device == "disk" else param_device
                 future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
-
+            print("adding tensor")
             mapping.add_tensor(renamed_key, original_key, source_pattern, future)
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
@@ -878,6 +910,7 @@ def convert_and_load_state_dict_in_model(
     total_entries = len(param_name_to_load)
     with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
         for first_param_name, mapping in param_name_to_load.items():
+            print(f"first_param_name: {first_param_name}")
             pbar.update(1)
             pbar.set_postfix({"Materializing param": first_param_name})
             pbar.refresh()
@@ -891,6 +924,7 @@ def convert_and_load_state_dict_in_model(
                     misc=misc,
                 )
                 for target_name, param in realized_value.items():
+                    print(f"target_name: {target_name}")
                     param = param[0] if isinstance(param, list) else param
                     device_match = device_map_regex.match(target_name)
                     param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
@@ -915,6 +949,7 @@ def convert_and_load_state_dict_in_model(
                 # Cleanup the tensors
                 mapping.reset()
             except SkipLayer:
+                print(f"skipping layer {first_param_name}")
                 continue
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)

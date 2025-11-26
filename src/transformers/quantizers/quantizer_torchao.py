@@ -47,6 +47,7 @@ if is_torchao_available():
             flatten_tensor_state_dict,
             unflatten_tensor_state_dict,
         )
+        from torchao.prototype.awq import AWQConfig
         from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
 
 
@@ -91,6 +92,11 @@ if is_torchao_available():
     SUPPORTED_SAFE_SERIALIZATION_CONFIGS = [
         torchao.quantization.Float8WeightOnlyConfig,
         torchao.quantization.Float8DynamicActivationFloat8WeightConfig,
+        torchao.quantization.Int4WeightOnlyConfig,
+        torchao.quantization.IntxWeightOnlyConfig,
+        torchao.quantization.Int8DynamicActivationIntxWeightConfig,
+        torchao.quantization.ModuleFqnToConfig,
+        AWQConfig,
     ]
 
     TORCHAO_VERSION = version.parse(importlib.metadata.version("torchao"))
@@ -241,6 +247,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        if "_weight_" in param_name:
+            return True
         if self.pre_quantized:
             return False
         if self.quantization_config.quant_type == "autoquant":
@@ -289,7 +297,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
         from torchao.quantization import quantize_
-
+        print("in create quantized param")
         full_name = param_name
         # Those are the pre quantized weights
         if ":" in param_name:
@@ -546,17 +554,20 @@ class TorchAoHfQuantizer(HfQuantizer):
         from ..integrations.torchao import TorchAoDeserialize
 
         if self.pre_quantized:
+            print("pre_quantized")
+            print(self.metadata)
             return [
                 WeightConverter(
-                    source_patterns=["weight:qdata", "weight:scale", "weight:zero_point"],
-                    target_patterns="weight",
+                    # source_keys=["_weight_qdata", "_weight_scale", "_weight_zero_point"],
+                    source_keys=["*_weight_*"],
+                    target_keys="*weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
-                WeightConverter(
-                    source_patterns=["weight:_data"],
-                    target_patterns="weight",
-                    operations=[TorchAoDeserialize(self)],
-                ),
+                # WeightConverter(
+                #     source_keys=["._weight__data"],
+                #     target_keys=".weight",
+                #     operations=[TorchAoDeserialize(self)],
+                # ),
                 # used for unsafe serialization
             ]
         return []
