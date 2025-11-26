@@ -317,8 +317,8 @@ class WeightRenaming(WeightTransform):
         config=None,
         hf_quantizer=None,
         missing_keys: Optional[MutableSet[str]] = None,
+        misc: Optional[MutableMapping[str, str]] = None,
     ):
-        misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
 
@@ -358,8 +358,8 @@ class WeightConverter(WeightTransform):
         config=None,
         hf_quantizer=None,
         missing_keys: Optional[MutableSet[str]] = None,
+        misc: Optional[MutableMapping[str, str]] = None,
     ):
-        misc = {}
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = [future.result() for future in futures]
 
@@ -745,7 +745,7 @@ def convert_and_load_state_dict_in_model(
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                         )
-                    shard_index = len(mapping.collected_tensors)
+                    shard_index = len(mapping.collected_tensors.get(original_key, []))
                     future = spawn_tp_materialize(
                         thread_pool,
                         tensor,
@@ -782,6 +782,7 @@ def convert_and_load_state_dict_in_model(
                     config=model.config,
                     hf_quantizer=hf_quantizer,
                     missing_keys=missing_keys,
+                    misc=misc,
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param

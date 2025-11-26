@@ -1,7 +1,6 @@
 import inspect
 from collections import defaultdict
 from inspect import signature
-from typing import Optional
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name
@@ -38,7 +37,7 @@ class Bnb4bitQuantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -95,7 +94,7 @@ class Bnb8bitQuantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
