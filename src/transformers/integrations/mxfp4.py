@@ -119,11 +119,12 @@ class Mxfp4Quantize(ConversionOps):
                 )
 
                 missing_keys.discard(f"{full_layer_name}")
+                module._is_hf_initialized = True
 
                 return {}
 
 
-class Mxfp4DequantizeOrSwizzle(ConversionOps):
+class Mxfp4Dequantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
@@ -147,30 +148,54 @@ class Mxfp4DequantizeOrSwizzle(ConversionOps):
             else:
                 param_data["_scales"] = input_dict["_scales"]
 
-        if self.hf_quantizer.quantization_config.dequantize:
-            # Here we are dequantizing the weights
-            dequantized = dequantize_convertops(
-                param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device
-            )
-            return {full_layer_name: dequantized}
-        else:
-            # Eagerly set tensors on the module and perform swizzle
-            module, _ = get_module_from_name(model, full_layer_name)
-            proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
-            swizzle_mxfp4_convertops(
-                param_data["_blocks"],
-                param_data["_scales"],
-                module,
-                proj,
-                param_data["_blocks"].device,
-                triton_kernels_hub,
-            )
-            missing_keys.discard(f"{full_layer_name}")
-            # We return an empty mapping since the module was updated in-place. This prevents
-            # the loader from trying to materialize the original meta-parameter names again.
-            # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
-            return {}
+        # Here we are dequantizing the weights
+        dequantized = dequantize_convertops(
+            param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device
+        )
+        return {full_layer_name: dequantized}
 
+
+class Mxfp4Deserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: Optional[torch.nn.Module] = None,
+        full_layer_name: str | None = None,
+        missing_keys: Optional[list[str]] = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        param_data = {}
+        if "_blocks" in input_dict.keys():
+            if isinstance(input_dict["_blocks"], list):
+                param_data["_blocks"] = input_dict["_blocks"][0]
+            else:
+                param_data["_blocks"] = input_dict["_blocks"]
+        if "_scales" in input_dict.keys():
+            if isinstance(input_dict["_scales"], list):
+                param_data["_scales"] = input_dict["_scales"][0]
+            else:
+                param_data["_scales"] = input_dict["_scales"]
+
+        # Eagerly set tensors on the module and perform swizzle
+        module, _ = get_module_from_name(model, full_layer_name)
+        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+        swizzle_mxfp4_convertops(
+            param_data["_blocks"],
+            param_data["_scales"],
+            module,
+            proj,
+            param_data["_blocks"].device,
+            triton_kernels_hub,
+        )
+        missing_keys.discard(f"{full_layer_name}")
+        module._is_hf_initialized = True
+        # We return an empty mapping since the module was updated in-place. This prevents
+        # the loader from trying to materialize the original meta-parameter names again.
+        # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
+        return {}
 
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):

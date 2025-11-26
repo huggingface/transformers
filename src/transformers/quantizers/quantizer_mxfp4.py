@@ -437,14 +437,23 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return Mxfp4Quantize(self)
 
     def get_weight_conversions(self):
-        from ..integrations.mxfp4 import Mxfp4DequantizeOrSwizzle
+        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 
         if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_keys=["_blocks", "_scales"],
-                    target_keys="",
-                    operations=[Mxfp4DequantizeOrSwizzle(self)],
-                )
-            ]
+            if self.quantization_config.dequantize:
+                return [
+                    WeightConverter(
+                        source_keys=["_blocks", "_scales"],
+                        target_keys="",
+                        operations=[Mxfp4Dequantize(self)],
+                    )
+                ]
+            else:
+                return [
+                    WeightConverter(
+                        source_keys=["_blocks", "_scales"],
+                        target_keys="",
+                        operations=[Mxfp4Deserialize(self)],
+                    )
+                ]
         return []
