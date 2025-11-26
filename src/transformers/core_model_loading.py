@@ -504,7 +504,7 @@ def set_param_for_module(
             missing_keys.discard(target_name)
             if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
                 mismatch_keys.add((target_name, param_value.shape, ref.shape))
-                module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
+                ref._is_hf_initialized = False  # unsure - but seems unreachable else?
             else:
                 # super important otherwise _init_weight will re-init the param
                 param_value._is_hf_initialized = True
