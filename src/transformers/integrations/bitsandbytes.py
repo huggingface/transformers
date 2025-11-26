@@ -74,7 +74,7 @@ class Bnb4bitDeserialize(ConversionOps):
         """
         Deserialization of bnb keys. We need 6 keys to recreate the quantized weights
         """
-        if len(input_dict)==1:
+        if len(input_dict) == 1:
             # special case when we only fetched the weight
             # since we collected keys, we need to return it like that
             return {full_layer_name: input_dict["weight"]}
@@ -86,14 +86,15 @@ class Bnb4bitDeserialize(ConversionOps):
         weight = input_dict.pop("weight")
         module, _ = get_module_from_name(model, full_layer_name)
         new_value = bnb.nn.Params4bit.from_prequantized(
-                data=weight,
-                quantized_stats=input_dict,
-                requires_grad=False,
-                device=weight.device,
-                module=module,
-            )
+            data=weight,
+            quantized_stats=input_dict,
+            requires_grad=False,
+            device=weight.device,
+            module=module,
+        )
         module._is_hf_initialized = True
         return {full_layer_name: new_value}
+
 
 class Bnb8bitQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
@@ -136,7 +137,7 @@ class Bnb8bitDeserialize(ConversionOps):
         """
         Deserialization of bnb keys.
         """
-        if len(input_dict)==1:
+        if len(input_dict) == 1:
             # special case when we only fetched the weight
             # since we collected keys, we need to return it like that
             return {full_layer_name: input_dict["weight"]}
@@ -149,10 +150,11 @@ class Bnb8bitDeserialize(ConversionOps):
 
         weight = input_dict["weight"]
         kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
-        kwargs["SCB"]= input_dict["SCB"]
+        kwargs["SCB"] = input_dict["SCB"]
         new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
         module._is_hf_initialized = True
         return {full_layer_name: new_value}
+
 
 def _replace_with_bnb_linear(
     model,

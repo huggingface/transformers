@@ -721,7 +721,11 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = renamed_key
 
             # 5. Handle dtype casting
-            if hf_quantizer and not hf_quantizer.pre_quantized and hf_quantizer.param_needs_quantization(model, renamed_key):
+            if (
+                hf_quantizer
+                and not hf_quantizer.pre_quantized
+                and hf_quantizer.param_needs_quantization(model, renamed_key)
+            ):
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
