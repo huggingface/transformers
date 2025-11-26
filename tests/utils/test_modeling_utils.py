@@ -40,6 +40,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     BartConfig,
     BartForConditionalGeneration,
+    BartModel,
     CLIPTextModelWithProjection,
     DynamicCache,
     GPT2Config,
@@ -109,6 +110,8 @@ if is_torch_available():
         BertModel,
         CLIPTextModel,
         GenerationMixin,
+        MusicgenConfig,
+        MusicgenForConditionalGeneration,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -180,7 +183,7 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.linear_2.weight = self.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("linear_2.weight")
@@ -254,7 +257,7 @@ if is_torch_available():
         def forward(self, x):
             return self.decoder(self.base(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.decoder.weight = self.base.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("decoder.weight")
@@ -578,37 +581,37 @@ class ModelUtilsTest(TestCasePlus):
         """
         # Load without dtype specified
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, dtype="float32")
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, dtype=torch.float16)
-        self.assertEqual(model.language_model.dtype, torch.float16)
-        self.assertEqual(model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.language_model.dtype, torch.float16)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
             TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "float16", "": "bfloat16"}
         )
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set the values as torch.dtype (not str)
         model = LlavaForConditionalGeneration.from_pretrained(
             TINY_LLAVA, dtype={"text_config": torch.float32, "vision_config": torch.float16, "": torch.bfloat16}
         )
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.float16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # should be able to set the values in configs directly and pass it to `from_pretrained`
@@ -617,17 +620,19 @@ class ModelUtilsTest(TestCasePlus):
         config.vision_config.dtype = torch.bfloat16
         config.dtype = torch.float16
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
-        self.assertEqual(model.language_model.dtype, torch.float32)
-        self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
-        self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
+        self.assertEqual(
+            model.model.language_model.dtype, torch.float32
+        )  # remember config says float32 for text_config
+        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
@@ -1203,7 +1208,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model(self):
         device_map = {
             "transformer.wte": f"{torch_device}:0",
@@ -1241,7 +1245,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model_with_direct_params(self):
         from accelerate import dispatch_model
 
@@ -1315,12 +1318,6 @@ class ModelUtilsTest(TestCasePlus):
         # test no model file found when use_safetensors=None (default when safetensors package available)
         with self.assertRaises(OSError) as missing_model_file_error:
             BertModel.from_pretrained("hf-internal-testing/config-no-model")
-
-        self.assertTrue(
-            "does not appear to have a file named pytorch_model.bin or model.safetensors."
-            in str(missing_model_file_error.exception),
-            msg=missing_model_file_error.exception,
-        )
 
         with self.assertRaises(OSError) as missing_model_file_error:
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1608,30 +1605,19 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    def test_modifying_model_config_gets_moved_to_generation_config(self):
+    def test_saving_model_config_with_generation_params(self):
         """
-        Calling `model.save_pretrained` should move the changes made to `generate` parameterization in the model config
-        to the generation config.
+        Calling `model.save_pretrained` with generation parameters should raise a `ValueError`
         """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        # Initially, the repetition penalty has its default value in `model.config`. The `model.generation_config` will
-        # have the exact same default
-        self.assertTrue(model.config.repetition_penalty == 1.0)
         self.assertTrue(model.generation_config.repetition_penalty == 1.0)
-        # If the user attempts to save a custom generation parameter:
+        self.assertFalse(hasattr(model.config, "repetition_penalty"))
+
+        # If the user attempts to save a custom generation parameter, we raise an Error
         model.config.repetition_penalty = 3.0
-        with warnings.catch_warnings(record=True) as warning_list:
+        with self.assertRaises(ValueError):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
-                # 1 - That parameter will be removed from `model.config`. We don't want to use `model.config` to store
-                # generative parameters, and the old default (1.0) would no longer reflect the user's wishes.
-                self.assertTrue(model.config.repetition_penalty is None)
-                # 2 - That parameter will be set in `model.generation_config` instead.
-                self.assertTrue(model.generation_config.repetition_penalty == 3.0)
-        # 3 - The user will see a warning regarding the custom parameter that has been moved.
-        self.assertTrue(len(warning_list) == 1)
-        self.assertTrue("Moving the following attributes" in str(warning_list[0].message))
-        self.assertTrue("repetition_penalty" in str(warning_list[0].message))
 
     def test_model_from_pretrained_from_mlx(self):
         from safetensors import safe_open
@@ -1729,35 +1715,32 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_save_and_load_config_with_custom_generation(self):
         """
-        Regression test for the ability to save and load a config with a custom generation kwarg (i.e. a parameter
-        that gets moved to the generation config and reset on the model config)
+        Tests that saving and loading a config with a custom generation kwarg is not possible
         """
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
 
         # The default for `num_beams` is 1 and `early_stopping` is False
-        self.assertTrue(model.config.num_beams == 1)
-        self.assertTrue(model.config.early_stopping is False)
+        # NOTE: accessible only from generation config, EVEN IF they are saved
+        # in `config.json` file in the hub
+        self.assertTrue(model.generation_config.num_beams == 1)
+        self.assertTrue(model.generation_config.early_stopping is False)
+        self.assertFalse(hasattr(model.config, "num_beams"))
+        self.assertFalse(hasattr(model.config, "early_stopping"))
 
-        # When we save the model, this custom parameter should be moved to the generation config AND the model
-        # config should contain `None`
-        model.config.num_beams = 2
+        # Sanity check: We can run `generate` with the model without any warnings
+        random_ids = torch.randint(0, 100, (1, 5))
+        with warnings.catch_warnings(record=True) as w:
+            model.generate(random_ids, max_new_tokens=3)
+        self.assertTrue(len(w) == 0)
+
+        # When we save the model and config has generation-related parameter,
+        # we will throw an error, nudging user to save attributes in the generation_config
+        model.config.num_beams = 5
         model.config.early_stopping = True
         self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            new_model = T5ForConditionalGeneration.from_pretrained(tmp_dir)
-            # moved to generation config
-            self.assertTrue(new_model.generation_config.num_beams == 2)
-            self.assertTrue(new_model.generation_config.early_stopping is True)
-            # reset in the model config
-            self.assertTrue(new_model.config.num_beams is None)
-            self.assertTrue(new_model.config.early_stopping is None)
-
-            # Sanity check: We can run `generate` with the new model without any warnings
-            random_ids = torch.randint(0, 100, (1, 5))
-            with warnings.catch_warnings(record=True) as w:
-                new_model.generate(random_ids, max_new_tokens=3)
-            self.assertTrue(len(w) == 0)
+            with self.assertRaises(ValueError):
+                model.save_pretrained(tmp_dir)
 
     def test_load_model_with_state_dict_only(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -2072,7 +2055,6 @@ class ModelUtilsTest(TestCasePlus):
         for k, v in model.state_dict().items():
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
@@ -2096,7 +2078,6 @@ class ModelUtilsTest(TestCasePlus):
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys_sharded(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
@@ -2809,6 +2790,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_error_no_flash_available(self):
         with self.assertRaises(ValueError) as cm:
             _ = AutoModel.from_pretrained(
@@ -2817,6 +2800,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_error_no_flash_available_with_config(self):
         with self.assertRaises(ValueError) as cm:
             config = AutoConfig.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
@@ -2827,6 +2812,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_error_wrong_attn_implementation(self):
         with self.assertRaises(ValueError) as cm:
             _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
@@ -2894,17 +2881,19 @@ class TestAttentionImplementation(unittest.TestCase):
                 )
 
         self.assertTrue(
-            "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!"
+            "You do not have `flash_attn` installed, using `kernels-community/flash-attn2` from the `kernels` library instead!"
             in cl.out
         )
 
+    # TODO (ydshieh): use another model
+    @unittest.skip("model deleted")
     def test_not_available_kernels(self):
         if is_kernels_available():
             self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_kernels`")
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
-                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn"
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn2"
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
@@ -3137,7 +3126,7 @@ class TestGetDecoder(unittest.TestCase):
         model = GPT2LMHeadModel(cfg)
         dec = model.get_decoder()
 
-        assert dec is model, f"GPT2 get_decoder() should return self (fallback), got {type(dec)}"
+        assert dec is model.transformer, f"GPT2 get_decoder() should return self (fallback), got {type(dec)}"
 
     def test_model_without_get_decoder(self):
         """Test edge case where model has model attribute but no get_decoder method."""
@@ -3197,4 +3186,211 @@ class TestGetDecoder(unittest.TestCase):
         model = LlavaForConditionalGeneration(cfg)
         dec = model.get_decoder()
 
-        assert dec is model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"
+        assert dec is model.model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"
+
+
+class TestGetEncoder(unittest.TestCase):
+    def test_seq2seq_lm_get_encoder_returns_encoder(self):
+        cfg = BartConfig(
+            vocab_size=128,
+            d_model=32,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=4,
+            decoder_attention_heads=4,
+            encoder_ffn_dim=64,
+            decoder_ffn_dim=64,
+        )
+        model = BartForConditionalGeneration(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model.model.encoder, (
+            f"Expected get_encoder() to return model.model.encoder, got {type(encoder)}"
+        )
+
+    def test_base_model_returns_encoder(self):
+        cfg = BartConfig(
+            vocab_size=128,
+            d_model=32,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=4,
+            decoder_attention_heads=4,
+            encoder_ffn_dim=64,
+            decoder_ffn_dim=64,
+        )
+        model = BartModel(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model.encoder, f"Expected get_encoder() to return  model.encoder, got {type(encoder)}"
+
+    def test_decoder_only_model_returns_self(self):
+        """Test that decoder-only models (no encoder) return self."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralModel(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model, f"Base model get_encoder() should return self, got {type(encoder)}"
+
+    def test_when_encoder_has_different_name(self):
+        """Test models with non-standard name for encoder modular (Musicgen has `self.model.text_encoder`)."""
+        cfg = MusicgenConfig(
+            text_encoder={
+                "model_type": "t5",
+                "vocab_size": 99,
+                "d_model": 32,
+                "d_ff": 37,
+                "num_layers": 2,
+                "num_heads": 2,
+            },
+            audio_encoder={
+                "model_type": "encodec",
+                "hidden_size": 99,
+                "compress": 1,
+                "num_filters": 2,
+                "codebook_size": 32,
+                "codebook_dim": 32,
+            },
+            decoder={
+                "vocab_size": 99,
+                "ffn_dim": 32,
+                "num_attention_heads": 2,
+                "hidden_size": 32,
+                "num_hidden_layers": 2,
+            },
+        )
+        model = MusicgenForConditionalGeneration(cfg)
+        encoder = model.get_encoder()
+
+        assert encoder is model.text_encoder, (
+            f"MusicgenForConditionalGeneration get_encoder() should return model.model.text_encoder, got {type(encoder)}"
+        )
+
+    def test_audio_encoder(self):
+        """Test models with multiple modality encoders (Musicgen has `self.model.audio_encoder`)."""
+        cfg = MusicgenConfig(
+            text_encoder={
+                "model_type": "t5",
+                "vocab_size": 99,
+                "d_model": 32,
+                "d_ff": 37,
+                "num_layers": 2,
+                "num_heads": 2,
+            },
+            audio_encoder={
+                "model_type": "encodec",
+                "hidden_size": 99,
+                "compress": 1,
+                "num_filters": 2,
+                "codebook_size": 32,
+                "codebook_dim": 32,
+            },
+            decoder={
+                "vocab_size": 99,
+                "ffn_dim": 32,
+                "num_attention_heads": 2,
+                "hidden_size": 32,
+                "num_hidden_layers": 2,
+            },
+        )
+        model = MusicgenForConditionalGeneration(cfg)
+        encoder = model.get_encoder(modality="audio")
+
+        assert encoder is model.audio_encoder, (
+            f"MusicgenForConditionalGeneration get_encoder(modality='audio') should return model.model.audio_encoder, got {type(encoder)}"
+        )
+
+    def test_non_existant_modality_throws_error(self):
+        """Test that an error is thrown when a rquested modality does not exist."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralModel(cfg)
+        with self.assertRaises(ValueError):
+            _ = model.get_encoder(modality="3d")
+
+    def test_encoder_return_self_when_modality_not_found(self):
+        """Test that `self` is returned if the model has no encoder for requested modality."""
+        cfg = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+        model = MistralModel(cfg)
+        encoder = model.get_encoder(modality="image")
+
+        assert encoder is model, f"Mistral get_encoder(modality='image') should return self, got {type(encoder)}"
+
+    def test_model_without_get_encoder(self):
+        """Test edge case where model has model attribute but no get_encoder method."""
+
+        class MockInnerModel:
+            """Mock model without get_encoder method."""
+
+            pass
+
+        class MockWrapperModel:
+            """Mock wrapper with model attribute but inner has no get_encoder."""
+
+            def __init__(self):
+                self.model = MockInnerModel()
+
+            def get_encoder(self):
+                if hasattr(self, "encoder"):
+                    return self.encoder
+                if hasattr(self, "model"):
+                    inner = self.model
+                    if hasattr(inner, "get_encoder") and type(inner) is not type(self):
+                        return inner.get_encoder()
+                    return inner
+                return self
+
+        wrapper = MockWrapperModel()
+        encoder = wrapper.get_encoder()
+
+        assert encoder is wrapper.model, f"Should return inner model when no get_encoder, got {type(encoder)}"
+
+    def test_vision_language_model(self):
+        """Test vision-language models like LLaVA can find the modality encoder ("image")."""
+        text_config = MistralConfig(
+            vocab_size=128,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+        )
+
+        vision_config = {
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_channels": 3,
+            "image_size": 224,
+            "patch_size": 16,
+        }
+
+        cfg = LlavaConfig(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config,
+            vocab_size=128,
+        )
+
+        model = LlavaForConditionalGeneration(cfg)
+        image_encoder = model.get_encoder(modality="image")
+
+        assert image_encoder is model.model.vision_tower, (
+            f"LLaVA get_encoder(modality='image') should return vision_tower, got {type(image_encoder)}"
+        )

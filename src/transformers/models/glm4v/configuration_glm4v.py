@@ -162,13 +162,9 @@ class Glm4vTextConfig(PreTrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        image_token_id (`int`, *optional*):
-            Token index used as placeholder for image embeddings.
-        video_token_id (`int`, *optional*):
-            Token index used as placeholder for video embeddings.
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
@@ -217,8 +213,6 @@ class Glm4vTextConfig(PreTrainedConfig):
         tie_word_embeddings: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        image_token_id: Optional[int] = None,
-        video_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -247,8 +241,6 @@ class Glm4vTextConfig(PreTrainedConfig):
         if "rope_theta" not in self.rope_parameters:
             self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
         rope_config_standardize_and_validate(self, ignore_keys={"mrope_section"})
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

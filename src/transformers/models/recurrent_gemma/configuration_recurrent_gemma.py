@@ -76,7 +76,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         hidden_activation (``str` or `function``, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
