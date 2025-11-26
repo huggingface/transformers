@@ -413,36 +413,38 @@ class BenchmarkRunner:
                 "PUSH_TO_HUB_TOKEN is not set, cannot push results to the Hub. When setting dataset_id, please also set the PUSH_TO_HUB_TOKEN environment variable."
             )
 
+        api = HfApi()
         n_results = len(results)
-        self.logger.info(f"Pushing {n_results} results to: {dataset_id}")
-        rows = []
-        for cfg_hash, entry in results.items():
-            row = {
-                "benchmark_config_hash": cfg_hash,
-                "config": entry["config"].to_dict(),
-                "measurements": entry["measurements"].to_dict(),
-                "metadata": entry["metadata"].to_dict(),
-            }
-            rows.append(row)
+        for include_timestamps in [False, True]:
+            self.logger.info(f"Pushing {n_results} results to: {dataset_id} with {include_timestamps = }")
+            rows = []
+            for cfg_hash, entry in results.items():
+                row = {
+                    "benchmark_config_hash": cfg_hash,
+                    "config": entry["config"].to_dict(),
+                    "measurements": entry["measurements"].to_dict(include_timestamps=include_timestamps),
+                    "metadata": entry["metadata"].to_dict(),
+                }
+                rows.append(row)
 
-        ds = Dataset.from_list(rows)
-        with tempfile.TemporaryDirectory() as tmp:
-            jsonl_path = os.path.join(tmp, "data.jsonl")
-            with open(jsonl_path, "w") as f:
-                json_lines = []
-                for ex in ds:
-                    json_lines.append(json.dumps(ex, ensure_ascii=False))
-                f.write("\n".join(json_lines))
+            ds = Dataset.from_list(rows)
+            with tempfile.TemporaryDirectory() as tmp:
+                jsonl_path = os.path.join(tmp, "data.jsonl")
+                with open(jsonl_path, "w") as f:
+                    json_lines = []
+                    for ex in ds:
+                        json_lines.append(json.dumps(ex, ensure_ascii=False))
+                    f.write("\n".join(json_lines))
 
-            api = HfApi()
-            # NOTE: we expect the repository to already exist
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
-            file_name = f"benchmark_run_{timestamp}.jsonl"
-            api.upload_file(
-                path_or_fileobj=jsonl_path,
-                path_in_repo=file_name,
-                repo_id=dataset_id,
-                repo_type="dataset",
-                token=PUSH_TO_HUB_TOKEN,
-            )
-        self.logger.info(f"Successfully uploaded results to: {dataset_id}")
+                # NOTE: we expect the repository to already exist
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
+                file_name = "full_results" if include_timestamps else "summarized_results"
+                file_name = file_name + "/" + f"benchmark_run_{timestamp}.jsonl"
+                api.upload_file(
+                    path_or_fileobj=jsonl_path,
+                    path_in_repo=file_name,
+                    repo_id=dataset_id,
+                    repo_type="dataset",
+                    token=PUSH_TO_HUB_TOKEN,
+                )
+                self.logger.info(f"Successfully uploaded results to: {dataset_id} with {include_timestamps = }")
