@@ -21,6 +21,7 @@ import functools
 import gc
 import importlib
 import inspect
+import json
 import logging
 import multiprocessing
 import os
@@ -36,12 +37,12 @@ import traceback
 import types
 import unittest
 from collections import UserDict, defaultdict
-from collections.abc import Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
@@ -57,7 +58,6 @@ from .integrations import (
     is_clearml_available,
     is_optuna_available,
     is_ray_available,
-    is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_trackio_available,
@@ -77,7 +77,6 @@ from .utils import (
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_compressed_tensors_available,
     is_cv2_available,
@@ -104,6 +103,7 @@ from .utils import (
     is_huggingface_hub_greater_or_equal,
     is_ipex_available,
     is_jinja_available,
+    is_jmespath_available,
     is_jumanpp_available,
     is_kernels_available,
     is_levenshtein_available,
@@ -130,7 +130,6 @@ from .utils import (
     is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
-    is_safetensors_available,
     is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -145,7 +144,6 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_gpu_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -160,7 +158,6 @@ from .utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
-    is_torchdynamo_available,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -499,13 +496,6 @@ def require_g2p_en(test_case):
     return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
 
 
-def require_safetensors(test_case):
-    """
-    Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
-    """
-    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
-
-
 def require_rjieba(test_case):
     """
     Decorator marking a test that requires rjieba. These tests are skipped when rjieba isn't installed.
@@ -518,6 +508,13 @@ def require_jinja(test_case):
     Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
     """
     return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
+
+
+def require_jmespath(test_case):
+    """
+    Decorator marking a test that requires jmespath. These tests are skipped when jmespath isn't installed.
+    """
+    return unittest.skipUnless(is_jmespath_available(), "test requires jmespath")(test_case)
 
 
 def require_onnx(test_case):
@@ -596,7 +593,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn")
+        get_kernel("kernels-community/flash-attn2")
     except Exception as _:
         kernels_available = False
 
@@ -1012,11 +1009,6 @@ else:
     torch_device = None
 
 
-def require_torchdynamo(test_case):
-    """Decorator marking a test that requires TorchDynamo"""
-    return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
-
-
 def require_torchao(test_case):
     """Decorator marking a test that requires torchao"""
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
@@ -1086,15 +1078,6 @@ def require_torch_large_accelerator(test_case, memory: float = 20):
     )(test_case)
 
 
-def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
-    """
-    Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
-    """
-    if is_bitsandbytes_available() and is_bitsandbytes_multi_backend_available():
-        return test_case
-    return require_torch_gpu(test_case)
-
-
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
@@ -1120,14 +1103,6 @@ def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
     return unittest.skipUnless(
         is_torch_bf16_available_on_device(torch_device), "test requires device with bf16 support"
-    )(test_case)
-
-
-def require_torch_bf16_gpu(test_case):
-    """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0"""
-    return unittest.skipUnless(
-        is_torch_bf16_gpu_available(),
-        "test requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0",
     )(test_case)
 
 
@@ -1182,16 +1157,6 @@ def require_ray(test_case):
 
     """
     return unittest.skipUnless(is_ray_available(), "test requires Ray/tune")(test_case)
-
-
-def require_sigopt(test_case):
-    """
-    Decorator marking a test that requires SigOpt.
-
-    These tests are skipped when SigOpt isn't installed.
-
-    """
-    return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
 
 
 def require_swanlab(test_case):
@@ -1304,15 +1269,7 @@ def require_bitsandbytes(test_case):
     """
     Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
-    if is_bitsandbytes_available() and is_torch_available():
-        try:
-            import pytest
-
-            return pytest.mark.bitsandbytes(test_case)
-        except ImportError:
-            return test_case
-    else:
-        return unittest.skip(reason="test requires bitsandbytes and torch")(test_case)
+    return unittest.skipUnless(is_bitsandbytes_available(), "test requires bitsandbytes")(test_case)
 
 
 def require_optimum(test_case):
@@ -1852,7 +1809,7 @@ class TemporaryHubRepo:
     ```
     """
 
-    def __init__(self, namespace: Optional[str] = None, token: Optional[str] = None) -> None:
+    def __init__(self, namespace: str | None = None, token: str | None = None) -> None:
         self.token = token
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_id = Path(tmp_dir).name
@@ -1869,7 +1826,7 @@ class TemporaryHubRepo:
 
 @contextlib.contextmanager
 # adapted from https://stackoverflow.com/a/64789046/9201239
-def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
+def ExtendSysPath(path: str | os.PathLike) -> Iterator[None]:
     """
     Temporary add given path to `sys.path`.
 
@@ -2049,14 +2006,12 @@ class TestCasePlus(unittest.TestCase):
         paths = [self.repo_root_dir_str, self.src_dir_str]
         if "/examples" in self.test_file_dir_str:
             paths.append(self.examples_dir_str)
-        else:
-            paths.append(self.tests_dir_str)
         paths.append(env.get("PYTHONPATH", ""))
 
         env["PYTHONPATH"] = ":".join(paths)
         return env
 
-    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None):
+    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None, return_pathlib_obj=False):
         """
         Args:
             tmp_dir (`string`, *optional*):
@@ -2076,6 +2031,8 @@ class TestCasePlus(unittest.TestCase):
             after (`bool`, *optional*):
                 If `True`, delete the `tmp_dir` at the end of the test if `False`, leave the `tmp_dir` and its contents
                 intact at the end of the test.
+            return_pathlib_obj (`bool`, *optional*):
+                If `True` will return a pathlib.Path object
 
         Returns:
             tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp dir
@@ -2122,7 +2079,7 @@ class TestCasePlus(unittest.TestCase):
             # register for deletion
             self.teardown_tmp_dirs.append(tmp_dir)
 
-        return tmp_dir
+        return Path(tmp_dir).resolve() if return_pathlib_obj else tmp_dir
 
     def python_one_liner_max_rss(self, one_liner_str):
         """
@@ -2609,7 +2566,7 @@ class RequestCounter:
         return sum(self._counter.values())
 
 
-def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
+def is_flaky(max_attempts: int = 5, wait_before_retry: float | None = None, description: str | None = None):
     """
     To decorate flaky tests. They will be retried on failures.
 
@@ -2650,7 +2607,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
     return decorator
 
 
-def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
+def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
     """
     To decorate tests that download from the Hub. They can fail due to a
     variety of network issues such as timeouts, connection resets, etc.
@@ -3204,9 +3161,9 @@ def cleanup(device: str, gc_collect=False):
 
 
 # Type definition of key used in `Expectations` class.
-DeviceProperties = tuple[Optional[str], Optional[int], Optional[int]]
+DeviceProperties = tuple[str | None, int | None, int | None]
 # Helper type. Makes creating instances of `Expectations` smoother.
-PackedDeviceProperties = tuple[Optional[str], Union[None, int, tuple[int, int]]]
+PackedDeviceProperties = tuple[str | None, None | int | tuple[int, int]]
 
 
 @cache
@@ -3235,7 +3192,7 @@ def get_device_properties() -> DeviceProperties:
 
 
 def unpack_device_properties(
-    properties: Optional[PackedDeviceProperties] = None,
+    properties: PackedDeviceProperties | None = None,
 ) -> DeviceProperties:
     """
     Unpack a `PackedDeviceProperties` tuple into consistently formatted `DeviceProperties` tuple. If properties is None, it is fetched.
@@ -3565,8 +3522,15 @@ def _patched_tearDown(self, *args, **kwargs):
     # We still record those failures not handled by the patched methods, and add custom messages along with the usual
     # pytest failure report.
     regular_failures_info = []
-    if hasattr(self, "_outcome") and self._outcome.errors:
-        for error_entry in self._outcome.errors:
+
+    errors = None
+    if hasattr(self._outcome, "errors"):
+        errors = self._outcome.errors
+    elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+        errors = self._outcome.result.errors
+
+    if hasattr(self, "_outcome") and errors:
+        for error_entry in errors:
             test_instance, (exc_type, exc_obj, exc_tb) = error_entry
             # breakpoint()
             regular_failures_info.append(
@@ -3579,7 +3543,10 @@ def _patched_tearDown(self, *args, **kwargs):
             )
 
         # Clear the regular failure (i.e. that is not from any of our patched assertion methods) from pytest's records.
-        self._outcome.errors.clear()
+        if hasattr(self._outcome, "errors"):
+            self._outcome.errors.clear()
+        elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+            self._outcome.result.errors.clear()
 
     # reset back to the original tearDown method, so `_patched_tearDown` won't be run by the subsequent tests if they
     # have only test failures that are not handle by the patched methods (or no test failure at all).
@@ -3782,7 +3749,7 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
-def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):
+def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
     """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
         tmp.write(script)
@@ -4110,3 +4077,13 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
     cache[(id(obj), indent, mode, prefix)] = output
 
     return output
+
+
+def write_file(file, content):
+    with open(file, "w") as f:
+        f.write(content)
+
+
+def read_json_file(file):
+    with open(file, "r") as fh:
+        return json.load(fh)

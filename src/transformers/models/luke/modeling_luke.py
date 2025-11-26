@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -529,10 +530,6 @@ class LukeAttention(nn.Module):
         super().__init__()
         self.self = LukeSelfAttention(config)
         self.output = LukeSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
     def forward(
         self,
@@ -770,22 +767,24 @@ class LukePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LukeAttention", "LukeEntityEmbeddings"]
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             if module.embedding_dim == 1:  # embedding for bias parameters
-                module.weight.data.zero_()
+                init.zeros_(module.weight)
             else:
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring(
@@ -822,9 +821,6 @@ class LukeModel(LukePreTrainedModel):
 
     def set_entity_embeddings(self, value):
         self.entity_embeddings.entity_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
     @auto_docstring
     def forward(
@@ -1031,7 +1027,6 @@ class LukeLMHead(nn.Module):
 
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
@@ -1043,14 +1038,6 @@ class LukeLMHead(nn.Module):
 
         return x
 
-    def _tie_weights(self):
-        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        # For accelerate compatibility and to not break backward compatibility
-        if self.decoder.bias.device.type == "meta":
-            self.decoder.bias = self.bias
-        else:
-            self.bias = self.decoder.bias
-
 
 @auto_docstring(
     custom_intro="""
@@ -1059,7 +1046,10 @@ class LukeLMHead(nn.Module):
     """
 )
 class LukeForMaskedLM(LukePreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias", "entity_predictions.decoder.weight"]
+    _tied_weights_keys = {
+        "entity_predictions.decoder.weight": "luke.entity_embeddings.entity_embeddings.weight",
+        "lm_head.bias": "lm_head.decoder.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1073,10 +1063,6 @@ class LukeForMaskedLM(LukePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def tie_weights(self):
-        super().tie_weights()
-        self._tie_or_clone_weights(self.entity_predictions.decoder, self.luke.entity_embeddings.entity_embeddings)
 
     def get_output_embeddings(self):
         return self.lm_head.decoder

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .feature_extraction_videomae import *
     from .image_processing_videomae import *
     from .modeling_videomae import *
+    from .video_processing_videomae import *
 else:
     import sys
 

@@ -144,7 +144,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     all_model_classes = (ZoeDepthForDepthEstimation,) if is_torch_available() else ()
     pipeline_model_mapping = {"depth-estimation": ZoeDepthForDepthEstimation} if is_torch_available() else {}
 
-    test_pruning = False
     test_resize_embeddings = False
     # `strict=True/False` are both failing with torch 2.7, see #38677
     test_torch_exportable = get_torch_major_and_minor_version() != "2.7"

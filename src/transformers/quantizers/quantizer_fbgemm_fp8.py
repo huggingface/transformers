@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 
@@ -56,9 +56,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "Please install the latest version of fbgemm-gpu library by following : https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries"
             )
 
-        if not is_accelerate_available("0.32.2"):
+        if not is_accelerate_available():
             raise ImportError(
-                "Loading an FP8 quantized model requires accelerate > 0.32.1 (`pip install --upgrade accelerate`)"
+                "Loading an FP8 quantized model requires accelerate (`pip install --upgrade accelerate`)"
             )
 
         if not torch.cuda.is_available():
@@ -192,13 +192,10 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         del param_name
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear

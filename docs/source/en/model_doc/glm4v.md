@@ -132,10 +132,11 @@ Using GLM-4.1V with video input is similar to using it with image input.
 The model can process video data and generate text based on the content of the video.
 
 ```python
-from transformers import AutoProcessor, Glm4vForConditionalGeneration, infer_device
+from transformers import AutoProcessor, Glm4vForConditionalGeneration
+from accelerate import Accelerator
 import torch
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 model = Glm4vForConditionalGeneration.from_pretrained(
@@ -169,6 +170,11 @@ print(output_text)
 
 [[autodoc]] Glm4vConfig
 
+
+## Glm4vVisionConfig
+
+[[autodoc]] Glm4vVisionConfig
+
 ## Glm4vTextConfig
 
 [[autodoc]] Glm4vTextConfig
@@ -191,6 +197,11 @@ print(output_text)
 ## Glm4vProcessor
 
 [[autodoc]] Glm4vProcessor
+
+## Glm4vVisionModel
+
+[[autodoc]] Glm4vVisionModel
+    - forward
 
 ## Glm4vTextModel
 

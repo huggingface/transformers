@@ -1,6 +1,6 @@
-from typing import Optional
-
 import torch
+
+from ..generation.continuous_batching.cache import PagedAttentionCache
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -20,16 +20,22 @@ def sdpa_attention_paged_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
+    scaling: float | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
-    cache = kwargs.pop("cache", None)
+    cache: PagedAttentionCache | None = kwargs.pop("cache", None)
     if cache is not None:
         # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
-        key, value = cache.update(key, value, module.layer_idx, **kwargs)
+        key, value = cache.update(
+            key_states=key,
+            value_states=value,
+            layer_idx=module.layer_idx,
+            read_index=kwargs["read_index"],
+            write_index=kwargs["write_index"],
+        )
         key = key.transpose(0, 1).unsqueeze(0)
         value = value.transpose(0, 1).unsqueeze(0)
 

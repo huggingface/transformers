@@ -13,7 +13,7 @@
 # limitations under the License.
 import warnings
 from io import BytesIO
-from typing import Any, Optional, Union, overload
+from typing import Any, overload
 
 import httpx
 
@@ -88,7 +88,7 @@ class VideoClassificationPipeline(Pipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(self, inputs: Optional[Union[str, list[str]]] = None, **kwargs):
+    def __call__(self, inputs: str | list[str] | None = None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 

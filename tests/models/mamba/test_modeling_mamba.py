@@ -32,10 +32,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MambaCache,
         MambaForCausalLM,
         MambaModel,
     )
+    from transformers.models.mamba.modeling_mamba import MambaCache
 
 
 class MambaModelTester:
@@ -81,9 +81,6 @@ class MambaModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
-
-    def get_large_model_config(self):
-        return MambaConfig.from_pretrained("hf-internal-testing/mamba-2.8b")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -238,10 +235,8 @@ class MambaModelTester:
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @ArthurZucker
-    test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
-    test_pruning = False
+
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
@@ -251,6 +246,18 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.config_tester = ConfigTester(
             self, config_class=MambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, MambaCache)
+
+        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
+        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
+
+        self.assertTrue(config.num_hidden_layers, len(past_key_values.conv_states))
+
+        for idx in range(len(past_key_values.conv_states)):
+            self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
+            self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
 
     def assertInterval(self, member, container, msg=None):
         r"""
@@ -391,6 +398,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
 
+@slow
 @require_torch
 class MambaIntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -438,7 +446,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_small(self, device):
         expected_output = "Hello my name is\n\nI am a\n\nI am a"
 
@@ -451,7 +458,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_mid(self, device):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
@@ -464,7 +470,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_big(self, device):
         expected_output = "Hello my name is John and I am a new member of this forum. I am a retired Marine and I am a member of the Marine Corps League. I am a"
 
@@ -476,7 +481,6 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
-    @slow
     @pytest.mark.torch_compile_test
     def test_compile_mamba_cache(self):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"

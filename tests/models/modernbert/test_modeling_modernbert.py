@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -236,8 +237,6 @@ class ModernBertModelTester:
 
 @require_torch
 class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
-
     all_model_classes = (
         (
             ModernBertModel,
@@ -262,8 +261,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
@@ -293,12 +291,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -375,7 +367,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.assertNotIn("reference_compile", config_dict)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_flash_attention_dispatches_by_default(self):
         "ModernBert should dispatch to FA2 by default, not SDPA"

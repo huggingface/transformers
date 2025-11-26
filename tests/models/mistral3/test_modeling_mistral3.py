@@ -176,7 +176,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     _is_composite = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
@@ -276,6 +275,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_output, expected_output)
 
     @require_read_token
+    @require_deterministic_for_xpu
     def test_mistral3_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -300,7 +300,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The image features two cats resting on a pink blanket. The cat on the left is a kitten",
+                ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
                 ("cuda", 8): 'The image features two cats lying on a pink surface, which appears to be a couch or a bed',
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"

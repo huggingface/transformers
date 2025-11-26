@@ -19,11 +19,9 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import (
-    is_mamba_ssm_available,
-    is_mambapy_available,
-)
+from ...utils.import_utils import is_mamba_ssm_available, is_mambapy_available, is_torchdynamo_compiling
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -35,7 +33,6 @@ from ..mamba.modeling_mamba import (
     MambaOutput,
     MambaPreTrainedModel,
     MambaRMSNorm,
-    _lazy_load_causal_conv1d,
 )
 
 
@@ -54,8 +51,6 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-_causal_conv1d_cache = None
-
 
 class FalconMambaConfig(MambaConfig):
     """
@@ -64,8 +59,8 @@ class FalconMambaConfig(MambaConfig):
     defaults will yield a similar configuration to that of the FALCON_MAMBA
     [tiiuae/falcon-mamba-7b](https://huggingface.co/tiiuae/falcon-mamba-7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -205,7 +200,7 @@ class FalconMambaCache(MambaCache):
     Cache for falcon_mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
@@ -234,8 +229,6 @@ class FalconMambaCache(MambaCache):
         ```
     """
 
-    pass
-
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
     """
@@ -258,7 +251,12 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -324,7 +322,12 @@ class FalconMambaMixer(MambaMixer):
             )
 
         else:
-            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+            causal_conv1d = lazy_load_kernel("causal-conv1d")
+            causal_conv1d_update, causal_conv1d_fn = (
+                (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+                if causal_conv1d is not None
+                else (None, None)
+            )
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -518,11 +521,16 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 

@@ -23,7 +23,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -34,9 +33,6 @@ if is_torch_available():
 
     from transformers import (
         MixtralForCausalLM,
-        MixtralForQuestionAnswering,
-        MixtralForSequenceClassification,
-        MixtralForTokenClassification,
         MixtralModel,
     )
 
@@ -50,18 +46,6 @@ class MixtralModelTester(CausalLMModelTester):
 
 @require_torch
 class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MixtralModel,
-            "text-classification": MixtralForSequenceClassification,
-            "token-classification": MixtralForTokenClassification,
-            "text-generation": MixtralForCausalLM,
-            "question-answering": MixtralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_tester_class = MixtralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -78,11 +62,11 @@ class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
         return True
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Mistral flash attention does not support right padding")
+        self.skipTest(reason="Mixtral flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):

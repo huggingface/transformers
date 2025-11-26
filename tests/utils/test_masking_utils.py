@@ -14,7 +14,12 @@
 
 import unittest
 
-from transformers.testing_utils import is_torch_available, require_torch
+from transformers.testing_utils import (
+    cleanup,
+    is_torch_available,
+    require_torch,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -23,7 +28,12 @@ if is_torch_available():
 
     from transformers import DynamicCache, LlamaConfig
     from transformers.cache_utils import DynamicSlidingWindowLayer
-    from transformers.masking_utils import create_causal_mask, create_chunked_causal_mask, find_packed_sequence_indices
+    from transformers.masking_utils import (
+        create_bidirectional_mask,
+        create_causal_mask,
+        create_chunked_causal_mask,
+        find_packed_sequence_indices,
+    )
 
 
 # fmt: off
@@ -56,6 +66,12 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 @require_torch
 class MaskTest(unittest.TestCase):
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_packed_sequence_mask_sdpa(self):
         config = LlamaConfig()
         config._attn_implementation = "sdpa"
@@ -136,6 +152,42 @@ class MaskTest(unittest.TestCase):
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
         EXPECTED_SEQUENCE_INDICES = torch.tensor([[0, 0, 0, 0, 1, 1, 2, 2, 2, 2], [0, 0, 0, 0, 0, 0, 1, 1, 1, 1]])
         self.assertTrue((find_packed_sequence_indices(position_ids) == EXPECTED_SEQUENCE_INDICES).all())
+
+    def test_nonpacked_sequence_mask_skip(self):
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        batch_size = 2
+        sequence_length = 10
+        cache_position = torch.arange(sequence_length)
+
+        # Non-packed sequences
+        position_ids = torch.arange(sequence_length)[None, :]
+
+        causal_mask = create_causal_mask(
+            config=config,
+            # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            attention_mask=None,
+            cache_position=cache_position,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+        # packed sequence should be skipped
+        self.assertTrue(causal_mask is None)
+
+        create_causal_mask_compiled = torch.compile(create_causal_mask, mode="reduce-overhead")
+        causal_mask = create_causal_mask_compiled(
+            config=config,
+            # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+            input_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            attention_mask=None,
+            cache_position=cache_position,
+            past_key_values=None,
+            position_ids=position_ids,
+        )
+        # cannot be skipped under compile, should result into a triu mask
+        self.assertTrue(torch.equal(~torch.ones(*causal_mask.shape).triu(diagonal=1).bool(), causal_mask))
 
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config
@@ -244,3 +296,92 @@ class MaskTest(unittest.TestCase):
         # fmt: on
 
         self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+
+    @staticmethod
+    def _run_bidirectional_mask(mask_fn, attn_implementation):
+        def run_mask_creation(mask_fn, config, input_embeds, encoder_mask, cross_mask, encoder_hidden_states):
+            encoder_attn_mask = mask_fn(
+                config=config,
+                input_embeds=input_embeds,
+                attention_mask=encoder_mask,
+            )
+            cross_attn_mask = mask_fn(
+                config=config,
+                input_embeds=input_embeds,
+                attention_mask=cross_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+            return encoder_attn_mask, cross_attn_mask
+
+        # We use llama but could be also bert/bart --> we only need the `_attn_implementation` here
+        config = LlamaConfig()
+        config._attn_implementation = attn_implementation
+
+        # Meta data
+        batch_size = 2
+        q_length = 10
+        kv_length = 5
+
+        input_embeds = torch.ones((batch_size, q_length, 1), device=torch_device, dtype=torch.float16)
+        encoder_hidden_states = torch.ones((batch_size, kv_length, 1), device=torch_device, dtype=torch.float16)
+
+        encoder_mask = torch.ones_like(input_embeds)[..., 0]
+        cross_mask = torch.ones_like(encoder_hidden_states)[..., 0]
+
+        # Case 1: Full mask
+        full_mask_encoder_1, full_mask_cross_1 = run_mask_creation(
+            mask_fn=mask_fn,
+            config=config,
+            input_embeds=input_embeds,
+            encoder_mask=encoder_mask,
+            cross_mask=cross_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        full_mask_encoder_2, full_mask_cross_2 = run_mask_creation(
+            mask_fn=mask_fn,
+            config=config,
+            input_embeds=input_embeds,
+            encoder_mask=None,
+            cross_mask=None,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+
+        # Case 2: Padding involved
+        cross_mask[:, -1] = 0
+        encoder_mask[:, -1] = 0
+
+        padded_mask_encoder, padded_mask_cross = run_mask_creation(
+            mask_fn=mask_fn,
+            config=config,
+            input_embeds=input_embeds,
+            encoder_mask=encoder_mask,
+            cross_mask=cross_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+
+        full_masks = (full_mask_encoder_1, full_mask_encoder_2), (full_mask_cross_1, full_mask_cross_2)
+        padded_masks = (padded_mask_encoder, padded_mask_cross)
+        return full_masks, padded_masks
+
+    def test_bidirectional_mask_cudagraphs(self):
+        """
+        Checks whether the bidirectional mask creation is compatible with cuda graphs, i.e. we do not into any error
+        during this test.
+        """
+        mask_creation_function = torch.compile(create_bidirectional_mask, mode="reduce-overhead")
+        self._run_bidirectional_mask(mask_fn=mask_creation_function, attn_implementation="sdpa")
+
+    def test_bidirectional_mask_skip_eager(self):
+        """
+        Checks whether the bidirectional mask creation can skip the mask creation if we have a full mask.
+        """
+        full_masks, padded_mask = self._run_bidirectional_mask(
+            mask_fn=create_bidirectional_mask, attn_implementation="eager"
+        )
+
+        for alternative_masks in full_masks:
+            self.assertTrue(alternative_masks[0] is None)
+            self.assertTrue(alternative_masks[1] is None)
+
+        self.assertTrue(padded_mask[0] is not None)
+        self.assertTrue(padded_mask[1] is not None)

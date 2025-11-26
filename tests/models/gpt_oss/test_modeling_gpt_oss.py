@@ -45,9 +45,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GptOssForCausalLM,
-        GptOssForSequenceClassification,
-        GptOssForTokenClassification,
         GptOssModel,
     )
 
@@ -61,17 +58,6 @@ class GptOssModelTester(CausalLMModelTester):
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-classification": GptOssForSequenceClassification,
-            "text-generation": GptOssForCausalLM,
-            "token-classification": GptOssForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester

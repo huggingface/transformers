@@ -36,12 +36,12 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_glm4v import smart_resize
 
 
-class Glm4vVideoProcessorInitKwargs(VideosKwargs):
-    max_image_size: Optional[dict[str, int]]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    max_duration: Optional[int]
+class Glm4vVideoProcessorInitKwargs(VideosKwargs, total=False):
+    max_image_size: dict[str, int]
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    max_duration: int
 
 
 @add_start_docstrings(

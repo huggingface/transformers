@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import os
+import re
 import shutil
 import warnings
-from collections.abc import Mapping, Sized
+from collections.abc import Callable, Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -114,11 +115,6 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 of returning overflowing tokens.
             return_special_tokens_mask (`bool`, *optional*, defaults to `False`):
                 Whether or not to return special tokens mask information.
-            return_offsets_mapping (`bool`, *optional*, defaults to `False`):
-                Whether or not to return `(char_start, char_end)` for each token.
-
-                This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
-                Python's tokenizer, this method will raise `NotImplementedError`.
             return_length  (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the lengths of the encoded inputs.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -175,6 +171,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     Supports the following methods from the `PreTrainedTokenizerBase` class:
 
     - [`~MistralCommonTokenizer.get_vocab`]: Returns the vocabulary as a dictionary of token to index.
+        This is a lossy conversion for Tekkenizer as some decoding errors are collapsed into the same token.
     - [`~MistralCommonTokenizer.encode`]: Encode a string to a list of integers.
     - [`~MistralCommonTokenizer.decode`]: Decode a list of integers to a string.
     - [`~MistralCommonTokenizer.batch_decode`]: Decode a batch of list of integers to a list of strings.
@@ -207,12 +204,12 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def __init__(
         self,
-        tokenizer_path: Union[str, os.PathLike, Path],
+        tokenizer_path: str | os.PathLike | Path,
         mode: ValidationMode = ValidationMode.test,
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
-        model_input_names: Optional[list[str]] = None,
+        model_input_names: list[str] | None = None,
         clean_up_tokenization_spaces: bool = False,
         **kwargs,
     ):
@@ -275,7 +272,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 )
             self.model_input_names = model_input_names
 
-        self._cache_get_vocab: Optional[dict[str, int]] = None
+        self._cache_get_vocab: dict[str, int] | None = None
 
     @property
     def bos_token_id(self) -> int:
@@ -353,9 +350,13 @@ class MistralCommonTokenizer(PushToHubMixin):
             `Dict[str, int]`: The vocabulary.
         """
         if self._cache_get_vocab is None:
-            self._cache_get_vocab = {
-                token: idx for idx, token in enumerate(self.tokenizer.instruct_tokenizer.tokenizer.vocab())
-            }
+            # We reverse the order to make sure that the first token is the one to be returned when there are multiple tokens with the same string representation.
+            vocab = self.tokenizer.instruct_tokenizer.tokenizer.vocab()
+            self._cache_get_vocab = {token: self._piece_to_id(token, False) for token in vocab}
+            # Order the dict.
+            self._cache_get_vocab = dict(
+                sorted(((k, v) for k, v in self._cache_get_vocab.items()), key=lambda x: x[1])
+            )
         return self._cache_get_vocab
 
     def __len__(self):
@@ -377,16 +378,16 @@ class MistralCommonTokenizer(PushToHubMixin):
     )
     def encode(
         self,
-        text: Union[TextInput, EncodedInput],
+        text: TextInput | EncodedInput,
         text_pair: None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, None] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
         **kwargs,
     ) -> list[int]:
@@ -435,7 +436,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         self,
         token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> str:
         """
@@ -471,13 +472,19 @@ class MistralCommonTokenizer(PushToHubMixin):
         if clean_up_tokenization_spaces:
             decoded_string = PreTrainedTokenizerBase.clean_up_tokenization(decoded_string)
 
+        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
+        # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
+        # Nevertheless we should remove it to ease users life.
+        if skip_special_tokens:
+            decoded_string = re.sub(r"^lang:[a-z]{2}", "", decoded_string)
+
         return decoded_string
 
     def batch_decode(
         self,
         sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> list[str]:
         """
@@ -510,7 +517,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _is_control_token(self, token_id: int) -> bool:
         if self._tokenizer_type == MistralTokenizerType.spm:
-            return token_id in self.tokenizer.instruct_tokenizer.tokenizer._control_tokens()
+            return token_id in self.tokenizer.instruct_tokenizer.tokenizer._control_tokens
         elif self._tokenizer_type == MistralTokenizerType.tekken:
             return token_id < self.tokenizer.instruct_tokenizer.tokenizer.num_special_tokens
         else:
@@ -520,9 +527,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str: ...
     @overload
     def convert_ids_to_tokens(self, ids: list[int], skip_special_tokens: bool = False) -> list[str]: ...
-    def convert_ids_to_tokens(
-        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
-    ) -> Union[str, list[str]]:
+    def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
         """
         Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
         added tokens.
@@ -556,19 +561,31 @@ class MistralCommonTokenizer(PushToHubMixin):
             return tokens[0]
         return tokens
 
-    def _piece_to_id(self, piece: str) -> int:
+    def _tekken_piece_to_id(self, piece: str, warn: bool) -> int:
+        tekken_tokenizer = self.tokenizer.instruct_tokenizer.tokenizer
+        assert isinstance(tekken_tokenizer, Tekkenizer), type(tekken_tokenizer)
+
+        piece_bytes = piece.encode("utf-8")
+        shift = tekken_tokenizer.num_special_tokens
+        try:
+            return shift + tekken_tokenizer._tekken_token2id_nospecial[piece_bytes]
+        except KeyError:
+            piece_str = piece_bytes.decode("utf-8")
+            if piece_str in tekken_tokenizer._special_tokens_reverse_vocab:
+                return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
+            if warn:
+                logger.warning("Failed to convert token %s to id, replacing with <unk>", piece_bytes)
+            return tekken_tokenizer.unk_id
+
+    def _piece_to_id(self, piece: str, warn: bool) -> int:
         if self._tokenizer_type == MistralTokenizerType.spm:
             return self.tokenizer.instruct_tokenizer.tokenizer._model.piece_to_id(piece)
         elif self._tokenizer_type == MistralTokenizerType.tekken:
-            pieces = self.tokenizer.instruct_tokenizer.tokenizer._model.encode(
-                piece, allowed_special="all", disallowed_special=set()
-            )
-            assert len(pieces) == 1, f"Expected to decode 1 token, got {len(pieces)}"
-            return pieces[0]
+            return self._tekken_piece_to_id(piece, warn)
         else:
             raise ValueError(f"Unknown tokenizer type: {self._tokenizer_type}")
 
-    def convert_tokens_to_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
+    def convert_tokens_to_ids(self, tokens: str | list[str]) -> int | list[int]:
         """
         Converts a token string (or a sequence of tokens) in a single integer id (or a sequence of ids), using the
         vocabulary.
@@ -588,7 +605,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         ids: list[int] = []
         for token in tokens:
-            ids.append(self._piece_to_id(token))
+            ids.append(self._piece_to_id(token, True))
 
         if one_token:
             return ids[0]
@@ -626,27 +643,21 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, EncodedInput],
+        text: TextInput | EncodedInput,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs,
     ) -> BatchEncoding:
-        if kwargs:
-            raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer._encode_plus`."
-            )
-
         def get_input_ids(text):
             if isinstance(text, str):
                 return self._text_to_ids(text, add_special_tokens)
@@ -677,25 +688,20 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _batch_encode_plus(
         self,
-        batch_text: Union[
-            list[TextInput],
-            list[EncodedInput],
-        ],
+        batch_text: list[TextInput] | list[EncodedInput],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -704,13 +710,6 @@ class MistralCommonTokenizer(PushToHubMixin):
                 return text
             else:
                 raise ValueError("Input is not valid. Should be a string or a list/tuple of integers.")
-
-        if return_offsets_mapping:
-            raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers. "
-                "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
-            )
 
         input_ids = []
         for ids in batch_text:
@@ -739,7 +738,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         if self._tokenizer_type == MistralTokenizerType.tekken:
             return {t["rank"] for t in self.tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
         elif self._tokenizer_type == MistralTokenizerType.spm:
-            return self.tokenizer.instruct_tokenizer.tokenizer._control_tokens()
+            return self.tokenizer.instruct_tokenizer.tokenizer._control_tokens
         else:
             raise ValueError(f"Unknown tokenizer type: {self._tokenizer_type}")
 
@@ -777,16 +776,16 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _batch_prepare_for_model(
         self,
-        batch_ids: list[Union[PreTokenizedInput, list[int]]],
+        batch_ids: list[PreTokenizedInput | list[int]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -845,14 +844,14 @@ class MistralCommonTokenizer(PushToHubMixin):
         ids: list[int],
         pair_ids: None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, None] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -940,10 +939,10 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _get_padding_truncation_strategies(
         self,
-        padding: Union[str, PaddingStrategy, bool] = False,
-        truncation: Optional[Union[str, TruncationStrategy, bool]] = None,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
+        padding: str | PaddingStrategy | bool = False,
+        truncation: str | TruncationStrategy | bool | None = None,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
         verbose: bool = True,
         **kwargs,
     ):
@@ -959,9 +958,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                     logger.warning(
                         "Truncation was not explicitly activated but `max_length` is provided a specific value, please"
                         " use `truncation=True` to explicitly truncate examples to max length. Defaulting to"
-                        " 'longest_first' truncation strategy. If you encode pairs of sequences (GLUE-style) with the"
-                        " tokenizer you can select this strategy more precisely by providing a specific strategy to"
-                        " `truncation`."
+                        " 'longest_first' truncation strategy."
                     )
                 self.deprecation_warnings["Truncation-not-explicitly-activated"] = True
             truncation = "longest_first"
@@ -1055,12 +1052,12 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
+        encoded_inputs: dict[str, EncodedInput] | BatchEncoding,
+        max_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
@@ -1129,19 +1126,17 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def pad(
         self,
-        encoded_inputs: Union[
-            BatchEncoding,
-            list[BatchEncoding],
-            dict[str, EncodedInput],
-            dict[str, list[EncodedInput]],
-            list[dict[str, EncodedInput]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        encoded_inputs: BatchEncoding
+        | list[BatchEncoding]
+        | dict[str, EncodedInput]
+        | dict[str, list[EncodedInput]]
+        | list[dict[str, EncodedInput]],
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
     ) -> BatchEncoding:
         """
@@ -1295,7 +1290,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         ids: list[int],
         pair_ids: None = None,
         num_tokens_to_remove: int = 0,
-        truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
+        truncation_strategy: str | TruncationStrategy = "longest_first",
         stride: int = 0,
         **kwargs,
     ) -> tuple[list[int], None, list[int]]:
@@ -1367,17 +1362,18 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        tools: Optional[list[Union[dict, Callable]]] = None,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        tools: list[dict | Callable] | None = None,
+        add_generation_prompt: bool = False,
         continue_final_message: bool = False,
         tokenize: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
+        padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_dict: bool = True,
         **kwargs,
-    ) -> Union[str, list[int], list[str], list[list[int]], BatchEncoding]:
+    ) -> str | list[int] | list[str] | list[list[int]] | BatchEncoding:
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids.
@@ -1391,6 +1387,9 @@ class MistralCommonTokenizer(PushToHubMixin):
                 giving the name, description and argument types for the tool. See our
                 [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#automated-function-conversion-for-tool-use)
                 for more information.
+            add_generation_prompt (`bool`, *optional*):
+                This argument is a no-op for `MistralCommonTokenizer`. However it cannot be used at the same time as `continue_final_message` to keep the API consistent and
+                if any conversation ends with an assistant message, it will raise an error. In such case, use `continue_final_message` instead.
             continue_final_message (bool, *optional*):
                 If this is set, the chat will be formatted so that the final
                 message in the chat is open-ended, without any EOS tokens. The model will continue this message
@@ -1433,7 +1432,10 @@ class MistralCommonTokenizer(PushToHubMixin):
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.apply_chat_template`."
             )
         if not isinstance(truncation, bool):
-            raise ValueError("`truncation` must be a boolean for `apply_chat_template` method.")
+            raise TypeError("`truncation` must be a boolean for `apply_chat_template` method.")
+
+        if add_generation_prompt and continue_final_message:
+            raise ValueError("Cannot use both `add_generation_prompt` and `continue_final_message`.")
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
@@ -1444,25 +1446,31 @@ class MistralCommonTokenizer(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        if add_generation_prompt:
+            for conversation in conversations:
+                last_message = conversation[-1]
+                if last_message.get("role") == "assistant":
+                    raise ValueError(
+                        "The last message in the conversation is already an assistant message. Consider using `continue_final_message` instead."
+                    )
+
         def _maybe_adapt_message(message: dict[str, Any]) -> None:
             """Adapt message to `mistral-common` format and leave validation to `mistral-common`."""
             if not isinstance(message, dict):
                 return
-            maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
-                "content"
-            )
+            maybe_list_content: str | list[dict[str, str | dict[str, Any]]] | None = message.get("content")
             if not maybe_list_content or isinstance(maybe_list_content, str):
                 return
 
-            normalized_content: list[dict[str, Union[str, dict[str, Any]]]] = []
+            normalized_content: list[dict[str, str | dict[str, Any]]] = []
             for content in maybe_list_content:
                 content_type = content.get("type", None)
                 if not content_type:
                     continue
                 elif content_type == "image":
-                    maybe_url: Optional[str] = content.get("url")
-                    maybe_path: Optional[str] = content.get("path")
-                    maybe_base64: Optional[str] = content.get("base64")
+                    maybe_url: str | None = content.get("url")
+                    maybe_path: str | None = content.get("path")
+                    maybe_base64: str | None = content.get("base64")
                     if maybe_url:
                         image_content = maybe_url
                     elif maybe_path:
@@ -1477,9 +1485,9 @@ class MistralCommonTokenizer(PushToHubMixin):
                         raise ValueError("Image content must be specified.")
                     normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
                 elif content_type == "audio":
-                    maybe_url: Optional[str] = content.get("url")
-                    maybe_path: Optional[str] = content.get("path")
-                    maybe_base64: Optional[str] = content.get("base64")
+                    maybe_url: str | None = content.get("url")
+                    maybe_path: str | None = content.get("path")
+                    maybe_base64: str | None = content.get("base64")
                     if maybe_url or maybe_path:
                         audio_data = load_audio_as(maybe_url or maybe_path, return_format="dict", force_mono=True)
                         normalized_content.append({"type": "input_audio", "input_audio": audio_data})
@@ -1496,7 +1504,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         audios: list[np.ndarray] = []
 
         for conversation in conversations:
-            messages: list[dict[str, Union[str, list[dict[str, Union[str, dict[str, Any]]]]]]] = []
+            messages: list[dict[str, str | list[dict[str, str | dict[str, Any]]]]] = []
             for message in conversation:
                 _maybe_adapt_message(message)
                 messages.append(message)
@@ -1529,14 +1537,14 @@ class MistralCommonTokenizer(PushToHubMixin):
             )
             if return_dict:
                 if images:
-                    pixel_values: Union[list[np.ndarray], np.ndarray, torch.Tensor]
+                    pixel_values: list[np.ndarray] | np.ndarray | torch.Tensor
                     if return_tensors == "pt":
                         if not is_torch_available():
                             raise ImportError(
                                 "Unable to convert output to PyTorch tensors format, PyTorch is not installed."
                             )
 
-                        pixel_values = torch.tensor(images)
+                        pixel_values = torch.from_numpy(np.stack(images))
                     elif return_tensors == "np":
                         pixel_values = np.array(images)
                     elif return_tensors is None:
@@ -1565,19 +1573,19 @@ class MistralCommonTokenizer(PushToHubMixin):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, EncodedInput, list[TextInput], list[EncodedInput], None] = None,
+        text: TextInput | EncodedInput | list[TextInput] | list[EncodedInput] | None = None,
         text_pair: None = None,
         text_target: None = None,
         text_pair_target: None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, None] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -1660,7 +1668,6 @@ class MistralCommonTokenizer(PushToHubMixin):
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_length=return_length,
                 verbose=verbose,
-                **kwargs,
             )
         else:
             return self._encode_plus(
@@ -1678,24 +1685,23 @@ class MistralCommonTokenizer(PushToHubMixin):
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_length=return_length,
                 verbose=verbose,
-                **kwargs,
             )
 
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_model_name_or_path: Union[str, os.PathLike],
+        pretrained_model_name_or_path: str | os.PathLike,
         *init_inputs,
         mode: ValidationMode = ValidationMode.test,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
-        model_input_names: Optional[list[str]] = None,
+        model_input_names: list[str] | None = None,
         clean_up_tokenization_spaces: bool = False,
         **kwargs,
     ):
@@ -1753,9 +1759,10 @@ class MistralCommonTokenizer(PushToHubMixin):
             raise ValueError("`init_inputs` are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
         # Handle kwargs and AutoTokenizer case
-        if kwargs and not set(kwargs.keys()).issubset({"_from_auto", "trust_remote_code"}):
+        ignore_subset = {"_from_auto", "trust_remote_code"}
+        if kwargs and not (set_kwargs := set(kwargs.keys())).issubset(ignore_subset):
             raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.from_pretrained`."
+                f"Kwargs {list(set_kwargs - ignore_subset)} are not supported by `MistralCommonTokenizer.from_pretrained`."
             )
 
         if not os.path.isdir(pretrained_model_name_or_path):
@@ -1810,14 +1817,14 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def save_pretrained(
         self,
-        save_directory: Union[str, os.PathLike, Path],
+        save_directory: str | os.PathLike | Path,
         push_to_hub: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        commit_message: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        private: Optional[bool] = None,
-        repo_url: Optional[str] = None,
-        organization: Optional[str] = None,
+        token: str | bool | None = None,
+        commit_message: str | None = None,
+        repo_id: str | None = None,
+        private: bool | None = None,
+        repo_url: str | None = None,
+        organization: str | None = None,
         **kwargs,
     ) -> tuple[str, ...]:
         """
@@ -1848,8 +1855,6 @@ class MistralCommonTokenizer(PushToHubMixin):
         Returns:
             A tuple of `str`: The files saved.
         """
-        # `save_jinja_files`` must be skipped to be able to save from a processor
-        kwargs.pop("save_jinja_files", None)
         if kwargs:
             raise ValueError(
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.save_pretrained`."

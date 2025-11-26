@@ -93,10 +93,6 @@ class ColPaliProcessor(ProcessorMixin):
             A prefix to be used for the query.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
-    tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
-
     def __init__(
         self,
         image_processor=None,
@@ -105,7 +101,8 @@ class ColPaliProcessor(ProcessorMixin):
         visual_prompt_prefix: str = "Describe the image.",
         query_prefix: str = "Question: ",
     ):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.visual_prompt_prefix = visual_prompt_prefix
+        self.query_prefix = query_prefix
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -124,8 +121,8 @@ class ColPaliProcessor(ProcessorMixin):
         tokenizer.add_tokens(EXTRA_TOKENS)
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
-        self.visual_prompt_prefix = visual_prompt_prefix
-        self.query_prefix = query_prefix
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,

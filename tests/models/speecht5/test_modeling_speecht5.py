@@ -159,7 +159,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -201,21 +201,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model does not have decoder_input_ids")
-    def test_torchscript_simple(self):
         pass
 
 
@@ -353,7 +338,6 @@ class SpeechT5ForSpeechToTextTester:
 class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -370,7 +354,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -680,13 +664,13 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -853,7 +837,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
     all_generative_model_classes = ()
     is_encoder_decoder = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -876,7 +859,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -945,22 +928,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_simple(self):
-        # disabled because this model doesn't have decoder_input_ids
-        pass
-
     @unittest.skip(reason="training is not supported yet")
     def test_training(self):
         pass
@@ -984,30 +951,33 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
 
 
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@slow
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_model(self):
-        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(torch_device)
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19").to(
+            torch_device
+        )
 
     @cached_property
     def default_processor(self):
-        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
+        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19")
 
     @cached_property
     def default_vocoder(self):
-        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(torch_device)
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan", revision="refs/pr/1").to(torch_device)
 
     def test_generation(self):
         model = self.default_model
@@ -1374,7 +1344,7 @@ class SpeechT5ForSpeechToSpeechTester:
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -1392,7 +1362,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1618,21 +1588,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load(self):
         pass
 
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @slow
-    @unittest.skip(reason="Model doesn't have decoder_input_ids")
-    def test_torchscript_simple(self):
-        pass
-
     @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
@@ -1656,13 +1611,13 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -1741,8 +1696,7 @@ class SpeechT5HifiGanTester:
 @require_torch
 class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
-    test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_position_embeddings = False
     test_mismatched_shapes = False

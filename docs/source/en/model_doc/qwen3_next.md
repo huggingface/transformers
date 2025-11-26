@@ -31,6 +31,7 @@ Despite its ultra-efficiency, it outperforms Qwen3-32B on downstream tasks — w
 Moreover, it delivers over **10x higher inference throughput** than Qwen3-32B when handling contexts longer than 32K tokens.
 
 For more details, please visit our blog [Qwen3-Next](qwen3_next) ([blog post](https://qwenlm.github.io/blog/qwen3_next/)).
+
 ## Usage examples
 
 ```python

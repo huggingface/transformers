@@ -33,7 +33,7 @@ Alexis Conneau.
 
 An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be seen in [Speech2Text2](speech_to_text_2).
 
-## Randomly initializing `SpeechEncoderDecoderModel` from model configurations.
+## Randomly initializing `SpeechEncoderDecoderModel` from model configurations
 
 [`SpeechEncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`Wav2Vec2Model`] configuration for the encoder
 and the default [`BertForCausalLM`] configuration for the decoder.
@@ -48,7 +48,7 @@ and the default [`BertForCausalLM`] configuration for the decoder.
 >>> model = SpeechEncoderDecoderModel(config=config)
 ```
 
-## Initialising `SpeechEncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
+## Initialising `SpeechEncoderDecoderModel` from a pretrained encoder and a pretrained decoder
 
 [`SpeechEncoderDecoderModel`] can be initialized from a pretrained encoder checkpoint and a pretrained decoder checkpoint. Note that any pretrained Transformer-based speech model, *e.g.* [Wav2Vec2](wav2vec2), [Hubert](hubert) can serve as the encoder and both pretrained auto-encoding models, *e.g.* BERT, pretrained causal language models, *e.g.* GPT2, as well as the pretrained decoder part of sequence-to-sequence models, *e.g.* decoder of BART, can be used as the decoder.
 Depending on which architecture you choose as the decoder, the cross-attention layers might be randomly initialized.
@@ -63,7 +63,7 @@ To do so, the `SpeechEncoderDecoderModel` class provides a [`SpeechEncoderDecode
 ... )
 ```
 
-## Loading an existing `SpeechEncoderDecoderModel` checkpoint and perform inference.
+## Loading an existing `SpeechEncoderDecoderModel` checkpoint and perform inference
 
 To load fine-tuned checkpoints of the `SpeechEncoderDecoderModel` class, [`SpeechEncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
 

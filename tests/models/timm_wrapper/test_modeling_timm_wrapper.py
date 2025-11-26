@@ -94,7 +94,7 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-    test_pruning = False
+
     has_attentions = False
 
     def setUp(self):
@@ -143,10 +143,6 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="TimmWrapper models doesn't have inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapper doesn't support output_attentions=True.")
-    def test_torchscript_output_attentions(self):
         pass
 
     @unittest.skip(reason="TimmWrapper doesn't support this.")

@@ -43,17 +43,16 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
 
-class Idefics2ImageProcessorKwargs(ImagesKwargs):
+class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_image_splitting (`bool`, *optional*, defaults to `False`):
         Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
     """
 
-    do_image_splitting: Optional[bool]
+    do_image_splitting: bool
 
 
 def get_resize_output_image_size(image, size, input_data_format) -> tuple[int, int]:
@@ -142,7 +141,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         image (Image):
             The image to convert.
     """
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background

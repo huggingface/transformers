@@ -26,6 +26,7 @@ from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionForConditionalGeneration,
     AyaVisionModel,
     AyaVisionModelOutputWithPast,
+    AyaVisionPreTrainedModel,
 )
 from transformers.models.got_ocr2.image_processing_got_ocr2_fast import GotOcr2ImageProcessorFast
 
@@ -89,6 +90,10 @@ class Cohere2VisionCausalLMOutputWithPast(AyaVisionCausalLMOutputWithPast):
     pass
 
 
+class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
+    base_model_prefix = "model"
+
+
 class Cohere2VisionModel(AyaVisionModel):
     _checkpoint_conversion_mapping = {}
 
@@ -109,7 +114,7 @@ class Cohere2VisionModel(AyaVisionModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -162,7 +167,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -303,7 +308,7 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs):
+class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -316,9 +321,9 @@ class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs):
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     """
 
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
 
 
 @auto_docstring
@@ -340,7 +345,7 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
 
 __all__ = [
     "Cohere2VisionForConditionalGeneration",
-    "Cohere2VisionPreTrainedModel",  # noqa: F822
+    "Cohere2VisionPreTrainedModel",
     "Cohere2VisionModel",
     "Cohere2VisionImageProcessorFast",
 ]

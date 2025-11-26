@@ -24,6 +24,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
+    is_torch_xpu_available,
     logging,
 )
 
@@ -45,7 +46,12 @@ def flash_attn_supports_top_left_mask():
 
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
-    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available()
+    return (
+        is_flash_attn_3_available()
+        or is_flash_attn_2_available()
+        or is_torch_npu_available()
+        or is_torch_xpu_available()
+    )
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
@@ -97,7 +103,7 @@ def _lazy_imports(implementation: Optional[str]):
             if flash_attn_varlen_func is None or flash_attn_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    f"Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn`."
+                    f"Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
                 )
 
     return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input
@@ -129,7 +135,7 @@ def lazy_import_flash_attention(implementation: Optional[str], force_import: Opt
     Lazily import flash attention and return the respective functions + flags.
 
     NOTE: For fullgraph, this needs to be called before compile, while no fullgraph can
-    work without preloading. See `load_and_register_kernel` in `integrations.hub_kernels`.
+    work without preloading. See `load_and_register_attn_kernel` in `integrations.hub_kernels`.
     """
     global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
     if force_import or any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
@@ -545,7 +551,7 @@ def _flash_attention_forward(
     max_length_q: Optional[int] = None,
     max_length_k: Optional[int] = None,
     target_dtype: Optional[torch.dtype] = None,
-    implementation: Optional[str] = None,
+    attn_implementation: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -564,11 +570,11 @@ def _flash_attention_forward(
         attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
-        implementation (`str`, *optional*):
+        attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
     (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
-        implementation
+        attn_implementation
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
