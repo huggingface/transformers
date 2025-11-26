@@ -563,6 +563,17 @@ def render_jinja_template(
     return rendered, all_generation_indices
 
 
+def is_valid_message(message):
+    """
+    Check that input is a valid message in a chat, namely a dict with "role" and "content" keys.
+    """
+    if not isinstance(message, dict):
+        return False
+    if not ("role" in message and "content" in message):
+        return False
+    return True
+
+
 class Chat:
     """This class is intended to just be used internally for pipelines and not exposed to users. We convert chats
     to this format because the rest of the pipeline code tends to assume that lists of messages are
@@ -570,6 +581,6 @@ class Chat:
 
     def __init__(self, messages: dict):
         for message in messages:
-            if not ("role" in message and "content" in message):
+            if not is_valid_message(message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
         self.messages = messages

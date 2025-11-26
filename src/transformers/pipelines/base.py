@@ -52,7 +52,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
-from ..utils.chat_template_utils import Chat
+from ..utils.chat_template_utils import Chat, is_valid_message
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
@@ -74,24 +74,6 @@ def no_collate_fn(items):
     if len(items) != 1:
         raise ValueError("This collate_fn is meant to be used with batch_size=1")
     return items[0]
-
-
-def is_valid_chat(chat):
-    """
-    Check that input is a valid chat, namely list of messages dicts that have "role" and "content" keys.
-    """
-    is_iterable = isinstance(
-        chat,
-        (list, tuple, types.GeneratorType, KeyDataset) if is_torch_available() else (list, tuple, types.GeneratorType),
-    )
-    if not is_iterable:
-        return False
-    for message in chat:
-        if not isinstance(message, dict):
-            return False
-        if not ("role" in message and "content" in message):
-            return False
-    return True
 
 
 def _pad(items, key, padding_value, padding_side):
@@ -1237,12 +1219,12 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 first_item = inputs[0]
 
             if isinstance(first_item, dict):
-                if is_valid_chat(inputs):
+                if is_valid_message(first_item):
                     inputs = Chat(inputs)
             elif isinstance(first_item, (list, tuple)):
                 # materialize generator is needed
                 items = list(inputs) if isinstance(inputs, types.GeneratorType) else inputs
-                if all(is_valid_chat(chat) for chat in items):
+                if all(is_valid_message(chat[0]) for chat in items):
                     chats = (Chat(chat) for chat in items)
                     if isinstance(inputs, types.GeneratorType):
                         inputs = chats
