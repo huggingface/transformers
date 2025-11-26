@@ -108,8 +108,8 @@ class GenerationConfig(PushToHubMixin):
             The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
             `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
             
-            `max_new_tokens` is now the recommended argument to control how many tokens the model generates.
-            `max_length` remains for backward compatibility because it includes the length of the input prompt, which can be less intuitive.
+            `max_new_tokens` is recommended for controlling how many tokens the model generates.
+            `max_length` remains for backward compatibility.
 
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
