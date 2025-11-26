@@ -261,3 +261,75 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         "▁doing",
     ]
     integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+
+    def test_internal_consistency(self):
+        """Override to add debug output on failure."""
+        tokenizer = self.get_tokenizer()
+        
+        def get_debug_info():
+            """Build debug info string to include in error messages."""
+            debug_lines = []
+            debug_lines.append(f"Tokenizer type: {type(tokenizer).__name__}")
+            debug_lines.append(f"Tokenizer module: {type(tokenizer).__module__}")
+            debug_lines.append(f"Tokenizer class location: {tokenizer.__class__.__module__}.{tokenizer.__class__.__name__}")
+            
+            if hasattr(tokenizer, 'name_or_path'):
+                debug_lines.append(f"Tokenizer name_or_path: {tokenizer.name_or_path}")
+            if hasattr(tokenizer, 'vocab_file'):
+                debug_lines.append(f"Tokenizer vocab_file: {tokenizer.vocab_file}")
+            
+            if hasattr(tokenizer, '_tokenizer'):
+                debug_lines.append(f"Has _tokenizer attribute: True")
+                debug_lines.append(f"_tokenizer type: {type(tokenizer._tokenizer)}")
+                if hasattr(tokenizer._tokenizer, 'model'):
+                    debug_lines.append(f"_tokenizer.model type: {type(tokenizer._tokenizer.model)}")
+                # Try to get more details about the tokenizer
+                try:
+                    debug_lines.append(f"_tokenizer object: {repr(tokenizer._tokenizer)}")
+                except:
+                    debug_lines.append(f"_tokenizer object: <repr failed>")
+            else:
+                debug_lines.append(f"Has _tokenizer attribute: False")
+            
+            debug_lines.append(f"Vocab size: {len(tokenizer)}")
+            return "\n".join(debug_lines)
+        
+        # Now run the actual test
+        try:
+            input_text, output_text = self.get_input_output_texts(tokenizer)
+
+            tokens = tokenizer.tokenize(input_text)
+            ids = tokenizer.convert_tokens_to_ids(tokens)
+            ids_2 = tokenizer.encode(input_text, add_special_tokens=False)
+            try:
+                self.assertListEqual(ids, ids_2)
+            except AssertionError as e:
+                debug_info = get_debug_info()
+                raise AssertionError(f"{e}\n\nDEBUG INFO:\n{debug_info}")
+
+            tokens_2 = tokenizer.convert_ids_to_tokens(ids)
+            try:
+                self.assertNotEqual(len(tokens_2), 0)
+            except AssertionError as e:
+                debug_info = get_debug_info()
+                raise AssertionError(f"{e}\n\nDEBUG INFO:\n{debug_info}")
+            
+            text_2 = tokenizer.decode(ids)
+            try:
+                self.assertIsInstance(text_2, str)
+            except AssertionError as e:
+                debug_info = get_debug_info()
+                raise AssertionError(f"{e}\n\nDEBUG INFO:\n{debug_info}")
+
+            try:
+                self.assertEqual(text_2, output_text)
+            except AssertionError as e:
+                debug_info = get_debug_info()
+                raise AssertionError(f"{e}\n\nDEBUG INFO:\n{debug_info}")
+        except AssertionError:
+            # Re-raise with debug info already included
+            raise
+        except Exception as e:
+            # For non-AssertionError exceptions, wrap with debug info
+            debug_info = get_debug_info()
+            raise AssertionError(f"Unexpected error: {e}\n\nDEBUG INFO:\n{debug_info}") from e

@@ -127,4 +127,7 @@ class GemmaTokenizer(TokenizersBackend):
         return 3
 
 
-__all__ = ["GemmaTokenizer"]
+__all__ = ["GemmaTokenizer", "GemmaTokenizerFast"]
+
+# Backward alias
+GemmaTokenizerFast = GemmaTokenizer
