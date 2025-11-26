@@ -635,15 +635,14 @@ def repl(m, repl_map: dict[str, str]) -> str:
     name = matched_groups[0]
     replacement = repl_map[name]
     # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-    if replacement.startswith("^"):
-        replacement = replacement[1:]
+    replacement = replacement.removeprefix("^")
     # This is ugly but needed for reverse mapping of Qwen2.5!
-    if "(?!\.(language_model|visual))" in replacement:
-        replacement = replacement.replace("(?!\.(language_model|visual))", "")
+    if r"(?!\.(language_model|visual))" in replacement:
+        replacement = replacement.replace(r"(?!\.(language_model|visual))", "")
 
     # Allow capturing groups in patterns, i.e. to add a prefix to all keys (timm_wrapper)
     # if len(m.groups()) > 1:
-        # return re.sub(rf"({m.group(1)})", replacement, m.group(0))
+    # return re.sub(rf"({m.group(1)})", replacement, m.group(0))
     return replacement
 
 
