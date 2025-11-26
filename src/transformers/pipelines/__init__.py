@@ -314,7 +314,7 @@ SUPPORTED_TASKS = {
     "video-to-text": {
         "impl": VideoToTextPipeline,
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
-        "default": {"model": ("ydshieh/vit-gpt2-coco-en", "5bebf1e")},
+        "default": {"model": ("microsoft/git-base", "main")},
         "type": "video",
     },
     "mask-generation": {

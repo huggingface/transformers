@@ -125,3 +125,120 @@ class VideoToTextPipelineTests(unittest.TestCase):
             ],
         )
 
+    @require_torch
+    def test_small_model_pt_with_num_frames(self):
+        """Test that num_frames parameter works correctly."""
+        small_model = "hf-internal-testing/tiny-random-vit-gpt2"
+        small_image_processor = VideoMAEImageProcessor(
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+        )
+        video_to_text = pipeline(
+            "video-to-text", model=small_model, image_processor=small_image_processor, max_new_tokens=19
+        )
+
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+        
+        # Test with explicit num_frames
+        output = video_to_text(video_file_path, num_frames=16)
+        self.assertIsInstance(output, list)
+        self.assertGreater(len(output), 0)
+        self.assertIn("generated_text", output[0])
+
+    @require_torch
+    def test_small_model_pt_with_system_prompt(self):
+        """Test that system_prompt parameter works correctly."""
+        small_model = "hf-internal-testing/tiny-random-vit-gpt2"
+        small_image_processor = VideoMAEImageProcessor(
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+        )
+        video_to_text = pipeline(
+            "video-to-text", model=small_model, image_processor=small_image_processor, max_new_tokens=19
+        )
+
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+        
+        # Test with system_prompt
+        system_prompt = "Describe this video in detail."
+        output = video_to_text(video_file_path, system_prompt=system_prompt)
+        self.assertIsInstance(output, list)
+        self.assertGreater(len(output), 0)
+        self.assertIn("generated_text", output[0])
+        self.assertIsInstance(output[0]["generated_text"], str)
+
+    @require_torch
+    def test_small_model_pt_batch_processing(self):
+        """Test batch processing with multiple videos."""
+        small_model = "hf-internal-testing/tiny-random-vit-gpt2"
+        small_image_processor = VideoMAEImageProcessor(
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+        )
+        video_to_text = pipeline(
+            "video-to-text", model=small_model, image_processor=small_image_processor, max_new_tokens=19
+        )
+
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+        
+        # Test batch processing
+        outputs = video_to_text([video_file_path, video_file_path])
+        self.assertIsInstance(outputs, list)
+        self.assertEqual(len(outputs), 2)
+        self.assertIsInstance(outputs[0], list)
+        self.assertIsInstance(outputs[1], list)
+        self.assertGreater(len(outputs[0]), 0)
+        self.assertGreater(len(outputs[1]), 0)
+
+    @require_torch
+    def test_small_model_pt_with_generate_kwargs(self):
+        """Test that generate_kwargs parameter works correctly."""
+        small_model = "hf-internal-testing/tiny-random-vit-gpt2"
+        small_image_processor = VideoMAEImageProcessor(
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+        )
+        video_to_text = pipeline(
+            "video-to-text", model=small_model, image_processor=small_image_processor
+        )
+
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+        
+        # Test with generate_kwargs
+        output = video_to_text(video_file_path, generate_kwargs={"max_new_tokens": 10})
+        self.assertIsInstance(output, list)
+        self.assertGreater(len(output), 0)
+        self.assertIn("generated_text", output[0])
+
+    @require_torch
+    def test_small_model_pt_max_new_tokens_conflict(self):
+        """Test that providing max_new_tokens both as argument and in generate_kwargs raises an error."""
+        small_model = "hf-internal-testing/tiny-random-vit-gpt2"
+        small_image_processor = VideoMAEImageProcessor(
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+        )
+        video_to_text = pipeline(
+            "video-to-text", model=small_model, image_processor=small_image_processor
+        )
+
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+        
+        # Test that providing max_new_tokens in both places raises ValueError
+        with self.assertRaises(ValueError):
+            video_to_text(video_file_path, max_new_tokens=10, generate_kwargs={"max_new_tokens": 20})
+
+    @require_torch
+    def test_small_model_pt_frame_sampling_rate(self):
+        """Test that frame_sampling_rate parameter is accepted (even if currently unused)."""
+        small_model = "hf-internal-testing/tiny-random-vit-gpt2"
+        small_image_processor = VideoMAEImageProcessor(
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+        )
+        video_to_text = pipeline(
+            "video-to-text", model=small_model, image_processor=small_image_processor, max_new_tokens=19
+        )
+
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+        
+        # Test that frame_sampling_rate doesn't cause errors
+        output = video_to_text(video_file_path, frame_sampling_rate=2)
+        self.assertIsInstance(output, list)
+        self.assertGreater(len(output), 0)
+        self.assertIn("generated_text", output[0])
+
