@@ -125,7 +125,10 @@ class LlamaTokenizer(TokenizersBackend):
         special_tokens = {str(eos_token), str(bos_token), str(unk_token)}
 
         filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-        self._merges = merges if merges is not None else generate_merges(filtered_vocab)
+        if merges is not None:
+            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
+        else:
+            self._merges = generate_merges(filtered_vocab)
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )

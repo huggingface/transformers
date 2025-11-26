@@ -2319,6 +2319,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         # Replace the first element (the Split pattern)
                         tokenizer.backend_tokenizer.pre_tokenizer[0] = split_pretokenizer
                     else:
+                        # Replace Metaspace with ByteLevel when adding Split, as Metaspace(split=False) doesn't
+                        # work correctly with the Split pre-tokenizer and causes spaces to be lost during encoding
+                        if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Metaspace):
+                            current_pretokenizer = tokenizers.pre_tokenizers.ByteLevel(
+                                add_prefix_space=False, use_regex=False
+                            )
+                        
                         # Not a Sequence, so create one with Split + current pretokenizer
                         tokenizer.backend_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence([
                             split_pretokenizer,
