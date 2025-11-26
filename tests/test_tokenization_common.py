@@ -233,7 +233,7 @@ Hi   Hello
 hi<s>there
 The following string should be properly encoded: Hello.
 But ird and ปี   ird   ด
-Hey how are you doing"""
+Hey how are you doing"""  # noqa: W293
     integration_expected_tokens = None
     integration_expected_token_ids = None
 
