@@ -88,9 +88,9 @@ class FbgemmFp8Quantize(ConversionOps):
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
         else:
             new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(value)
-            weight_scale = weight_scale.view(weight_scale.shape[0], 1)
+            weight_scale = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1))
 
-        return {target_key: new_value,
+        return {target_key: torch.nn.Parameter(new_value),
                 f"{target_key}_scale": weight_scale}
 
 class FbgemmFp8Linear(torch.nn.Linear):

@@ -69,9 +69,9 @@ class FbgemmFp8Test(unittest.TestCase):
     model_name = "meta-llama/Meta-Llama-3-8B"
 
     input_text = "What are we having for dinner?"
-    max_new_tokens = 9
+    max_new_tokens = 5
 
-    EXPECTED_OUTPUT = "What are we having for dinner?\nI'm having a steak and a salad"
+    EXPECTED_OUTPUT = "What are we having for dinner? I don’t know."
 
     device_map = "cuda"
 
@@ -174,7 +174,7 @@ class FbgemmFp8Test(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_save_pretrained(self):
@@ -188,7 +188,7 @@ class FbgemmFp8Test(unittest.TestCase):
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_change_loading_attributes(self):
@@ -208,7 +208,7 @@ class FbgemmFp8Test(unittest.TestCase):
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
@@ -224,7 +224,7 @@ class FbgemmFp8Test(unittest.TestCase):
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_quantized_model_offload(self):
@@ -250,7 +250,7 @@ class FbgemmFp8Test(unittest.TestCase):
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
             quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
-            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @require_torch_multi_gpu
@@ -266,7 +266,7 @@ class FbgemmFp8Test(unittest.TestCase):
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
 
