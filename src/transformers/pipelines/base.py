@@ -1218,9 +1218,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             else:
                 first_item = inputs[0]
 
-            if isinstance(first_item, dict):
-                if is_valid_message(first_item):
-                    inputs = Chat(inputs)
+            if is_valid_message(first_item):
+                inputs = Chat(inputs)
             elif isinstance(first_item, (list, tuple)):
                 # materialize generator is needed
                 items = list(inputs) if isinstance(inputs, types.GeneratorType) else inputs
