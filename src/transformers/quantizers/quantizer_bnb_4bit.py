@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
-
+from ..core_model_loading import WeightConverter
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -32,8 +32,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
-
-
+    
 if is_torch_available():
     import torch
 
@@ -298,3 +297,16 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         from ..integrations.bitsandbytes import Bnb4bitQuantize
 
         return Bnb4bitQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.bitsandbytes import Bnb4bitDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_keys=["weight.nested_absmax", "weight.nested_quant_map", "weight.quant_map", "weight.absmax", "weight.quant_state.bitsandbytes__nf4", "weight.quant_state.bitsandbytes__fp4", "weight"],
+                    target_keys="weight",
+                    operations=[Bnb4bitDeserialize(self)],
+                )
+            ]
+        return []
