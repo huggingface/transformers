@@ -408,7 +408,7 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
         rope_parameters = rope_scaling or rope_parameters
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
-        self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 1.0)
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 1.0)
 
         # Validate the correctness of rotary position embeddings parameters
         if "rope_theta" not in self.rope_parameters:
