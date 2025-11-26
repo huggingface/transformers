@@ -1129,7 +1129,6 @@ class AutoTokenizer:
             ) or tokenizer_class_candidate == "PreTrainedTokenizer":
                 tokenizer_class = tokenizer_class_from_name("TokenizersBackend")
 
-
             return _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
 
         # Otherwise we have to be creative.

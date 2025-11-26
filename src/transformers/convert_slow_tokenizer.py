@@ -1418,7 +1418,7 @@ class MoshiConverter(SpmConverter):
     def __init__(self, vocab_file, **kwargs):
         requires_backends(self, "protobuf")
 
-        self.vocab_file  = vocab_file
+        self.vocab_file = vocab_file
         super().__init__(self, vocab_file)
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
@@ -1634,6 +1634,7 @@ class TxtConverter:
     def _load(self):
         vocab = {}
         import json
+
         with open(self.vocab_file, "r", encoding="utf-8") as vf:
             vocab = json.load(vf) if self.vocab_file.endswith(".json") else {}
 

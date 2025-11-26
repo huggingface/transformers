@@ -422,7 +422,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 except Exception:
                     converter = None
 
-            if converter is None and "vocab_file" in class_args:  # some "fast" tokenizers that have not been changed to use tokenizer.json
+            if (
+                converter is None and "vocab_file" in class_args
+            ):  # some "fast" tokenizers that have not been changed to use tokenizer.json
                 init_kwargs.setdefault("vocab_file", vocab_file)
                 if merges_file is not None and "merges_file" in class_args:
                     _record_loaded_file(merges_file)
@@ -431,7 +433,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if converter is not None:
                 tokenizer_object = converter.converted()
                 vocab, merges = converter.vocab, converter.merges
-                if tokenizer_object is None and converter.__class__.__name__ == "TxtConverter" and cls is TokenizersBackend:
+                if (
+                    tokenizer_object is None
+                    and converter.__class__.__name__ == "TxtConverter"
+                    and cls is TokenizersBackend
+                ):
                     raise ValueError(
                         "Cannot initialize TokenizersBackend directly from `vocab.txt` and `merges.txt`. "
                         "Please load a concrete tokenizer class or provide a tokenizer.json."
