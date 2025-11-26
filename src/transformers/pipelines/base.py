@@ -76,6 +76,26 @@ def no_collate_fn(items):
     return items[0]
 
 
+def is_valid_chat(chat):
+    """
+    Check that input is a valid chat, namely list of messages dicts that have "role" and "content" keys.
+    """
+    is_iterable = isinstance(
+        chat,
+        (list, tuple, types.GeneratorType, KeyDataset)
+        if is_torch_available()
+        else (list, tuple, types.GeneratorType),
+    )
+    if not is_iterable:
+        return False
+    for message in chat:
+        if not isinstance(message, dict):
+            return False
+        if not ("role" in message and "content" in message):
+            return False
+    return True
+
+
 def _pad(items, key, padding_value, padding_side):
     batch_size = len(items)
     if isinstance(items[0][key], torch.Tensor):
@@ -1205,24 +1225,27 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if args:
             logger.warning(f"Ignoring args : {args}")
 
-        # Detect if inputs is a chat-style input and cast as `Chat` or list of `Chat`
-        if isinstance(
-            inputs,
-            (list, tuple, types.GeneratorType, KeyDataset)
-            if is_torch_available()
-            else (list, tuple, types.GeneratorType),
-        ):
+        # Detect if inputs are a chat-style input(s) and cast as `Chat` or list of `Chat`
+        container_types = (list, tuple, types.GeneratorType)
+        if is_torch_available():
+            container_types = (*container_types, KeyDataset)
+        if isinstance(inputs, container_types):
+            # get first item to see if a single chat or list of chats
             if isinstance(inputs, types.GeneratorType):
                 gen_copy1, gen_copy2 = itertools.tee(inputs)
                 inputs = (x for x in gen_copy1)
                 first_item = next(gen_copy2)
             else:
                 first_item = inputs[0]
-            if isinstance(first_item, (list, tuple, dict)):
-                if isinstance(first_item, dict):
+
+            if isinstance(first_item, dict):
+                if is_valid_chat(inputs):
                     inputs = Chat(inputs)
-                else:
-                    chats = (Chat(chat) for chat in inputs)
+            elif isinstance(first_item, (list, tuple)):
+                # materialize generator is needed
+                items = list(inputs) if isinstance(inputs, types.GeneratorType) else inputs
+                if all(is_valid_chat(chat) for chat in items):
+                    chats = (Chat(chat) for chat in items)
                     if isinstance(inputs, types.GeneratorType):
                         inputs = chats
                     else:
