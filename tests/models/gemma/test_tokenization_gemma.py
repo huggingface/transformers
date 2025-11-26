@@ -26,89 +26,8 @@ from transformers.testing_utils import (
 @require_tokenizers
 @require_read_token
 class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = "google/gemma-7b"
+    from_pretrained_id = "hf-internal-testing/dummy-gemma"
     tokenizer_class = GemmaTokenizer
-
-    @classmethod
-    def setUpClass(cls):
-        """Override to add debug logging for CI."""
-        import os
-        import sys
-        
-        # Store debug info as class variable so we can include it in test failures
-        cls._setup_debug_info = []
-        
-        try:
-            print("\n" + "="*80, file=sys.stderr)
-            print("[GEMMA TEST DEBUG] Starting setUpClass", file=sys.stderr)
-            print("="*80, file=sys.stderr)
-            
-            # Call parent setUpClass
-            super().setUpClass()
-            
-            # Log what files are in tmpdirname after setup
-            if hasattr(cls, 'tmpdirname') and os.path.isdir(cls.tmpdirname):
-                files = os.listdir(cls.tmpdirname)
-                msg = f"Files in tmpdirname after setup: {sorted(files)}"
-                print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
-                cls._setup_debug_info.append(msg)
-                
-                # Check if tokenizer.json exists and its size
-                tokenizer_json = os.path.join(cls.tmpdirname, 'tokenizer.json')
-                if os.path.exists(tokenizer_json):
-                    size = os.path.getsize(tokenizer_json)
-                    msg = f"tokenizer.json exists, size: {size} bytes"
-                    print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
-                    cls._setup_debug_info.append(msg)
-                    
-                    # Check vocab size in the file
-                    try:
-                        import json as json_module
-                        with open(tokenizer_json) as f:
-                            tj = json_module.load(f)
-                        vocab_size = len(tj.get('model', {}).get('vocab', {}))
-                        msg = f"Vocab size in tokenizer.json: {vocab_size}"
-                        print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
-                        cls._setup_debug_info.append(msg)
-                    except Exception as e:
-                        msg = f"Error reading tokenizer.json: {e}"
-                        print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
-                        cls._setup_debug_info.append(msg)
-                else:
-                    msg = "tokenizer.json does NOT exist!"
-                    print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
-                    cls._setup_debug_info.append(msg)
-                    
-                    # Try to manually save the tokenizer to see what happens
-                    try:
-                        from transformers import AutoTokenizer
-                        print(f"[GEMMA TEST DEBUG] Attempting to manually save tokenizer...", file=sys.stderr)
-                        tokenizer = AutoTokenizer.from_pretrained(
-                            cls.from_pretrained_id[0],
-                            **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
-                        )
-                        print(f"[GEMMA TEST DEBUG] Loaded tokenizer, vocab size: {len(tokenizer)}", file=sys.stderr)
-                        tokenizer.save_pretrained(cls.tmpdirname)
-                        files_after = os.listdir(cls.tmpdirname)
-                        print(f"[GEMMA TEST DEBUG] Files after manual save: {sorted(files_after)}", file=sys.stderr)
-                        cls._setup_debug_info.append(f"Files after manual save: {sorted(files_after)}")
-                    except Exception as e:
-                        msg = f"Error in manual save attempt: {e}"
-                        print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
-                        import traceback
-                        print(f"[GEMMA TEST DEBUG] Traceback: {traceback.format_exc()}", file=sys.stderr)
-                        cls._setup_debug_info.append(msg)
-            else:
-                msg = "tmpdirname not set or not a directory"
-                print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
-                cls._setup_debug_info.append(msg)
-            
-            print("="*80 + "\n", file=sys.stderr)
-        except Exception as e:
-            import traceback
-            print(f"[GEMMA TEST DEBUG] Error in setUpClass: {e}", file=sys.stderr)
-            print(f"[GEMMA TEST DEBUG] Traceback: {traceback.format_exc()}", file=sys.stderr)
-            cls._setup_debug_info.append(f"Error in setUpClass: {e}")
 
     integration_expected_tokens = [
         "This",
@@ -342,6 +261,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         "▁doing",
     ]
     integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+  
     def test_internal_consistency(self):
         """Override to add debug output on failure."""
         tokenizer = self.get_tokenizer()
