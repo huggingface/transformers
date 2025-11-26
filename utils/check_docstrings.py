@@ -144,7 +144,6 @@ OBJECTS_TO_IGNORE = {
     "BlipTextConfig",
     "BlipVisionConfig",
     "BloomConfig",
-    "BloomTokenizerFast",
     "BLTConfig",
     "BLTPatcherConfig",
     "BridgeTowerTextConfig",

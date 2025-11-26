@@ -98,6 +98,22 @@ loaded very simply into 🤗 transformers. Take a look at the [Using tokenizers 
     - push_to_hub
     - all
 
+## PythonBackend
+
+[[autodoc]] PythonBackend
+
+## TokenizersBackend
+
+[[autodoc]] TokenizersBackend
+
+## SentencePieceBackend
+
+[[autodoc]] SentencePieceBackend
+
+## TokenizersExtractor
+
+[[autodoc]] TokenizersExtractor
+
 ## BatchEncoding
 
 [[autodoc]] BatchEncoding
