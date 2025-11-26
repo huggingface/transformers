@@ -317,11 +317,15 @@ class WeightTransform:
         if self.distributed_operation is not None or self.quantization_operation is not None:
             raise ValueError("Cannot reverse the transform with TP or quantization")
 
-        reverse_transform = self.__class__(source_patterns=self.target_patterns, target_patterns=self.source_patterns)
-        # Add the reverse ops if applicable
-        if hasattr(reverse_transform, "operations"):
+        kwargs = {}
+        # Add the reverse ops if applicable (it needs to be provided at __init__)
+        if hasattr(self, "operations"):
             # All reverse ops, in reverse order
-            reverse_transform.operations = [op.reverso_op for op in self.operations[::-1]]
+            kwargs["operations"] = [op.reverso_op for op in self.operations[::-1]]
+
+        reverse_transform = self.__class__(
+            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
+        )
 
         # In this case, we already called `add_tensor` at least once, and we will use the saved keys to revert
         # (i.e. we will be able to retrieve directly the correct params thanks to the `collected_tensors` which
