@@ -59,6 +59,7 @@ from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
     _get_device_map,
+    accelerate_disk_offload,
     accelerate_dispatch,
     check_and_set_device_map,
     expand_device_map,
@@ -132,9 +133,7 @@ from .utils.quantization_config import QuantizationMethod
 
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
-    from accelerate.utils import (
-        extract_model_from_parallel,
-    )
+    from accelerate.utils import extract_model_from_parallel
     from accelerate.utils.modeling import get_state_dict_from_offload
 
 
@@ -3890,6 +3889,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 weight_conversions.extend(
                     [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
                 )
+            if hf_quantizer is not None:
+                weight_conversions.extend(hf_quantizer.get_weight_conversions())
 
         if gguf_file:
             if hf_quantizer is not None:
@@ -4073,6 +4074,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
+        # This offload index if for params explicitly on the "disk" in the device_map
+        disk_offload_index = None
+        # Prepare parameters offloading if needed
+        if device_map is not None and "disk" in device_map.values():
+            disk_offload_index = accelerate_disk_offload(
+                disk_offload_folder,
+                checkpoint_files,
+                device_map,
+                expected_keys,
+                sharded_metadata,
+                dtype,
+                weight_mapping,
+            )
+
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and not is_hqq_or_quark:
             expanded_device_map = expand_device_map(device_map, expected_keys)
@@ -4111,16 +4126,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
-            missing_keys, unexpected_keys, mismatched_keys, misc = convert_and_load_state_dict_in_model(
-                model,
-                merged_state_dict,
-                weight_mapping,
-                tp_plan,
-                hf_quantizer,
-                dtype,
-                device_map,
-                model.dtype_plan,
-                device_mesh,
+            missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, misc = (
+                convert_and_load_state_dict_in_model(
+                    model,
+                    merged_state_dict,
+                    weight_mapping,
+                    tp_plan,
+                    hf_quantizer,
+                    dtype,
+                    device_map,
+                    model.dtype_plan,
+                    device_mesh,
+                    disk_offload_index,
+                    disk_offload_folder,
+                )
             )
 
             # finally close all opened file pointers
@@ -4184,7 +4203,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             misc=misc,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
         )
-        disk_offload_index = None
+
         return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
