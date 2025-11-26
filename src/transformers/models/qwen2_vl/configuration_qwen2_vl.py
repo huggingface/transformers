@@ -116,6 +116,12 @@ class Qwen2VLTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        bos_token_id (`int`, *optional*, defaults to 151643):
+            The id of the _beginning-of-stream_ token.
+        eos_token_id (`int`, *optional*, defaults to 151645):
+            The id of the _end-of-stream_ token.
+        pad_token_id (`int`, *optional*):
+            The id of the _padding_ token.
 
     ```python
     >>> from transformers import Qwen2VLTextModel, Qwen2VLConfig
@@ -288,16 +294,17 @@ class Qwen2VLConfig(PreTrainedConfig):
             text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
             text_params = list(text_params) + ["rope_scaling", "rope_theta"]
             text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
-            text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype")) # don't pop the dtype
-            self.text_config = self.sub_configs["text_config"](**text_config)  
+            text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+            self.text_config = self.sub_configs["text_config"](**text_config)
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
-        # FIXME: arthur/cyril - tying has to be used from the text config 
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        # FIXME: arthur/cyril - tying has to be used from the text config
+        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig"]

@@ -128,6 +128,12 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        bos_token_id (`int`, *optional*, defaults to 151643):
+            The id of the _beginning-of-stream_ token.
+        eos_token_id (`int`, *optional*, defaults to 151645):
+            The id of the _end-of-stream_ token.
+        pad_token_id (`int`, *optional*):
+            The id of the _padding_ token.
 
     ```python
     >>> from transformers import Qwen2_5_VLTextModel, Qwen2_5_VLConfig
@@ -309,7 +315,8 @@ class Qwen2_5_VLConfig(PreTrainedConfig):
         self.vision_end_token_id = vision_end_token_id
 
         # FIXME: arthur/cyril - tying has to be used from the text config
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen2_5_VLConfig", "Qwen2_5_VLTextConfig"]
