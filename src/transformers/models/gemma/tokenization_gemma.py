@@ -23,7 +23,7 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json", "vocab_file": "tokenizer.json"}
 
 
 class GemmaTokenizer(TokenizersBackend):

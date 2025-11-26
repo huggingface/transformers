@@ -29,6 +29,63 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "google/gemma-7b"
     tokenizer_class = GemmaTokenizer
 
+    @classmethod
+    def setUpClass(cls):
+        """Override to add debug logging for CI."""
+        import os
+        import sys
+        
+        super().setUpClass()
+        
+        # Store debug info as class variable so we can include it in test failures
+        cls._setup_debug_info = []
+        
+        try:
+            print("\n" + "="*80, file=sys.stderr)
+            print("[GEMMA TEST DEBUG] Starting setUpClass", file=sys.stderr)
+            print("="*80, file=sys.stderr)
+            
+            # Log what files are in tmpdirname after setup
+            if hasattr(cls, 'tmpdirname') and os.path.isdir(cls.tmpdirname):
+                files = os.listdir(cls.tmpdirname)
+                msg = f"Files in tmpdirname after setup: {sorted(files)}"
+                print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
+                cls._setup_debug_info.append(msg)
+                
+                # Check if tokenizer.json exists and its size
+                tokenizer_json = os.path.join(cls.tmpdirname, 'tokenizer.json')
+                if os.path.exists(tokenizer_json):
+                    size = os.path.getsize(tokenizer_json)
+                    msg = f"tokenizer.json exists, size: {size} bytes"
+                    print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
+                    cls._setup_debug_info.append(msg)
+                    
+                    # Check vocab size in the file
+                    try:
+                        import json as json_module
+                        with open(tokenizer_json) as f:
+                            tj = json_module.load(f)
+                        vocab_size = len(tj.get('model', {}).get('vocab', {}))
+                        msg = f"Vocab size in tokenizer.json: {vocab_size}"
+                        print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
+                        cls._setup_debug_info.append(msg)
+                    except Exception as e:
+                        msg = f"Error reading tokenizer.json: {e}"
+                        print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
+                        cls._setup_debug_info.append(msg)
+                else:
+                    msg = "tokenizer.json does NOT exist!"
+                    print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
+                    cls._setup_debug_info.append(msg)
+            else:
+                msg = "tmpdirname not set or not a directory"
+                print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
+                cls._setup_debug_info.append(msg)
+            
+            print("="*80 + "\n", file=sys.stderr)
+        except Exception:
+            pass  # Don't break tests if debug fails
+
     integration_expected_tokens = [
         "This",
         "▁is",
@@ -261,64 +318,43 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         "▁doing",
     ]
     integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
-
     def test_internal_consistency(self):
         """Override to add debug output on failure."""
-        import os
-        
         tokenizer = self.get_tokenizer()
         
         def get_debug_info():
             """Build debug info string to include in error messages."""
             debug_lines = []
+            
+            # Include setup debug info
+            if hasattr(self.__class__, '_setup_debug_info'):
+                debug_lines.append("=== SETUP DEBUG INFO ===")
+                debug_lines.extend(self.__class__._setup_debug_info)
+                debug_lines.append("")
+            
+            debug_lines.append("=== TOKENIZER DEBUG INFO ===")
             debug_lines.append(f"Tokenizer type: {type(tokenizer).__name__}")
             debug_lines.append(f"Tokenizer module: {type(tokenizer).__module__}")
             debug_lines.append(f"Tokenizer class location: {tokenizer.__class__.__module__}.{tokenizer.__class__.__name__}")
             
             if hasattr(tokenizer, 'name_or_path'):
                 debug_lines.append(f"Tokenizer name_or_path: {tokenizer.name_or_path}")
-                # Check what files exist in the temp directory
-                if tokenizer.name_or_path and os.path.exists(tokenizer.name_or_path):
-                    debug_lines.append(f"Temp directory exists: True")
-                    try:
-                        files = os.listdir(tokenizer.name_or_path)
-                        debug_lines.append(f"Files in temp directory: {', '.join(files)}")
-                        tokenizer_json_path = os.path.join(tokenizer.name_or_path, "tokenizer.json")
-                        if os.path.exists(tokenizer_json_path):
-                            debug_lines.append(f"tokenizer.json exists: True")
-                            debug_lines.append(f"tokenizer.json size: {os.path.getsize(tokenizer_json_path)} bytes")
-                            # Try to read and check vocab size from the file
-                            try:
-                                import json
-                                with open(tokenizer_json_path, 'r') as f:
-                                    tj = json.load(f)
-                                if 'model' in tj and 'vocab' in tj['model']:
-                                    vocab_size = len(tj['model']['vocab'])
-                                    debug_lines.append(f"Vocab size in tokenizer.json: {vocab_size}")
-                            except Exception as e:
-                                debug_lines.append(f"Error reading tokenizer.json: {e}")
-                        else:
-                            debug_lines.append(f"tokenizer.json exists: False")
-                    except Exception as e:
-                        debug_lines.append(f"Error listing temp directory: {e}")
-                else:
-                    debug_lines.append(f"Temp directory exists: False")
-            
             if hasattr(tokenizer, 'vocab_file'):
                 debug_lines.append(f"Tokenizer vocab_file: {tokenizer.vocab_file}")
+            if hasattr(tokenizer, 'vocab_files_names'):
+                debug_lines.append(f"Tokenizer vocab_files_names: {tokenizer.vocab_files_names}")
+            
+            # Check what files exist in the directory
+            import os
+            if hasattr(tokenizer, 'name_or_path') and os.path.isdir(tokenizer.name_or_path):
+                files_in_dir = os.listdir(tokenizer.name_or_path)
+                debug_lines.append(f"Files in tokenizer directory: {sorted(files_in_dir)}")
             
             if hasattr(tokenizer, '_tokenizer'):
                 debug_lines.append(f"Has _tokenizer attribute: True")
                 debug_lines.append(f"_tokenizer type: {type(tokenizer._tokenizer)}")
                 if hasattr(tokenizer._tokenizer, 'model'):
                     debug_lines.append(f"_tokenizer.model type: {type(tokenizer._tokenizer.model)}")
-                    # Try to get vocab size from the model
-                    try:
-                        if hasattr(tokenizer._tokenizer.model, 'get_vocab'):
-                            vocab_dict = tokenizer._tokenizer.model.get_vocab()
-                            debug_lines.append(f"_tokenizer.model vocab size: {len(vocab_dict)}")
-                    except:
-                        pass
                 # Try to get more details about the tokenizer
                 try:
                     debug_lines.append(f"_tokenizer object: {repr(tokenizer._tokenizer)}")
@@ -326,12 +362,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     debug_lines.append(f"_tokenizer object: <repr failed>")
             else:
                 debug_lines.append(f"Has _tokenizer attribute: False")
-            
-            # Add debug info from tokenization_utils_base if available
-            if hasattr(tokenizer, '_gemma_debug_info'):
-                debug_lines.append("\nGEMMA_DEBUG_INFO from tokenization_utils_base:")
-                for key, value in tokenizer._gemma_debug_info.items():
-                    debug_lines.append(f"  {key}: {value}")
             
             debug_lines.append(f"Vocab size: {len(tokenizer)}")
             return "\n".join(debug_lines)

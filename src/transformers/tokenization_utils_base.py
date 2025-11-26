@@ -2134,10 +2134,46 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             )
 
         # If tokenizer_file exists and tokenizer has a TokenizersBackend, replace the blank tokenizer with tokenizer.json
+        # DEBUG: Log for Gemma debugging
+        if type(tokenizer).__name__ == "GemmaTokenizer":
+            try:
+                import sys
+                print(f"\n[GEMMA DEBUG] tokenizer_file={tokenizer_file}, hasattr(_tokenizer)={hasattr(tokenizer, '_tokenizer')}", file=sys.stderr)
+                if tokenizer_file is None:
+                    print(f"[GEMMA DEBUG] tokenizer_file is None! resolved_vocab_files keys: {list(resolved_vocab_files.keys())}", file=sys.stderr)
+                    print(f"[GEMMA DEBUG] resolved_vocab_files values: {resolved_vocab_files}", file=sys.stderr)
+            except Exception:
+                pass  # Don't break if debug fails
+        
         if tokenizer_file is not None and hasattr(tokenizer, "_tokenizer"):
             from tokenizers import Tokenizer as TokenizerFast
 
+            # DEBUG: Log for Gemma debugging
+            if type(tokenizer).__name__ == "GemmaTokenizer":
+                try:
+                    import sys
+                    import os as os_module
+                    print(f"[GEMMA DEBUG] Loading tokenizer from file: {tokenizer_file}", file=sys.stderr)
+                    print(f"[GEMMA DEBUG] File exists: {os_module.path.exists(tokenizer_file)}", file=sys.stderr)
+                    if os_module.path.exists(tokenizer_file):
+                        import json as json_module
+                        with open(tokenizer_file) as f:
+                            tj = json_module.load(f)
+                        vocab_size = len(tj.get('model', {}).get('vocab', {}))
+                        print(f"[GEMMA DEBUG] Vocab size in file: {vocab_size}", file=sys.stderr)
+                except Exception:
+                    pass  # Don't break if debug fails
+            
             tokenizer._tokenizer = TokenizerFast.from_file(tokenizer_file)
+            
+            # DEBUG: Log for Gemma debugging
+            if type(tokenizer).__name__ == "GemmaTokenizer":
+                try:
+                    import sys
+                    print(f"[GEMMA DEBUG] After loading, tokenizer vocab size: {len(tokenizer)}\n", file=sys.stderr)
+                except Exception:
+                    pass  # Don't break if debug fails
+            
             # Re-run post-initialization if the tokenizer has it
             if hasattr(tokenizer, "_post_init"):
                 tokenizer._post_init()
