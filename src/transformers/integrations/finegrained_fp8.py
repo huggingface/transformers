@@ -452,11 +452,11 @@ class FP8Expert(nn.Module):
             _, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states.index_select(0, token_idx)
             gate, up = self.linear(
-                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales_inv[expert_idx]
+                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
             ).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = self.linear(
-                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales_inv[expert_idx]
+                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
             )
 
             routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
