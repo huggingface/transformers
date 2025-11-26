@@ -388,13 +388,19 @@ class WeightRenaming(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
+        # Collect the tensor if using threading
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = (
                 futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
             )
 
+        # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
+        # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
+        target_key = self.target_patterns[0]
+        self.collected_tensors[target_key] = self.collected_tensors.pop(self.source_patterns[0])
+
+        all_target_keys = [target_key]
         collected_tensors = self.collected_tensors
-        all_target_keys = sorted(self.layer_targets.keys(), key=dot_natural_key)
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
@@ -432,6 +438,7 @@ class WeightConverter(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
+        # Collect all tensors if using threading
         for pattern, futures in self.collected_tensors.items():
             self.collected_tensors[pattern] = (
                 futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
