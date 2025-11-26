@@ -34,6 +34,7 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
+    from ..core_model_loading import WeightConverter
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
@@ -246,3 +247,16 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         from ..integrations.bitsandbytes import Bnb8bitQuantize
 
         return Bnb8bitQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.bitsandbytes import Bnb8bitDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_keys=["SCB", "weight_format", "weight"],
+                    target_keys="weight",
+                    operations=[Bnb8bitDeserialize(self)],
+                )
+            ]
+        return []
