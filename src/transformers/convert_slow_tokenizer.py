@@ -559,6 +559,7 @@ class SpmConverter:
         else:
             self.original_tokenizer = self
 
+        self.vocab_file = vocab_file
         m = model_pb2.ModelProto()
         with open(vocab_file, "rb") as f:
             m.ParseFromString(f.read())
