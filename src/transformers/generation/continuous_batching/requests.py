@@ -185,7 +185,7 @@ class RequestState:
         if self.status != RequestStatus.DECODING:
             return False
 
-        # If we're recording timestamps, add the token ID and timestamp to the list
+        # If we're recording timestamps, add timestamp to the list
         if self.record_timestamps:
             self._timestamps.append(time.perf_counter())
 
