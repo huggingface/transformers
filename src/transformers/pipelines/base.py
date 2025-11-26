@@ -82,9 +82,7 @@ def is_valid_chat(chat):
     """
     is_iterable = isinstance(
         chat,
-        (list, tuple, types.GeneratorType, KeyDataset)
-        if is_torch_available()
-        else (list, tuple, types.GeneratorType),
+        (list, tuple, types.GeneratorType, KeyDataset) if is_torch_available() else (list, tuple, types.GeneratorType),
     )
     if not is_iterable:
         return False

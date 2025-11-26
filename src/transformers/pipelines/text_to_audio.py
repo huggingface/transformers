@@ -37,6 +37,7 @@ class AudioOutput(TypedDict, total=False):
     sampling_rate (`int`):
         The sampling rate of the generated audio waveform.
     """
+
     audio: AudioInput
     sampling_rate: int
 
@@ -257,7 +258,6 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
-
         if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
         if getattr(self, "assistant_tokenizer", None) is not None:
@@ -276,7 +276,6 @@ class TextToAudioPipeline(Pipeline):
         return preprocess_params, params, postprocess_params
 
     def postprocess(self, audio):
-
         needs_decoding = False
         if isinstance(audio, dict):
             if "audio" in audio:

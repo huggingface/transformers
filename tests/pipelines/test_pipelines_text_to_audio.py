@@ -248,7 +248,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     def test_csm_model_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b", device=torch_device)
         generate_kwargs = {"max_new_tokens": 10, "output_audio": True}
-        n_channel = 1   # model generates mono audio
+        n_channel = 1  # model generates mono audio
 
         outputs = speech_generator("[0]This is a test", generate_kwargs=generate_kwargs)
         self.assertEqual(outputs["sampling_rate"], 24000)
@@ -265,7 +265,9 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         # test batching
         batch_size = 2
-        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"], generate_kwargs=generate_kwargs, batch_size=batch_size)
+        outputs = speech_generator(
+            ["[0]This is a test", "[0]This is a second test"], generate_kwargs=generate_kwargs, batch_size=batch_size
+        )
         self.assertEqual(len(outputs), batch_size)
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
@@ -276,9 +278,11 @@ class TextToAudioPipelineTests(unittest.TestCase):
     def test_dia_model(self):
         speech_generator = pipeline(task="text-to-audio", model="nari-labs/Dia-1.6B-0626", device=torch_device)
         generate_kwargs = {"max_new_tokens": 20}
-        n_channel = 1   # model generates mono audio
+        n_channel = 1  # model generates mono audio
 
-        outputs = speech_generator("[S1] Dia is an open weights text to dialogue model.", generate_kwargs=generate_kwargs)
+        outputs = speech_generator(
+            "[S1] Dia is an open weights text to dialogue model.", generate_kwargs=generate_kwargs
+        )
         self.assertEqual(outputs["sampling_rate"], 44100)
         audio = outputs["audio"]
         self.assertEqual(ANY(np.ndarray), audio)
@@ -296,7 +300,11 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         # test batching
         batch_size = 2
-        outputs = speech_generator(["[S1] Dia is an open weights text to dialogue model.", "[S2] This is a second example."], generate_kwargs=generate_kwargs, batch_size=2)
+        outputs = speech_generator(
+            ["[S1] Dia is an open weights text to dialogue model.", "[S2] This is a second example."],
+            generate_kwargs=generate_kwargs,
+            batch_size=2,
+        )
         self.assertEqual(len(outputs), batch_size)
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
