@@ -91,7 +91,7 @@ def get_standardized_rope_params(config):
 
     # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
     rope_theta = getattr(config, "rope_theta", None)
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", None)
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
 
     # Case 1: one RoPE theat = one RoPE param per model without nesting
     if not set(rope_parameters.keys()).issubset(ALLOWED_LAYER_TYPES):

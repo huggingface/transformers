@@ -252,11 +252,11 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             "sliding_attention": {"rope_type": "default"},
             "full_attention": {"rope_type": "default"},
         }
-        rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
+        self.rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
         if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
-            rope_parameters["full_attention"].update(rope_scaling)
-        rope_parameters["full_attention"]["rope_theta"] = kwargs.get("rope_theta", 1_000_000.0)
-        rope_parameters["sliding_attention"]["rope_theta"] = kwargs.get("rope_local_base_freq", 10000.0)
+            self.rope_parameters["full_attention"].update(rope_scaling)
+        self.rope_parameters["full_attention"]["rope_theta"] = kwargs.get("rope_theta", 1_000_000.0)
+        self.rope_parameters["sliding_attention"]["rope_theta"] = kwargs.get("rope_local_base_freq", 10000.0)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_standardize_and_validate(self)

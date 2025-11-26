@@ -164,10 +164,10 @@ class ApertusConfig(PreTrainedConfig):
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         rope_parameters = rope_scaling or rope_parameters
-        rope_parameters = rope_parameters if rope_parameters is not None else {}
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 12000000.0)
+        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 12000000.0)
         rope_config_standardize_and_validate(self)
 
         super().__init__(

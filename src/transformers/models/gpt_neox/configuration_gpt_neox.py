@@ -150,7 +150,7 @@ class GPTNeoXConfig(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
         rope_parameters = rope_scaling or rope_parameters
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
-        rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
         self.attention_bias = attention_bias
 
         # Validate the correctness of rotary position embeddings parameters

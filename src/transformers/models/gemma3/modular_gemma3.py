@@ -208,7 +208,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
             "sliding_attention": {"rope_type": "default"},
             "full_attention": {"rope_type": "default"},
         }
-        rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
+        self.rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
         if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
             rope_parameters["full_attention"].update(rope_scaling)
         rope_parameters["full_attention"]["rope_theta"] = kwargs.pop("rope_theta", 1_000_000.0)

@@ -226,21 +226,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
-        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
-        default_rope_params = {
-            "sliding_attention": {"rope_type": "default"},
-            "full_attention": {"rope_type": "default"},
-        }
-        rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
-        if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
-            rope_parameters["full_attention"].update(rope_scaling)
-        rope_parameters["full_attention"]["rope_theta"] = kwargs.get("rope_theta", 1_000_000.0)
-        rope_parameters["sliding_attention"]["rope_theta"] = kwargs.get("rope_local_base_freq", 10000.0)
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_config_standardize_and_validate(self)
-
         if layer_types is None:
             self.layer_types = [
                 "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
@@ -249,6 +234,21 @@ class Gemma3nTextConfig(PreTrainedConfig):
             self.layer_types = layer_types
 
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        self.rope_parameters = rope_parameters if rope_parameters is not None else default_rope_params
+        if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
+            self.rope_parameters["full_attention"].update(rope_scaling)
+        self.rope_parameters["full_attention"]["rope_theta"] = kwargs.get("rope_theta", 1_000_000.0)
+        self.rope_parameters["sliding_attention"]["rope_theta"] = kwargs.get("rope_local_base_freq", 10000.0)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_config_standardize_and_validate(self)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers
