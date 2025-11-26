@@ -429,7 +429,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         self.token_type_ids_include_special_tokens = kwargs.pop("token_type_ids_include_special_tokens", True)
 
         # 5. Special tokens mask configuration
-        # Patterns: "none", "cls_sep", "eos", "bos", "cls_double_sep"
+        # Patterns: "none", "cls_sep", "eos", "bos", "bos_eos", "cls_double_sep", "prefix_suffix"
         self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "cls_sep")
 
         # 6. Set backend to "custom" if not already set (for direct PreTrainedTokenizer subclasses)
@@ -439,6 +439,9 @@ class PythonBackend(PreTrainedTokenizerBase):
         # 7. init the parent class
         super().__init__(**kwargs)
 
+        if self._added_tokens_decoder:
+            self._update_total_vocab_size()
+
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # V5: the order of addition follows self.SPECIAL_TOKENS_ATTRIBUTES, then extra special tokens
         # Note: _add_tokens will automatically skip tokens that are already in the base vocab
@@ -446,6 +449,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             [token for token in self.all_special_tokens if token not in self._added_tokens_encoder],
             special_tokens=True,
         )
+        self._update_total_vocab_size()
 
     @property
     def is_fast(self) -> bool:
@@ -660,10 +664,11 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         # Tokenize non-added tokens
         result = []
+        all_special_tokens_set = set(self.all_special_tokens)
         for token in tokens:
             if not token:
                 continue
-            if token in no_split_token:
+            if token in no_split_token or token in all_special_tokens_set:
                 result.append(token)
             else:
                 result.extend(self._tokenize(token))
@@ -861,7 +866,9 @@ class PythonBackend(PreTrainedTokenizerBase):
         - `"cls_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
         - `"eos"`: seq0 [EOS] or seq0 [EOS] seq1 [EOS]
         - `"bos"`: [BOS] seq0 or [BOS] seq0 [BOS] seq1
+        - `"bos_eos"`: [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
         - `"cls_double_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+        - `"prefix_suffix"`: `<prefix_tokens> seq0 [seq1] <suffix_tokens>` (custom prefix/suffix stored on the tokenizer)
 
         Args:
             token_ids_0 (`list[int]`):
@@ -890,6 +897,12 @@ class PythonBackend(PreTrainedTokenizerBase):
                 return [self.bos_token_id] + token_ids_0
             return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
 
+        elif self.special_tokens_pattern == "bos_eos":
+            # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
+            if token_ids_1 is None:
+                return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+            return [self.bos_token_id] + token_ids_0 + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
+
         elif self.special_tokens_pattern == "cls_double_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
             if token_ids_1 is None:
@@ -901,6 +914,13 @@ class PythonBackend(PreTrainedTokenizerBase):
                 + token_ids_1
                 + [self.sep_token_id]
             )
+
+        elif self.special_tokens_pattern == "prefix_suffix":
+            prefix_tokens = getattr(self, "prefix_tokens", [])
+            suffix_tokens = getattr(self, "suffix_tokens", [])
+            if token_ids_1 is None:
+                return prefix_tokens + token_ids_0 + suffix_tokens
+            return prefix_tokens + token_ids_0 + token_ids_1 + suffix_tokens
 
         else:  # "none" or any other value
             # No special tokens
@@ -920,7 +940,9 @@ class PythonBackend(PreTrainedTokenizerBase):
         - `"cls_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] seq1 [SEP]
         - `"eos"`: seq0 [EOS] or seq0 [EOS] seq1 [EOS]
         - `"bos"`: [BOS] seq0 or [BOS] seq0 [BOS] seq1
+        - `"bos_eos"`: [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
         - `"cls_double_sep"`: [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
+        - `"prefix_suffix"`: `<prefix_tokens> seq0 [seq1] <suffix_tokens>`
 
         Args:
             token_ids_0 (`list[int]`):
@@ -962,11 +984,26 @@ class PythonBackend(PreTrainedTokenizerBase):
                 return [1] + ([0] * len(token_ids_0))
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
+        elif self.special_tokens_pattern == "bos_eos":
+            # [BOS] seq0 [EOS] or [BOS] seq0 [EOS] seq1 [EOS]
+            if token_ids_1 is None:
+                return [1] + ([0] * len(token_ids_0)) + [1]
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+
         elif self.special_tokens_pattern == "cls_double_sep":
             # [CLS] seq0 [SEP] or [CLS] seq0 [SEP] [SEP] seq1 [SEP]
             if token_ids_1 is None:
                 return [1] + ([0] * len(token_ids_0)) + [1]
             return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+
+        elif self.special_tokens_pattern == "prefix_suffix":
+            prefix_len = len(getattr(self, "prefix_tokens", []))
+            suffix_len = len(getattr(self, "suffix_tokens", []))
+            mask = [1] * prefix_len + ([0] * len(token_ids_0))
+            if token_ids_1 is not None:
+                mask += [0] * len(token_ids_1)
+            mask += [1] * suffix_len
+            return mask
 
         else:
             return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
@@ -1032,26 +1069,30 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         text = self.convert_tokens_to_string(filtered_tokens)
 
-        # Simple cleanup of common tokenization artifacts
+        # Apply tokenizer-specific cleanup if available and requested
         clean_up_tokenization_spaces = (
             clean_up_tokenization_spaces
             if clean_up_tokenization_spaces is not None
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            # Inline simple cleanup (removed clean_up_tokenization method)
-            text = (
-                text.replace(" .", ".")
-                .replace(" ?", "?")
-                .replace(" !", "!")
-                .replace(" ,", ",")
-                .replace(" ' ", "'")
-                .replace(" n't", "n't")
-                .replace(" 'm", "'m")
-                .replace(" 's", "'s")
-                .replace(" 've", "'ve")
-                .replace(" 're", "'re")
-            )
+            # Call custom cleanup method if it exists (e.g., for CLVP's [SPACE] token replacement)
+            if hasattr(self, "clean_up_tokenization") and callable(self.clean_up_tokenization):
+                text = self.clean_up_tokenization(text)
+            else:
+                # Otherwise apply standard cleanup
+                text = (
+                    text.replace(" .", ".")
+                    .replace(" ?", "?")
+                    .replace(" !", "!")
+                    .replace(" ,", ",")
+                    .replace(" ' ", "'")
+                    .replace(" n't", "n't")
+                    .replace(" 'm", "'m")
+                    .replace(" 's", "'s")
+                    .replace(" 've", "'ve")
+                    .replace(" 're", "'re")
+                )
 
         return text
 
@@ -1282,6 +1323,13 @@ class PythonBackend(PreTrainedTokenizerBase):
             seq1_len = len(token_ids_1) if token_ids_1 is not None else 0
 
         # Build token type IDs based on pattern
+        if self.special_tokens_pattern == "prefix_suffix":
+            total_len = len(getattr(self, "prefix_tokens", [])) + len(token_ids_0)
+            if token_ids_1 is not None:
+                total_len += len(token_ids_1)
+            total_len += len(getattr(self, "suffix_tokens", []))
+            return [0] * total_len
+
         if self.token_type_ids_pattern == "bert_style" and token_ids_1 is not None:
             # BERT-style: first sequence gets 0s, second sequence gets 1s
             return [0] * seq0_len + [1] * seq1_len

@@ -227,7 +227,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
             # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
-            self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
+            self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
             tokenizer = AutoTokenizer.from_pretrained(tmp_repo.repo_id, use_fast=False, trust_remote_code=True)
             # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
             self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
