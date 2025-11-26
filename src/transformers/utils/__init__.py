@@ -233,6 +233,7 @@ from .import_utils import (
     is_torch_optimi_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
+    enable_tf32,
     is_torch_xla_available,
     is_torch_xpu_available,
     is_torchao_available,

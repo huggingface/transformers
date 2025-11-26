@@ -31,7 +31,7 @@ from transformers.testing_utils import (
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
 )
-from transformers.utils.import_utils import enable_tf32
+from transformers.utils import enable_tf32
 
 
 NOT_DEVICE_TESTS = {
