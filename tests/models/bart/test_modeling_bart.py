@@ -1279,9 +1279,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_decoder_attention_mask(self):
-        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large").to(
-            torch_device
-        )
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large").to(torch_device)
         tokenizer = self.default_tokenizer
         sentence = "UN Chief Says There Is No <mask> in Syria"
         input_ids = tokenizer(sentence, return_tensors="pt").input_ids.to(torch_device)
