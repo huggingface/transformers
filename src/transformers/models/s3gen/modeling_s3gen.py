@@ -1603,9 +1603,19 @@ class S3GenModel(S3GenPreTrainedModel):
         return output_mels
 
     @torch.inference_mode()
-    def inference(self, speech_tokens, ref_wav, ref_sr, cache_source=None, finalize=True):
-        """End-to-end inference: tokens → waveform."""
-        output_mels = self.forward(speech_tokens, ref_wav=ref_wav, ref_sr=ref_sr, finalize=finalize)
+    def inference(self, speech_tokens, ref_wav=None, ref_sr=None, ref_dict=None, cache_source=None, finalize=True):
+        """
+        End-to-end inference: tokens → waveform.
+
+        Args:
+            speech_tokens: Speech token sequence
+            ref_wav: Reference audio waveform (mutex with ref_dict)
+            ref_sr: Reference audio sample rate (required with ref_wav)
+            ref_dict: Pre-computed reference embeddings (mutex with ref_wav)
+            cache_source: Cached source for streaming
+            finalize: Whether to finalize generation
+        """
+        output_mels = self.forward(speech_tokens, ref_wav=ref_wav, ref_sr=ref_sr, ref_dict=ref_dict, finalize=finalize)
 
         if cache_source is None:
             cache_source = torch.zeros(1, 1, 0).to(self.device)
@@ -1642,5 +1652,7 @@ class S3GenModel(S3GenPreTrainedModel):
         Returns:
             `torch.FloatTensor`: Generated waveform of shape `(batch_size, audio_length)`.
         """
-        output_wavs, _ = self.inference(speech_tokens, ref_wav, ref_sr, cache_source, finalize)
+        output_wavs, _ = self.inference(
+            speech_tokens, ref_wav=ref_wav, ref_sr=ref_sr, cache_source=cache_source, finalize=finalize
+        )
         return output_wavs

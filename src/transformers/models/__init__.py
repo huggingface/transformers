@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     from .camembert import *
     from .canine import *
     from .chameleon import *
+    from .chatterbox import *
     from .chinese_clip import *
     from .clap import *
     from .clip import *
@@ -311,6 +312,7 @@ if TYPE_CHECKING:
     from .rwkv import *
     from .s3gen import *
     from .s3tokenizer import *
+    from .t3 import *
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
