@@ -174,5 +174,12 @@ class LayoutLMv3Config(PreTrainedConfig):
         self.patch_size = patch_size
         self.classifier_dropout = classifier_dropout
 
+        # LayoutLMv3's relative position bias and spatial attention bias are incompatible with SDPA/FlashAttention
+        # Automatically set eager attention when these biases are enabled, unless explicitly set by user
+        if has_relative_attention_bias or has_spatial_attention_bias:
+            # Only set if not already explicitly set via kwargs (attn_implementation is processed in super().__init__)
+            if self._attn_implementation is None:
+                self._attn_implementation = "eager"
+
 
 __all__ = ["LayoutLMv3Config"]
