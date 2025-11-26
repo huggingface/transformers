@@ -21,7 +21,7 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Optional, Union
+from typing import Any
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
@@ -93,7 +93,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class: Optional[type[PreTrainedTokenizer]] = None
+    slow_tokenizer_class: type[PreTrainedTokenizer] | None = None
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -307,8 +307,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def _convert_encoding(
         self,
         encoding: EncodingFast,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -351,7 +351,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return encoding_dict, encodings
 
-    def convert_tokens_to_ids(self, tokens: Union[str, Iterable[str]]) -> Union[int, list[int]]:
+    def convert_tokens_to_ids(self, tokens: str | Iterable[str]) -> int | list[int]:
         """
         Converts a token string (or a sequence of tokens) in a single integer id (or a Iterable of ids), using the
         vocabulary.
@@ -373,10 +373,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return self.unk_token_id
         return index
 
-    def _convert_id_to_token(self, index: int) -> Optional[str]:
+    def _convert_id_to_token(self, index: int) -> str | None:
         return self._tokenizer.id_to_token(int(index))
 
-    def _add_tokens(self, new_tokens: list[Union[str, AddedToken]], special_tokens=False) -> int:
+    def _add_tokens(self, new_tokens: list[str | AddedToken], special_tokens=False) -> int:
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
 
@@ -403,9 +403,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         return self._tokenizer.num_special_tokens_to_add(pair)
 
-    def convert_ids_to_tokens(
-        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
-    ) -> Union[str, list[str]]:
+    def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
         """
         Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
         added tokens.
@@ -431,7 +429,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             tokens.append(self._tokenizer.id_to_token(index))
         return tokens
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
+    def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         return self.encode_plus(text=text, text_pair=pair, add_special_tokens=add_special_tokens, **kwargs).tokens()
 
     def set_truncation_and_padding(
@@ -440,8 +438,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy,
         max_length: int,
         stride: int,
-        pad_to_multiple_of: Optional[int],
-        padding_side: Optional[str],
+        pad_to_multiple_of: int | None,
+        padding_side: str | None,
     ):
         """
         Define the truncation and the padding strategies for fast tokenizers (provided by HuggingFace tokenizers
@@ -511,20 +509,21 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput], list[TextInputPair], list[PreTokenizedInput], list[PreTokenizedInputPair]
-        ],
+        batch_text_or_text_pairs: list[TextInput]
+        | list[TextInputPair]
+        | list[PreTokenizedInput]
+        | list[PreTokenizedInputPair],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -602,19 +601,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput,
+        text_pair: TextInput | PreTokenizedInput | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[bool] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: bool | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -670,9 +669,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
@@ -694,10 +693,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _save_pretrained(
         self,
-        save_directory: Union[str, os.PathLike],
+        save_directory: str | os.PathLike,
         file_names: tuple[str, ...],
-        legacy_format: Optional[bool] = None,
-        filename_prefix: Optional[str] = None,
+        legacy_format: bool | None = None,
+        filename_prefix: str | None = None,
     ) -> tuple[str, ...]:
         """
         Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens as well as in a unique JSON
