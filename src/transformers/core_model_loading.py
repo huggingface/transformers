@@ -531,9 +531,9 @@ def convert_and_load_state_dict_in_model(
                 future = spawn_tp_materialize(
                     thread_pool,
                     tensor,
-                    _dtype,
                     converter.distributed_operation,
                     shard_index,
+                    _dtype,
                 )
 
         if future is None:  # If not TP, async materialize the tensors. TODO handle disk offload?
