@@ -51,6 +51,7 @@ from transformers.models.auto.image_processing_auto import get_image_processor_c
 from transformers.models.auto.video_processing_auto import get_video_processor_config
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
     PROCESSOR_NAME,
@@ -521,7 +522,10 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_chat_templates(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer = LlamaTokenizer(SAMPLE_VOCAB_LLAMA, keep_accents=True)
+            # Extract vocab and merges from SentencePiece model
+            extractor = SentencePieceExtractor(SAMPLE_VOCAB_LLAMA)
+            vocab_ids, vocab_scores, merges = extractor.extract()
+            tokenizer = LlamaTokenizer(vocab=vocab_scores, merges=merges)
             image_processor = SiglipImageProcessor()
             chat_template = "default dummy template for testing purposes only"
             processor = LlavaProcessor(
