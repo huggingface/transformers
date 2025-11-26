@@ -282,6 +282,21 @@ else:
         "PreTrainedTokenizerFast",
     ]
 
+
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_sentencepiece_objects
+
+    _import_structure["utils.dummy_sentencepiece_objects"] = [
+        name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["tokenization_utils_sentencepiece"] = [
+        "SentencePieceBackend",
+    ]
+
 try:
     if not (is_sentencepiece_available() and is_tokenizers_available()):
         raise OptionalDependencyNotAvailable()
@@ -681,8 +696,8 @@ if TYPE_CHECKING:
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
     # Tokenization
-    from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
-    from .tokenization_utils import PythonBackend as PythonBackend
+    from .tokenization_python import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_python import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
@@ -690,6 +705,7 @@ if TYPE_CHECKING:
     from .tokenization_utils_base import TokenSpan as TokenSpan
 
     # Tokenization
+    from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
     from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
     from .tokenization_utils_tokenizers import (
         TokenizersBackend as TokenizersBackend,

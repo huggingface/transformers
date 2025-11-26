@@ -171,8 +171,7 @@ class LlamaTokenizer(TokenizersBackend):
     def _post_init(self):
         """Post-initialization setup that needs to run after _tokenizer is set."""
         # Only set pre_tokenizer/normalizer for Llama-3 style tokenizers (use Sequence)
-        pre_tok_str = str(self._tokenizer.pre_tokenizer) #if self._tokenizer.pre_tokenizer else ""
-        if not pre_tok_str.startswith("Sequence"):
+        if not str(self._tokenizer.pre_tokenizer).startswith("Sequence"):
             self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
             self._tokenizer.normalizer = None
             self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
