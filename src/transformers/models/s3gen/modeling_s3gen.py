@@ -24,11 +24,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio.compliance.kaldi as Kaldi
-from librosa.filters import mel as librosa_mel_fn
-
-
-
 from diffusers.models.attention import BasicTransformerBlock
+from librosa.filters import mel as librosa_mel_fn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
