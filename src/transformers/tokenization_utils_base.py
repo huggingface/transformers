@@ -2398,9 +2398,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         specific [`~tokenization_utils_tokenizers.PythonBackend._save_pretrained`]
         """
         if legacy_format is False:
-            raise ValueError(
-                "Only fast tokenizers (instances of PythonBackend) can be saved in non legacy format."
-            )
+            raise ValueError("Only fast tokenizers (instances of PythonBackend) can be saved in non legacy format.")
 
         save_directory = str(save_directory)
 

@@ -1408,5 +1408,7 @@ class TokenizersExtractor:
         self._tokenizer.decoder = decoder
 
 
+# Backward-compatible aliases for the fast tokenizers backend
+PythonBackend = TokenizersBackend
 # Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
 PreTrainedTokenizerFast = TokenizersBackend

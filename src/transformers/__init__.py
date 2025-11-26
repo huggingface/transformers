@@ -692,8 +692,8 @@ if TYPE_CHECKING:
 
     # Tokenization
     from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
-    from .tokenization_utils_tokenizers import PythonBackend as PythonBackend
     from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+    from .tokenization_utils_tokenizers import PythonBackend as PythonBackend
     from .tokenization_utils_tokenizers import TokenizersBackend as TokenizersBackend
     from .tokenization_utils_tokenizers import TokenizersExtractor as TokenizersExtractor
 

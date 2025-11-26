@@ -20,7 +20,6 @@ from functools import cached_property
 from transformers import (
     PreTrainedTokenizerBase,
     PythonBackend,
-    PythonBackend,
     UdopProcessor,
     UdopTokenizer,
     UdopTokenizerFast,

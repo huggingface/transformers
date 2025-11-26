@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import PreTrainedTokenizerBase, PythonBackend, PythonBackend
+from transformers import PreTrainedTokenizerBase, PythonBackend
 from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
     require_pytesseract,

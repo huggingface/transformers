@@ -39,7 +39,6 @@ from transformers import (
     AutoTokenizer,
     LayoutLMv3TokenizerFast,
     PythonBackend,
-    PythonBackend,
     logging,
 )
 from transformers.feature_extraction_utils import FeatureExtractionMixin
