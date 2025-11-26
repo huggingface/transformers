@@ -397,14 +397,13 @@ class WeightRenaming(WeightTransform):
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
         target_key = self.target_patterns[0]
-        self.collected_tensors[target_key] = self.collected_tensors.pop(self.source_patterns[0])
+        collected_tensors = {target_key: self.collected_tensors[self.source_patterns[0]]}
 
         all_target_keys = [target_key]
-        collected_tensors = self.collected_tensors
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
-                    self.collected_tensors,
+                    collected_tensors,
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
                     all_target_keys=all_target_keys,
