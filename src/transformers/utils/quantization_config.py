@@ -66,30 +66,23 @@ class QuantizationMethod(str, Enum):
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
 
-
-class AWQLinearVersion(str, Enum):
+class AwqFormat(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
-    EXLLAMA = "exllama"
-    IPEX = "ipex"
+    GEMV_FAST = "gemv_fast"
 
-    @staticmethod
-    def from_str(version: str):
-        version = version.lower()
-        if version == "gemm":
-            return AWQLinearVersion.GEMM
-        elif version == "gemv":
-            return AWQLinearVersion.GEMV
-        elif version == "exllama":
-            return AWQLinearVersion.EXLLAMA
-        elif version == "ipex":
-            return AWQLinearVersion.IPEX
-        else:
-            raise ValueError(f"Unknown AWQLinearVersion {version}")
-
-
-class AwqBackendPackingMethod(str, Enum):
-    GPTQMODEL = "gptqmodel"
+class AwqBackend(str, Enum):
+    AUTO = "auto"
+    MACHETE = "machete"
+    MARLIN = "marlin"
+    EXLLAMA_V2 = "exllama_v2"
+    EXLLAMA_V1 = "exllama_v1"
+    GEMM = "gemm"
+    GEMM_TRITON = "gemm_triton"
+    GEMV = "gemv"
+    GEMV_FAST = "gemv_fast"
+    TORCH_AWQ = "torch_awq"
+    TORCH_FUSED_AWQ = "torch_fused_awq"
     LLMAWQ = "llm-awq"
 
 
@@ -649,7 +642,7 @@ class GPTQConfig(QuantizationConfigMixin):
             Whether to perform sequential quantization even within a single Transformer block. Instead of quantizing
             the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
             quantization using inputs that have passed through the previously quantized layers.
-        checkpoint_format (`str`, *optional*, defaults to `"gptq"`):
+        format (`str`, *optional*, defaults to `"gptq"`):
             GPTQ weight format. `gptq` (v1) is supported by gptqmodel. `gptq_v2` is gptqmodel only.
         meta (`dict[str, any]`, *optional*):
             Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
@@ -692,7 +685,7 @@ class GPTQConfig(QuantizationConfigMixin):
         act_group_aware: bool = True,
         sym: bool = True,
         true_sequential: bool = True,
-        checkpoint_format: str = "gptq",
+        format: str = "gptq",
         meta: Optional[dict[str, Any]] = None,
         backend: Optional[str] = None,
         model_seqlen: Optional[int] = None,
@@ -715,8 +708,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.act_group_aware = act_group_aware
         self.sym = sym
         self.true_sequential = true_sequential
-        self.checkpoint_format = checkpoint_format.lower()
-        self.format = self.checkpoint_format
+        self.format = format.lower()
         self.meta = meta
         self.backend = backend.lower() if isinstance(backend, str) else backend
         self.model_seqlen = model_seqlen
@@ -821,10 +813,6 @@ class AwqConfig(GPTQConfig):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
             Note you cannot quantize directly with transformers, please refer to `AutoAWQ` documentation for quantizing HF models.
-        exllama_config (`dict[str, Any]`, *optional*):
-            You can specify the version of the exllama kernel through the `version` key, the maximum sequence
-            length through the `max_input_len` key, and the maximum batch size through the `max_batch_size` key.
-            Defaults to `{"version": 2, "max_input_len": 2048, "max_batch_size": 8}` if unset.
     """
 
     def __init__(
@@ -832,19 +820,17 @@ class AwqConfig(GPTQConfig):
         bits: int = 4,
         group_size: int = 128,
         zero_point: bool = True,
-        version: AWQLinearVersion = AWQLinearVersion.GEMM,
-        backend: AwqBackendPackingMethod = AwqBackendPackingMethod.GPTQMODEL,
-        exllama_config: dict[str, int] | None = None,
+        backend: AwqBackend = AwqBackend.AUTO,
         modules_to_not_convert: list | None = None,
         **kwargs,
     ):
-
+        format = AwqFormat.GEMM
+        if kwargs.get("version") is not None:
+            format = kwargs.pop("version")
         self.zero_point = zero_point
-        self.version = version
-        self.exllama_config = exllama_config
         self.modules_to_not_convert = modules_to_not_convert
 
-        super().__init__(bits=bits, group_size=group_size, backend=backend, checkpoint_format=self.version, **kwargs)
+        super().__init__(bits=bits, group_size=group_size, backend=backend, format=format, **kwargs)
         self.quant_method = QuantizationMethod.AWQ
 
 
@@ -852,26 +838,16 @@ class AwqConfig(GPTQConfig):
         r"""
         Safety checker that arguments are correct
         """
-        if self.backend not in [AwqBackendPackingMethod.GPTQMODEL, AwqBackendPackingMethod.LLMAWQ]:
-            raise ValueError(
-                f"Only supported quantization backends in {AwqBackendPackingMethod.GPTQMODEL} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
-            )
-
-        self.version = AWQLinearVersion.from_str(self.version)
-        if self.version not in [
-            AWQLinearVersion.GEMM,
-            AWQLinearVersion.GEMV,
-            AWQLinearVersion.EXLLAMA,
-            AWQLinearVersion.IPEX,
+        if self.format not in [
+            AwqFormat.GEMM,
+            AwqFormat.GEMV,
+            AwqFormat.GEMV_FAST,
         ]:
             raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX] - not recognized version {self.version}"
+                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.GEMV_FAST] - not recognized version {self.format}"
             )
         
-        # convert vertion to checkpoint_format
-        self.checkpoint_format = self.version.value
-
-        if self.backend == AwqBackendPackingMethod.LLMAWQ:
+        if self.backend == AwqBackend.LLMAWQ:
             # Only cuda device can run this function
             if not (torch.cuda.is_available() or torch.xpu.is_available()):
                 raise ValueError("LLM-AWQ backend is only supported on CUDA and XPU")
@@ -881,34 +857,9 @@ class AwqConfig(GPTQConfig):
                 if major < 8:
                     raise ValueError("LLM-AWQ backend is only supported on CUDA GPUs with compute capability >= 8.0")
 
-        if self.version == AWQLinearVersion.EXLLAMA:
-            gptqmodel_version_supports_awq = False
-            MIN_GPTQMODEL_SUPPORT_AWQ_VERSION = "5.0.0"
-            if is_gptqmodel_available():
-                gptqmodel_version_supports_awq = version.parse(importlib.metadata.version("gptqmodel")) >= version.parse(
-                    MIN_GPTQMODEL_SUPPORT_AWQ_VERSION
-                )
-
-            if not gptqmodel_version_supports_awq:
-                raise ValueError(
-                    f"You current version of `gptqmodel` does not support awq, "
-                    f"please upgrade `gptqmodel` package to at least {MIN_GPTQMODEL_SUPPORT_AWQ_VERSION}."
-                )
-
-            if self.exllama_config is None:
-                self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
-            else:
-                if "version" not in self.exllama_config:
-                    raise ValueError("`exllama_config` needs to have a `version` key.")
-                elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                    exllama_version = self.exllama_config["version"]
-                    raise ValueError(
-                        f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                    )
-
     def get_loading_attributes(self):
         attributes_dict = copy.deepcopy(self.__dict__)
-        loading_attributes = ["version", "exllama_config"]
+        loading_attributes = ["version"]
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
         return loading_attributes_dict
 

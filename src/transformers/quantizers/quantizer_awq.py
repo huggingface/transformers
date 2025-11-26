@@ -23,8 +23,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
-from ..utils.quantization_config import AWQLinearVersion
-
+from ..utils.quantization_config import AwqBackend
 
 if is_torch_available():
     import torch
@@ -40,7 +39,7 @@ class AwqQuantizer(HfQuantizer):
     # AWQ requires data calibration - we support only inference
     requires_calibration = True
 
-    required_packages = ["awq", "accelerate"]
+    required_packages = ["gptqmodel", "awq", "accelerate"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -51,48 +50,6 @@ class AwqQuantizer(HfQuantizer):
 
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
-
-        if (
-            self.quantization_config.version == AWQLinearVersion.GEMM
-            and not torch.cuda.is_available()
-            and not torch.xpu.is_available()
-        ):
-            logger.warning_once("No CUDA or XPU found, consider switching to the IPEX version for CPU-only execution.")
-            self.quantization_config.version = AWQLinearVersion.IPEX
-
-        if self.quantization_config.version == AWQLinearVersion.IPEX:
-            if version.parse(importlib.metadata.version("gptqmodel")) < version.parse("5.0.0"):
-                raise RuntimeError(
-                    "To use IPEX backend, you need gptqmodel>5.0.0. Please install the latest version or from source."
-                )
-            if device_map is None:
-                logger.warning_once(
-                    "You have loaded an AWQ model without setting device_map, please set 'cpu' or 'xpu' or 'auto'"
-                )
-            elif isinstance(device_map, dict) and "disk" in device_map.values():
-                raise ValueError(
-                    "You are attempting to load an IPEX version AWQ model with a device_map that contains disk device."
-                    " This is not supported. Please make sure only cpu and xpu in the device_map."
-                )
-        else:
-            if not torch.cuda.is_available() and not torch.xpu.is_available():
-                raise RuntimeError(
-                    "GPU is required to run AWQ quantized model. You can use IPEX version AWQ if you have an Intel CPU"
-                )
-
-            if device_map is None:
-                logger.warning_once(
-                    "You have loaded an AWQ model on CPU and have a CUDA/XPU device available, make sure to set "
-                    "your model on a GPU device in order to run your model."
-                )
-            elif device_map is not None:
-                if isinstance(device_map, dict) and any(
-                    forbidden in device_map.values() for forbidden in ("cpu", torch.device("cpu"), "disk")
-                ):
-                    raise ValueError(
-                        "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
-                        " This is not supported. Please remove the CPU or disk device from the device_map."
-                    )
 
     def update_dtype(self, dtype):
         if dtype is None:
@@ -129,18 +86,17 @@ class AwqQuantizer(HfQuantizer):
             )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
-            from ..integrations import post_init_awq_exllama_modules
+        if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
+            from gptqmodel.utils.model import hf_gptqmodel_post_init
+            model = hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
-            model = post_init_awq_exllama_modules(model, self.quantization_config.exllama_config)
-
-        if self.quantization_config.version == AWQLinearVersion.IPEX:
-            from ..integrations import post_init_awq_ipex_modules
-
-            model = post_init_awq_ipex_modules(model)
+        # if self.quantization_config.version == AWQLinearVersion.IPEX:
+        #     from ..integrations import post_init_awq_ipex_modules
+        #
+        #     model = post_init_awq_ipex_modules(model)
 
     def is_serializable(self, safe_serialization=None):
-        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+        if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False
 

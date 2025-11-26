@@ -22,10 +22,8 @@ from ..modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ..modeling_utils import PreTrainedModel
 from ..utils import is_gptqmodel_available, is_llm_awq_available, is_torch_available, logging
 from ..utils.quantization_config import (
-    AwqBackendPackingMethod,
     AwqConfig,
-    AWQLinearVersion,
-    ExllamaVersion,
+    AwqBackend,
 )
 
 
@@ -103,7 +101,7 @@ def replace_with_awq_linear(
             "AWQ (either `llmawq`) is not available. Please install it with `pip install gptqmodel` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
         )
 
-    if backend == AwqBackendPackingMethod.GPTQMODEL:
+    if backend != AwqBackend.LLMAWQ:
         from gptqmodel.utils.importer import hf_select_quant_linear_v2
         from gptqmodel.quantization import METHOD
         target_cls = hf_select_quant_linear_v2(
@@ -112,6 +110,7 @@ def replace_with_awq_linear(
             desc_act=False,
             sym=False,
             format=quantization_config.format,
+            backend=quantization_config.backend,
             quant_method=METHOD.AWQ,
             zero_point=quantization_config.zero_point,
             pack=False,
@@ -132,7 +131,7 @@ def replace_with_awq_linear(
                 in_features = module.in_features
                 out_features = module.out_features
 
-                if backend == AwqBackendPackingMethod.GPTQMODEL:
+                if backend != AwqBackend.LLMAWQ:
                     model._modules[name] = target_cls(
                         bits=quantization_config.bits,
                         sym=quantization_config.sym,
@@ -168,31 +167,6 @@ def replace_with_awq_linear(
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
-
-
-def post_init_awq_exllama_modules(model, exllama_config):
-    """
-    Runs post init for Exllama layers which performs:
-        - Weights unpacking, reordering and repacking
-        - Devices scratch space allocation
-    """
-
-    if exllama_config["version"] == ExllamaVersion.ONE:
-        from gptqmodel.quantization.awq.modules.linear.exllama import exllama_post_init
-
-        model = exllama_post_init(model)
-    elif exllama_config["version"] == ExllamaVersion.TWO:
-        from gptqmodel.quantization.awq.modules.linear.exllamav2 import exllamav2_post_init
-
-        model = exllamav2_post_init(
-            model,
-            max_input_len=exllama_config["max_input_len"],
-            max_batch_size=exllama_config["max_batch_size"],
-        )
-    else:
-        raise ValueError(f"Unrecognized Exllama version: {exllama_config['version']}")
-
-    return model
 
 
 def post_init_awq_ipex_modules(model):
