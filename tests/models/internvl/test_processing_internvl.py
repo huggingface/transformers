@@ -72,11 +72,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
 
-    # todo @yoni check why this is different than loading separate components and then initializing the processor
-    def get_processor(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        return processor
-
     @unittest.skip("InternVL requires text")
     def test_video_processor_defaults(self):
         pass
