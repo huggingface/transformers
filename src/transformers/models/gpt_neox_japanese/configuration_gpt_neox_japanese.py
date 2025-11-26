@@ -121,7 +121,8 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         self.hidden_dropout = hidden_dropout
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rotary_emb_base", 10000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rotary_emb_base", 10000.0)
         rope_config_standardize_and_validate(self)
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

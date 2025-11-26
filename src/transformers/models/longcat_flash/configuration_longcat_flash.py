@@ -216,7 +216,8 @@ class LongcatFlashConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000000.0)
 
         for key in ["beta_fast", "beta_slow", "factor"]:
             if key in self.rope_parameters:

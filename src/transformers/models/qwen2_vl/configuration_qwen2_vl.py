@@ -206,7 +206,8 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 1000000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 1000000.0)
         rope_type = rope_parameters.get("type") or rope_parameters.get("rope_type")
         if rope_type == "mrope":
             self.rope_parameters["rope_type"] = "default"

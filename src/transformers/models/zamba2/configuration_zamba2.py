@@ -201,7 +201,8 @@ class Zamba2Config(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
         rope_config_standardize_and_validate(self)
 
         self.mamba_d_state = mamba_d_state

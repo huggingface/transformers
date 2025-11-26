@@ -71,7 +71,8 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
         rope_config_standardize_and_validate(self)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
@@ -126,7 +127,8 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
         rope_config_standardize_and_validate(self)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
@@ -173,7 +175,8 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
         rope_config_standardize_and_validate(self)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
@@ -254,7 +257,8 @@ class BltPatcherConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
         rope_config_standardize_and_validate(self)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
@@ -383,7 +387,8 @@ class BltConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
+        if "rope_theta" not in self.rope_parameters:
+            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 500000.0)
         rope_config_standardize_and_validate(self)
 
         # Cross attention configurations

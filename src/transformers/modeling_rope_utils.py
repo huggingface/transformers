@@ -907,6 +907,10 @@ def rope_config_standardize_and_validate(config: PreTrainedConfig, ignore_keys: 
         # BC: "rope_theta" was originally saved in config
         rope_parameters["rope_theta"] = rope_parameters.get("rope_theta", getattr(config, "rope_theta", None))
 
+        # Ignore `partial_rotary_factor` if present for all RoPE types
+        ignore_keys = ignore_keys if ignore_keys is not None else set()
+        ignore_keys.update(["partial_rotary_factor"])
+
         if validation_fn is not None:
             validation_fn(rope_parameters, config=config, ignore_keys=ignore_keys)
         else:
