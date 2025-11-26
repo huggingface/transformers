@@ -705,14 +705,16 @@ if TYPE_CHECKING:
     from .tokenization_utils_base import TokenSpan as TokenSpan
 
     # Tokenization
-    from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
-    from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
-    from .tokenization_utils_tokenizers import (
-        TokenizersBackend as TokenizersBackend,
-    )
-    from .tokenization_utils_tokenizers import (
-        TokenizersExtractor as TokenizersExtractor,
-    )
+    if is_sentencepiece_available():
+        from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
+    if is_tokenizers_available():
+        from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+        from .tokenization_utils_tokenizers import (
+            TokenizersBackend as TokenizersBackend,
+        )
+        from .tokenization_utils_tokenizers import (
+            TokenizersExtractor as TokenizersExtractor,
+        )
 
     # Trainer
     from .trainer import Trainer as Trainer
