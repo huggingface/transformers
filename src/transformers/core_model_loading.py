@@ -314,14 +314,15 @@ class WeightTransform:
 
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
-        if self.distributed_operation is not None or self.quantization_operation is not None:
+        # TODO: check this and relax when quantizer have `reverse_op`
+        if self.quantization_operation is not None:
             raise ValueError("Cannot reverse the transform with TP or quantization")
 
         kwargs = {}
         # Add the reverse ops if applicable (it needs to be provided at __init__)
         if hasattr(self, "operations"):
             # All reverse ops, in reverse order
-            kwargs["operations"] = [op.reverso_op for op in self.operations[::-1]]
+            kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
             source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
