@@ -317,7 +317,6 @@ class WeightTransform:
             # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
             if r"(.+)" in pattern:
                 pattern = pattern.replace(r"(.+)", "")
-
             self.target_patterns[i] = pattern
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper)
