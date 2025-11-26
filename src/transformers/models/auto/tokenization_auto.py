@@ -523,6 +523,13 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                             )
                     except Exception:
                         pass
+            except ImportError as e:
+                if "sentencepiece" in str(e).lower() or "SentencePiece" in str(e):
+                    raise ImportError(
+                        f"This checkpoint only contains a SentencePiece model file ({spm_file}), but the `sentencepiece` library is not installed. "
+                        f"Please install sentencepiece to load this tokenizer: `pip install sentencepiece`"
+                    ) from e
+                raise
             except Exception:
                 pass
 
