@@ -13,7 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..core_model_loading import WeightConverter
 from .base import HfQuantizer
 
 
@@ -35,6 +34,7 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
+    from ..core_model_loading import WeightConverter
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
