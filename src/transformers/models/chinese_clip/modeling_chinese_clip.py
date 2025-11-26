@@ -1024,14 +1024,14 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         ...     text_features = model.get_text_features(**inputs)
         >>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
         ```"""
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
 
-        pooled_output = text_outputs.pooler_output
+        pooled_output = text_outputs[0][:, 0, :]
         text_features = self.text_projection(pooled_output)
 
         return text_features
