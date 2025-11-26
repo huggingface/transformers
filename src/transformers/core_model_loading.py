@@ -305,6 +305,27 @@ class WeightTransform:
         if isinstance(self.target_patterns, str):
             self.target_patterns = [self.target_patterns]
 
+        # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
+        # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
+        # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
+        for i, pattern in enumerate(self.target_patterns):
+            # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
+            pattern = pattern.removeprefix("^")
+            # This is ugly but needed for reverse mapping of Qwen2.5!
+            if r"(?!\.(language_model|visual))" in pattern:
+                pattern = pattern.replace(r"(?!\.(language_model|visual))", "")
+            # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
+            if r"(.+)" in pattern:
+                pattern = pattern.replace(r"(.+)", "")
+
+            self.target_patterns[i] = pattern
+
+        # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper)
+        for i, pattern in enumerate(self.source_patterns):
+            if r"\1" in pattern:
+                pattern = pattern.replace(r"\1", "")
+            self.source_patterns[i] = pattern
+
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
@@ -313,7 +334,7 @@ class WeightTransform:
         # to create from the source as `add_tensor` will only be called once with this given source for many targets
         if (ops := getattr(self, "operations", None)) is not None:
             # TODO: Here we assume this only happens during saving if the model was created from __init__, i.e.
-            # the Futures are actually Tensors, and we use heuristics to grab the sizes and the names
+            # the future are actually Tensors, and we use heuristics to grab the sizes and the names
             # This is brittle but works for the default mappings we have now
             all_created_targets = []
             if len(ops) == 2 and isinstance(ops[0], Chunk) and isinstance(ops[1], SplitModulelist):
@@ -367,6 +388,7 @@ class WeightTransform:
                 reverse_collected_tensors[matched_target_pattern].append(target_key)
                 for source in all_sources:
                     reverse_layer_targets[source].add(target_key)
+                    # reverse_collected_tensors[matched_target_pattern].append(source)
             reverse_collected_tensors = {k: sorted(set(v)) for k, v in reverse_collected_tensors.items()}
             reverse_transform.layer_targets = reverse_layer_targets
             reverse_transform.collected_tensors = reverse_collected_tensors
@@ -633,14 +655,9 @@ def repl(m, repl_map: dict[str, str]) -> str:
     # Exactly one match => return replacement
     name = matched_groups[0]
     replacement = repl_map[name]
-    # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-    replacement = replacement.removeprefix("^")
-    # This is ugly but needed for reverse mapping of Qwen2.5!
-    if r"(?!\.(language_model|visual))" in replacement:
-        replacement = replacement.replace(r"(?!\.(language_model|visual))", "")
     # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
-    if "\1" in replacement and len(m.groups()) > 1:
-        replacement = replacement.replace("\1", m.group(1))
+    if r"\1" in replacement and len(m.groups()) > 1:
+        replacement = replacement.replace(r"\1", m.group(1))
 
     return replacement
 
