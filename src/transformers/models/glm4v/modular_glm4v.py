@@ -202,10 +202,6 @@ class Glm4vTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        image_token_id (`int`, *optional*):
-            Token index used as placeholder for image embeddings.
-        video_token_id (`int`, *optional*):
-            Token index used as placeholder for video embeddings.
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
