@@ -246,7 +246,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     "model.layers.0.self_attn.k_proj.weight",
                     "model.layers.0.self_attn.v_proj.weight",
                 ],
-                operations=[Chunk(dim=0, chunks=3)],
+                operations=[Chunk(dim=0)],
             ),
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]

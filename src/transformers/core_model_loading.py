@@ -148,7 +148,7 @@ class Chunk(ConversionOps):
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         sizes = len(target_patterns)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
-        return {target: chunk.squeeze() for target, chunk in zip(target_patterns, chunks)}
+        return dict(zip(target_patterns, chunks))
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -639,10 +639,10 @@ def repl(m, repl_map: dict[str, str]) -> str:
     # This is ugly but needed for reverse mapping of Qwen2.5!
     if r"(?!\.(language_model|visual))" in replacement:
         replacement = replacement.replace(r"(?!\.(language_model|visual))", "")
+    # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
+    if "\1" in replacement and len(m.groups()) > 1:
+        replacement = replacement.replace("\1", m.group(1))
 
-    # Allow capturing groups in patterns, i.e. to add a prefix to all keys (timm_wrapper)
-    # if len(m.groups()) > 1:
-    # return re.sub(rf"({m.group(1)})", replacement, m.group(0))
     return replacement
 
 
