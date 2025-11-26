@@ -210,7 +210,7 @@ class BenchmarkRunner:
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            e2e_latency, ttft, itl, shape_and_decoded_output, gpu_metrics = self.time_generate(
+            e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
                 max_new_tokens=config.num_tokens_to_generate,
                 use_continuous_batching=config.continuous_batching,
                 gpu_monitor=None,
@@ -233,12 +233,12 @@ class BenchmarkRunner:
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
             for _ in trange(config.measurement_iterations, desc="Benchmarking"):
-                e2e_latency, ttft, itl, shape_and_decoded_output, gpu_metrics = self.time_generate(
+                e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
                     max_new_tokens=config.num_tokens_to_generate,
                     use_continuous_batching=config.continuous_batching,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
                 )
-                result.accumulate(e2e_latency, ttft, itl, shape_and_decoded_output, gpu_metrics)
+                result.accumulate(e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
 
             # Profile if needed
@@ -298,9 +298,8 @@ class BenchmarkRunner:
 
         # Compute metrics
         e2e_latency = wall_time_1 - wall_time_0
-        time_to_first_token = min(ts[0] - wall_time_0 for ts in timestamps)
-        inter_token_latency = np.mean([(ts[-1] - ts[0]) / (len(ts) - 1) for ts in timestamps])
-        return e2e_latency, time_to_first_token, inter_token_latency, shape_and_decoded_output, gpu_metrics
+        timestamps = torch.tensor(timestamps).sub(wall_time_0).tolist()
+        return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
