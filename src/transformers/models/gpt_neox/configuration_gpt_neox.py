@@ -144,8 +144,8 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
+
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         rope_parameters = rope_scaling or rope_parameters
@@ -161,7 +161,9 @@ class GPTNeoXConfig(PreTrainedConfig):
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
 
 
 __all__ = ["GPTNeoXConfig"]

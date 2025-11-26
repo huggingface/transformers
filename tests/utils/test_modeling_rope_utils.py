@@ -24,7 +24,7 @@ if is_torch_available():
     import torch
 
     from transformers import ROPE_INIT_FUNCTIONS
-    from transformers.modeling_rope_utils import rope_config_validation
+    from transformers.modeling_rope_utils import rope_config_standardize_and_validate
     from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
 
@@ -35,13 +35,13 @@ class RopeTest(unittest.TestCase):
         all_rope_types = ROPE_INIT_FUNCTIONS.keys()
 
         # The base config is always valid (default RoPE)
-        rope_config_validation(config)
+        rope_config_standardize_and_validate(config)
 
         # If we explicitly set the other RoPE types, then validation should fail
         for rope_type in all_rope_types:
             config.rope_parameters = {"rope_type": rope_type, "rope_theta": 10000.0}
             with self.assertRaises(KeyError):
-                rope_config_validation(config)
+                rope_config_standardize_and_validate(config)
 
         # Parameters are exclusive to their own RoPE type, and should raise an exception if incorrectly passed
         valid_param_mapping = {
@@ -60,16 +60,16 @@ class RopeTest(unittest.TestCase):
                     continue
                 else:
                     with self.assertRaises(KeyError):
-                        rope_config_validation(config)
+                        rope_config_standardize_and_validate(config)
 
         # Any other parameters passed to RoPE will raise a warning that a particular key is not used
         # But sometimes we can have model-specific RoPE kwargs and bypass warning with `ignore_keys`
         model_specific_kwarg = "mrope_sections"  # e,g in Qwen2-VL
 
         config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, model_specific_kwarg: True}
-        rope_config_validation(config, ignore_keys={model_specific_kwarg})
+        rope_config_standardize_and_validate(config, ignore_keys={model_specific_kwarg})
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            rope_config_validation(config)
+            rope_config_standardize_and_validate(config)
             self.assertEqual(len(logs.output), 1)
             self.assertIn(model_specific_kwarg, logs.output[0])
 
@@ -81,10 +81,10 @@ class RopeTest(unittest.TestCase):
             "global_attn": {"rope_type": "default", "rope_theta": 10000},
             "local_attn": {"rope_type": "linear", "rope_theta": 10000, "factor": 2.0},
         }
-        rope_config_validation(config)
+        rope_config_standardize_and_validate(config)
 
         config.rope_parameters = config.rope_parameters["local_attn"]
-        rope_config_validation(config)
+        rope_config_standardize_and_validate(config)
 
     def test_yarn_original_original_max_position_embeddings_validation(self):
         """Tests that models with no/bad `original_max_position_embeddings` raise a warning"""
@@ -100,7 +100,7 @@ class RopeTest(unittest.TestCase):
         config.rope_parameters = rope_config
         with self.assertRaises(AssertionError):  # confirm that no warnings are thrown
             with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-                rope_config_validation(config)
+                rope_config_standardize_and_validate(config)
 
         # bad rope config, no `original_max_position_embeddings` -> warning
         rope_config = {
@@ -110,7 +110,7 @@ class RopeTest(unittest.TestCase):
         }
         config.rope_parameters = rope_config
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            rope_config_validation(config)
+            rope_config_standardize_and_validate(config)
             self.assertEqual(len(logs.output), 1)
             self.assertIn("is unset", logs.output[0])
 
@@ -123,7 +123,7 @@ class RopeTest(unittest.TestCase):
         }
         config.rope_parameters = rope_config
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            rope_config_validation(config)
+            rope_config_standardize_and_validate(config)
             self.assertEqual(len(logs.output), 1)
             self.assertIn("implicit factor", logs.output[0])
 
@@ -373,7 +373,7 @@ class RopeTest(unittest.TestCase):
             }
             self.assertEqual(config.rope_parameters.get("attention_factor"), None)
             # Verify that "TypeError: '<' not supported between instances of 'NoneType' and 'int'" is not raised.
-            rope_config_validation(config)
+            rope_config_standardize_and_validate(config)
 
         # Check 2: seq_len == 0 -> short factor is applied to the default frequencies
         config.rope_parameters = {

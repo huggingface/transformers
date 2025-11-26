@@ -91,19 +91,21 @@ def get_standardized_rope_params(config):
 
     # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
     rope_theta = getattr(config, "rope_theta", None)
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", None)
 
     # Case 1: one RoPE theat = one RoPE param per model without nesting
     if not set(rope_parameters.keys()).issubset(ALLOWED_LAYER_TYPES):
         rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
         rope_parameters.setdefault("rope_theta", rope_theta)
-        rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+        if partial_rotary_factor is not None:
+            rope_parameters["partial_rotary_factor"] = partial_rotary_factor
     # Case 2: different RoPE for each layer as nested dict
     else:
         for layer_type in config.layer_types:
             rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
             rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
-            rope_parameters[layer_type].setdefault("partial_rotary_factor", partial_rotary_factor)
+            if partial_rotary_factor is not None:
+                rope_parameters[layer_type]["partial_rotary_factor"] = partial_rotary_factor
 
     return rope_parameters
 
@@ -906,10 +908,6 @@ def rope_config_standardize_and_validate(config: PreTrainedConfig, ignore_keys: 
         rope_parameters["rope_type"] = rope_type
         # BC: "rope_theta" was originally saved in config
         rope_parameters["rope_theta"] = rope_parameters.get("rope_theta", getattr(config, "rope_theta", None))
-
-        # Ignore `partial_rotary_factor` if present for all RoPE types
-        ignore_keys = ignore_keys if ignore_keys is not None else set()
-        ignore_keys.update(["partial_rotary_factor"])
 
         if validation_fn is not None:
             validation_fn(rope_parameters, config=config, ignore_keys=ignore_keys)
