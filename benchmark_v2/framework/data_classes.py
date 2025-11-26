@@ -115,9 +115,9 @@ class BenchmarkResult:
         self.time_to_first_token.append(tftt)
         self.inter_token_latency.append(itl)
 
-    def to_dict(self, include_timestamps: bool = False) -> dict[str, Any]:
-        # Save GPU metrics as None if it contains only None values
-        if all(gm is None for gm in self.gpu_metrics):
+    def to_dict(self, summarized: bool = False) -> dict[str, Any]:
+        # Save GPU metrics as None if it contains only None values or if we are summarizing
+        if summarized or all(gm is None for gm in self.gpu_metrics):
             gpu_metrics = None
         else:
             gpu_metrics = [gm.to_dict() for gm in self.gpu_metrics]
@@ -127,7 +127,7 @@ class BenchmarkResult:
             "inter_token_latency": self.inter_token_latency,
             "shape_and_decoded_outputs": self.shape_and_decoded_outputs,
             "gpu_metrics": gpu_metrics,
-            "timestamps": self._timestamps if include_timestamps else None,
+            "timestamps": self._timestamps if summarized else None,
         }
 
     @classmethod

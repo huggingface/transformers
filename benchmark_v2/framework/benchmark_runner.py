@@ -415,14 +415,14 @@ class BenchmarkRunner:
 
         api = HfApi()
         n_results = len(results)
-        for include_timestamps in [False, True]:
-            self.logger.info(f"Pushing {n_results} results to: {dataset_id} with {include_timestamps = }")
+        for summarized in [False, True]:
+            self.logger.info(f"Pushing {n_results} results to: {dataset_id} with {summarized = }")
             rows = []
             for cfg_hash, entry in results.items():
                 row = {
                     "benchmark_config_hash": cfg_hash,
                     "config": entry["config"].to_dict(),
-                    "measurements": entry["measurements"].to_dict(include_timestamps=include_timestamps),
+                    "measurements": entry["measurements"].to_dict(summarized=summarized),
                     "metadata": entry["metadata"].to_dict(),
                 }
                 rows.append(row)
@@ -438,7 +438,7 @@ class BenchmarkRunner:
 
                 # NOTE: we expect the repository to already exist
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
-                file_name = "full_results" if include_timestamps else "summarized_results"
+                file_name = "full_results" if summarized else "summarized_results"
                 file_name = file_name + "/" + f"benchmark_run_{timestamp}.jsonl"
                 api.upload_file(
                     path_or_fileobj=jsonl_path,
@@ -447,4 +447,4 @@ class BenchmarkRunner:
                     repo_type="dataset",
                     token=PUSH_TO_HUB_TOKEN,
                 )
-                self.logger.info(f"Successfully uploaded results to: {dataset_id} with {include_timestamps = }")
+                self.logger.info(f"Successfully uploaded results to: {dataset_id} with {summarized = }")
