@@ -67,7 +67,8 @@ class Blip2Processor(ProcessorMixin):
             tokenizer.add_tokens([self.image_token], special_tokens=True)
         else:
             self.image_token = tokenizer.image_token
-        self.num_query_tokens = num_query_tokens
+        # Default to 32 if missing, matching official BLIP-2 checkpoints
+        self.num_query_tokens = num_query_tokens if num_query_tokens is not None else 32
 
         super().__init__(image_processor, tokenizer)
 
@@ -107,8 +108,9 @@ class Blip2Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         max_length = output_kwargs["text_kwargs"].pop("max_length", None)
         if max_length is not None:
-            output_kwargs["text_kwargs"]["max_length"] = max_length - self.num_query_tokens
-
+            adjusted_max_length = max_length - self.num_query_tokens
+            if adjusted_max_length > 0:
+                output_kwargs["text_kwargs"]["max_length"] = adjusted_max_length
         encoding = BatchFeature(tensor_type=return_tensors)
         if text is not None:
             if isinstance(text, str):
