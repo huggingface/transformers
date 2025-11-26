@@ -24,6 +24,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -180,6 +181,9 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        bos_token_id: Optional[int] = 151643,
+        eos_token_id: Optional[int] = 151645,
+        pad_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -222,7 +226,13 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         if self.rope_parameters["rope_type"] == "mrope":
             self.rope_parameters["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            **kwargs,
+        )
 
 
 class Qwen2_5_VLConfig(PreTrainedConfig):
@@ -285,8 +295,12 @@ class Qwen2_5_VLConfig(PreTrainedConfig):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
-            # For BC use all kwargs to init `TextConfig`
-            self.text_config = self.sub_configs["text_config"](**kwargs)
+            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
+            text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
+            text_params = list(text_params) + ["rope_scaling", "rope_theta"]
+            text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+            text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+            self.text_config = self.sub_configs["text_config"](**text_config)
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
