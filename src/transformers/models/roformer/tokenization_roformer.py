@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for RoFormer."""
 
-from tokenizers import Tokenizer, normalizers, pre_tokenizers, processors
+from tokenizers import NormalizedString, PreTokenizedString, Tokenizer, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -24,8 +24,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
-
-from tokenizers import NormalizedString, PreTokenizedString
 
 
 class JiebaPreTokenizer:
