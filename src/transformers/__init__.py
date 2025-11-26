@@ -696,8 +696,8 @@ if TYPE_CHECKING:
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
     # Tokenization
-    from .tokenization_python import PreTrainedTokenizer as PreTrainedTokenizer
-    from .tokenization_python import PythonBackend as PythonBackend
+    from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_utils import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
