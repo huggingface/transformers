@@ -72,8 +72,6 @@ class HerbertTokenizer(TokenizersBackend):
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
         sep_token: str = "</s>",
-        vocab_file: Optional[str] = None,
-        merges_file: Optional[str] = None,
         **kwargs,
     ):
         if vocab is not None:
@@ -110,9 +108,6 @@ class HerbertTokenizer(TokenizersBackend):
         )
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
-
-        self.vocab_file = vocab_file
-        self.merges_file = merges_file
 
         super().__init__(
             cls_token=cls_token,

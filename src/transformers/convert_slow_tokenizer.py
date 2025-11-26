@@ -18,6 +18,7 @@ All the conversions are grouped here to gather SentencePiece dependencies outsid
 allow to make our dependency on SentencePiece optional.
 """
 
+import os
 import warnings
 from functools import lru_cache
 from typing import Optional
@@ -1611,6 +1612,45 @@ def bytes_to_unicode():
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
+
+
+class TxtConverter:
+    """
+    A lightweight converter for tokenizers that only provide `vocab.txt` + `merges.txt`.
+
+    It only exposes the loaded vocab/merges; model-specific construction is delegated to the tokenizer class.
+    """
+
+    def __init__(self, vocab_file: str, merges_file: str, add_prefix_space: bool = False, unk_token=None):
+        if merges_file is None or not os.path.isfile(merges_file):
+            raise ValueError("TxtConverter requires both `vocab.txt` and `merges.txt` to be present.")
+
+        self.vocab_file = vocab_file
+        self.merges_file = merges_file
+        self.add_prefix_space = add_prefix_space
+        self.unk_token = str(unk_token) if unk_token is not None else "[UNK]"
+        self.vocab, self.merges = self._load()
+
+    def _load(self):
+        vocab = {}
+        import json
+        with open(self.vocab_file, "r", encoding="utf-8") as vf:
+            vocab = json.load(vf) if self.vocab_file.endswith(".json") else {}
+
+        merges = []
+        with open(self.merges_file, "r", encoding="utf-8") as mf:
+            for line in mf:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    parts = line.split()
+                    if len(parts) == 2:
+                        merges.append((parts[0], parts[1]))
+
+        return vocab, merges
+
+    def converted(self):
+        # Only populate vocab/merges; construction is handled by the target tokenizer class.
+        return None
 
 
 class TikTokenConverter:

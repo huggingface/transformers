@@ -117,6 +117,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             raise ValueError(
                 "You have to call `super().__init__()` in your tokenizer class after your initialize `self._tokenizer`."
             )
+        self._extra_special_tokens = kwargs.get("extra_special_tokens", [])
 
         _truncation = self._tokenizer.truncation
 
@@ -298,6 +299,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         added_tokens_file = resolved_vocab_files.get("added_tokens_file")
         tokenizer_file = resolved_vocab_files.get("tokenizer_file")
         vocab_file = resolved_vocab_files.get("vocab_file")
+        merges_file = resolved_vocab_files.get("merges_file")
         gguf_file = resolved_vocab_files.get("gguf_file")
 
         init_kwargs = dict(init_configuration)
@@ -325,6 +327,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         vocab = None
         merges = None
 
+        def _record_loaded_file(path):
+            if path is not None:
+                files_loaded.append(os.path.basename(path))
+
         if gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
@@ -337,7 +343,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 kwargs.update(additional_kwargs)
 
         if tokenizer_file is not None and os.path.isfile(tokenizer_file):
-            files_loaded.append(os.path.basename(tokenizer_file))
+            _record_loaded_file(tokenizer_file)
             with open(tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
 
@@ -374,14 +380,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         class_args = {x.name for x in class_sig.parameters.values()}
         converter = None
         if tokenizer_json is None and vocab_file is not None:
-            files_loaded.append(os.path.basename(vocab_file))
-            if os.path.basename(vocab_file).startswith("tekken"):
+            _record_loaded_file(vocab_file)
+            vocab_filename = os.path.basename(vocab_file)
+            if vocab_filename.startswith("tekken"):
                 from .integrations.mistral import MistralConverter
 
                 converter = MistralConverter(vocab=vocab_file)
                 all_special = converter.additional_special_tokens
                 init_kwargs.setdefault("additional_special_tokens", all_special)
-            elif os.path.basename(vocab_file).endswith(".model"):
+            elif vocab_filename.endswith(".model"):
                 from .convert_slow_tokenizer import TikTokenConverter
 
                 try:
@@ -401,17 +408,34 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             "Unable to read tokenizer vocabulary. Please ensure you have the required "
                             "`sentencepiece` dependency installed."
                         ) from e
-            elif "vocab_file" in class_args:  # some "fast" tokenizers that have not been changed to use tokenizer.json
+            elif vocab_filename.endswith(".json"):
+                try:
+                    from .convert_slow_tokenizer import TxtConverter
+
+                    converter = TxtConverter(
+                        vocab_file=vocab_file,
+                        merges_file=merges_file,
+                        add_prefix_space=init_kwargs.get("add_prefix_space", False),
+                        unk_token=init_kwargs.get("unk_token"),
+                    )
+                    _record_loaded_file(merges_file)
+                except Exception:
+                    converter = None
+
+            if converter is None and "vocab_file" in class_args:  # some "fast" tokenizers that have not been changed to use tokenizer.json
                 init_kwargs.setdefault("vocab_file", vocab_file)
-                if merges is not None and "merges_file" in class_args:
-                    merges_file = resolved_vocab_files.get("merges_file")
-                    if merges_file is not None:
-                        files_loaded.append(os.path.basename(merges_file))
-                        init_kwargs.setdefault("merges_file", merges_file)
+                if merges_file is not None and "merges_file" in class_args:
+                    _record_loaded_file(merges_file)
+                    init_kwargs.setdefault("merges_file", merges_file)
 
             if converter is not None:
                 tokenizer_object = converter.converted()
                 vocab, merges = converter.vocab, converter.merges
+                if tokenizer_object is None and converter.__class__.__name__ == "TxtConverter" and cls is TokenizersBackend:
+                    raise ValueError(
+                        "Cannot initialize TokenizersBackend directly from `vocab.txt` and `merges.txt`. "
+                        "Please load a concrete tokenizer class or provide a tokenizer.json."
+                    )
 
         if added_tokens_decoder:
             init_kwargs["added_tokens_decoder"] = added_tokens_decoder
