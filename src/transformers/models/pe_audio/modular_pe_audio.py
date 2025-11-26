@@ -5,34 +5,31 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...configuration_utils import PretrainedConfig
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from ..auto import AutoModel
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..dac.modeling_dac import DacEncoder
+from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
-    Qwen3RMSNorm,
-    Qwen3RotaryEmbedding,
     Qwen3Attention,
     Qwen3DecoderLayer,
+    Qwen3RMSNorm,
+    Qwen3RotaryEmbedding,
 )
-from ..dac.configuration_dac import DacConfig
-from ..qwen3.configuration_qwen3 import Qwen3Config
 from .configuration_pe_audio import PEAudioConfig, PEAudioEncoderConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
-from ...configuration_utils import PretrainedConfig
 
 
 class PEAudioEncoderConfig(Qwen3Config):
-
     _default_dac_config_kwargs = {
         "downsampling_ratios": [2, 8, 10, 12],
         "encoder_hidden_size": 64,
         "codebook_dim": 128,
     }
+    sub_configs = {"dac_config": CONFIG_MAPPING['dac']}
 
     def __init__(
         self,
@@ -290,10 +287,17 @@ class PEAudioEncoderEmbeddings(nn.Module):
         return hidden_states, padding_mask
 
 
-class PEAudioEncoderAttention(Qwen3Attention): ...
+class PEAudioAttention(Qwen3Attention):
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
+        self.is_causal = False
+        self.sliding_window = None
 
 
-class PEAudioEncoderLayer(Qwen3DecoderLayer): ...
+class PEAudioEncoderLayer(Qwen3DecoderLayer):
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
+        del self.attention_type
 
 
 class PEAudioRMSNorm(Qwen3RMSNorm): ...
@@ -303,8 +307,14 @@ class PEAudioRotaryEmbedding(Qwen3RotaryEmbedding): ...
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`PEAudioEncoder`].
+    """
+)
 class PEAudioEncoderOutput(BaseModelOutputWithPooling):
-    padding_mask: Optional[torch.Tensor] = None
+    codec_features: Optional[torch.FloatTensor] = None
+    output_mask: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -322,8 +332,22 @@ class PEAudioPretrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": PEAudioEncoderLayer,
-        "attentions": PEAudioEncoderAttention,
+        "attentions": PEAudioAttention,
     }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, PEAudioEncoderEmbeddings):
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+
 
 @auto_docstring(
     custom_intro="""
@@ -332,6 +356,7 @@ class PEAudioPretrainedModel(PreTrainedModel):
 )
 class PEAudioEncoder(PEAudioPretrainedModel):
     config: PEAudioEncoderConfig
+    main_input_name = "input_values"
 
     def __init__(self, config: PEAudioEncoderConfig):
         super().__init__(config)
@@ -351,6 +376,8 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         self.norm = PEAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = PEAudioRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+
+        self.post_init()
 
     def get_audio_features(
         self,
@@ -409,7 +436,7 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         return PEAudioEncoderOutput(
             last_hidden_state=hidden_states[:, 1:],
             pooler_output=hidden_states[:, 0],
-            padding_mask=padding_mask,
+            output_mask=padding_mask,
         )
 
 

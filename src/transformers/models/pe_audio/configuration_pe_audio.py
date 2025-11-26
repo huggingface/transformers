@@ -138,12 +138,12 @@ class PEAudioEncoderConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
     _default_dac_config_kwargs = {
         "downsampling_ratios": [2, 8, 10, 12],
         "encoder_hidden_size": 64,
         "codebook_dim": 128,
     }
+    sub_configs = {"dac_config": CONFIG_MAPPING["dac"]}
 
     def __init__(
         self,

@@ -100,7 +100,7 @@ class PEAudioEncoderTester:
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_channels, self.audio_seq_length])
         valid_lengths = ids_tensor([self.batch_size], self.audio_seq_length)
-        padding_mask = torch.ones([self.batch_size, self.audio_seq_length], device=torch_device) < valid_lengths[:, None]
+        padding_mask = torch.arange(self.audio_seq_length, device=torch_device)[None, :] < valid_lengths[:, None]
         padding_mask = padding_mask.int()
         config = self.get_config()
 

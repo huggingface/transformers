@@ -17,6 +17,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -193,7 +194,7 @@ def eager_attention_forward(
 class PEVideoEncoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: PEVideoConfig, layer_idx: int):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -201,7 +202,7 @@ class PEVideoEncoderAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -217,7 +218,7 @@ class PEVideoEncoderAttention(nn.Module):
         )
         self.q_norm = PEVideoRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = PEVideoRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sliding_window = None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -357,7 +358,7 @@ class PEVideoAttention(nn.Module):
 
 
 class PEVideoEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: PEVideoConfig, layer_idx: int):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -366,7 +367,6 @@ class PEVideoEncoderLayer(GradientCheckpointingLayer):
         self.mlp = PEVideoMLP(config)
         self.input_layernorm = PEVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PEVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -424,6 +424,42 @@ class PEVideoRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+class PEVideoRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: PEVideoConfig, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 @auto_docstring
 class PEVideoPreTrainedModel(PreTrainedModel):
     config: PEVideoConfig
@@ -442,6 +478,19 @@ class PEVideoPreTrainedModel(PreTrainedModel):
         "attentions": PEVideoEncoderAttention,
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, PEVideoEncoderEmbeddings):
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+
 
 @auto_docstring(
     custom_intro="""
@@ -449,6 +498,8 @@ class PEVideoPreTrainedModel(PreTrainedModel):
     """
 )
 class PEVideoEncoder(PEVideoPreTrainedModel):
+    config: PEVideoEncoderConfig
+
     def __init__(self, config: PEVideoEncoderConfig):
         super().__init__(config)
         # Vision feature extraction stack (pre-embeddings)
@@ -464,6 +515,7 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
             [PEVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = PEVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = PEVideoRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def get_video_features(
@@ -496,13 +548,13 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
             pixel_values_videos,
             padding_mask_videos=padding_mask_videos,
         )
-        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask_videos=attention_mask)
+        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=attention_mask)
 
         if attention_mask is not None:
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        position_embeddings = self.rope_embeddings(inputs_embeds, position_ids)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
         hidden_states = inputs_embeds
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -517,9 +569,9 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
         hidden_states = self.output(hidden_states)
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
+            last_hidden_state=hidden_states[:, 1:],
             pooler_output=hidden_states[:, 0],
         )
 
 
-__all__ = ["PEVideoModel", "PEVideoEncoder"]
+__all__ = ["PEVideoEncoder"]

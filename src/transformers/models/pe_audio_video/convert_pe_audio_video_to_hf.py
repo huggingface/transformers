@@ -1,8 +1,10 @@
-from transformers.utils import cached_file
-from transformers.models.pe_audio_video.modeling_pe_audio_video import PEAudioVideoModel, PEAudioVideoConfig
-import safetensors.torch
-import re
 import gc
+import re
+
+import safetensors.torch
+
+from transformers.models.pe_audio_video.modeling_pe_audio_video import PEAudioVideoConfig, PEAudioVideoModel
+from transformers.utils import cached_file
 
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
@@ -30,13 +32,14 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"audio_video_model\.transformer\.norm": "audio_video_encoder.norm",
     r"audio_video_model\.transformer\.output": "audio_video_encoder.output",
 
-    r"audio_video_model\.transformer\.modality_aligner": "audio_video_encoder.modality_aligner",
+    r"audio_video_model\.transformer\.modality_aligner.conv": "audio_video_encoder.video_proj",
+    r"audio_video_model\.transformer\.modality_aligner.layer_norm": "audio_video_encoder.video_norm",
     r"audio_video_model\.transformer\.concat_modality_proj": "audio_video_encoder.concat_modality_proj",
     r"audio_video_model\.transformer\.data_proj": "audio_video_encoder.data_proj",
 
     r"audio_video_text_head": "text_head_audio_video",
     r"audio_text_head": "text_head_audio",
-    r"video_text_head": "text_head_video", 
+    r"video_text_head": "text_head_video",
 }
 
 path = cached_file("facebook/pe-av-large", "model.safetensors")
@@ -55,7 +58,8 @@ def permute(w, n_heads, dim1, dim2):
     Permute weights for rotary embeddings.
     Based on convert_perception_lm_weights_to_hf.py line 227-228
     """
-    return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+    # return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+    return w
 
 converted_state_dict = {}
 for original_key, tensor in state_dict.items():

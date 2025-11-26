@@ -1,24 +1,22 @@
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
-from ..auto import AutoModel, AutoModelForImageClassification
-from ..pe_audio.modeling_pe_audio import PEAudioEncoderEmbeddings
-from .configuration_pe_video import PEVideoConfig, PEVideoEncoderConfig
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
-from ..qwen3.configuration_qwen3 import Qwen3Config
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ...configuration_utils import PretrainedConfig
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForImageClassification
+from ..pe_audio.modeling_pe_audio import PEAudioEncoderEmbeddings
+from ..qwen3.configuration_qwen3 import Qwen3Config
+from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
 from ..timm_wrapper import TimmWrapperConfig
+from .configuration_pe_video import PEVideoConfig, PEVideoEncoderConfig
+
 
 class PEVideoEncoderConfig(Qwen3Config):
     model_type = "pe_video_encoder"
@@ -31,7 +29,7 @@ class PEVideoEncoderConfig(Qwen3Config):
         "global_pool": "map",
         "initializer_range": 0.02,
     }
-    
+
     def __init__(
         self,
         vision_config=None,
@@ -131,10 +129,17 @@ class PEVideoConfig(PretrainedConfig):
 class PEVideoEncoderEmbeddings(PEAudioEncoderEmbeddings): ...
 
 
-class PEVideoEncoderAttention(Qwen3Attention): ...
+class PEVideoEncoderAttention(Qwen3Attention):
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
+        self.is_causal = False
+        self.sliding_window = None
 
 
-class PEVideoEncoderLayer(Qwen3DecoderLayer): ...
+class PEVideoEncoderLayer(Qwen3DecoderLayer):
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
+        del self.attention_type
 
 
 class PEVideoRMSNorm(Qwen3RMSNorm): ...
@@ -161,7 +166,20 @@ class PEVideoPreTrainedModel(PreTrainedModel):
         "attentions": PEVideoEncoderAttention,
     }
 
-        
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, PEVideoEncoderEmbeddings):
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+
+
 @auto_docstring(
     custom_intro="""
     The PEVideo Encoder model.

@@ -13,12 +13,14 @@
 # limitations under the License.
 import unittest
 
-from transformers import PEAudioVideoConfig, PEAudioVideoEncoderConfig, PEAudioVideoProcessor
+from huggingface_hub import hf_hub_download
+
+from transformers import PEAudioVideoEncoderConfig, PEAudioVideoProcessor
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     slow,
     torch_device,
-    cleanup,
 )
 from transformers.utils import is_torch_available
 
@@ -27,16 +29,13 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
-    random_attention_mask,
 )
-from huggingface_hub import hf_hub_download
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        ModernBertConfig,
         PEAudioVideoEncoder,
         PEAudioVideoModel,
     )
@@ -124,7 +123,7 @@ class PEAudioVideoEncoderTester:
         num_audio_channels=1,
         num_video_channels=3,
         audio_seq_length=160,
-        num_frames=8,
+        num_frames=24,
         is_training=True,
     ):
         self.parent = parent
@@ -146,12 +145,12 @@ class PEAudioVideoEncoderTester:
         # seq_length is what gets feeded to the transformer
         # we first have to divide by hop_length to get the number of frames
         # then we add 1 because we add the class token
-        return self.audio_seq_length // config.dac_config.hop_length + 1
+        return self.audio_seq_length // config.audio_config.dac_config.hop_length + 1
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_seq_length])
         valid_audio_lengths = ids_tensor([self.batch_size], self.audio_seq_length)
-        padding_mask = torch.ones([self.batch_size, self.audio_seq_length], device=torch_device) < valid_audio_lengths[:, None]
+        padding_mask = torch.arange(self.audio_seq_length, device=torch_device)[None, :] < valid_audio_lengths[:, None]
         padding_mask = padding_mask.int()
 
         pixel_values_videos = floats_tensor(
@@ -164,8 +163,7 @@ class PEAudioVideoEncoderTester:
             ]
         )
         valid_video_lengths = ids_tensor([self.batch_size], self.num_frames)
-        # padding_mask_videos = torch.ones([self.batch_size, self.num_frames], device=torch_device) < valid_video_lengths[:, None]
-        padding_mask_videos = torch.ones([self.batch_size, self.num_frames], device=torch_device)
+        padding_mask_videos = torch.arange(self.num_frames, device=torch_device)[None, :] < valid_video_lengths[:, None]
         padding_mask_videos = padding_mask_videos.int()
 
         config = self.get_config()
@@ -200,7 +198,7 @@ class PEAudioVideoEncoderTester:
 @require_torch
 class PEAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PEAudioVideoEncoder,)
-    additional_model_inputs = ["input_values", "padding_mask"]
+    additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -223,38 +221,27 @@ class PEAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Cannot set `output_attentions` for timm models.")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperModel cannot be tested with meta device")
-    def test_can_be_initialized_on_meta(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperModel cannot be tested with meta device")
-    def test_can_load_with_meta_device_context_manager(self):
-        pass
-
-    @unittest.skip(reason="PEAudioVideoEncoder does not support retaining gradients on hidden states/attentions yet")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapperForImageClassification does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet.")
-    def test_can_set_attention_dynamically_composite_model(self):
-        pass
-
     @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="PEVideoEncoder does not support feedforward chunking yet")
-    def test_feed_forward_chunking(self):
+    @unittest.skip(
+        "PEAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector."
+    )
+    def test_sdpa_can_dispatch_composite_models(self):
         pass
 
-    @unittest.skip(reason="Cumulative error between single/ batch is too high for this test.")
-    def test_batching_equivalence(self):
+    @unittest.skip("TimmWrapperForImageClassification does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet.")
+    def test_can_set_attention_dynamically_composite_model(self):
         pass
 
+    @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
+    def test_can_be_initialized_on_meta(self):
+        pass
+
+    @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
+    def test_can_load_with_meta_device_context_manager(self):
+        pass
 
 
 @require_torch
@@ -266,7 +253,7 @@ class PEAudioVideoModelIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
-    
+
     @slow
     def test(self):
         video_path = hf_hub_download(
@@ -279,8 +266,14 @@ class PEAudioVideoModelIntegrationTest(unittest.TestCase):
             filename="audiobox.mp4",
             repo_type="dataset"
         )
-        inputs = self.processor(text=["A woman and a man speaking"], audio=[audio_path], videos=[video_path], return_tensors="pt", padding=True).to(torch_device)
 
+        inputs = self.processor(
+            text=["A woman and a man speaking", "A woman speaking"],
+            audio=[audio_path, "/home/eustache_lebihan/add-sam-audio/audiobox_first5sec.mp4"],
+            videos=[video_path, "/home/eustache_lebihan/add-sam-audio/audiobox_first5sec.mp4"],
+            return_tensors="pt",
+            padding=True
+        ).to(torch_device)
         model = PEAudioVideoModel.from_pretrained(
             self.checkpoint_name, dtype=self.dtype, device_map=torch_device, attn_implementation="eager"
         )
