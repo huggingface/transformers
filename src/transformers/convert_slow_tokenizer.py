@@ -1417,8 +1417,8 @@ class MoshiConverter(SpmConverter):
     def __init__(self, vocab_file, **kwargs):
         requires_backends(self, "protobuf")
 
-        Converter.__init__(self, vocab_file)
-
+        self.vocab_file  = vocab_file
+        super().__init__(self, vocab_file)
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
