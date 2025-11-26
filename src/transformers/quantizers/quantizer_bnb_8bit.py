@@ -14,7 +14,7 @@
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
-
+from ..core_model_loading import WeightConverter
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -246,3 +246,16 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         from ..integrations.bitsandbytes import Bnb8bitQuantize
 
         return Bnb8bitQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.bitsandbytes import Bnb8bitDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_keys=["SCB", "weight_format", "weight"],
+                    target_keys="weight",
+                    operations=[Bnb8bitDeserialize(self)],
+                )
+            ]
+        return []

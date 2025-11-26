@@ -37,27 +37,28 @@ class Bnb4bitQuantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
+        full_layer_name: str | None = None,
         model: torch.nn.Module | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         """
         we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
-        target_key, value = tuple(input_dict.items())[0]
+        value = list(input_dict.values())[0]
         value = value[0] if isinstance(value, list) else value
 
         # update param name to get the weights instead of the quantized stats
-        module, _ = get_module_from_name(model, target_key)
+        module, _ = get_module_from_name(model, full_layer_name)
 
         # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
         if issubclass(module.source_cls, Conv1D):
             value = value.T
 
-        old_value = model.get_parameter_or_buffer(target_key)
+        old_value = model.get_parameter_or_buffer(full_layer_name)
         new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
         module._is_hf_initialized = True
-        return {target_key: new_value}
+        return {full_layer_name: new_value}
 
 
 class Bnb4bitDeserialize(ConversionOps):
@@ -103,49 +104,56 @@ class Bnb8bitQuantize(ConversionOps):
         self,
         input_dict: dict[str, list[torch.Tensor]],
         model: torch.nn.Module | None = None,
-        missing_keys=None,
+        full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_key, value = tuple(input_dict.items())[0]
+        value = list(input_dict.values())[0]
         value = value[0] if isinstance(value, list) else value
 
-        module, tensor_name = get_module_from_name(model, target_key)
-        module_name = target_key.rsplit(".", 1)[0]
+        module, _ = get_module_from_name(model, full_layer_name)
+ 
+        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+        # Since weights are saved in the correct "orientation", we skip transposing when loading.
+        if issubclass(module.source_cls, Conv1D):
+            value = value.T
+        value_device = value.device
+        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
+        kwargs.pop("SCB", None)
+        new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
+        return {full_layer_name: new_value}
 
-        if not self.hf_quantizer.pre_quantized:
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
-            # Since weights are saved in the correct "orientation", we skip transposing when loading.
-            if issubclass(module.source_cls, Conv1D):
-                value = value.T
-            value_device = value.device
-            kwargs = getattr(module, tensor_name).__dict__
-            kwargs.pop("SCB", None)
-            new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
-            missing_keys.discard(f"{module_name}.weight_format")
-            missing_keys.discard(f"{module_name}.SCB")
-            return {target_key: new_value}
-        else:
-            missing_keys.discard(target_key)
-            # useless key that gets saved for no reason
-            if tensor_name.endswith("weight_format"):
-                return {}
-            # Save the states for later quantization when they are all gathered
-            if not hasattr(self.hf_quantizer, "param_quant_stats"):
-                self.hf_quantizer.param_quant_stats = defaultdict(dict)
-            self.hf_quantizer.param_quant_stats[module_name].update({target_key: value})
-            # We are ready for quantization in this case (SCB and the weight)
-            if len(self.hf_quantizer.param_quant_stats[module_name]) == 2:
-                weight = self.hf_quantizer.param_quant_stats[module_name].pop(f"{module_name}.weight")
-                kwargs = getattr(module, "weight").__dict__
-                weight_device = weight.device
-                new_value = bnb.nn.Int8Params(weight.to("cpu"), requires_grad=False, **kwargs).to(weight_device)
-                setattr(new_value, "SCB", self.hf_quantizer.param_quant_stats[module_name][f"{module_name}.SCB"])
-                del self.hf_quantizer.param_quant_stats[module_name]
-                # sometimes, weight_format is not saved so we need to remove it from missing keys ...
-                missing_keys.discard(f"{module_name}.weight_format")
-                return {f"{module_name}.weight": new_value}
-            return {}
 
+class Bnb8bitDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        """
+        Deserialization of bnb keys.
+        """
+        if len(input_dict)==1:
+            # special case when we only fetched the weight
+            # since we collected keys, we need to return it like that
+            return {full_layer_name: input_dict["weight"]}
+        
+        for key, value in input_dict.items():
+            if isinstance(value, list):
+                input_dict[key] = value[0]
+                
+        module, _ = get_module_from_name(model, full_layer_name)
+
+        weight = input_dict["weight"]
+        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
+        kwargs["SCB"]= input_dict["SCB"]
+        new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
+        module._is_hf_initialized = True
+        return {full_layer_name: new_value}
 
 def _replace_with_bnb_linear(
     model,
@@ -186,8 +194,6 @@ def _replace_with_bnb_linear(
                             has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
                             threshold=quantization_config.llm_int8_threshold,
                         )
-                        # hack to create the correct keys in the state dict with the right dtype
-                        new_module.weight.SCB = torch.empty(1, dtype=torch.float32)
                         if pre_quantized:
                             new_module.weight.data = new_module.weight.data.to(dtype=torch.int8)
                         model._modules[name] = new_module
