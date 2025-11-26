@@ -950,7 +950,7 @@ def is_optimum_available() -> bool:
 
 
 @lru_cache
-def is_auto_awq_available() -> bool:
+def is_llm_awq_available() -> bool:
     return _is_package_available("awq")
 
 

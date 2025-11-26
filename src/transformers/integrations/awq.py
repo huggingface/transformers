@@ -20,7 +20,7 @@ from packaging import version
 from ..activations import ACT2FN
 from ..modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ..modeling_utils import PreTrainedModel
-from ..utils import is_gptqmodel_available, is_torch_available, logging
+from ..utils import is_gptqmodel_available, is_llm_awq_available, is_torch_available, logging
 from ..utils.quantization_config import (
     AwqBackendPackingMethod,
     AwqConfig,
@@ -98,37 +98,24 @@ def replace_with_awq_linear(
 
     backend = quantization_config.backend
 
-    if not is_gptqmodel_available():
+    if not is_gptqmodel_available() and not is_llm_awq_available():
         raise ValueError(
             "AWQ (either `llmawq`) is not available. Please install it with `pip install gptqmodel` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
         )
 
-    if backend == AwqBackendPackingMethod.AUTOAWQ:
-        if quantization_config.version == AWQLinearVersion.GEMM:
-            from gptqmodel.nn_modules.qlinear.awq_gemm import AwqGEMMQuantLinear
-
-            target_cls = AwqGEMMQuantLinear
-        elif quantization_config.version == AWQLinearVersion.GEMV:
-            from gptqmodel.nn_modules.qlinear.awq_gemv import AwqGEMVQuantLinear
-
-            target_cls = AwqGEMVQuantLinear
-        elif quantization_config.version == AWQLinearVersion.EXLLAMA:
-            if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
-                from gptqmodel.nn_modules.qlinear.awq_exllama import AwqExllamaQuantLinear
-
-                target_cls = AwqExllamaQuantLinear
-            elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
-                from gptqmodel.nn_modules.qlinear.awq_exllamav2 import AwqExllamaV2QuantLinear
-
-                target_cls = AwqExllamaV2QuantLinear
-            else:
-                raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
-        elif quantization_config.version == AWQLinearVersion.IPEX:
-            from gptqmodel.nn_modules.qlinear.torch_fused_awq import TorchFusedAwqQuantLinear
-
-            target_cls = TorchFusedAwqQuantLinear
-        else:
-            raise ValueError(f"Unrecognized AWQ version: {quantization_config.version}")
+    if backend == AwqBackendPackingMethod.GPTQMODEL:
+        from gptqmodel.utils.importer import hf_select_quant_linear_v2
+        from gptqmodel.quantization import METHOD
+        target_cls = hf_select_quant_linear_v2(
+            bits=quantization_config.bits,
+            group_size=quantization_config.group_size,
+            desc_act=False,
+            sym=False,
+            format=quantization_config.format,
+            quant_method=METHOD.AWQ,
+            zero_point=quantization_config.zero_point,
+            pack=False,
+        )
     else:
         from awq.quantize.qmodule import WQLinear
 
@@ -145,17 +132,27 @@ def replace_with_awq_linear(
                 in_features = module.in_features
                 out_features = module.out_features
 
-                model._modules[name] = target_cls(
-                    bits=quantization_config.bits,
-                    sym=quantization_config.sym,
-                    desc_act=quantization_config.desc_act,
-                    group_size=quantization_config.group_size,
-                    in_features=in_features,
-                    out_features=out_features,
-                    bias=module.bias is not None,
-                    dev=module.weight.device,
-                    register_buffers=True,
-                )
+                if backend == AwqBackendPackingMethod.GPTQMODEL:
+                    model._modules[name] = target_cls(
+                        bits=quantization_config.bits,
+                        sym=quantization_config.sym,
+                        desc_act=quantization_config.desc_act,
+                        group_size=quantization_config.group_size,
+                        in_features=in_features,
+                        out_features=out_features,
+                        bias=module.bias is not None,
+                        dev=module.weight.device,
+                        register_buffers=True,
+                    )
+                else:
+                    model._modules[name] = target_cls(
+                        w_bit=quantization_config.bits,
+                        group_size=quantization_config.group_size,
+                        in_features=in_features,
+                        out_features=out_features,
+                        bias=module.bias is not None,
+                        dev=module.weight.device,
+                    )
                 has_been_replaced = True
 
                 # Force requires grad to False to avoid unexpected errors

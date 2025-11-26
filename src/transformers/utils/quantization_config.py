@@ -30,7 +30,6 @@ from packaging import version
 from transformers.utils.import_utils import is_gptqmodel_available
 
 from ..utils import (
-    is_auto_awq_available,
     is_compressed_tensors_available,
     is_hqq_available,
     is_quark_available,
@@ -90,7 +89,7 @@ class AWQLinearVersion(str, Enum):
 
 
 class AwqBackendPackingMethod(str, Enum):
-    AUTOAWQ = "autoawq"
+    GPTQMODEL = "gptqmodel"
     LLMAWQ = "llm-awq"
 
 
@@ -717,6 +716,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.sym = sym
         self.true_sequential = true_sequential
         self.checkpoint_format = checkpoint_format.lower()
+        self.format = self.checkpoint_format
         self.meta = meta
         self.backend = backend.lower() if isinstance(backend, str) else backend
         self.model_seqlen = model_seqlen
@@ -808,7 +808,7 @@ class AwqConfig(GPTQConfig):
         version (`AWQLinearVersion`, *optional*, defaults to `AWQLinearVersion.GEMM`):
             The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise,
             GEMV is better (e.g. < 8 ). GEMM models are compatible with Exllama kernels.
-        backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.AUTOAWQ`):
+        backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.GPTQMODEL`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
         do_fuse (`bool`, *optional*, defaults to `False`):
@@ -833,7 +833,7 @@ class AwqConfig(GPTQConfig):
         group_size: int = 128,
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
-        backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
+        backend: AwqBackendPackingMethod = AwqBackendPackingMethod.GPTQMODEL,
         exllama_config: dict[str, int] | None = None,
         modules_to_not_convert: list | None = None,
         **kwargs,
@@ -844,7 +844,7 @@ class AwqConfig(GPTQConfig):
         self.exllama_config = exllama_config
         self.modules_to_not_convert = modules_to_not_convert
 
-        super().__init__(bits=bits, group_size=group_size, backend=backend, **kwargs)
+        super().__init__(bits=bits, group_size=group_size, backend=backend, checkpoint_format=self.version, **kwargs)
         self.quant_method = QuantizationMethod.AWQ
 
 
@@ -852,9 +852,9 @@ class AwqConfig(GPTQConfig):
         r"""
         Safety checker that arguments are correct
         """
-        if self.backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]:
+        if self.backend not in [AwqBackendPackingMethod.GPTQMODEL, AwqBackendPackingMethod.LLMAWQ]:
             raise ValueError(
-                f"Only supported quantization backends in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
+                f"Only supported quantization backends in {AwqBackendPackingMethod.GPTQMODEL} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
             )
 
         self.version = AWQLinearVersion.from_str(self.version)
