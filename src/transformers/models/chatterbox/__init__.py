@@ -19,6 +19,7 @@ from ...utils import (
     _LazyModule,
     is_torch_available,
 )
+from ...utils.import_utils import define_import_structure
 
 
 _import_structure = {
@@ -50,4 +51,5 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

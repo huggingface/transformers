@@ -17,7 +17,7 @@
 import logging
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import librosa
 import numpy as np
@@ -30,9 +30,9 @@ from torch import Tensor
 from ...generation.utils import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ..llama.modeling_llama import LlamaConfig, LlamaModel, LlamaPreTrainedModel
 from .configuration_t3 import T3Config
+
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def melspectrogram_voice_encoder(wav, config: VoiceEncConfig):
     return mel_norm
 
 
-def stride_as_partials(mel: np.ndarray, hp: VoiceEncConfig, overlap=0.5, rate: float = None, min_coverage=0.8):
+def stride_as_partials(mel: np.ndarray, hp: VoiceEncConfig, overlap=0.5, rate: float | None = None, min_coverage=0.8):
     """Stride mel spectrogram into overlapping partials."""
 
     def get_frame_step(overlap, rate, hp):
@@ -149,7 +149,7 @@ class VoiceEncoder(nn.Module):
         return raw_embeds / torch.linalg.norm(raw_embeds, dim=1, keepdim=True)
 
     def embeds_from_wavs(
-        self, wavs: List[np.ndarray], sample_rate: int, overlap=0.5, rate: float = 1.3, batch_size=32
+        self, wavs: list[np.ndarray], sample_rate: int, overlap=0.5, rate: float = 1.3, batch_size=32
     ):
         """Extract embeddings from waveforms."""
         if sample_rate != self.config.sample_rate:
@@ -341,7 +341,7 @@ class T3Cond:
         """Cast to a device and dtype."""
         for k, v in self.__dict__.items():
             if torch.is_tensor(v):
-                is_fp = not v.dtype in [torch.long, torch.int, torch.int32, torch.int64]
+                is_fp = v.dtype not in [torch.long, torch.int, torch.int32, torch.int64]
                 setattr(self, k, v.to(device=device, dtype=dtype if is_fp else None))
         return self
 
@@ -527,7 +527,7 @@ class T3HuggingfaceBackend(LlamaPreTrainedModel, GenerationMixin):
         input_ids: torch.Tensor,
         decoder_cond: torch.Tensor,
         use_cache: bool,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         cache_position: Optional[torch.Tensor] = None,  # kept for API parity
     ):
         if not use_cache:
@@ -554,7 +554,7 @@ class T3HuggingfaceBackend(LlamaPreTrainedModel, GenerationMixin):
     def forward(
         self,
         inputs_embeds: torch.Tensor,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         use_cache: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = True,

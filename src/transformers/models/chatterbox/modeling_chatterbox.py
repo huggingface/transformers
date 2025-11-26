@@ -15,21 +15,20 @@
 """PyTorch Chatterbox model - Complete TTS Pipeline."""
 
 import logging
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
 
 import librosa
 import numpy as np
 import torch
 import torch.nn.functional as F
 from tokenizers import Tokenizer
-from torch import Tensor
 
 from ...modeling_utils import PreTrainedModel
 from ...models.s3gen.modeling_s3gen import S3GenModel
-from .configuration_chatterbox import ChatterboxConfig
 from ...models.t3.modeling_t3 import T3Cond, T3Model
+from .configuration_chatterbox import ChatterboxConfig
+
 
 logger = logging.getLogger(__name__)
 

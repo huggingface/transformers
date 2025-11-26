@@ -22,7 +22,7 @@ import torch
 
 from transformers.models.t3.configuration_t3 import T3Config
 from transformers.models.t3.modeling_t3 import T3Cond, T3Model
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 
 @require_torch

@@ -64,9 +64,9 @@ class ChatterboxConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        from ...models.t3.configuration_t3 import T3Config
-        from ...models.s3gen.configuration_s3gen import S3GenConfig
         from ...models.hiftnet.configuration_hiftnet import HiFTNetConfig
+        from ...models.s3gen.configuration_s3gen import S3GenConfig
+        from ...models.t3.configuration_t3 import T3Config
 
         # Initialize sub-model configs
         # Handle both dict and Config object inputs
