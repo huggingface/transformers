@@ -501,6 +501,7 @@ def is_torch_tf32_available() -> bool:
         return False
     return True
 
+
 @lru_cache
 def enable_tf32(enable: bool) -> None:
     """
@@ -520,6 +521,7 @@ def enable_tf32(enable: bool) -> None:
     else:
         torch.backends.cuda.matmul.allow_tf32 = enable
         torch.backends.cudnn.allow_tf32 = enable
+
 
 @lru_cache
 def is_torch_flex_attn_available() -> bool:

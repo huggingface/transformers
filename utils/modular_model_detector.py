@@ -117,7 +117,8 @@ from tqdm import tqdm
 
 import transformers
 from transformers import AutoModel, AutoTokenizer
-from transformers.utils import enable_tf32, logging as transformers_logging
+from transformers.utils import enable_tf32
+from transformers.utils import logging as transformers_logging
 
 
 # ANSI color codes for CLI output styling
