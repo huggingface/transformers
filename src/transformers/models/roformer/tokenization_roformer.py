@@ -118,6 +118,9 @@ class RoFormerTokenizer(TokenizersBackend):
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
+        elif unk_token not in vocab:
+            vocab[str(unk_token)] = len(vocab)
+
 
         self._tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(unk_token)))
         self._tokenizer.normalizer = normalizers.BertNormalizer(

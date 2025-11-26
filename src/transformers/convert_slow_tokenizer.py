@@ -1622,9 +1622,6 @@ class TxtConverter:
     """
 
     def __init__(self, vocab_file: str, merges_file: str, add_prefix_space: bool = False, unk_token=None):
-        if merges_file is None or not os.path.isfile(merges_file):
-            raise ValueError("TxtConverter requires both `vocab.txt` and `merges.txt` to be present.")
-
         self.vocab_file = vocab_file
         self.merges_file = merges_file
         self.add_prefix_space = add_prefix_space
@@ -1636,16 +1633,22 @@ class TxtConverter:
         import json
 
         with open(self.vocab_file, "r", encoding="utf-8") as vf:
-            vocab = json.load(vf) if self.vocab_file.endswith(".json") else {}
+            if self.vocab_file.endswith(".json"):
+                vocab = json.load(vf)
+            else:
+                for index, line in enumerate(vf):
+                    token = line.strip()
+                    vocab[token] = index
 
         merges = []
-        with open(self.merges_file, "r", encoding="utf-8") as mf:
-            for line in mf:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    parts = line.split()
-                    if len(parts) == 2:
-                        merges.append((parts[0], parts[1]))
+        if self.merges_file:
+            with open(self.merges_file, "r", encoding="utf-8") as mf:
+                for line in mf:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        parts = line.split()
+                        if len(parts) == 2:
+                            merges.append((parts[0], parts[1]))
 
         return vocab, merges
 
