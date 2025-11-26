@@ -5,7 +5,6 @@
 #                          modular_from_uppercase_model.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -21,7 +20,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     output_attentions: bool = True,
@@ -43,7 +42,7 @@ def eager_attention_forward(
 class FromUppercaseModelAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Union[FromUppercaseModelVisionConfig, FromUppercaseModelTextConfig]):
+    def __init__(self, config: FromUppercaseModelVisionConfig | FromUppercaseModelTextConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -66,10 +65,10 @@ class FromUppercaseModelAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -131,7 +130,7 @@ class FromUppercaseModelMLP(nn.Module):
 
 
 class FromUppercaseModelEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Union[FromUppercaseModelVisionConfig, FromUppercaseModelTextConfig]):
+    def __init__(self, config: FromUppercaseModelVisionConfig | FromUppercaseModelTextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = FromUppercaseModelAttention(config)
@@ -144,7 +143,7 @@ class FromUppercaseModelEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:

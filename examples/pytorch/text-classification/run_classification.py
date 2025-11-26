@@ -35,7 +35,6 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 
 import datasets
 import evaluate
@@ -78,10 +77,10 @@ class DataTrainingArguments:
     the command line.
     """
 
-    dataset_name: Optional[str] = field(
+    dataset_name: str | None = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     do_regression: bool = field(
@@ -90,7 +89,7 @@ class DataTrainingArguments:
             "help": "Whether to do regression instead of classification. If None, will be inferred from the dataset."
         },
     )
-    text_column_names: Optional[str] = field(
+    text_column_names: str | None = field(
         default=None,
         metadata={
             "help": (
@@ -99,36 +98,36 @@ class DataTrainingArguments:
             )
         },
     )
-    text_column_delimiter: Optional[str] = field(
+    text_column_delimiter: str | None = field(
         default=" ", metadata={"help": "The delimiter to use to join text columns into a single sentence."}
     )
-    train_split_name: Optional[str] = field(
+    train_split_name: str | None = field(
         default=None,
         metadata={
             "help": 'The name of the train split in the input dataset. If not specified, will use the "train" split when do_train is enabled'
         },
     )
-    validation_split_name: Optional[str] = field(
+    validation_split_name: str | None = field(
         default=None,
         metadata={
             "help": 'The name of the validation split in the input dataset. If not specified, will use the "validation" split when do_eval is enabled'
         },
     )
-    test_split_name: Optional[str] = field(
+    test_split_name: str | None = field(
         default=None,
         metadata={
             "help": 'The name of the test split in the input dataset. If not specified, will use the "test" split when do_predict is enabled'
         },
     )
-    remove_splits: Optional[str] = field(
+    remove_splits: str | None = field(
         default=None,
         metadata={"help": "The splits to remove from the dataset. Multiple splits should be separated by commas."},
     )
-    remove_columns: Optional[str] = field(
+    remove_columns: str | None = field(
         default=None,
         metadata={"help": "The columns to remove from the dataset. Multiple columns should be separated by commas."},
     )
-    label_column_name: Optional[str] = field(
+    label_column_name: str | None = field(
         default=None,
         metadata={
             "help": (
@@ -146,7 +145,7 @@ class DataTrainingArguments:
             )
         },
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
@@ -168,7 +167,7 @@ class DataTrainingArguments:
     shuffle_seed: int = field(
         default=42, metadata={"help": "Random seed that will be used to shuffle the train dataset."}
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -177,7 +176,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -186,7 +185,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_predict_samples: Optional[int] = field(
+    max_predict_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -195,14 +194,14 @@ class DataTrainingArguments:
             )
         },
     )
-    metric_name: Optional[str] = field(default=None, metadata={"help": "The metric to use for evaluation."})
-    train_file: Optional[str] = field(
+    metric_name: str | None = field(default=None, metadata={"help": "The metric to use for evaluation."})
+    train_file: str | None = field(
         default=None, metadata={"help": "A csv or a json file containing the training data."}
     )
-    validation_file: Optional[str] = field(
+    validation_file: str | None = field(
         default=None, metadata={"help": "A csv or a json file containing the validation data."}
     )
-    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
+    test_file: str | None = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
 
     def __post_init__(self):
         if self.dataset_name is None:
@@ -226,13 +225,13 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    tokenizer_name: Optional[str] = field(
+    tokenizer_name: str | None = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )

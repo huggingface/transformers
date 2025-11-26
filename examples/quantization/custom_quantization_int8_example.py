@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -112,7 +112,7 @@ class Int8SymmetricConfig(QuantizationConfigMixin):
     Configuration for INT8 symmetric quantization.
     """
 
-    def __init__(self, modules_to_not_convert: Optional[list[str]] = None, **kwargs):
+    def __init__(self, modules_to_not_convert: list[str] | None = None, **kwargs):
         self.quant_method = "int8_symmetric"
         self.modules_to_not_convert = modules_to_not_convert
 
