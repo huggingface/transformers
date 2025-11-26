@@ -170,7 +170,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
         )
 
         super().__init__(
-            
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,

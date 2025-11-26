@@ -75,7 +75,8 @@ Hi   Hello
 hi<s>there
 The following string should be properly encoded: Hello.
 But ird and ปี   ird   ด
-Hey how are you doing"""
+Hey how are you doing"""  # noqa: W293
+
 
 if is_torch_available():
     import torch

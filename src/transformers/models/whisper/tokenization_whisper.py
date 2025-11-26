@@ -253,7 +253,6 @@ class WhisperTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.ByteLevel()
 
         super().__init__(
-            
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

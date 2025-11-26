@@ -30,10 +30,8 @@ from .tokenization_utils_base import (
     PreTrainedTokenizerBase,
     TextInput,
     TruncationStrategy,
-    find_sentencepiece_model_file,
-    load_vocab_and_merges,
 )
-from .utils import PaddingStrategy, TensorType, add_end_docstrings, cached_file, logging
+from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
@@ -518,102 +516,94 @@ class PythonBackend(PreTrainedTokenizerBase):
         _is_local: bool,
         **kwargs,
     ):
-        if tokenizer_file is not None and hasattr(tokenizer, "_tokenizer"):
-            from tokenizers import Tokenizer as TokenizerFast
+        # spm_filename = find_sentencepiece_model_file(
+        #     pretrained_model_name_or_path,
+        #     revision=kwargs.get("revision"),
+        #     token=token,
+        #     cache_dir=cache_dir,
+        #     local_files_only=local_files_only,
+        #     subfolder=kwargs.get("subfolder", ""),
+        # )
+        # if spm_filename is not None:
+        #     try:
+        #         resolved_spm = cached_file(
+        #             pretrained_model_name_or_path,
+        #             spm_filename,
+        #             cache_dir=cache_dir,
+        #             force_download=kwargs.get("force_download", False),
+        #             proxies=kwargs.get("proxies"),
+        #             token=token,
+        #             revision=kwargs.get("revision"),
+        #             local_files_only=local_files_only,
+        #             subfolder=kwargs.get("subfolder", ""),
+        #         )
+        #     except Exception:
+        #         resolved_spm = None
+        #     if resolved_spm is not None:
+        #         try:
+        #             import inspect as _inspect
 
-            tokenizer._tokenizer = TokenizerFast.from_file(tokenizer_file)
-            if hasattr(tokenizer, "_post_init"):
-                tokenizer._post_init()
-            return tokenizer
+        #             from .convert_slow_tokenizer import SentencePieceExtractor
 
-        spm_filename = find_sentencepiece_model_file(
-            pretrained_model_name_or_path,
-            revision=kwargs.get("revision"),
-            token=token,
-            cache_dir=cache_dir,
-            local_files_only=local_files_only,
-            subfolder=kwargs.get("subfolder", ""),
-        )
-        if spm_filename is not None:
-            try:
-                resolved_spm = cached_file(
-                    pretrained_model_name_or_path,
-                    spm_filename,
-                    cache_dir=cache_dir,
-                    force_download=kwargs.get("force_download", False),
-                    proxies=kwargs.get("proxies"),
-                    token=token,
-                    revision=kwargs.get("revision"),
-                    local_files_only=local_files_only,
-                    subfolder=kwargs.get("subfolder", ""),
-                )
-            except Exception:
-                resolved_spm = None
-            if resolved_spm is not None:
-                try:
-                    import inspect as _inspect
+        #             class_sig = _inspect.signature(getattr(cls, "__init__", cls))
+        #             vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
+        #             files_loaded = [spm_filename]
+        #             init_kwargs["backend"] = "tokenizers"
+        #             init_kwargs["files_loaded"] = files_loaded
+        #             if "merges" in class_sig.parameters:
+        #                 return cls.from_pretrained(
+        #                     pretrained_model_name_or_path,
+        #                     *init_inputs,
+        #                     vocab=vocab_scores,
+        #                     merges=merges,
+        #                     **init_kwargs,
+        #                 )
+        #             elif "vocab" in class_sig.parameters:
+        #                 return cls.from_pretrained(
+        #                     pretrained_model_name_or_path,
+        #                     *init_inputs,
+        #                     vocab=vocab_scores,
+        #                     **init_kwargs,
+        #                 )
+        #         except Exception:
+        #             pass
 
-                    from .convert_slow_tokenizer import SentencePieceExtractor
+        # vocab, merges, files_loaded = load_vocab_and_merges(
+        #     pretrained_model_name_or_path,
+        #     cache_dir=cache_dir,
+        #     force_download=kwargs.get("force_download", False),
+        #     proxies=kwargs.get("proxies"),
+        #     token=token,
+        #     revision=kwargs.get("revision"),
+        #     local_files_only=local_files_only,
+        #     subfolder=kwargs.get("subfolder", ""),
+        # )
 
-                    class_sig = _inspect.signature(getattr(cls, "__init__", cls))
-                    vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
-                    files_loaded = [spm_filename]
-                    init_kwargs["backend"] = "tokenizers"
-                    init_kwargs["files_loaded"] = files_loaded
-                    if "merges" in class_sig.parameters:
-                        return cls.from_pretrained(
-                            pretrained_model_name_or_path,
-                            *init_inputs,
-                            vocab=vocab_scores,
-                            merges=merges,
-                            **init_kwargs,
-                        )
-                    elif "vocab" in class_sig.parameters:
-                        return cls.from_pretrained(
-                            pretrained_model_name_or_path,
-                            *init_inputs,
-                            vocab=vocab_scores,
-                            **init_kwargs,
-                        )
-                except Exception:
-                    pass
+        # if vocab is not None:
+        #     try:
+        #         import inspect as _inspect
 
-        vocab, merges, files_loaded = load_vocab_and_merges(
-            pretrained_model_name_or_path,
-            cache_dir=cache_dir,
-            force_download=kwargs.get("force_download", False),
-            proxies=kwargs.get("proxies"),
-            token=token,
-            revision=kwargs.get("revision"),
-            local_files_only=local_files_only,
-            subfolder=kwargs.get("subfolder", ""),
-        )
+        #         class_sig = _inspect.signature(getattr(cls, "__init__", cls))
+        #         init_kwargs["backend"] = "tokenizers"
+        #         init_kwargs["files_loaded"] = files_loaded
 
-        if vocab is not None:
-            try:
-                import inspect as _inspect
-
-                class_sig = _inspect.signature(getattr(cls, "__init__", cls))
-                init_kwargs["backend"] = "tokenizers"
-                init_kwargs["files_loaded"] = files_loaded
-
-                if merges is not None and "merges" in class_sig.parameters:
-                    return cls.from_pretrained(
-                        pretrained_model_name_or_path,
-                        *init_inputs,
-                        vocab=vocab,
-                        merges=merges,
-                        **init_kwargs,
-                    )
-                elif "vocab" in class_sig.parameters:
-                    return cls.from_pretrained(
-                        pretrained_model_name_or_path,
-                        *init_inputs,
-                        vocab=vocab,
-                        **init_kwargs,
-                    )
-            except Exception:
-                pass
+        #         if merges is not None and "merges" in class_sig.parameters:
+        #             return cls.from_pretrained(
+        #                 pretrained_model_name_or_path,
+        #                 *init_inputs,
+        #                 vocab=vocab,
+        #                 merges=merges,
+        #                 **init_kwargs,
+        #             )
+        #         elif "vocab" in class_sig.parameters:
+        #             return cls.from_pretrained(
+        #                 pretrained_model_name_or_path,
+        #                 *init_inputs,
+        #                 vocab=vocab,
+        #                 **init_kwargs,
+        #             )
+        #     except Exception:
+        #         pass
 
         return tokenizer
 

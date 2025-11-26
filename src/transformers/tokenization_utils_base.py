@@ -1968,8 +1968,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenizer = cls(*init_inputs, **init_kwargs)
         except import_protobuf_decode_error():
             raise RuntimeError(
-                "Unable to load tokenizer model from SPM, loading from TikToken will be attempted instead."
-                "(Google protobuf error: Tried to load SPM model with non-SPM vocab file).",
+                "Unable to load tokenizer model from SPM",
             )
         except RuntimeError as e:
             if "sentencepiece_processor.cc" in str(e):
@@ -2000,12 +1999,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             _is_local=_is_local,
             **kwargs,
         )
-
-        if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
-            logger.info(
-                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
-                " fine-tuned or trained."
-            )
 
         return tokenizer
 
@@ -2335,8 +2328,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
         # Remove the Fast at the end if we can save the slow tokenizer
-        if tokenizer_class.endswith("Fast") and getattr(self, "can_save_slow_tokenizer", False):
-            tokenizer_class = tokenizer_class[:-4]
+        tokenizer_class = tokenizer_class.removesuffix("Fast")
         tokenizer_config["tokenizer_class"] = tokenizer_class
         if getattr(self, "_auto_map", None) is not None:
             tokenizer_config["auto_map"] = self._auto_map
@@ -2355,7 +2347,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenizer_config.pop("tokenizer_file", None)
         if "device_map" in tokenizer_config:
             tokenizer_config.pop("device_map")
-        if "__slow_tokenizer" in tokenizer_config: # legacy flag?
+        if "__slow_tokenizer" in tokenizer_config:  # legacy flag?
             tokenizer_config.pop("__slow_tokenizer")
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:

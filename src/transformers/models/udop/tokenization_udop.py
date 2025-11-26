@@ -240,7 +240,6 @@ class UdopTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
-            
             eos_token=eos_token,
             sep_token=sep_token,
             unk_token=unk_token,
@@ -461,7 +460,6 @@ class UdopTokenizer(TokenizersBackend):
                 **kwargs,
             )
 
-    # Copied from transformers.models.layoutxlm.tokenization_layoutxlm_fast.LayoutXLMTokenizerFast.tokenize
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         batched_input = [(text, pair)] if pair else [text]
 
@@ -902,7 +900,6 @@ class UdopTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-    # Copied from transformers.models.layoutxlm.tokenization_layoutxlm_fast.LayoutXLMTokenizerFast._pad
     def _pad(
         self,
         encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],

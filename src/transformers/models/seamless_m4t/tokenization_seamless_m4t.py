@@ -217,7 +217,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             kwargs.setdefault("additional_special_tokens", additional_special_tokens)
 
         super().__init__(
-            
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

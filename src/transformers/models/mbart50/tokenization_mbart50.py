@@ -185,7 +185,6 @@ class MBart50Tokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
-            
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             eos_token=eos_token,

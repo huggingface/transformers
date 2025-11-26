@@ -105,7 +105,6 @@ class HerbertTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
 
-
         self.vocab_file = vocab_file
         self.merges_file = merges_file
 

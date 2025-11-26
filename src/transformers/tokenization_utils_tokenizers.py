@@ -31,14 +31,13 @@ from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers import normalizers as tokenizers_normalizers
-from tokenizers.decoders import Decoder as DecoderFast
-from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
-from tokenizers import AddedToken, EncodeInput, Encoding, InputSequence, Tokenizer
 from tokenizers.decoders import Decoder
+from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.models import Model
 from tokenizers.normalizers import Normalizer
 from tokenizers.pre_tokenizers import PreTokenizer
 from tokenizers.processors import PostProcessor
+from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -203,47 +202,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         _is_local: bool,
         **kwargs,
     ):
-        tokenizer = super()._post_process_tokenizer(
-            tokenizer,
-            tokenizer_file,
-            pretrained_model_name_or_path,
-            resolved_vocab_files,
-            init_inputs,
-            init_kwargs,
-            added_tokens_decoder,
-            cache_dir,
-            token,
-            local_files_only,
-            _commit_hash,
-            _is_local,
-            **kwargs,
-        )
-        cls._maybe_fix_mistral_regex(
-            tokenizer=tokenizer,
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
-            cache_dir=cache_dir,
-            token=token,
-            local_files_only=local_files_only,
-            _commit_hash=_commit_hash,
-            _is_local=_is_local,
-            init_kwargs=init_kwargs,
-            **kwargs,
-        )
-        return tokenizer
-
-    @classmethod
-    def _maybe_fix_mistral_regex(
-        cls,
-        tokenizer,
-        pretrained_model_name_or_path: str,
-        cache_dir: Optional[str],
-        token: Optional[Union[str, bool]],
-        local_files_only: bool,
-        _commit_hash: Optional[str],
-        _is_local: bool,
-        init_kwargs: dict[str, Any],
-        **kwargs,
-    ):
         try:
             vocab_size = tokenizer.vocab_size
         except Exception:
@@ -309,6 +267,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ),
                         behavior="isolated",
                     )
+        return tokenizer
 
     def __repr__(self) -> str:
         added_tokens_decoder_rep = "\n\t".join([f"{k}: {v.__repr__()}," for k, v in self.added_tokens_decoder.items()])
@@ -412,7 +371,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         merges.append((parts[0], parts[1]))
 
         class_sig = inspect.signature(getattr(cls, "__init__", cls))
-        class_args = set(map(lambda x: x.name, class_sig.parameters.values()))
+        class_args = {x.name for x in class_sig.parameters.values()}
         converter = None
         if tokenizer_json is None and vocab_file is not None:
             files_loaded.append(os.path.basename(vocab_file))
@@ -442,7 +401,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             "Unable to read tokenizer vocabulary. Please ensure you have the required "
                             "`sentencepiece` dependency installed."
                         ) from e
-            elif "vocab_file" in class_args:
+            elif "vocab_file" in class_args:  # some "fast" tokenizers that have not been changed to use tokenizer.json
                 init_kwargs.setdefault("vocab_file", vocab_file)
                 if merges is not None and "merges_file" in class_args:
                     merges_file = resolved_vocab_files.get("merges_file")
@@ -464,7 +423,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if files_loaded and "files_loaded" not in init_kwargs:
             init_kwargs["files_loaded"] = files_loaded
 
-
         accepts_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in class_sig.parameters.values())
         if tokenizer_object is not None:  # only when cls is self
             init_kwargs.setdefault("tokenizer_object", tokenizer_object)
@@ -480,10 +438,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @property
     def is_fast(self) -> bool:
-        return True
-
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
         return True
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
@@ -1452,6 +1406,7 @@ class TokenizersExtractor:
     @decoder.setter
     def decoder(self, decoder: Decoder):
         self._tokenizer.decoder = decoder
+
 
 # Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
 PreTrainedTokenizerFast = TokenizersBackend
