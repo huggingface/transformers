@@ -35,8 +35,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         import os
         import sys
         
-        super().setUpClass()
-        
         # Store debug info as class variable so we can include it in test failures
         cls._setup_debug_info = []
         
@@ -44,6 +42,9 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             print("\n" + "="*80, file=sys.stderr)
             print("[GEMMA TEST DEBUG] Starting setUpClass", file=sys.stderr)
             print("="*80, file=sys.stderr)
+            
+            # Call parent setUpClass
+            super().setUpClass()
             
             # Log what files are in tmpdirname after setup
             if hasattr(cls, 'tmpdirname') and os.path.isdir(cls.tmpdirname):
@@ -77,14 +78,37 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     msg = "tokenizer.json does NOT exist!"
                     print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
                     cls._setup_debug_info.append(msg)
+                    
+                    # Try to manually save the tokenizer to see what happens
+                    try:
+                        from transformers import AutoTokenizer
+                        print(f"[GEMMA TEST DEBUG] Attempting to manually save tokenizer...", file=sys.stderr)
+                        tokenizer = AutoTokenizer.from_pretrained(
+                            cls.from_pretrained_id[0],
+                            **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
+                        )
+                        print(f"[GEMMA TEST DEBUG] Loaded tokenizer, vocab size: {len(tokenizer)}", file=sys.stderr)
+                        tokenizer.save_pretrained(cls.tmpdirname)
+                        files_after = os.listdir(cls.tmpdirname)
+                        print(f"[GEMMA TEST DEBUG] Files after manual save: {sorted(files_after)}", file=sys.stderr)
+                        cls._setup_debug_info.append(f"Files after manual save: {sorted(files_after)}")
+                    except Exception as e:
+                        msg = f"Error in manual save attempt: {e}"
+                        print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
+                        import traceback
+                        print(f"[GEMMA TEST DEBUG] Traceback: {traceback.format_exc()}", file=sys.stderr)
+                        cls._setup_debug_info.append(msg)
             else:
                 msg = "tmpdirname not set or not a directory"
                 print(f"[GEMMA TEST DEBUG] {msg}", file=sys.stderr)
                 cls._setup_debug_info.append(msg)
             
             print("="*80 + "\n", file=sys.stderr)
-        except Exception:
-            pass  # Don't break tests if debug fails
+        except Exception as e:
+            import traceback
+            print(f"[GEMMA TEST DEBUG] Error in setUpClass: {e}", file=sys.stderr)
+            print(f"[GEMMA TEST DEBUG] Traceback: {traceback.format_exc()}", file=sys.stderr)
+            cls._setup_debug_info.append(f"Error in setUpClass: {e}")
 
     integration_expected_tokens = [
         "This",
