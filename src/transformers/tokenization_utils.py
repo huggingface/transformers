@@ -856,7 +856,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         return (text, kwargs)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequences by adding special tokens.
@@ -1097,17 +1097,17 @@ class PythonBackend(PreTrainedTokenizerBase):
     def prepare_for_model(
         self,
         ids: list[int],
-        pair_ids: Optional[list[int]] = None,
+        pair_ids: list[int] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = False,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -1207,9 +1207,9 @@ class PythonBackend(PreTrainedTokenizerBase):
     def truncate_sequences(
         self,
         ids: list[int],
-        pair_ids: Optional[list[int]] = None,
+        pair_ids: list[int] | None = None,
         num_tokens_to_remove: int = 0,
-        truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
+        truncation_strategy: str | TruncationStrategy = "longest_first",
         stride: int = 0,
     ) -> tuple[list[int], list[int], list[int]]:
         """Truncates sequences according to the specified strategy."""
@@ -1272,7 +1272,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         return ids, pair_ids, overflowing_tokens
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task.
@@ -1335,7 +1335,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             # All zeros pattern (default): everything gets 0s
             return [0] * (seq0_len + seq1_len)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, ...]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, ...]:
         """
         Default implementation for common vocabulary saving patterns.
         Saves self.encoder/self.vocab as JSON, optionally with self.bpe_ranks as merges.

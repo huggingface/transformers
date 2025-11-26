@@ -44,7 +44,6 @@ if is_vision_available():
         Kosmos2Processor,
         PreTrainedTokenizerFast,
         XLMRobertaTokenizer,
-        XLMRobertaTokenizerFast,
     )
 
 

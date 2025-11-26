@@ -37,7 +37,6 @@ from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
-    AddedToken,
     BatchEncoding,
     PreTokenizedInput,
     PreTrainedTokenizerBase,

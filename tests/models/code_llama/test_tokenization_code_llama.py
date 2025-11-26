@@ -17,6 +17,8 @@ import shutil
 import tempfile
 import unittest
 
+from tokenizers import AddedToken
+
 from transformers import CodeLlamaTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
@@ -30,8 +32,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
-
-from tokenizers import AddedToken
 
 
 # impoprt convert_slow_tokenizer
@@ -455,7 +455,6 @@ class LlamaIntegrationTest(unittest.TestCase):
         )
 
     def test_fast_special_tokens(self):
-        slow_tokenizer = self.tokenizer
         fast_tokenizer = self.rust_tokenizer
 
         fast_tokenizer.add_eos_token = False
@@ -559,6 +558,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     )
     def test_integration_test_xnli(self):
         import tqdm
+        from datasets import load_dataset
 
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer

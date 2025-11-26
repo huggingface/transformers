@@ -75,7 +75,7 @@ Hi   Hello
 hi<s>there
 The following string should be properly encoded: Hello.
 But ird and ปี   ird   ด
-Hey how are you doing"""
+Hey how are you doing"""  # noqa: W293
 
 if is_torch_available():
     import torch
@@ -232,7 +232,7 @@ Hi   Hello
 hi<s>there
 The following string should be properly encoded: Hello.
 But ird and ปี   ird   ด
-Hey how are you doing"""
+Hey how are you doing"""  # noqa: W293
     integration_expected_tokens = None
     integration_expected_token_ids = None
 
@@ -350,7 +350,7 @@ Hey how are you doing"""
                 merges=merges,
                 do_lower_case=False,
                 keep_accents=True,
-                added_tokens_decoder={token_id: token_info for token_id, token_info in added_tokens_decoder.items()},
+                added_tokens_decoder=added_tokens_decoder,
                 **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
             )
 

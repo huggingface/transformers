@@ -36,7 +36,7 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
+        cls.vocab = [
             "l",
             "o",
             "w",
@@ -59,8 +59,7 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "wider</w>",
             "<unk>",
         ]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
+        cls.merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])

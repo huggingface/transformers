@@ -52,7 +52,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = PixtralProcessor.from_pretrained(
             "hf-internal-testing/Mistral-Small-3.1-24B-Instruct-2503-only-processor",
             fix_mistral_regex=True,
-            **processor_kwargs
+            **processor_kwargs,
         )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token

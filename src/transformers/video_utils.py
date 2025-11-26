@@ -595,7 +595,6 @@ def read_video_torchcodec(
     from torchcodec.decoders import VideoDecoder
 
     # VideoDecoder expects a string for device, default to "cpu" if None
-    device = kwargs.get("device") or "cpu"
 
     decoder = VideoDecoder(
         video_path,

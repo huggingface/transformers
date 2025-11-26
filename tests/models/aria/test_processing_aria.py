@@ -34,7 +34,9 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = AriaProcessor.from_pretrained("m-ric/Aria_hf_2", size_conversion={490: 2, 980: 2}, fix_mistral_regex=True)
+        processor = AriaProcessor.from_pretrained(
+            "m-ric/Aria_hf_2", size_conversion={490: 2, 980: 2}, fix_mistral_regex=True
+        )
         processor.save_pretrained(cls.tmpdirname)
         cls.image1 = load_image(
             url_to_local_path(

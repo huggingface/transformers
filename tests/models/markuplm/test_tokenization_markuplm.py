@@ -217,9 +217,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "merges": merges,
                 "do_lower_case": False,
                 "keep_accents": True,
-                "added_tokens_decoder": {
-                    token_id: token_info for token_id, token_info in added_tokens_decoder.items()
-                },
+                "added_tokens_decoder": added_tokens_decoder,
             }
 
             tags_dict = getattr(reference_tokenizer, "tags_dict", None)
@@ -1385,8 +1383,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
                     special_token in new_tokenizer.all_special_tokens,
-                    all_special_tokens,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    msg=f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
                 )
 
             else:

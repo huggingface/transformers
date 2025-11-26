@@ -17,6 +17,7 @@
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
+from ...convert_slow_tokenizer import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -76,7 +77,7 @@ class OpenAIGPTTokenizer(TokenizersBackend):
 
         # Initialize merges
         if merges is not None:
-            self._merges = merges if merges is not None else generate_merges(filtered_vocab)
+            self._merges = merges if merges is not None else generate_merges(self._vocab)
         else:
             self._merges = []
 

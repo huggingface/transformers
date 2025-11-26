@@ -1008,10 +1008,10 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_pair = tokenizer_r.encode(words, boxes=boxes, add_special_tokens=False)
 
                 # Generate output
-                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
+                _ = tokenizer_r.build_inputs_with_special_tokens(input_simple)
 
                 # Generate pair output
-                output_r_pair = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
+                _ = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
 
     def test_special_tokens_mask_input_pairs(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

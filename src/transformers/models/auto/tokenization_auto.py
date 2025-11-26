@@ -461,10 +461,26 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
 
     # Try tekken.json (Mistral format)
     try:
-        if has_file(pretrained_model_name_or_path, "tekken.json", revision=kwargs.get("revision"), token=kwargs.get("token"), cache_dir=kwargs.get("cache_dir"), local_files_only=kwargs.get("local_files_only", False)):
+        if has_file(
+            pretrained_model_name_or_path,
+            "tekken.json",
+            revision=kwargs.get("revision"),
+            token=kwargs.get("token"),
+            cache_dir=kwargs.get("cache_dir"),
+            local_files_only=kwargs.get("local_files_only", False),
+        ):
             from ...integrations.mistral import convert_tekken_tokenizer
 
-            tekken_file = cached_file(pretrained_model_name_or_path, "tekken.json", **{k: v for k, v in kwargs.items() if k in ["cache_dir", "force_download", "proxies", "token", "revision", "local_files_only", "subfolder"]})
+            tekken_file = cached_file(
+                pretrained_model_name_or_path,
+                "tekken.json",
+                **{
+                    k: v
+                    for k, v in kwargs.items()
+                    if k
+                    in ["cache_dir", "force_download", "proxies", "token", "revision", "local_files_only", "subfolder"]
+                },
+            )
             if tekken_file is not None:
                 files_loaded.append("tekken.json")
                 kwargs["backend"] = "tokenizers"
@@ -971,7 +987,7 @@ class AutoTokenizer:
         ```"""
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
                 FutureWarning,
             )
