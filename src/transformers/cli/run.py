@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from enum import Enum
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -28,27 +28,27 @@ FormatEnum = Enum("FormatEnum", {fmt.upper(): fmt for fmt in PipelineDataFormat.
 
 def run(
     task: Annotated[TaskEnum, typer.Argument(help="Task to run", case_sensitive=False)],  # type: ignore
-    input: Annotated[Optional[str], typer.Option(help="Path to the file to use for inference")] = None,
+    input: Annotated[str | None, typer.Option(help="Path to the file to use for inference")] = None,
     output: Annotated[
-        Optional[str], typer.Option(help="Path to the file that will be used post to write results.")
+        str | None, typer.Option(help="Path to the file that will be used post to write results.")
     ] = None,
     model: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Name or path to the model to instantiate. If not provided, will use the default model for that task."
         ),
     ] = None,
     config: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             help="Name or path to the model's config to instantiate. If not provided, will use the model's one."
         ),
     ] = None,
     tokenizer: Annotated[
-        Optional[str], typer.Option(help="Name of the tokenizer to use. If not provided, will use the model's one.")
+        str | None, typer.Option(help="Name of the tokenizer to use. If not provided, will use the model's one.")
     ] = None,
     column: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help="Name of the column to use as input. For multi columns input use 'column1,columns2'"),
     ] = None,
     format: Annotated[FormatEnum, typer.Option(help="Input format to read from", case_sensitive=False)] = "pipe",  # type: ignore
