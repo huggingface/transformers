@@ -3481,7 +3481,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             and len(encoded_inputs) > 0
             and isinstance(encoded_inputs[0], Mapping)
         ):
-            # Call .keys() explicitly to avoid issue #42370
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
