@@ -57,11 +57,6 @@ class Idefics2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.fake_image_token)
         cls.image_seq_len = processor.image_seq_len
 
-    # todo @yoni check why this is different than loading separate components and then initializing the processor
-    def get_processor(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        return processor
-
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_len": 2}
