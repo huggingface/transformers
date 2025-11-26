@@ -643,7 +643,7 @@ class Fp8Quantize(ConversionOps):
         if target_keys.endswith("weight"):
             scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
         else:
-            scale_key = target_keys + "_scales_inv"
+            scale_key = target_keys + "_scale_inv"
 
         # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
         return {
