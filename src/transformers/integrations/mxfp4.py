@@ -149,9 +149,7 @@ class Mxfp4Dequantize(ConversionOps):
                 param_data["_scales"] = input_dict["_scales"]
 
         # Here we are dequantizing the weights
-        dequantized = dequantize_convertops(
-            param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device
-        )
+        dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device)
         return {full_layer_name: dequantized}
 
 
@@ -196,6 +194,7 @@ class Mxfp4Deserialize(ConversionOps):
         # the loader from trying to materialize the original meta-parameter names again.
         # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
         return {}
+
 
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):
