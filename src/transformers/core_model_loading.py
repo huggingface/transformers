@@ -144,7 +144,8 @@ class Chunk(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         if len(value) > 1:
             raise ValueError("Unexpected value in `Chunk`!")
-        tensor = next(iter(value.values()))
+        tensors = next(iter(value.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
         sizes = len(target_patterns)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
         return {target: chunk.squeeze() for target, chunk in zip(target_patterns, chunks)}
@@ -235,7 +236,8 @@ class SplitModulelist(ConversionOps):
         config,
     ) -> dict[str, torch.Tensor]:
         all_tensors = {}
-        for source_pattern, tensor in value.items():
+        for source_pattern, tensors in value.items():
+            tensor = tensors[0] if isinstance(tensors, list) else tensors
             sizes = len(all_target_keys) // len(value)
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
             if len(value) > 1:
