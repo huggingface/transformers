@@ -250,7 +250,7 @@ class NemotronAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
 
-        self.partial_rotary_factor = config.partial_rotary_factor
+        self.partial_rotary_factor = config.rope_parameters["partial_rotary_factor"]
         self.is_causal = True
         self.rotary_emb = NemotronRotaryEmbedding(config=config)
 

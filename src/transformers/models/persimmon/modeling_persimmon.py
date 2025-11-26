@@ -219,7 +219,7 @@ class PersimmonAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
 
-        self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
+        self.rotary_ndims = int(self.head_dim * config.rope_parameters["partial_rotary_factor"])
         self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:

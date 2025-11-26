@@ -444,7 +444,9 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         rope_parameters_type = self.rope_parameters.get("rope_type", None)
         rope_parameters_short_factor = self.rope_parameters.get("short_factor", None)
         rope_parameters_long_factor = self.rope_parameters.get("long_factor", None)
-        rotary_ndims = int(self.hidden_size // self.num_attention_heads * self.partial_rotary_factor)
+        rotary_ndims = int(
+            self.hidden_size // self.num_attention_heads * self.rope_parameters["partial_rotary_factor"]
+        )
         if rope_parameters_type not in ["default", "longrope"]:
             raise ValueError(f"`rope_parameters`'s type field must be one of ['longrope'], got {rope_parameters_type}")
 

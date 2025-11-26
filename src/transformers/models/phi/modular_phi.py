@@ -75,7 +75,7 @@ class PhiAttention(LlamaAttention):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.dense = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         del self.o_proj
-        self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
+        self.rotary_ndims = int(self.head_dim * config.rope_parameters["partial_rotary_factor"])
         self.qk_layernorm = config.qk_layernorm
         if self.qk_layernorm:
             self.q_layernorm = nn.LayerNorm(

@@ -219,7 +219,8 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 1000000.0)
-        if self.rope_parameters["rope_type"] == "mrope":
+        rope_type = rope_parameters.get("type") or rope_parameters.get("rope_type")
+        if rope_type == "mrope":
             self.rope_parameters["rope_type"] = "default"
         rope_config_standardize_and_validate(self, ignore_keys={"mrope_section"})
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)

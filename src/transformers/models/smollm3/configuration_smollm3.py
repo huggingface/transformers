@@ -201,6 +201,11 @@ class SmolLM3Config(PreTrainedConfig):
         self.layer_types = layer_types
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
+
         # Validate the correctness of rotary position embeddings parameters
         self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 2000000.0)
         rope_config_standardize_and_validate(self)
