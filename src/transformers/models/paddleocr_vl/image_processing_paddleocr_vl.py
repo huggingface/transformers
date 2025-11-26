@@ -77,8 +77,8 @@ def smart_resize(
     height: int,
     width: int,
     factor: int = 28,
-    min_pixels: int = 28 * 28 * 130,
-    max_pixels: int = 28 * 28 * 1280,
+    min_pixels: int = 384 * 384,
+    max_pixels: int = 1536 * 1536,
 ):
     if height < factor:
         width = round((width * factor) / height)
@@ -110,34 +110,12 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
     Constructs a PaddleOCRVL image processor that dynamically resizes images based on the original images.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`Dict[str, int]`, *optional*, defaults to `None`):
-            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `28 * 28 * 130`):
+        min_pixels (`int`, *optional*, defaults to `384 * 384`):
             The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1670`):
+        max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
             The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
+        temporal_patch_size (`int`, *optional*, defaults to 1):
             The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
     """
 
     model_input_names = [
@@ -157,8 +135,8 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 28 * 28 * 130,
-        max_pixels: int = 28 * 28 * 1280,
+        min_pixels: int = 384 * 384,
+        max_pixels: int = 1536 * 1536,
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
@@ -177,6 +155,7 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
         self.min_pixels = size["shortest_edge"]
         self.max_pixels = size["longest_edge"]
         self.size = size
+
         self.do_resize = do_resize
         self.resample = resample
         self.do_rescale = do_rescale
@@ -184,6 +163,7 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size

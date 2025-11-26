@@ -43,7 +43,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import check_model_inputs
-from .configuration_paddleocr_vl import PaddleOCRVLConfig, PaddleOCRVLTextConfig, PaddleOCRVLVisionConfig
+from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
 
 
 logger = logging.get_logger(__name__)
@@ -54,7 +54,7 @@ class PaddleOCRProjector(nn.Module):
         super().__init__()
         self.text_config = config.text_config
         self.vision_config = config.vision_config
-        self.merge_kernel_size = (2, 2)
+        self.merge_kernel_size = (self.vision_config.spatial_merge_size, self.vision_config.spatial_merge_size)
 
         self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
 
@@ -167,7 +167,7 @@ class PaddleOCRRotaryEmbedding(nn.Module):
 
 
 class PaddleOCRMLP(nn.Module):
-    def __init__(self, config: PaddleOCRVLTextConfig):
+    def __init__(self, config: PaddleOCRTextConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -382,7 +382,7 @@ class PaddleOCRRMSNorm(nn.Module):
 
 
 class PaddleOCRDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: PaddleOCRVLTextConfig, layer_idx: int):
+    def __init__(self, config: PaddleOCRTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -442,8 +442,8 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class PaddleOCRVLTextModel(PaddleOCRVLPreTrainedModel):
-    def __init__(self, config: PaddleOCRVLTextConfig):
+class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
+    def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -521,11 +521,11 @@ class PaddleOCRVLTextModel(PaddleOCRVLPreTrainedModel):
 
 
 class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
-    config: PaddleOCRVLVisionConfig
+    config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
 
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
 
         self.vision_model = PaddleOCRVisionTransformer(config)
@@ -535,8 +535,8 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
     def forward(
         self,
-        pixel_values,
-        cu_seqlens,
+        pixel_values: torch.FloatTensor,
+        cu_seqlens: torch.Tensor,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
     ) -> BaseModelOutputWithPooling:
         """
@@ -556,7 +556,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
 
 class PaddleOCRVisionEmbeddings(nn.Module):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -591,16 +591,13 @@ class PaddleOCRVisionEmbeddings(nn.Module):
 
         dim = embeddings.shape[-1]
 
-        new_height = height
-        new_width = width
-
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            size=(new_height, new_width),
+            size=(height, width),
             mode="bilinear",
             align_corners=False,
         )
@@ -617,8 +614,6 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
-            position_ids (`torch.LongTensor` of shape `sequence_length`):
-                The position ids of the image.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
@@ -629,9 +624,6 @@ class PaddleOCRVisionEmbeddings(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, squence_len, -1)
 
-        assert batch_size == 1, (
-            f"Batch size must be 1, but received {batch_size}. This model only processes one image at a time."
-        )
         start = 0
         embeddings = embeddings.squeeze(0)
         tmp_embeddings = []
@@ -665,7 +657,7 @@ def apply_rotary_pos_emb_vision(
 class PaddleOCRVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -768,7 +760,7 @@ class PaddleOCRVisionAttention(nn.Module):
 
 
 class PaddleOCRVisionMLP(nn.Module):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
@@ -782,33 +774,8 @@ class PaddleOCRVisionMLP(nn.Module):
         return hidden_states
 
 
-class PaddleOCRVisionMultiheadAttentionPoolingHead(nn.Module):
-    """Multihead Attention Pooling."""
-
-    def __init__(self, config: PaddleOCRVLVisionConfig):
-        super().__init__()
-
-        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        self.mlp = PaddleOCRVisionMLP(config)
-
-    def forward(self, hidden_state):
-        batch_size = hidden_state.shape[0]
-        probe = self.probe.repeat(batch_size, 1, 1)
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
-
-        residual = hidden_state
-        hidden_state = self.layernorm(hidden_state)
-        hidden_state = residual + self.mlp(hidden_state)
-
-        return hidden_state[:, 0]
-
-
 class PaddleOCRVisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -858,7 +825,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         config: PaddleOCRVisionConfig
     """
 
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([PaddleOCRVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -873,13 +840,17 @@ class PaddleOCRVisionEncoder(nn.Module):
     @auto_docstring
     def forward(
         self,
-        inputs_embeds,
-        cu_seqlens,
+        inputs_embeds: torch.FloatTensor,
+        cu_seqlens: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
     ) -> BaseModelOutput:
         """
         Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
                 The cumulative sequence lengths of each image or video feature.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -925,7 +896,7 @@ class PaddleOCRVisionEncoder(nn.Module):
 
 
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
@@ -933,13 +904,10 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         self.embeddings = PaddleOCRVisionEmbeddings(config)
         self.encoder = PaddleOCRVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        if self.use_head:
-            self.head = PaddleOCRVisionMultiheadAttentionPoolingHead(config)
 
     def forward(
         self,
-        pixel_values,
+        pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
@@ -952,8 +920,6 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
                 The cumulative sequence lengths of each image or video feature.
             attention_mask (`torch.Tensor`, *optional*):
                 The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-            position_ids (`torch.LongTensor` of shape `sequence_length`):
-                The position ids of the image.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
@@ -1036,12 +1002,12 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
     _checkpoint_conversion_mapping = {"^model": "language_model"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding"]
+    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config: PaddleOCRVLConfig):
         super().__init__(config)
-        self.visual = PaddleOCRVisionModel(config.vision_config)
-        self.language_model = PaddleOCRVLTextModel(config.text_config)
+        self.visual = PaddleOCRVisionModel._from_config(config.vision_config)
+        self.language_model = PaddleOCRTextModel._from_config(config.text_config)
         self.rope_deltas = None
         self.projector = PaddleOCRProjector(config)
 
@@ -1253,29 +1219,32 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             cu_seqlens=cu_seqlens,
         )
         image_embeds = vision_outputs.last_hidden_state
+        image_embeds = self.projector(image_embeds, image_grid_thw)
         return image_embeds
 
     def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: Optional[torch.FloatTensor] = None,
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
-        n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
-        n_image_features = image_features.shape[0]
-        if n_image_tokens != n_image_features:
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
             raise ValueError(
                 f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
             )
-        mask = input_ids == self.config.image_token_id
-        mask_unsqueezed = mask.unsqueeze(-1)
-        mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-        image_mask = mask_expanded.to(inputs_embeds.device)
-        return image_mask
+        return special_image_mask
 
     @can_return_tuple
     def forward(
@@ -1305,8 +1274,9 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            image_embeds = self.projector(image_embeds, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -1358,7 +1328,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             rope_deltas=self.rope_deltas,
         )
 
-        return output if return_dict else output.to_tuple()
+        return output
 
 
 class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, GenerationMixin):
@@ -1368,7 +1338,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         r"^model(?!(\.visual|\.projector))": "model.language_model",
     }
     _tied_weights_keys = ["lm_head.weight"]
-    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding"]
+    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1433,8 +1403,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
 
@@ -1520,8 +1488,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         pixel_values=None,
         pixel_values_videos=None,
         image_grid_thw=None,
-        video_grid_thw=None,
-        second_per_grid_ts=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1536,8 +1502,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1688,4 +1652,4 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         return input_ids, model_kwargs
 
 
-__all__ = ["PaddleOCRVLForConditionalGeneration"]
+__all__ = ["PaddleOCRVLForConditionalGeneration", "PaddleOCRTextModel", "PaddleOCRVisionModel"]

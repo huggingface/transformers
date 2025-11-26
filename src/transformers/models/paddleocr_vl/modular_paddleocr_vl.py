@@ -18,6 +18,7 @@
 # limitations under the License.
 
 import math
+from functools import partial
 from typing import Optional, Union
 
 import numpy as np
@@ -27,7 +28,6 @@ from torch import nn
 
 from ...activations import GELUActivation
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
@@ -46,7 +46,7 @@ from ...image_utils import (
 )
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import rope_config_validation as _rope_config_validation
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...processing_utils import (
@@ -56,6 +56,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
     Ernie4_5MLP,
@@ -74,9 +75,9 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLRotaryEmbedding,
     VisionRotaryEmbedding,
 )
+from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipMLP,
-    SiglipMultiheadAttentionPoolingHead,
     SiglipVisionEmbeddings,
 )
 from ..video_llama_3.modeling_video_llama_3 import (
@@ -87,14 +88,15 @@ from ..video_llama_3.modeling_video_llama_3 import (
 
 
 logger = logging.get_logger(__name__)
+rope_config_validation = partial(_rope_config_validation, ignore_keys={"mrope_section"})
 
 
 def smart_resize(
     height: int,
     width: int,
     factor: int = 28,
-    min_pixels: int = 28 * 28 * 130,
-    max_pixels: int = 28 * 28 * 1280,
+    min_pixels: int = 384 * 384,
+    max_pixels: int = 1536 * 1536,
 ):
     if height < factor:
         width = round((width * factor) / height)
@@ -126,34 +128,12 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
     Constructs a PaddleOCRVL image processor that dynamically resizes images based on the original images.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`Dict[str, int]`, *optional*, defaults to `None`):
-            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `28 * 28 * 130`):
+        min_pixels (`int`, *optional*, defaults to `384 * 384`):
             The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1670`):
+        max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
             The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
+        temporal_patch_size (`int`, *optional*, defaults to 1):
             The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
     """
 
     model_input_names = [
@@ -172,32 +152,14 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 28 * 28 * 130,
-        max_pixels: int = 28 * 28 * 1280,
+        min_pixels: int = 384 * 384,
+        max_pixels: int = 1536 * 1536,
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
         **kwargs,
     ) -> None:
-        super().__init__(**kwargs)
-        self.do_resize = do_resize
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
-        self.min_pixels = size["shortest_edge"]
-        self.max_pixels = size["longest_edge"]
-        self.size = size
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.do_convert_rgb = do_convert_rgb
+        super().__init__()
 
     def _preprocess(
         self,
@@ -346,8 +308,6 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 28 * 28 * 130,
-        max_pixels: int = 28 * 28 * 1280,
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
@@ -357,12 +317,7 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
-            size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
+            size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
         self.min_pixels = size["shortest_edge"]
         self.max_pixels = size["longest_edge"]
         self.size = size
@@ -567,169 +522,27 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs})
 
 
-class PaddleOCRVLVisionConfig(PretrainedConfig):
+class PaddleOCRVisionConfig(SiglipVisionConfig):
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=224,
-        patch_size=14,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
         spatial_merge_size=2,
         temporal_patch_size=2,
-        tokens_per_second=2,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+        super().__init__()
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
-        self.tokens_per_second = tokens_per_second
 
 
-class PaddleOCRVLTextConfig(PretrainedConfig):
-    """
-    Configuration class.
-
-    This class stores the configuration of an Ernie model, defining the model architecture.
-    It inherits from PretrainedConfig and can be used to control model outputs.
-    """
-
+class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
-
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    def __init__(
-        self,
-        vocab_size=32000,
-        hidden_size=768,
-        intermediate_size=11008,
-        max_position_embeddings=32768,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        rms_norm_eps=1e-6,
-        use_cache=False,
-        use_flash_attention=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        head_dim=128,
-        hidden_act="silu",
-        use_bias=False,
-        rope_theta=10000,
-        weight_share_add_bias=True,
-        ignored_index=-100,
-        attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0.0,
-        compression_ratio: float = 1.0,
-        num_key_value_heads=None,
-        max_sequence_length=None,
-        tie_word_embeddings=False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        **kwargs,
-    ):
-        """
-        Initialize configuration with default or specified parameters.
-
-        Args:
-            vocab_size (int): Size of the vocabulary (number of unique tokens)
-            hidden_size (int): Dimensionality of the encoder layers and the pooler layer
-            intermediate_size (int): Dimensionality of the "intermediate" (feed-forward) layer
-            max_position_embeddings (int): Maximum sequence length the model can handle
-            num_hidden_layers (int): Number of hidden layers in the Transformer encoder
-            num_attention_heads (int): Number of attention heads for each attention layer
-            rms_norm_eps (float): The epsilon used by the RMS normalization layers
-            use_cache (bool): Whether to use caching for faster generation (decoding)
-            use_flash_attention (bool): Whether to use FlashAttention for optimized attention computation
-            pad_token_id (int): Token ID used for padding sequences
-            bos_token_id (int): Token ID used for beginning-of-sequence
-            eos_token_id (int): Token ID used for end-of-sequence
-            use_bias (bool): Whether to use bias terms in linear layers
-            rope_theta (float): The base period of the RoPE embeddings
-            weight_share_add_bias (bool): Whether to share bias weights in certain layers
-            ignored_index (int): Target value that is ignored during loss computation
-            attention_probs_dropout_prob (float): Dropout probability for attention weights
-            hidden_dropout_prob (float): Dropout probability for hidden layers
-            compression_ratio (float): Ratio for KV cache compression (1.0 = no compression)
-            num_key_value_heads (int): Number of key/value heads (for Grouped Query Attention)
-            max_sequence_length (int): Maximum sequence length for positional embeddings
-            **kwargs: Additional keyword arguments passed to parent class
-        """
-
-        # Set default for tied embeddings if not specified.
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.use_flash_attention = use_flash_attention
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.sliding_window = None
-        self.hidden_size = hidden_size
-        self.use_bias = use_bias
-        self.weight_share_add_bias = weight_share_add_bias
-        self.rope_theta = rope_theta
-        self.ignored_index = ignored_index
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.compression_ratio = compression_ratio
-        self.num_key_value_heads = num_key_value_heads
-        self.max_sequence_length = max_sequence_length
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-        if self.rope_parameters is not None and self.rope_parameters["rope_type"] == "mrope":
-            self.rope_parameters["rope_type"] = "default"
-        rope_config_validation(self, ignore_keys={"mrope_section"})
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class PaddleOCRVLConfig(Qwen2VLConfig):
-    pass
+    sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
 
 
 class PaddleOCRProjector(nn.Module):
@@ -737,7 +550,7 @@ class PaddleOCRProjector(nn.Module):
         super().__init__()
         self.text_config = config.text_config
         self.vision_config = config.vision_config
-        self.merge_kernel_size = (2, 2)
+        self.merge_kernel_size = (self.vision_config.spatial_merge_size, self.vision_config.spatial_merge_size)
 
         self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
 
@@ -778,7 +591,7 @@ class PaddleOCRRotaryEmbedding(Qwen2VLRotaryEmbedding):
 
 
 class PaddleOCRMLP(Ernie4_5MLP):
-    def __init__(self, config: PaddleOCRVLTextConfig):
+    def __init__(self, config: PaddleOCRTextConfig):
         super().__init__()
 
 
@@ -798,7 +611,7 @@ class PaddleOCRRMSNorm(Ernie4_5RMSNorm):
 
 
 class PaddleOCRDecoderLayer(Ernie4_5DecoderLayer):
-    def __init__(self, config: PaddleOCRVLTextConfig, layer_idx: int):
+    def __init__(self, config: PaddleOCRTextConfig, layer_idx: int):
         super().__init__()
 
 
@@ -817,17 +630,17 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-class PaddleOCRVLTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
-    def __init__(self, config: PaddleOCRVLTextConfig):
+class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
+    def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
 
 
 class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
-    config: PaddleOCRVLVisionConfig
+    config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
     input_modalities = "image"
 
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
 
         self.vision_model = PaddleOCRVisionTransformer(config)
@@ -837,8 +650,8 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
     def forward(
         self,
-        pixel_values,
-        cu_seqlens,
+        pixel_values: torch.FloatTensor,
+        cu_seqlens: torch.Tensor,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
     ) -> BaseModelOutputWithPooling:
         """
@@ -858,7 +671,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
 
 class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -868,16 +681,13 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
 
         dim = embeddings.shape[-1]
 
-        new_height = height
-        new_width = width
-
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            size=(new_height, new_width),
+            size=(height, width),
             mode="bilinear",
             align_corners=False,
         )
@@ -894,8 +704,6 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
-            position_ids (`torch.LongTensor` of shape `sequence_length`):
-                The position ids of the image.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
@@ -906,9 +714,6 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, squence_len, -1)
 
-        assert batch_size == 1, (
-            f"Batch size must be 1, but received {batch_size}. This model only processes one image at a time."
-        )
         start = 0
         embeddings = embeddings.squeeze(0)
         tmp_embeddings = []
@@ -926,29 +731,22 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
 
 
 class PaddleOCRVisionAttention(VideoLlama3VisionAttention):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
 
 
 class PaddleOCRVisionMLP(SiglipMLP):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
-
-
-class PaddleOCRVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
-        super().__init__()
-
-        self.mlp = PaddleOCRVisionMLP(config)
 
 
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
 
 
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
         embed_dim = config.hidden_size
         num_heads = config.num_attention_heads
@@ -957,13 +755,17 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
 
     def forward(
         self,
-        inputs_embeds,
-        cu_seqlens,
+        inputs_embeds: torch.FloatTensor,
+        cu_seqlens: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
     ) -> BaseModelOutput:
         """
         Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
                 The cumulative sequence lengths of each image or video feature.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1009,7 +811,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
 
 
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
-    def __init__(self, config: PaddleOCRVLVisionConfig):
+    def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
@@ -1017,13 +819,10 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         self.embeddings = PaddleOCRVisionEmbeddings(config)
         self.encoder = PaddleOCRVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        if self.use_head:
-            self.head = PaddleOCRVisionMultiheadAttentionPoolingHead(config)
 
     def forward(
         self,
-        pixel_values,
+        pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
@@ -1036,8 +835,6 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
                 The cumulative sequence lengths of each image or video feature.
             attention_mask (`torch.Tensor`, *optional*):
                 The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-            position_ids (`torch.LongTensor` of shape `sequence_length`):
-                The position ids of the image.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
@@ -1071,13 +868,13 @@ class PaddleOCRVLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 class PaddleOCRVLModel(Qwen2VLModel):
     _checkpoint_conversion_mapping = {"^model": "language_model"}
-    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding"]
+    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config: PaddleOCRVLConfig):
         super().__init__(config)
-        self.visual = PaddleOCRVisionModel(config.vision_config)
+        self.visual = PaddleOCRVisionModel._from_config(config.vision_config)
         self.projector = PaddleOCRProjector(config)
-        self.language_model = PaddleOCRVLTextModel(config.text_config)
+        self.language_model = PaddleOCRTextModel._from_config(config.text_config)
         self.rope_deltas = None
 
         self.post_init()
@@ -1114,25 +911,32 @@ class PaddleOCRVLModel(Qwen2VLModel):
             cu_seqlens=cu_seqlens,
         )
         image_embeds = vision_outputs.last_hidden_state
+        image_embeds = self.projector(image_embeds, image_grid_thw)
         return image_embeds
 
     def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: Optional[torch.FloatTensor] = None,
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
-        n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
-        n_image_features = image_features.shape[0]
-        if n_image_tokens != n_image_features:
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        if inputs_embeds[special_image_mask].numel() != image_features.numel():
             raise ValueError(
                 f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
             )
-        mask = input_ids == self.config.image_token_id
-        mask_unsqueezed = mask.unsqueeze(-1)
-        mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-        image_mask = mask_expanded.to(inputs_embeds.device)
-        return image_mask
+        return special_image_mask
 
     @can_return_tuple
     def forward(
@@ -1162,8 +966,9 @@ class PaddleOCRVLModel(Qwen2VLModel):
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-            image_embeds = self.projector(image_embeds, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -1215,7 +1020,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
             rope_deltas=self.rope_deltas,
         )
 
-        return output if return_dict else output.to_tuple()
+        return output
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -1224,7 +1029,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         "^mlp_AR": "model.projector",
         r"^model(?!(\.visual|\.projector))": "model.language_model",
     }
-    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding"]
+    _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     @can_return_tuple
     @auto_docstring
@@ -1253,8 +1058,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
 
@@ -1340,8 +1143,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         pixel_values=None,
         pixel_values_videos=None,
         image_grid_thw=None,
-        video_grid_thw=None,
-        second_per_grid_ts=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1356,8 +1157,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1373,7 +1172,10 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 __all__ = [
     "PaddleOCRVLForConditionalGeneration",
     "PaddleOCRVLConfig",
-    "PaddleOCRVLTextConfig",
+    "PaddleOCRTextModel",
+    "PaddleOCRVisionModel",
+    "PaddleOCRVisionConfig",
+    "PaddleOCRTextConfig",
     "PaddleOCRVLImageProcessor",
     "PaddleOCRVLImageProcessorFast",
     "PaddleOCRVLProcessor",

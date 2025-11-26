@@ -39,8 +39,8 @@ def smart_resize(
     height: int,
     width: int,
     factor: int = 28,
-    min_pixels: int = 28 * 28 * 130,
-    max_pixels: int = 28 * 28 * 1280,
+    min_pixels: int = 384 * 384,
+    max_pixels: int = 1536 * 1536,
 ):
     if height < factor:
         width = round((width * factor) / height)
@@ -79,8 +79,6 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: int = 28 * 28 * 130,
-        max_pixels: int = 28 * 28 * 1280,
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
@@ -90,12 +88,7 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
-            size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
+            size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
         self.min_pixels = size["shortest_edge"]
         self.max_pixels = size["longest_edge"]
         self.size = size

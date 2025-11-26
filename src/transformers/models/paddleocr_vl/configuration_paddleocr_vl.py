@@ -23,13 +23,62 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 from typing import Optional
 
-from ...configuration_utils import PreTrainedConfig, PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters, standardize_rope_params
+from ...modeling_rope_utils import rope_config_validation as _rope_config_validation
 
 
-class PaddleOCRVLVisionConfig(PretrainedConfig):
+class PaddleOCRVisionConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PaddleOCRVisionModel`]. It is used to instantiate a
+    PaddleOCR vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the PaddleOCR
+    [google/paddle_o_c_r-base-patch16-224](https://huggingface.co/google/paddle_o_c_r-base-patch16-224) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+
+    Example:
+
+    ```python
+    >>> from transformers import PaddleOCRVisionConfig, PaddleOCRVisionModel
+
+    >>> # Initializing a PaddleOCRVisionConfig with google/paddle_o_c_r-base-patch16-224 style configuration
+    >>> configuration = PaddleOCRVisionConfig()
+
+    >>> # Initializing a PaddleOCRVisionModel (with random weights) from the google/paddle_o_c_r-base-patch16-224 style configuration
+    >>> model = PaddleOCRVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
 
@@ -41,13 +90,12 @@ class PaddleOCRVLVisionConfig(PretrainedConfig):
         num_attention_heads=12,
         num_channels=3,
         image_size=224,
-        patch_size=14,
+        patch_size=16,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         spatial_merge_size=2,
         temporal_patch_size=2,
-        tokens_per_second=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -64,19 +112,85 @@ class PaddleOCRVLVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
-        self.tokens_per_second = tokens_per_second
 
 
-class PaddleOCRVLTextConfig(PretrainedConfig):
-    """
-    Configuration class.
+rope_config_validation = partial(_rope_config_validation, ignore_keys={"mrope_section"})
 
-    This class stores the configuration of an Ernie model, defining the model architecture.
-    It inherits from PretrainedConfig and can be used to control model outputs.
-    """
+
+class PaddleOCRTextConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PaddleOCRTextModel`]. It is used to instantiate an Ernie 4.5
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Ernie 4.5 0.3B.
+    e.g. [baidu/ERNIE-4.5-0.3B-PT](https://huggingface.co/baidu/ERNIE-4.5-0.3B-PT)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 103424):
+            Vocabulary size of the Ernie 4.5 model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`PaddleOCRTextModel`]
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 18):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 2):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+            `num_attention_heads`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in any of the projections including mlp and attention for example.
+        head_dim (`int`, *optional*, defaults to 128):
+            The attention head dimension. If None, it will default to hidden_size // num_attention_heads
+
+    ```python
+    >>> from transformers import PaddleOCRTextModel, PaddleOCRTextConfig
+
+    >>> # Initializing a PaddleOCRText 0.3B style configuration
+    >>> configuration = PaddleOCRTextConfig()
+
+    >>> # Initializing a model from the 0.3B style configuration
+    >>> model = PaddleOCRTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "paddleocr_vl_text"
-
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `PaddleOCRTextModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -94,100 +208,60 @@ class PaddleOCRVLTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=768,
-        intermediate_size=11008,
-        max_position_embeddings=32768,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        rms_norm_eps=1e-6,
-        use_cache=False,
-        use_flash_attention=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        head_dim=128,
-        hidden_act="silu",
-        use_bias=False,
-        rope_theta=10000,
-        weight_share_add_bias=True,
-        ignored_index=-100,
-        attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0.0,
-        compression_ratio: float = 1.0,
-        num_key_value_heads=None,
-        max_sequence_length=None,
-        tie_word_embeddings=False,
+        vocab_size: Optional[int] = 103424,
+        hidden_size: Optional[int] = 1024,
+        intermediate_size: Optional[int] = 3072,
+        num_hidden_layers: Optional[int] = 18,
+        num_attention_heads: Optional[int] = 16,
+        num_key_value_heads: Optional[int] = 2,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 131072,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-05,
+        use_cache: Optional[int] = True,
+        pad_token_id: Optional[int] = 0,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = True,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        use_bias: Optional[bool] = False,
+        head_dim: Optional[int] = 128,
         **kwargs,
     ):
-        """
-        Initialize configuration with default or specified parameters.
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
 
-        Args:
-            vocab_size (int): Size of the vocabulary (number of unique tokens)
-            hidden_size (int): Dimensionality of the encoder layers and the pooler layer
-            intermediate_size (int): Dimensionality of the "intermediate" (feed-forward) layer
-            max_position_embeddings (int): Maximum sequence length the model can handle
-            num_hidden_layers (int): Number of hidden layers in the Transformer encoder
-            num_attention_heads (int): Number of attention heads for each attention layer
-            rms_norm_eps (float): The epsilon used by the RMS normalization layers
-            use_cache (bool): Whether to use caching for faster generation (decoding)
-            use_flash_attention (bool): Whether to use FlashAttention for optimized attention computation
-            pad_token_id (int): Token ID used for padding sequences
-            bos_token_id (int): Token ID used for beginning-of-sequence
-            eos_token_id (int): Token ID used for end-of-sequence
-            use_bias (bool): Whether to use bias terms in linear layers
-            rope_theta (float): The base period of the RoPE embeddings
-            weight_share_add_bias (bool): Whether to share bias weights in certain layers
-            ignored_index (int): Target value that is ignored during loss computation
-            attention_probs_dropout_prob (float): Dropout probability for attention weights
-            hidden_dropout_prob (float): Dropout probability for hidden layers
-            compression_ratio (float): Ratio for KV cache compression (1.0 = no compression)
-            num_key_value_heads (int): Number of key/value heads (for Grouped Query Attention)
-            max_sequence_length (int): Maximum sequence length for positional embeddings
-            **kwargs: Additional keyword arguments passed to parent class
-        """
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
 
-        # Set default for tied embeddings if not specified.
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.use_bias = use_bias
+        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 500000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.use_flash_attention = use_flash_attention
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.sliding_window = None
-        self.hidden_size = hidden_size
-        self.use_bias = use_bias
-        self.weight_share_add_bias = weight_share_add_bias
-        self.rope_theta = rope_theta
-        self.ignored_index = ignored_index
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.compression_ratio = compression_ratio
-        self.num_key_value_heads = num_key_value_heads
-        self.max_sequence_length = max_sequence_length
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-        if self.rope_parameters is not None and self.rope_parameters["rope_type"] == "mrope":
-            self.rope_parameters["rope_type"] = "default"
-        rope_config_validation(self, ignore_keys={"mrope_section"})
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class PaddleOCRVLConfig(PreTrainedConfig):
@@ -229,7 +303,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "paddleocr_vl"
-    sub_configs = {"vision_config": PaddleOCRVLVisionConfig, "text_config": PaddleOCRVLTextConfig}
+    sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -290,4 +364,4 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         return super().__getattribute__(key)
 
 
-__all__ = ["PaddleOCRVLConfig", "PaddleOCRVLTextConfig"]
+__all__ = ["PaddleOCRVLConfig", "PaddleOCRVisionConfig", "PaddleOCRTextConfig"]
