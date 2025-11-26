@@ -140,7 +140,7 @@ class FPQuantHfQuantizer(HfQuantizer):
 
         replace_with_fp_quant_linear(
             model,
-            fp_quant_linear_config=adapt_fp_quant_config(self.quantization_config),
+            fp_quant_linear_config=adapt_fp_quant_config(self.quantization_config)
         )
         model.config.quantization_config = self.quantization_config
 

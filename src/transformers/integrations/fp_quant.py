@@ -17,6 +17,8 @@ from ..utils import (
     is_fp_quant_available,
 )
 
+import torch
+from typing import Optional
 
 if is_fp_quant_available():
     from fp_quant import FPQuantConfig as FPQuantLinearConfig
@@ -30,7 +32,7 @@ class FpQuantQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys: Optional[list[str]] = None, **kwargs) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
@@ -40,57 +42,54 @@ class FpQuantQuantize(ConversionOps):
         # if target_device == "cpu" and param_name.endswith("weight"):
         #     # Works agains hard-coded missing key dispatch to CPU
         #     return
-
+        print("module: ", list(module.named_parameters()))
         # The module holds either:
         #  * `weight` when `store_master_weights=True`
         #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
         #  * `dqweight` when `store_master_weights=False` and `pseudoquantization=True`
-
         if target_key.endswith(".qweight"):
             # Loading a real quantized checkpoint without master weights
             qweight = torch.nn.Parameter(
-                param_value,
+                value,
                 requires_grad=False,
             )
-            module.weight = None
-            module.dqweight = None
             
-            weight_key = target_keys.rsplit(".", 1)[0] + ".weight"
-            dqweight_key = target_keys.rsplit(".", 1)[0] + ".dqweight"
-            return {target_key: qweight,
-                    weight_key: None,
-                    dqweight_key: None
+            weight_key = target_key.rsplit(".", 1)[0] + ".weight"
+            dqweight_key = target_key.rsplit(".", 1)[0] + ".dqweight"
+
+            return {f"{target_key}": qweight,
                     }
 
-        if param_name.endswith(".dqweight"):
+        if target_key.endswith(".dqweight"):
             # Loading a pseudo-quantized checkpoint without master weights
-            dqweight = torch.nn.Parameter(param_value.to(target_device))
+            dqweight = torch.nn.Parameter(value)
             
-            weight_key = target_keys.rsplit(".", 1)[0] + ".weight"
-            dqweight_key = target_keys.rsplit(".", 1)[0] + ".dqweight"
-            scales_key = target_keys.rsplit(".", 1)[0] + ".scales"
+            weight_key = target_key.rsplit(".", 1)[0] + ".weight"
+            dqweight_key = target_key.rsplit(".", 1)[0] + ".dqweight"
+            scales_key = target_key.rsplit(".", 1)[0] + ".scales"
             
             return {
-                target_key:dqweight,
-                weight_key:None,
-                dqweight_key:None,
-                scales_key:None
+                f"{target_key}": dqweight,
+                f"{weight_key}": torch.nn.Parameter(torch.empty(0)),
+                f"{dqweight_key}": torch.nn.Parameter(torch.empty(0)),
+                f"{scales_key}": torch.nn.Parameter(torch.empty(0))
                 }
 
         # Loading master weights or an unquantized checkpoint
-        weight = torch.nn.Parameter(param_value.to(target_device))
+        print("##### value: ", value.device)
+        weight = torch.nn.Parameter(value)
         module.weight = weight
         # Let pre-forward handle the quantization and set None where necessary
         module.pre_forward()
         
-        prefix_target_key = target_keys.rsplit(".", 1)[0]
+        prefix_target_key = target_key.rsplit(".", 1)[0]
 
         return {target_key: weight,
-                prefix_target_key + ".act_global_scale": module.act_global_scale,
-                prefix_target_key + "backward_hadamard_matrix": module.backward_hadamard_matrix
-                prefix_target_key + "forward_hadamard_matrix": module.forward_hadamard_matrix
-                prefix_target_key + "qweight": module.qweight
-                prefix_target_key + "scales": module.scales
+                f"{prefix_target_key}.act_global_scale": module.act_global_scale,
+                f"{prefix_target_key}.backward_hadamard_matrix": module.backward_hadamard_matrix,
+                f"{prefix_target_key}.forward_hadamard_matrix": module.forward_hadamard_matrix,
+                f"{prefix_target_key}.qweight": module.qweight,
+                f"{prefix_target_key}.scales": module.scales
                 }
 
 def adapt_fp_quant_config(config: FPQuantConfig):
