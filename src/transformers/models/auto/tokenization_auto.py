@@ -1122,16 +1122,13 @@ class AutoTokenizer:
                 pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs
             )
         elif config_tokenizer_class is not None:
-            fast_tokenizer_class = None
-            if fast_tokenizer_class is None:
-                tokenizer_class_candidate = config_tokenizer_class
-                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
-                if (
-                    tokenizer_class is None and not tokenizer_class_candidate.endswith("Fast")
-                ) or tokenizer_class_candidate == "PreTrainedTokenizer":
-                    tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate + "Fast")
-            else:
-                tokenizer_class = fast_tokenizer_class
+            tokenizer_class_candidate = config_tokenizer_class
+            tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+            if (
+                tokenizer_class is None and not tokenizer_class_candidate.endswith("Fast")
+            ) or tokenizer_class_candidate == "PreTrainedTokenizer":
+                tokenizer_class = tokenizer_class_from_name("TokenizersBackend")
+
 
             return _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
 

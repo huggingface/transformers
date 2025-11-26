@@ -172,7 +172,6 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -282,6 +281,18 @@ else:
         "TokenizersExtractor",
         "PythonBackend",
     ]
+
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_sentencepiece_objects
+
+    _import_structure["utils.dummy_sentencepiece_objects"] = [
+        name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["tokenization_utils_sentencepiece"] = ["SentencePieceBackend"]
 
 
 try:
