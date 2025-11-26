@@ -217,8 +217,6 @@ class Glm4vTextConfig(PreTrainedConfig):
         tie_word_embeddings: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        image_token_id: Optional[int] = None,
-        video_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -246,8 +244,6 @@ class Glm4vTextConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
