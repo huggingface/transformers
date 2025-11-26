@@ -3651,7 +3651,10 @@ class ModelTesterMixin:
                 getattr(config, "hidden_size", None) is not None
                 and getattr(config, "num_attention_heads", None) is not None
             ):
-                head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
+                # For some models, num_attention_heads is a list of ints: we take the max to maximize the multiplier
+                num_attn_heads = getattr(config, "num_attention_heads")
+                num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
+                head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
                 config.hidden_size *= max(requested_dim // head_dim, 1)
 
             if (

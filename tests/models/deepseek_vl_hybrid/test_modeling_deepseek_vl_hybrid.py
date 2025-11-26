@@ -271,6 +271,13 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 ):
                     self.assertTrue(submodule.config._attn_implementation == "sdpa")
 
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest(
+            "deepseek_vl_hybrid uses SAM, which requires an attention_mask input for relative positional embeddings"
+        )
+
 
 @require_torch
 @require_torch_accelerator
