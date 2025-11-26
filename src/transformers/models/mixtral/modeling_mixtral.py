@@ -109,7 +109,7 @@ class MixtralTopKRouter(nn.Module):
         router_logits = torch.nn.functional.softmax(router_logits.float(), dim=-1)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
         router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
+        router_scores = router_top_value
         return router_scores, router_indices
 
 
