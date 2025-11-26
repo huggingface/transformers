@@ -2,9 +2,10 @@ import hashlib
 import itertools
 import json
 import logging
+from functools import lru_cache
 from typing import Any
 
-from transformers.utils.import_utils import is_flash_attn_2_available
+from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
 
 
 KERNELIZATION_AVAILABLE = False
@@ -18,17 +19,36 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+@lru_cache
+def is_fa2_or_kernel_available() -> bool:
+    """Returns True if the flash_attn_2 or a fallback kernel is available"""
+    # Early return if flash_attn_2 is available
+    if is_flash_attn_2_available():
+        return True
+    # Early return if kernels is not available
+    if not is_kernels_available():
+        logger.warning(
+            "flash_attention_2 is not available. kernels is not installed. Benchmarking flash_attention_2 will not "
+            "be possible."
+        )
+        return False
+    # If kernels is available, try to get the flash_attn_2 kernel
+    try:
+        from kernels import get_kernel
+
+        get_kernel("kernels-community/flash-attn")
+    except Exception as _:
+        logger.warning(
+            "flash_attention_2 is not available. kernels is installed, but the flash_attn kernel is not available."
+            "Benchmarking flash_attention_2 will not be possible."
+        )
+        return False
+
+
 class BenchmarkConfig:
     """Configuration for a single benchmark scenario."""
 
-    all_attn_implementations = [
-        ("flash_attention_2", None),
-        ("eager", None),
-        ("sdpa", "math"),
-        ("sdpa", "flash_attention"),
-        ("flex_attention", None),
-    ]
-
+    all_attn_implementations = ["flash_attention_2", "eager", "sdpa", "flex_attention"]
     all_compiled_modes = [None, "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
 
     def __init__(
@@ -41,7 +61,6 @@ class BenchmarkConfig:
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
         attn_implementation: str = "eager",
-        sdpa_backend: str | None = None,
         compile_mode: str | None = None,
         compile_options: dict[str, Any] | None = None,
         kernelize: bool = False,
@@ -59,7 +78,6 @@ class BenchmarkConfig:
         self.num_tokens_to_generate = num_tokens_to_generate
         # Generation parameters
         self.attn_implementation = attn_implementation
-        self.sdpa_backend = sdpa_backend
         # Optimization parameters
         self.compile_mode = compile_mode
         self.compile_options = compile_options if compile_options is not None else {}
@@ -75,34 +93,21 @@ class BenchmarkConfig:
         if skip_validity_check:
             return
         # Check FA is installed
-        if self.attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
-            logger.warning(
-                "Flash attention does not support compile mode. Defaulting to SDPA w/ flash attention backend."
-            )
-            self.attn_implementation = "sdpa"
-            self.sdpa_backend = "flash_attention"
-        # Flash attention does not support compile mode, so we turn it off # FIXME: it would be better to support it
         is_fa = self.attn_implementation == "flash_attention_2"
-        is_fa |= self.attn_implementation == "sdpa" and self.sdpa_backend == "flash_attention"
-        if is_fa:
+        if is_fa and not is_fa2_or_kernel_available():
+            logger.warning("Flash attention is not available. Defaulting to SDPA.")
+            self.attn_implementation = "sdpa"
+        # Flash attention does not support compile mode, so we turn it off # FIXME: it would be better to support it
+        if is_fa and self.compile_mode is not None:
             logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
             self.compile_mode = None
-        # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
-        if self.attn_implementation == "sdpa" and self.sdpa_backend is None:
-            default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
-            logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
-            self.sdpa_backend = default_backend
+        # Handle continuous batching cases
         if self.continuous_batching:
             if self.attn_implementation == "flex_attention":
                 logger.error(
-                    "disabling continuous batching because of invalid configuration: flex attention is not supported"
+                    "Disabling continuous batching because of invalid configuration: flex attention is not supported."
                 )
                 self.continuous_batching = False
-            elif self.attn_implementation == "sdpa" and self.sdpa_backend is not None:
-                logger.warning(
-                    "when continuous batching is enabled, sdpa_backend must be None because of the attention mask, setting it to None"
-                )
-                self.sdpa_backend = None
 
     @property
     def hash(self) -> str:
@@ -115,7 +120,6 @@ class BenchmarkConfig:
             gpu_monitor_str = "monitored" if self.gpu_monitoring else "unmonitored"
             dimensions_str = f"b{self.batch_size}_s{self.sequence_length}_n{self.num_tokens_to_generate}"
             attn_code = self.attn_implementation
-            attn_code += f"_{self.sdpa_backend}" if self.attn_implementation == "sdpa" else ""
             compile_str = f"compiled_{self.compile_mode}" if self.compile_mode is not None else "uncompiled"
             kernelize_str = "kernelized" if self.kernelize else "unkernelized"
             continuous_batching_str = "cb" if self.continuous_batching else "generate"
@@ -125,7 +129,6 @@ class BenchmarkConfig:
             gpu_monitor_str = ("with" if self.gpu_monitoring else "no") + " GPU monitoring"
             dimensions_str = f"batch size {self.batch_size}, sequence length {self.sequence_length}, {self.num_tokens_to_generate} generated tokens"
             attn_code = f"{self.attn_implementation} attention"
-            attn_code += f" with {self.sdpa_backend} backend" if self.attn_implementation == "sdpa" else ""
             compile_str = "compiled" if self.compile_mode is not None else "not compiled"
             kernelize_str = "kernelized" if self.kernelize else "not kernelized"
             continuous_batching_str = "continuous batching" if self.continuous_batching else "regular generate"
@@ -145,7 +148,6 @@ class BenchmarkConfig:
             "sequence_length": self.sequence_length,
             "num_tokens_to_generate": self.num_tokens_to_generate,
             "attn_implementation": self.attn_implementation,
-            "sdpa_backend": self.sdpa_backend,
             "compile_mode": self.compile_mode,
             "compile_options": self.compile_options | {},  # to avoid inplace modification of the original dict
             "kernelize": self.kernelize,
@@ -162,7 +164,6 @@ class BenchmarkConfig:
             sequence_length=data.get("sequence_length", 128),
             num_tokens_to_generate=data.get("num_tokens_to_generate", 128),
             attn_implementation=data.get("attn_implementation", "eager"),
-            sdpa_backend=data.get("sdpa_backend"),
             compile_mode=data.get("compile_mode"),
             compile_options=data.get("compile_options"),
             kernelize=data.get("kernelize", False),
@@ -213,7 +214,7 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
     configs = []
     # Early return if level is greater than 3: we generate all combinations of configs, maybe even w/ all compile modes
     if level >= 3:
-        for attn_implementation, sdpa_backend in BenchmarkConfig.all_attn_implementations:
+        for attn_implementation in BenchmarkConfig.all_attn_implementations:
             # Usually there is not much to gain by compiling with other modes, but we allow it for level 4
             compile_modes = BenchmarkConfig.all_compiled_modes if level >= 4 else [None, "default"]
             for cm in compile_modes:
@@ -222,7 +223,6 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
                         configs.append(
                             BenchmarkConfig(
                                 attn_implementation=attn_implementation,
-                                sdpa_backend=sdpa_backend,
                                 compile_mode=cm,
                                 kernelize=kernelize_on,
                                 continuous_batching=cb_on,
