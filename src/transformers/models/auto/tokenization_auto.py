@@ -15,6 +15,7 @@
 """Auto Tokenizer class."""
 
 import importlib
+import importlib.util
 import json
 import os
 from collections import OrderedDict
@@ -1161,13 +1162,19 @@ class AutoTokenizer:
             config = config.encoder
 
         model_type = config_class_to_model_type(type(config).__name__)
+
         if model_type is not None:
             tokenizer_class_py, tokenizer_class_fast = TOKENIZER_MAPPING[type(config)]
-
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
                 return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
                 if tokenizer_class_py is not None:
+                    # Check for Mistral/Voxtral models before loading
+                    if "Mistral" in tokenizer_class_py.__name__ and importlib.util.find_spec("mistral_common") is None:
+                        raise ImportError(
+                            "The tokenizer for Voxtral or Mistral models requires the `mistral-common` package.\n"
+                            "Please install it with:\n\n    pip install mistral-common\n"
+                        )
                     return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 else:
                     raise ValueError(
