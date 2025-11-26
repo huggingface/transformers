@@ -264,6 +264,8 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_internal_consistency(self):
         """Override to add debug output on failure."""
+        import os
+        
         tokenizer = self.get_tokenizer()
         
         def get_debug_info():
@@ -275,6 +277,33 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             
             if hasattr(tokenizer, 'name_or_path'):
                 debug_lines.append(f"Tokenizer name_or_path: {tokenizer.name_or_path}")
+                # Check what files exist in the temp directory
+                if tokenizer.name_or_path and os.path.exists(tokenizer.name_or_path):
+                    debug_lines.append(f"Temp directory exists: True")
+                    try:
+                        files = os.listdir(tokenizer.name_or_path)
+                        debug_lines.append(f"Files in temp directory: {', '.join(files)}")
+                        tokenizer_json_path = os.path.join(tokenizer.name_or_path, "tokenizer.json")
+                        if os.path.exists(tokenizer_json_path):
+                            debug_lines.append(f"tokenizer.json exists: True")
+                            debug_lines.append(f"tokenizer.json size: {os.path.getsize(tokenizer_json_path)} bytes")
+                            # Try to read and check vocab size from the file
+                            try:
+                                import json
+                                with open(tokenizer_json_path, 'r') as f:
+                                    tj = json.load(f)
+                                if 'model' in tj and 'vocab' in tj['model']:
+                                    vocab_size = len(tj['model']['vocab'])
+                                    debug_lines.append(f"Vocab size in tokenizer.json: {vocab_size}")
+                            except Exception as e:
+                                debug_lines.append(f"Error reading tokenizer.json: {e}")
+                        else:
+                            debug_lines.append(f"tokenizer.json exists: False")
+                    except Exception as e:
+                        debug_lines.append(f"Error listing temp directory: {e}")
+                else:
+                    debug_lines.append(f"Temp directory exists: False")
+            
             if hasattr(tokenizer, 'vocab_file'):
                 debug_lines.append(f"Tokenizer vocab_file: {tokenizer.vocab_file}")
             
@@ -283,6 +312,13 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 debug_lines.append(f"_tokenizer type: {type(tokenizer._tokenizer)}")
                 if hasattr(tokenizer._tokenizer, 'model'):
                     debug_lines.append(f"_tokenizer.model type: {type(tokenizer._tokenizer.model)}")
+                    # Try to get vocab size from the model
+                    try:
+                        if hasattr(tokenizer._tokenizer.model, 'get_vocab'):
+                            vocab_dict = tokenizer._tokenizer.model.get_vocab()
+                            debug_lines.append(f"_tokenizer.model vocab size: {len(vocab_dict)}")
+                    except:
+                        pass
                 # Try to get more details about the tokenizer
                 try:
                     debug_lines.append(f"_tokenizer object: {repr(tokenizer._tokenizer)}")
@@ -290,6 +326,12 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     debug_lines.append(f"_tokenizer object: <repr failed>")
             else:
                 debug_lines.append(f"Has _tokenizer attribute: False")
+            
+            # Add debug info from tokenization_utils_base if available
+            if hasattr(tokenizer, '_gemma_debug_info'):
+                debug_lines.append("\nGEMMA_DEBUG_INFO from tokenization_utils_base:")
+                for key, value in tokenizer._gemma_debug_info.items():
+                    debug_lines.append(f"  {key}: {value}")
             
             debug_lines.append(f"Vocab size: {len(tokenizer)}")
             return "\n".join(debug_lines)
