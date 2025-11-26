@@ -409,14 +409,14 @@ class FP8Expert(nn.Module):
             # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
             gu_scale_o = _ceil_div(Wg_out, bo)
             gu_scale_i = _ceil_div(Wg_in, bi)
-            self.gate_up_proj_scales_inv = nn.Parameter(
+            self.gate_up_proj_scale_inv = nn.Parameter(
                 torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32, device=device)
             )
 
             # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
             dp_scale_o = _ceil_div(Wd_out, bo)
             dp_scale_i = _ceil_div(Wd_in, bi)
-            self.down_proj_scales_inv = nn.Parameter(
+            self.down_proj_scale_inv = nn.Parameter(
                 torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32, device=device)
             )
         else:
