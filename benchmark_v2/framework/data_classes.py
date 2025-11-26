@@ -127,7 +127,7 @@ class BenchmarkResult:
             "inter_token_latency": self.inter_token_latency,
             "shape_and_decoded_outputs": self.shape_and_decoded_outputs,
             "gpu_metrics": gpu_metrics,
-            "timestamps": self._timestamps if summarized else None,
+            "timestamps": None if summarized else self._timestamps,
         }
 
     @classmethod
