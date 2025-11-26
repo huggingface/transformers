@@ -744,7 +744,6 @@ src/transformers/utils/dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_
 src/transformers/utils/dummy_music_objects.py
 src/transformers/utils/dummy_pt_objects.py
 src/transformers/utils/dummy_sentencepiece_and_tokenizers_objects.py
-src/transformers/utils/dummy_sentencepiece_objects.py
 src/transformers/utils/dummy_speech_objects.py
 src/transformers/utils/dummy_tokenizers_objects.py
 src/transformers/utils/dummy_vision_objects.py

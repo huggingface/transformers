@@ -34,7 +34,6 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     BatchEncoding,
@@ -91,7 +90,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class: type[PreTrainedTokenizer] | None = None
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -103,15 +101,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden
         add_prefix_space = kwargs.get("add_prefix_space", False)
-
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
-            # Some tokenizers saved with very old versions still set `from_slow=True` even though they no longer
-            # have a dedicated slow implementation. In that case we can safely ignore the flag and rely on the
-            logger.warning_once(
-                "Tokenizer was saved with `from_slow=True`, but no slow tokenizer class is available. "
-                "Falling back to loading the fast tokenizer directly."
-            )
-            from_slow = False
 
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)

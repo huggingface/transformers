@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...tokenization_utils_tokenizers import PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
