@@ -182,3 +182,6 @@ class S3GenConfig(PretrainedConfig):
         self.token_mel_ratio = token_mel_ratio
         self.pre_lookahead_len = pre_lookahead_len
         super().__init__(**kwargs)
+
+
+__all__ = ["S3GenConfig"]

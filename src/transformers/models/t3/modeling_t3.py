@@ -30,7 +30,7 @@ from torch import Tensor
 from ...generation.utils import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ..llama.modeling_llama import LlamaConfig, LlamaModel, LlamaPreTrainedModel
+from ..llama.modeling_llama import LlamaConfig, LlamaModel
 from .configuration_t3 import T3Config
 
 
@@ -500,88 +500,6 @@ class AlignmentStreamAnalyzer:
         return logits
 
 
-class T3HuggingfaceBackend(LlamaPreTrainedModel, GenerationMixin):
-    """
-    Lightweight wrapper so we can reuse HuggingFace's generation utilities while feeding custom embeddings/logits.
-    """
-
-    def __init__(
-        self,
-        config,
-        llama: LlamaModel,
-        *,
-        speech_enc: nn.Embedding,
-        speech_head: nn.Linear,
-        alignment_stream_analyzer: Optional[AlignmentStreamAnalyzer] = None,
-    ):
-        super().__init__(config)
-        self.model = llama
-        self.speech_enc = speech_enc
-        self.speech_head = speech_head
-        self._added_cond = False
-        self.alignment_stream_analyzer = alignment_stream_analyzer
-
-    @torch.inference_mode()
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.Tensor,
-        decoder_cond: torch.Tensor,
-        use_cache: bool,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
-        cache_position: Optional[torch.Tensor] = None,  # kept for API parity
-    ):
-        if not use_cache:
-            past_key_values = None
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        inputs_embeds = self.speech_enc(input_ids)
-
-        if not self._added_cond:
-            assert past_key_values is not None
-            if decoder_cond.size(0) != inputs_embeds.size(0):
-                decoder_cond = decoder_cond.expand(inputs_embeds.size(0), -1, -1)
-            inputs_embeds = torch.cat([decoder_cond, inputs_embeds], dim=1)
-            self._added_cond = True
-
-        return {
-            "inputs_embeds": inputs_embeds,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
-
-    @torch.inference_mode()
-    def forward(
-        self,
-        inputs_embeds: torch.Tensor,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
-        use_cache: bool = True,
-        output_attentions: bool = False,
-        output_hidden_states: bool = True,
-        return_dict: bool = True,
-    ):
-        assert return_dict
-        assert output_hidden_states
-
-        output = self.model(
-            inputs_embeds=inputs_embeds,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-        )
-        hidden_states = output.hidden_states[-1]
-        logits = self.speech_head(hidden_states)
-
-        return CausalLMOutputWithCrossAttentions(
-            logits=logits,
-            past_key_values=output.past_key_values,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
-        )
-
-
 # ============================================================================
 # T3 Model
 # ============================================================================
@@ -599,7 +517,7 @@ class T3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
 
 
-class T3Model(T3PreTrainedModel):
+class T3Model(T3PreTrainedModel, GenerationMixin):
     """
     T3 (Token-To-Token) TTS model using LLaMA as backbone.
 
@@ -637,11 +555,17 @@ class T3Model(T3PreTrainedModel):
         # Voice encoder for speaker conditioning
         self.voice_encoder = VoiceEncoder()
 
+        # Set main input name for generation
+        self.main_input_name = "inputs_embeds"
+
         # Initialize weights
         self.post_init()
 
-        self.patched_model: Optional[T3HuggingfaceBackend] = None
-        self.compiled = False
+        # Generation state
+        self._decoder_cond = None
+        self._added_cond = False
+        self._current_position = 0
+        self.alignment_stream_analyzer = None
 
     def prepare_conditioning(self, t3_cond: T3Cond):
         """Prepare conditioning embeddings."""
@@ -680,54 +604,136 @@ class T3Model(T3PreTrainedModel):
 
     def forward(
         self,
-        *,
-        t3_cond: T3Cond,
-        text_tokens: torch.LongTensor,
-        text_token_lens: torch.LongTensor,
-        speech_tokens: torch.LongTensor,
-        speech_token_lens: torch.LongTensor,
-        training=False,
+        input_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        # Training-specific arguments
+        t3_cond: Optional[T3Cond] = None,
+        text_tokens: Optional[torch.LongTensor] = None,
+        text_token_lens: Optional[torch.LongTensor] = None,
+        speech_tokens: Optional[torch.LongTensor] = None,
+        speech_token_lens: Optional[torch.LongTensor] = None,
     ):
-        """Forward pass of T3 model."""
-        embeds, len_cond = self.prepare_input_embeds(
-            t3_cond=t3_cond, text_tokens=text_tokens, speech_tokens=speech_tokens
-        )
+        """
+        Forward pass of T3 model.
 
-        tfmr_out = self.tfmr.forward(
-            input_ids=None,
-            inputs_embeds=embeds,
-            output_hidden_states=True,
-            return_dict=True,
-            use_cache=(not training),
-        )
-        hidden_states = tfmr_out.hidden_states[-1]
+        Supports both training mode (with t3_cond, text_tokens, speech_tokens) and
+        generation mode (with inputs_embeds from prepare_inputs_for_generation).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Split hidden states
-        len_text = text_tokens.size(1)
-        len_speech = speech_tokens.size(1)
-        B, _, dim = hidden_states.shape
-        device, dtype = hidden_states.device, hidden_states.dtype
+        # Training/evaluation mode
+        if t3_cond is not None and text_tokens is not None and speech_tokens is not None:
+            embeds, len_cond = self.prepare_input_embeds(
+                t3_cond=t3_cond, text_tokens=text_tokens, speech_tokens=speech_tokens
+            )
 
-        text_latents = torch.zeros(B, len_text, dim, dtype=dtype, device=device)
-        speech_latents = torch.zeros(B, len_speech, dim, dtype=dtype, device=device)
+            tfmr_out = self.tfmr(
+                inputs_embeds=embeds,
+                output_hidden_states=True,
+                return_dict=True,
+                use_cache=False,
+            )
+            hidden_states = tfmr_out.hidden_states[-1]
 
-        ttl, stl = text_token_lens, speech_token_lens
-        for i in range(B):
-            text_end = len_cond + ttl[i].item()
-            speech_start = len_cond + text_tokens.size(1)
-            speech_end = speech_start + stl[i].item()
-            text_latents[i, : ttl[i]] = hidden_states[i, len_cond:text_end]
-            speech_latents[i, : stl[i]] = hidden_states[i, speech_start:speech_end]
+            # Split hidden states
+            len_text = text_tokens.size(1)
+            len_speech = speech_tokens.size(1)
+            B, _, dim = hidden_states.shape
+            device, dtype = hidden_states.device, hidden_states.dtype
 
-        text_logits = self.text_head(text_latents)
-        speech_logits = self.speech_head(speech_latents)
+            text_latents = torch.zeros(B, len_text, dim, dtype=dtype, device=device)
+            speech_latents = torch.zeros(B, len_speech, dim, dtype=dtype, device=device)
+
+            ttl, stl = text_token_lens, speech_token_lens
+            for i in range(B):
+                text_end = len_cond + ttl[i].item()
+                speech_start = len_cond + text_tokens.size(1)
+                speech_end = speech_start + stl[i].item()
+                text_latents[i, : ttl[i]] = hidden_states[i, len_cond:text_end]
+                speech_latents[i, : stl[i]] = hidden_states[i, speech_start:speech_end]
+
+            text_logits = self.text_head(text_latents)
+            speech_logits = self.speech_head(speech_latents)
+
+            return {
+                "text_logits": text_logits,
+                "text_latents": text_latents,
+                "speech_logits": speech_logits,
+                "speech_latents": speech_latents,
+                "hidden_states": hidden_states,
+            }
+
+        # Generation mode
+        else:
+            output_attentions = output_attentions if output_attentions is not None else False
+            output_hidden_states = output_hidden_states if output_hidden_states is not None else True
+            use_cache = use_cache if use_cache is not None else True
+
+            tfmr_out = self.tfmr(
+                inputs_embeds=inputs_embeds,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=True,
+            )
+
+            hidden_states = tfmr_out.hidden_states[-1]
+            logits = self.speech_head(hidden_states)
+
+            if not return_dict:
+                return (logits, tfmr_out.past_key_values, hidden_states, tfmr_out.attentions)
+
+            return CausalLMOutputWithCrossAttentions(
+                logits=logits,
+                past_key_values=tfmr_out.past_key_values,
+                hidden_states=tfmr_out.hidden_states,
+                attentions=tfmr_out.attentions,
+            )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs,
+    ):
+        """
+        Prepare inputs for generation step.
+
+        This method is called by HuggingFace's generate() at each step.
+        """
+        # First call: add conditioning embeddings
+        if past_key_values is None:
+            # Initial call - input_ids is the BOS token(s)
+            inputs_embeds = self.speech_emb(input_ids)
+            inputs_embeds = inputs_embeds + self.speech_pos_emb.get_fixed_embedding(0)
+
+            # Prepend decoder conditioning if available
+            if self._decoder_cond is not None:
+                inputs_embeds = torch.cat([self._decoder_cond, inputs_embeds], dim=1)
+                self._current_position = 0
+        else:
+            # Subsequent calls - only process the new token
+            input_ids = input_ids[:, -1:]
+            inputs_embeds = self.speech_emb(input_ids)
+            self._current_position += 1
+            inputs_embeds = inputs_embeds + self.speech_pos_emb.get_fixed_embedding(self._current_position)
 
         return {
-            "text_logits": text_logits,
-            "text_latents": text_latents,
-            "speech_logits": speech_logits,
-            "speech_latents": speech_latents,
-            "hidden_states": hidden_states,
+            "inputs_embeds": inputs_embeds,
+            "past_key_values": past_key_values,
+            "use_cache": use_cache if use_cache is not None else True,
+            "output_attentions": self.config.use_alignment_analyzer
+            if hasattr(self.config, "use_alignment_analyzer")
+            else False,
+            "output_hidden_states": True,
         }
 
     def loss(
@@ -751,7 +757,6 @@ class T3Model(T3PreTrainedModel):
             text_token_lens=text_token_lens,
             speech_tokens=speech_tokens,
             speech_token_lens=speech_token_lens,
-            training=True,
         )
 
         IGNORE_ID = -100
@@ -787,6 +792,7 @@ class T3Model(T3PreTrainedModel):
         from transformers.generation.logits_process import (
             MinPLogitsWarper,
             RepetitionPenaltyLogitsProcessor,
+            TemperatureLogitsWarper,
             TopPLogitsWarper,
         )
 
@@ -795,113 +801,169 @@ class T3Model(T3PreTrainedModel):
         if initial_speech_tokens is None:
             initial_speech_tokens = self.config.start_speech_token * torch.ones_like(text_tokens[:, :1])
 
+        # Prepare conditioning embeddings (text + initial speech)
         embeds, len_cond = self.prepare_input_embeds(
             t3_cond=t3_cond, text_tokens=text_tokens, speech_tokens=initial_speech_tokens, cfg_weight=cfg_weight
         )
 
-        if not self.compiled:
-            alignment_stream_analyzer = None
-            if self.config.use_alignment_analyzer:
-                alignment_stream_analyzer = AlignmentStreamAnalyzer(
-                    self.tfmr,
-                    text_tokens_slice=(len_cond, len_cond + text_tokens.size(-1)),
-                    alignment_layer_idx=self.config.alignment_layer_idx,
-                    eos_idx=self.config.stop_speech_token,
-                )
-
-            self.patched_model = T3HuggingfaceBackend(
-                config=self.tfmr.config,
-                llama=self.tfmr,
-                speech_enc=self.speech_emb,
-                speech_head=self.speech_head,
-                alignment_stream_analyzer=alignment_stream_analyzer,
+        # Setup alignment analyzer if needed
+        if self.config.use_alignment_analyzer:
+            alignment_analyzer = AlignmentStreamAnalyzer(
+                self.tfmr,
+                text_tokens_slice=(len_cond, len_cond + text_tokens.size(-1)),
+                alignment_layer_idx=self.config.alignment_layer_idx,
+                eos_idx=self.config.stop_speech_token,
             )
-            self.compiled = True
-
-        alignment_stream_analyzer = self.patched_model.alignment_stream_analyzer
-
-        device = embeds.device
-        bos_token = torch.tensor([[self.config.start_speech_token]], dtype=torch.long, device=device)
-        bos_embed = self.speech_emb(bos_token)
-        bos_embed = bos_embed + self.speech_pos_emb.get_fixed_embedding(0)
-
-        use_cfg = cfg_weight > 0.0 and embeds.size(0) > 1
-        if use_cfg:
-            bos_embed = torch.cat([bos_embed, bos_embed], dim=0)
-
-        inputs_embeds = torch.cat([embeds, bos_embed], dim=1)
-        generated_ids = bos_token.clone()
-
-        top_p_warper = TopPLogitsWarper(top_p=top_p)
-        min_p_warper = MinPLogitsWarper(min_p=min_p)
-        repetition_penalty_processor = RepetitionPenaltyLogitsProcessor(penalty=float(repetition_penalty))
-
-        output = self.patched_model(
-            inputs_embeds=inputs_embeds,
-            past_key_values=None,
-            use_cache=True,
-            output_attentions=True,
-            output_hidden_states=True,
-            return_dict=True,
-        )
-        past = output.past_key_values
+        else:
+            alignment_analyzer = None
 
         max_steps = max_new_tokens or self.config.max_speech_tokens
-        predicted = []
+        device = embeds.device
+        use_cfg = cfg_weight > 0.0 and embeds.size(0) > 1
 
-        for i in range(max_steps):
-            logits_step = output.logits[:, -1, :]
+        # If using CFG, we need manual generation loop (HF generate doesn't support CFG batching)
+        if use_cfg:
+            # Manual generation loop for CFG
+            bos_token = torch.tensor([[self.config.start_speech_token]], dtype=torch.long, device=device)
+            bos_embed = self.speech_emb(bos_token)
+            bos_embed = bos_embed + self.speech_pos_emb.get_fixed_embedding(0)
+            bos_embed = torch.cat([bos_embed, bos_embed], dim=0)  # Duplicate for CFG
 
-            if use_cfg:
-                cond = logits_step[0:1, :]
-                uncond = logits_step[1:2, :]
-                cfg = torch.as_tensor(cfg_weight, device=cond.device, dtype=cond.dtype)
-                logits = cond + cfg * (cond - uncond)
-            else:
-                logits = logits_step
+            inputs_embeds = torch.cat([embeds, bos_embed], dim=1)
+            generated_ids = bos_token.clone()
 
-            if alignment_stream_analyzer is not None:
-                if logits.dim() == 1:
-                    logits = logits.unsqueeze(0)
-                last_token = generated_ids[0, -1].item() if generated_ids.size(1) > 0 else None
-                logits = alignment_stream_analyzer.step(logits, next_token=last_token)
+            top_p_warper = TopPLogitsWarper(top_p=top_p)
+            min_p_warper = MinPLogitsWarper(min_p=min_p)
+            repetition_penalty_processor = RepetitionPenaltyLogitsProcessor(penalty=float(repetition_penalty))
 
-            ids_for_proc = generated_ids[:1, ...]
-            logits = repetition_penalty_processor(ids_for_proc, logits)
-
-            if temperature != 1.0:
-                logits = logits / temperature
-
-            logits = min_p_warper(ids_for_proc, logits)
-            logits = top_p_warper(ids_for_proc, logits)
-
-            probs = torch.softmax(logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1)
-            predicted.append(next_token)
-            generated_ids = torch.cat([generated_ids, next_token], dim=1)
-
-            if next_token.view(-1) == self.config.stop_speech_token:
-                logger.info(f"EOS token detected at step {i + 1}")
-                break
-
-            next_token_embed = self.speech_emb(next_token)
-            next_token_embed = next_token_embed + self.speech_pos_emb.get_fixed_embedding(i + 1)
-            if use_cfg:
-                next_token_embed = torch.cat([next_token_embed, next_token_embed], dim=0)
-
-            output = self.patched_model(
-                inputs_embeds=next_token_embed,
-                past_key_values=past,
+            output = self(
+                inputs_embeds=inputs_embeds,
+                past_key_values=None,
                 use_cache=True,
-                output_attentions=True,
+                output_attentions=alignment_analyzer is not None,
                 output_hidden_states=True,
                 return_dict=True,
             )
             past = output.past_key_values
 
-        if predicted:
-            predicted_tokens = torch.cat(predicted, dim=1)
-        else:
-            predicted_tokens = torch.empty((1, 0), dtype=torch.long, device=device)
+            predicted = []
 
-        return predicted_tokens
+            for i in range(max_steps):
+                logits_step = output.logits[:, -1, :]
+
+                # Apply CFG
+                cond = logits_step[0:1, :]
+                uncond = logits_step[1:2, :]
+                cfg = torch.as_tensor(cfg_weight, device=cond.device, dtype=cond.dtype)
+                logits = cond + cfg * (cond - uncond)
+
+                # Apply alignment analyzer
+                if alignment_analyzer is not None:
+                    if logits.dim() == 1:
+                        logits = logits.unsqueeze(0)
+                    last_token = generated_ids[0, -1].item() if generated_ids.size(1) > 0 else None
+                    logits = alignment_analyzer.step(logits, next_token=last_token)
+
+                ids_for_proc = generated_ids[:1, ...]
+                logits = repetition_penalty_processor(ids_for_proc, logits)
+
+                if temperature != 1.0:
+                    logits = logits / temperature
+
+                logits = min_p_warper(ids_for_proc, logits)
+                logits = top_p_warper(ids_for_proc, logits)
+
+                probs = torch.softmax(logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
+                predicted.append(next_token)
+                generated_ids = torch.cat([generated_ids, next_token], dim=1)
+
+                if stop_on_eos and next_token.view(-1) == self.config.stop_speech_token:
+                    logger.info(f"EOS token detected at step {i + 1}")
+                    break
+
+                next_token_embed = self.speech_emb(next_token)
+                next_token_embed = next_token_embed + self.speech_pos_emb.get_fixed_embedding(i + 1)
+                next_token_embed = torch.cat([next_token_embed, next_token_embed], dim=0)
+
+                output = self(
+                    inputs_embeds=next_token_embed,
+                    past_key_values=past,
+                    use_cache=True,
+                    output_attentions=alignment_analyzer is not None,
+                    output_hidden_states=True,
+                    return_dict=True,
+                )
+                past = output.past_key_values
+
+            if predicted:
+                predicted_tokens = torch.cat(predicted, dim=1)
+            else:
+                predicted_tokens = torch.empty((1, 0), dtype=torch.long, device=device)
+
+            return predicted_tokens[0]
+
+        else:
+            # Use HuggingFace's generate() for non-CFG case
+            # Store decoder conditioning for prepare_inputs_for_generation
+            self._decoder_cond = embeds
+            self._current_position = 0
+            self.alignment_stream_analyzer = alignment_analyzer
+
+            # Create custom logits processor for alignment analyzer
+            class CustomLogitsProcessor:
+                def __init__(self, alignment_analyzer_inst):
+                    self.alignment_analyzer = alignment_analyzer_inst
+                    self.generated_tokens = []
+
+                def __call__(self, input_ids, scores):
+                    # Apply alignment analyzer
+                    if self.alignment_analyzer is not None:
+                        last_token = input_ids[0, -1].item() if input_ids.size(1) > 0 else None
+                        scores = self.alignment_analyzer.step(scores, next_token=last_token)
+
+                    return scores
+
+            # Build logits processors
+            from transformers.generation.logits_process import LogitsProcessorList
+
+            logits_processors = LogitsProcessorList()
+
+            logits_processors.append(CustomLogitsProcessor(alignment_analyzer))
+            logits_processors.append(RepetitionPenaltyLogitsProcessor(penalty=float(repetition_penalty)))
+
+            if temperature != 1.0:
+                logits_processors.append(TemperatureLogitsWarper(temperature))
+
+            logits_processors.append(MinPLogitsWarper(min_p=min_p))
+            logits_processors.append(TopPLogitsWarper(top_p=top_p))
+
+            # Generate using HuggingFace's generate (batch size 1)
+            bos_token = torch.tensor([[self.config.start_speech_token]], dtype=torch.long, device=device)
+
+            generated_ids = self.generate(
+                input_ids=bos_token,
+                max_new_tokens=max_steps,
+                do_sample=do_sample,
+                logits_processor=logits_processors,
+                bos_token_id=self.config.start_speech_token,
+                eos_token_id=self.config.stop_speech_token if stop_on_eos else None,
+                pad_token_id=self.config.stop_speech_token,
+                num_return_sequences=num_return_sequences,
+                output_attentions=self.config.use_alignment_analyzer,
+                output_hidden_states=True,
+                return_dict_in_generate=False,
+                use_cache=True,
+            )
+
+            # Extract generated tokens (remove BOS)
+            predicted_tokens = generated_ids[:, 1:]
+
+            # Clean up generation state
+            self._decoder_cond = None
+            self._current_position = 0
+
+            return predicted_tokens[0]
+
+
+__all__ = ["T3PreTrainedModel", "T3Model", "T3Cond", "VoiceEncoder"]

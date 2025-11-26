@@ -113,3 +113,6 @@ class ChatterboxConfig(PretrainedConfig):
         output["s3gen_config"] = self.s3gen_config.to_dict()
         output["hiftnet_config"] = self.hiftnet_config.to_dict()
         return output
+
+
+__all__ = ["ChatterboxConfig"]

@@ -33,9 +33,13 @@ class T3ModelTest(unittest.TestCase):
         # Use smaller model for faster tests
         self.config.llama_config_dict["num_hidden_layers"] = 2
         self.config.llama_config_dict["num_attention_heads"] = 4
+        self.config.llama_config_dict["num_key_value_heads"] = 4  # Match num_attention_heads
+        self.config.llama_config_dict["hidden_size"] = 256
+        self.config.llama_config_dict["intermediate_size"] = 512
         self.config.hidden_size = 256
         self.config.speaker_embed_size = 128
         self.config.perceiver_num_latents = 8
+        self.config.perceiver_latent_dim = 256
 
     def test_model_initialization(self):
         """Test that the model can be initialized."""

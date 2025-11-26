@@ -1656,3 +1656,6 @@ class S3GenModel(S3GenPreTrainedModel):
             speech_tokens, ref_wav=ref_wav, ref_sr=ref_sr, cache_source=cache_source, finalize=finalize
         )
         return output_wavs
+
+
+__all__ = ["S3GenPreTrainedModel", "S3GenModel"]

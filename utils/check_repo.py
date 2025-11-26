@@ -212,6 +212,9 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/bark/test_modeling_bark.py",
+    "models/s3gen/test_modeling_s3gen.py",
+    "models/t3/test_modeling_t3.py",
+    "models/chatterbox/test_modeling_chatterbox.py",
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
     "models/llama4/test_modeling_llama4.py",
     "models/sam2_video/test_modeling_sam2_video.py",
@@ -1010,6 +1013,7 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
+    "T3Cond",  # Internal conditioning class for T3 model
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

@@ -359,3 +359,6 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
     ):
         """Forward pass - calls generate."""
         return self.generate(text, reference_wav, reference_sr, tokenizer, **kwargs)
+
+
+__all__ = ["ChatterboxPreTrainedModel", "ChatterboxModel"]

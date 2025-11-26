@@ -17,20 +17,9 @@ from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
-_import_structure = {
-    "configuration_s3gen": ["S3GenConfig"],
-    "modeling_s3gen": [
-        "S3GenModel",
-        "S3GenPreTrainedModel",
-    ],
-}
-
 if TYPE_CHECKING:
-    from .configuration_s3gen import S3GenConfig
-    from .modeling_s3gen import (
-        S3GenModel,
-        S3GenPreTrainedModel,
-    )
+    from .configuration_s3gen import *
+    from .modeling_s3gen import *
 else:
     import sys
 

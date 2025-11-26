@@ -14,40 +14,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
-_import_structure = {
-    "configuration_chatterbox": ["ChatterboxConfig"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_chatterbox"] = [
-        "ChatterboxPreTrainedModel",
-        "ChatterboxModel",
-    ]
-
 if TYPE_CHECKING:
-    from .configuration_chatterbox import ChatterboxConfig
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_chatterbox import ChatterboxModel, ChatterboxPreTrainedModel
-
+    from .configuration_chatterbox import *
+    from .modeling_chatterbox import *
 else:
     import sys
 

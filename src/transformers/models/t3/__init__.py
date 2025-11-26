@@ -14,42 +14,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
-_import_structure = {
-    "configuration_t3": ["T3Config"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_t3"] = [
-        "T3PreTrainedModel",
-        "T3Model",
-        "T3Cond",
-        "VoiceEncoder",
-    ]
-
 if TYPE_CHECKING:
-    from .configuration_t3 import T3Config
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_t3 import T3Cond, T3Model, T3PreTrainedModel, VoiceEncoder
-
+    from .configuration_t3 import *
+    from .modeling_t3 import *
 else:
     import sys
 

@@ -206,3 +206,6 @@ class T3Config(PretrainedConfig):
     def multilingual(cls):
         """Create configuration for multilingual TTS model."""
         return cls(text_tokens_dict_size=2454)
+
+
+__all__ = ["T3Config"]
