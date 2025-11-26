@@ -110,6 +110,15 @@ class RoFormerTokenizer(TokenizersBackend):
         strip_accents=None,
         **kwargs,
     ):
+        if vocab is None:
+            vocab = {
+                str(unk_token): 0,
+                str(pad_token): 1,
+                str(cls_token): 2,
+                str(sep_token): 3,
+                str(mask_token): 4,
+            }
+
         self._tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(unk_token)))
         self._tokenizer.normalizer = normalizers.BertNormalizer(
             clean_text=True,
