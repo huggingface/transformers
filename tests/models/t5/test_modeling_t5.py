@@ -47,6 +47,7 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
+        GenerationConfig,
         T5EncoderModel,
         T5ForConditionalGeneration,
         T5ForQuestionAnswering,
@@ -932,7 +933,29 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
 
 def use_task_specific_params(model, task):
-    model.config.update(model.config.task_specific_params[task])
+    task_params = model.config.task_specific_params[task]
+    
+    # Separate generation parameters from config parameters
+    generation_params = {}
+    config_params = {}
+    
+    # Get all valid GenerationConfig attributes 
+    temp_config = GenerationConfig()
+    generation_config_attrs = set(temp_config.__dict__.keys())
+    
+    for key, value in task_params.items():
+        if key in generation_config_attrs or hasattr(temp_config, key):
+            generation_params[key] = value
+        else:
+            config_params[key] = value
+    
+    if generation_params:
+        for key, value in generation_params.items():
+            setattr(model.generation_config, key, value)
+    
+    if config_params:
+        for key, value in config_params.items():
+            setattr(model.config, key, value)
 
 
 @require_torch
