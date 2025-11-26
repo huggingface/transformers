@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -63,10 +64,11 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = CLIPImageProcessor(do_center_crop=False)
 
         # We have a SentencePiece fixture for testing
-        slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
-        fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab, vocab_scores, merges = extractor.extract()
+        tokenizer = XLMRobertaTokenizer(vocab=vocab_scores)
 
-        processor = Kosmos2Processor(image_processor, fast_tokenizer)
+        processor = Kosmos2Processor(image_processor, tokenizer)
         processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):

@@ -68,7 +68,7 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_tensors="pt",
                 truncation=True,
                 padding=True,
-                max_length=20,
+                max_length=2,
             )
 
     @staticmethod

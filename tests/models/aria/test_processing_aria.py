@@ -34,7 +34,7 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = AriaProcessor.from_pretrained("m-ric/Aria_hf_2", size_conversion={490: 2, 980: 2})
+        processor = AriaProcessor.from_pretrained("m-ric/Aria_hf_2", size_conversion={490: 2, 980: 2}, fix_mistral_regex=True)
         processor.save_pretrained(cls.tmpdirname)
         cls.image1 = load_image(
             url_to_local_path(
@@ -73,12 +73,18 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     def get_tokenizer(self, **kwargs):
+        if "fix_mistral_regex" not in kwargs:
+            kwargs["fix_mistral_regex"] = True
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
     def get_image_processor(self, **kwargs):
+        if "fix_mistral_regex" not in kwargs:
+            kwargs["fix_mistral_regex"] = True
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
     def get_processor(self, **kwargs):
+        if "fix_mistral_regex" not in kwargs:
+            kwargs["fix_mistral_regex"] = True
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @classmethod

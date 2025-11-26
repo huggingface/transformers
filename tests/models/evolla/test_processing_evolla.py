@@ -42,7 +42,7 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        processor = EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-hf")
+        processor = EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-hf", fix_mistral_regex=True)
 
         processor.save_pretrained(self.tmpdirname)
 
@@ -165,9 +165,13 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
 
     def get_tokenizer(self, **kwargs):
+        if "fix_mistral_regex" not in kwargs:
+            kwargs["fix_mistral_regex"] = True
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
     def get_protein_tokenizer(self, **kwargs):
+        if "fix_mistral_regex" not in kwargs:
+            kwargs["fix_mistral_regex"] = True
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).protein_tokenizer
 
     def tearDown(self):
