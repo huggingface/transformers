@@ -14,9 +14,10 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from ..core_model_loading import WeightConverter
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
-from ..core_model_loading import WeightConverter
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -32,7 +33,8 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
-    
+
+
 if is_torch_available():
     import torch
 

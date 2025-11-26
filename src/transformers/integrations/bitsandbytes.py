@@ -12,6 +12,7 @@ from ..utils import (
     logging,
 )
 
+
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
 
@@ -52,7 +53,7 @@ class Bnb4bitQuantize(ConversionOps):
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
         if issubclass(module.source_cls, Conv1D):
             value = value.T
-    
+
         old_value = model.get_parameter_or_buffer(target_key)
         new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
         module._is_hf_initialized = True
