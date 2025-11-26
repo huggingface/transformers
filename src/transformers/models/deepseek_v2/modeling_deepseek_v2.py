@@ -96,6 +96,8 @@ class DeepseekV2Moe(nn.Module):
         self.num_group = config.n_group
         self.top_k = config.num_experts_per_tok
         self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.num_experts = config.n_routed_experts
 
     def route_tokens_to_experts(self, router_logits):
         batch_size, seq_len, hidden_dim = router_logits.shape
@@ -116,6 +118,9 @@ class DeepseekV2Moe(nn.Module):
             tmp_scores = router_logits.masked_fill(~score_mask.bool(), 0.0)
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
+        if self.norm_topk_prob and self.top_k is not None and self.top_k > 1:
+            denom = topk_weight.sum(dim=-1, keepdim=True).clamp_min_(1e-20)
+            topk_weight = topk_weight / denom
         topk_weight = topk_weight * self.routed_scaling_factor
         topk_weight = torch.zeros_like(router_logits).scatter_(1, topk_idx, topk_weight)
         return topk_idx, topk_weight
