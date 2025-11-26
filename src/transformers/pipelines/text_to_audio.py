@@ -192,6 +192,10 @@ class TextToAudioPipeline(Pipeline):
             # generate_kwargs get priority over forward_params
             forward_params.update(generate_kwargs)
 
+            # ensure dict output to facilitate postprocessing
+            if self.model.config.model_type not in ["bark", "musicgen"]:
+                forward_params.update({"return_dict_in_generate": True})
+
             output = self.model.generate(**model_inputs, **forward_params)
         else:
             if len(generate_kwargs):
@@ -253,6 +257,7 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
+
         if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
         if getattr(self, "assistant_tokenizer", None) is not None:
@@ -272,21 +277,17 @@ class TextToAudioPipeline(Pipeline):
 
     def postprocess(self, audio):
 
-        if self.model.config.model_type in ["csm"]:
-            audio_key = "audio"
-        elif self.model.config.model_type in ["dia"]:
-            # codes that need decoding
-            audio_key = "sequences"
-        else:
-            audio_key = "waveform"
-
+        needs_decoding = False
         if isinstance(audio, dict):
-            audio = audio[audio_key]
+            if "audio" in audio:
+                audio = audio["audio"]
+            else:
+                needs_decoding = True
+                audio = audio["sequences"]
         elif isinstance(audio, tuple):
             audio = audio[0]
 
-        if self.model.config.model_type in ["dia"]:
-            # models that require decoding, e.g. with codec
+        if needs_decoding:
             audio = self.processor.decode(audio)
 
         if isinstance(audio, list) and len(audio) > 1:
