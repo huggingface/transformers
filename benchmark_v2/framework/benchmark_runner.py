@@ -429,7 +429,8 @@ class BenchmarkRunner:
 
             ds = Dataset.from_list(rows)
             with tempfile.TemporaryDirectory() as tmp:
-                jsonl_path = os.path.join(tmp, "data.jsonl")
+                file_name = "summarized_results" if summarized else "full_results"
+                jsonl_path = os.path.join(tmp, f"{file_name}.jsonl")
                 with open(jsonl_path, "w") as f:
                     json_lines = []
                     for ex in ds:
@@ -438,7 +439,6 @@ class BenchmarkRunner:
 
                 # NOTE: we expect the repository to already exist
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
-                file_name = "full_results" if summarized else "summarized_results"
                 file_name = file_name + "/" + f"benchmark_run_{timestamp}.jsonl"
                 api.upload_file(
                     path_or_fileobj=jsonl_path,
