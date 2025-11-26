@@ -831,9 +831,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=input_ids.device)
 
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, input_ids.device
-        )
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,

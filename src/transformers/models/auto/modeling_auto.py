@@ -2101,14 +2101,6 @@ class AutoModelForVideoClassification(_BaseAutoModelClass):
 AutoModelForVideoClassification = auto_class_update(AutoModelForVideoClassification, head_doc="video classification")
 
 
-# Private on purpose, the public class will add the deprecation warnings.
-class _AutoModelForVision2Seq(_BaseAutoModelClass):
-    _model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
-
-
-_AutoModelForVision2Seq = auto_class_update(_AutoModelForVision2Seq, head_doc="vision-to-text modeling")
-
-
 class AutoModelForImageTextToText(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
@@ -2215,26 +2207,6 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
-class AutoModelForVision2Seq(_AutoModelForVision2Seq):
-    @classmethod
-    def from_config(cls, config, **kwargs):
-        warnings.warn(
-            "The class `AutoModelForVision2Seq` is deprecated and will be removed in v5.0. Please use "
-            "`AutoModelForImageTextToText` instead.",
-            FutureWarning,
-        )
-        return super().from_config(config, **kwargs)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        warnings.warn(
-            "The class `AutoModelForVision2Seq` is deprecated and will be removed in v5.0. Please use "
-            "`AutoModelForImageTextToText` instead.",
-            FutureWarning,
-        )
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-
 __all__ = [
     "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
     "MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING",
@@ -2318,7 +2290,6 @@ __all__ = [
     "AutoModelForTokenClassification",
     "AutoModelForUniversalSegmentation",
     "AutoModelForVideoClassification",
-    "AutoModelForVision2Seq",
     "AutoModelForVisualQuestionAnswering",
     "AutoModelForDocumentQuestionAnswering",
     "AutoModelWithLMHead",

@@ -67,7 +67,6 @@ if is_torch_available():
         AutoModelForImageTextToText,
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
-        AutoModelForVision2Seq,
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
@@ -4386,7 +4385,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         """Test that `decoder_input_ids` can be used to condition the generation in vision-to-text models"""
         pixel_values = floats_tensor((2, 3, 30, 30))
         conditioning_input = torch.tensor([[10], [10]])  # this should be the 2nd output token, after the BOS token
-        model = AutoModelForVision2Seq.from_pretrained(
+        model = AutoModelForImageTextToText.from_pretrained(
             "hf-internal-testing/tiny-random-VisionEncoderDecoderModel-vit-gpt2"
         )
         pixel_values = pixel_values.to(torch_device)

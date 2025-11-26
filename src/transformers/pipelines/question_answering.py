@@ -179,18 +179,6 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                 inputs = list(args)
         # Generic compatibility with sklearn and Keras
         # Batched data
-        elif "X" in kwargs:
-            warnings.warn(
-                "Passing the `X` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-            inputs = kwargs["X"]
-        elif "data" in kwargs:
-            warnings.warn(
-                "Passing the `data` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-            inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
             if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
                 inputs = [{"question": Q, "context": kwargs["context"]} for Q in kwargs["question"]]

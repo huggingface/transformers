@@ -90,6 +90,8 @@ We decided to remove some features for the upcoming v5 as they are currently onl
 - No more relative positional biases in Bert-like models, see [#41170](https://github.com/huggingface/transformers/pull/41170). This feature was introduced to allow relative position scores within attention calculations (similar to T5). However, this feature is barely used in official models and a lot of complexity instead. It also only worked with eager.
 - No more head pruning, see [#41417](https://github.com/huggingface/transformers/pull/41417) by @gante. As the name suggests, it allowed to prune heads within your attention layers.
 
+Removed `device` argument from `get_extended_attention_mask`. Device is inferred from `attention_mask`.
+
 ### Updates to supported torch APIs
 
 We dropped support for two torch APIs:
@@ -155,7 +157,7 @@ Linked PRs:
 - In processing classes each attribute will be serialized under `processor_config.json` as a nested dict, instead of serializing attributes in their own config files. Loading will be supported for all old format processors (https://github.com/huggingface/transformers/pull/41474)
 - `XXXFeatureExtractors` classes are completely removed in favor of `XXXImageProcessor` class for all vision models (https://github.com/huggingface/transformers/pull/41174)
 - Minor change: `XXXFastImageProcessorKwargs` is removed in favor of `XXXImageProcessorKwargs` which will be shared between fast and slow processors (https://github.com/huggingface/transformers/pull/40931)
-
+- `AutoModelForVision2Seq` is removed in favor of `AutoModelForImageTextToText`
 
 ## Modeling
 
