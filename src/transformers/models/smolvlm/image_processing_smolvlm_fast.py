@@ -195,6 +195,8 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         """
         Prepare a nested images structure for processing.
         """
+        # Checks for `str` in case of URL/local path and optionally loads images
+        images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def resize(
