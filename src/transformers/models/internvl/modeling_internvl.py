@@ -549,12 +549,6 @@ class InternVLModel(InternVLPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -787,12 +781,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -806,19 +794,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring

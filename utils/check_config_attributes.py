@@ -124,6 +124,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
+    # used by sam3 video, kept here for consistency with sam2
+    "Sam3VisionConfig": ["backbone_feature_sizes"],
     # used internally to calculate `mlp_dim`
     "SamHQVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented

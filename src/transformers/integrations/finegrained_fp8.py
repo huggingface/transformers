@@ -15,7 +15,7 @@
 
 import re
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any
 
 from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
@@ -246,7 +246,7 @@ def w8a8_block_fp8_matmul_compile(
     weight_q: torch.Tensor,  # [out_features, hidden_dim]
     input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
     weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
-    block_size: Optional[tuple[int, int]] = None,  # (M=128, N=128) for weights for example
+    block_size: tuple[int, int] | None = None,  # (M=128, N=128) for weights for example
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
@@ -315,7 +315,7 @@ class FP8Linear(nn.Linear):
         out_features: int,
         bias: bool = False,
         dtype=None,
-        block_size: Optional[tuple[int, int]] = None,
+        block_size: tuple[int, int] | None = None,
         device=None,
         activation_scheme="dynamic",
     ):
@@ -549,6 +549,8 @@ def replace_with_fp8_linear(
     quantization_config=None,
 ):
     """Helper function to replace model layers with FP8 versions."""
+    if modules_to_not_convert is None:
+        modules_to_not_convert = []
     modules_to_not_convert += ["lm_head"]
 
     if quantization_config.modules_to_not_convert is not None:
@@ -570,35 +572,29 @@ def replace_with_fp8_linear(
     return model
 
 
-class QuantizationOp(ConversionOps):
-    """Base class for quantization operations."""
-
-    pass
-
-
-class Fp8Quantize(QuantizationOp):
+class Fp8Quantize(ConversionOps):
     """
     A quantization operation that creates two tensors, weight and scale out of a weight.
     """
 
     reverse_op: type[ConversionOps]
 
-    def __init__(self, block_size: Optional[tuple[int, int]] = None):
-        self.block_size = block_size
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
         self.reverse_op = Fp8Dequantize
 
-    def convert(self, input_dict: torch.Tensor, *, quant_config: dict[str, Any]) -> dict[str, torch.Tensor]:
+    def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
         # Unpack single key/value (value may be wrapped in a list)
         target_keys, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
         # Resolve block size (support dict-like or attr-like quant_config)
         block_size = None
-        if quant_config is not None:
-            if isinstance(quant_config, dict):
-                block_size = quant_config.get("weight_block_size")
+        if self.hf_quantizer.quantization_config is not None:
+            if isinstance(self.hf_quantizer.quantization_config, dict):
+                block_size = self.hf_quantizer.quantization_config.get("weight_block_size")
             else:
-                block_size = getattr(quant_config, "weight_block_size", None)
+                block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
         if block_size is None:
             block_size = (value.shape[-2], value.shape[-1])
 
@@ -656,16 +652,16 @@ class Fp8Quantize(QuantizationOp):
         }
 
 
-class Fp8Dequantize(QuantizationOp):
+class Fp8Dequantize(ConversionOps):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
 
-    def __init__(self, block_size: Optional[tuple[int, int]] = None):
+    def __init__(self, block_size: tuple[int, int] | None = None):
         self.block_size = block_size
         self.reverse_op = Fp8Quantize
 
     def convert(
         self,
-        value: Union[Sequence[torch.Tensor], dict[str, torch.Tensor]],
+        value: Sequence[torch.Tensor] | dict[str, torch.Tensor],
         *,
         context: dict[str, Any],
     ) -> torch.Tensor:

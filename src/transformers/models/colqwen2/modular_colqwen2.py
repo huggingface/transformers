@@ -97,9 +97,9 @@ class ColQwen2Processor(ColPaliProcessor):
         wrapper around the Qwen2VLProcessor's [`~Qwen2VLProcessor.__call__`] method adapted for the ColQwen2 model. It cannot process
         both text and images at the same time.
 
-        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
+        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
         [`~Qwen2TokenizerFast.__call__`].
-        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
+        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
         [`~Qwen2VLImageProcessor.__call__`].
         Please refer to the doctsring of the above two methods for more information.
 
@@ -352,10 +352,10 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
+                image_embeds = self.vlm.model.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )
