@@ -85,12 +85,13 @@ class Mxfp4Quantize(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         model: Optional[torch.nn.Module] = None,
         missing_keys: Optional[list[str]] = None,
-        full_layer_name: str | None = None,
+        all_target_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         _, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
+        full_layer_name = all_target_keys[0]
         module, _ = get_module_from_name(model, full_layer_name)
 
         with torch.device(value.device):
@@ -132,7 +133,7 @@ class Mxfp4Dequantize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor],
         model: Optional[torch.nn.Module] = None,
-        full_layer_name: str | None = None,
+        all_target_keys: list[str] | None = None,
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -150,6 +151,7 @@ class Mxfp4Dequantize(ConversionOps):
 
         # Here we are dequantizing the weights
         dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device)
+        full_layer_name = all_target_keys[0]
         return {full_layer_name: dequantized}
 
 
@@ -161,7 +163,7 @@ class Mxfp4Deserialize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor],
         model: Optional[torch.nn.Module] = None,
-        full_layer_name: str | None = None,
+        all_target_keys: list[str] | None = None,
         missing_keys: Optional[list[str]] = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -178,6 +180,7 @@ class Mxfp4Deserialize(ConversionOps):
                 param_data["_scales"] = input_dict["_scales"]
 
         # Eagerly set tensors on the module and perform swizzle
+        full_layer_name = all_target_keys[0]
         module, _ = get_module_from_name(model, full_layer_name)
         proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
         swizzle_mxfp4_convertops(
