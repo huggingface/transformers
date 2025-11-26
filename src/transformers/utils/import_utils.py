@@ -858,6 +858,15 @@ def is_flash_attn_3_available() -> bool:
 
 
 @lru_cache
+def is_flash_attn_4_available() -> bool:
+    if not (is_torch_cuda_available() and _is_package_available("flash_attn")):
+        return False
+
+    # FA4 is distributed to just "flash_attn" but its mapping is properly mapped to cute
+    return "flash-attn-cute" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+
+
+@lru_cache
 def is_flash_attn_greater_or_equal_2_10() -> bool:
     _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")

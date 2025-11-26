@@ -70,7 +70,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
+from .integrations.hub_kernels import is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -110,6 +110,7 @@ from .utils import (
     is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_kernels_available,
     is_offline_mode,
     is_remote_url,
@@ -123,6 +124,7 @@ from .utils import (
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
+    PACKAGE_DISTRIBUTION_MAPPING,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_tracing,
@@ -1666,9 +1668,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             if torch.cuda.is_available():
                 major, _ = torch.cuda.get_device_capability()
-                if major < 9:
+                if major < 8:
                     raise ValueError(
-                        f"{preface} Flash Attention 3 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
+                        f"{preface} Flash Attention 3 requires compute capability >= 8.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
                     )
                 else:
                     raise ImportError(f"{preface} Flash Attention 3 is not available.")
@@ -1709,6 +1711,86 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     raise ValueError(
                         "You are attempting to use Flash Attention 3 with a model not initialized on GPU and with no GPU available. "
+                        "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                        "or initialising the model on CPU and then moving it to GPU."
+                    )
+
+        return True
+
+    def _flash_attn_4_can_dispatch(self, is_init_check: bool = False) -> bool:
+        """
+        Check the availability of Flash Attention 4 for a given model.
+
+        Args:
+            is_init_check (`bool`, *optional*):
+                Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
+                fully instantiated. This is needed as we also check the devices of the weights, which are only available
+                later after __init__. This allows to raise proper exceptions early before instantiating the full models
+                if we know that the model does not support the requested attention.
+        """
+        dtype = self.config.dtype
+
+        if not self._supports_flash_attn:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support Flash Attention 4 yet. Please request to add support where"
+                f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
+                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+            )
+
+        if not is_flash_attn_4_available():
+            preface = "FlashAttention4 has been toggled on, but it cannot be used due to the following error:"
+
+            if (
+                importlib.util.find_spec("flash_attn") is None
+                or "flash-attn-cute" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+            ):
+                raise ImportError(f"{preface} the package flash_attn (under cute) seems to be not installed.")
+
+            if torch.cuda.is_available():
+                major, _ = torch.cuda.get_device_capability()
+                if major < 9:
+                    raise ValueError(
+                        f"{preface} Flash Attention 4 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
+                    )
+                else:
+                    raise ImportError(f"{preface} Flash Attention 4 is not available.")
+            else:
+                raise ValueError(
+                    f"{preface} Flash Attention 4 is not available on CPU. Please make sure torch can access a CUDA device."
+                )
+
+        if dtype is None:
+            logger.warning_once(
+                "You are attempting to use Flash Attention 4 without specifying a torch dtype. This might lead to unexpected behaviour"
+            )
+        elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
+            logger.warning_once(
+                "Flash Attention 4 only supports torch.float16 and torch.bfloat16 dtypes, but"
+                f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_4", dtype=torch.float16)`'
+            )
+
+        if getattr(self.config, "alibi", False) or getattr(self.config, "use_alibi", False):
+            raise ValueError("Model is configured to use ALiBi, which is not supported by Flash Attention 4.")
+
+        # Check for attention dropout, which is incompatible with FA4
+        if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
+            raise ValueError(
+                f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 4."
+            )
+
+        # With the early check, the parameters are not yet initialized correctly
+        if not is_init_check:
+            param_devices = list({param.device for param in self.parameters()})
+            if len(param_devices) == 1 and param_devices[0].type == "cpu":
+                if torch.cuda.is_available():
+                    logger.warning_once(
+                        "You are attempting to use Flash Attention 4 with a model not initialized on GPU. Make sure to move the model to GPU"
+                        " after initializing it on CPU with `model.to('cuda')`."
+                    )
+                else:
+                    raise ValueError(
+                        "You are attempting to use Flash Attention 4 with a model not initialized on GPU and with no GPU available. "
                         "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                         "or initialising the model on CPU and then moving it to GPU."
                     )
@@ -1794,10 +1876,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         applicable_attn_implementation = attn_implementation
 
-        # If FA not installed, do not fail but use kernels instead
+        # If FA not installed, do not fail but use kernels instead (except for FA4 for now)
+        requested_original_flash_attn = attn_implementation is not None and (
+            attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"
+        )
         if (
-            attn_implementation is not None
-            and "flash" in attn_implementation
+            requested_original_flash_attn
             and self._supports_flash_attn
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
@@ -1806,23 +1890,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn2"
                 if is_torch_xpu_available():
-                    # On XPU, kernels library is the native implementation. Rename variable to avoid "fallback" warning and irrelevant checks.
-                    attn_implementation = "kernels-community/flash-attn2"
+                    # On XPU, kernels library is the native implementation
+                    # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
+                    requested_original_flash_attn = False
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_attn_kernel(applicable_attn_implementation)
+                # preload flash attention here to allow compile with fullgraph
+                lazy_import_flash_attention(applicable_attn_implementation)
+
                 # log that we used kernel fallback if successful
-                if "flash_" in attn_implementation:
+                if requested_original_flash_attn:
                     logger.warning_once(
                         f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
                         "from the `kernels` library instead!"
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
-                if attn_implementation.startswith("flash_"):
+                if requested_original_flash_attn:
                     if attn_implementation.endswith("2"):
                         self._flash_attn_2_can_dispatch()
                     else:
@@ -1834,9 +1921,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             applicable_attn_implementation = self.get_correct_attn_implementation(
                 applicable_attn_implementation, is_init_check
             )
+
             # preload flash attention here to allow compile with fullgraph
-            if applicable_attn_implementation.startswith("flash_"):
-                lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
+            if "flash" in applicable_attn_implementation:
+                lazy_import_flash_attention(applicable_attn_implementation)
+
         return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
@@ -1848,7 +1937,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
-                message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`, `"attn_implementation=paged|flash_attention_2"`'
+                message += ', `"attn_implementation=flash_attention_4"`, `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`, `"attn_implementation=paged|flash_attention_2"`'
             if self._supports_sdpa:
                 message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|sdpa"`'
             if self._supports_flex_attn:
@@ -1860,6 +1949,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self._flash_attn_2_can_dispatch(is_init_check)
         elif "flash_attention_3" in applicable_attention:
             self._flash_attn_3_can_dispatch(is_init_check)
+        elif "flash_attention_4" in applicable_attention:
+            self._flash_attn_4_can_dispatch(is_init_check)
         elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
         elif "sdpa" in applicable_attention:
@@ -3631,7 +3722,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 </Tip>
             attn_implementation (`str`, *optional*):
-                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
+                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)), or `"flash_attention_4"` (using [Dao-AILab/flash-attention/flash_attn/cute](https://github.com/Dao-AILab/flash-attention/tree/main/flash_attn/cute)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
                 Accept HF kernel references in the form:
                   <namespace>/<repo_name>[@<revision>][:<kernel_name>]
@@ -4650,6 +4741,7 @@ class AttentionInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
+        "flash_attention_4": flash_attention_forward,
         "flash_attention_3": flash_attention_forward,
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,

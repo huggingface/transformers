@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
     is_torch_xpu_available,
@@ -34,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 # TODO Deprecate when all models have the attention interface
 def flash_attn_supports_top_left_mask():
-    if is_flash_attn_3_available():
+    if is_flash_attn_3_available() or is_flash_attn_4_available():
         return False
     if is_flash_attn_2_available():
         return not is_flash_attn_greater_or_equal_2_10()
@@ -47,7 +48,8 @@ def flash_attn_supports_top_left_mask():
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
     return (
-        is_flash_attn_3_available()
+        is_flash_attn_4_available()
+        or is_flash_attn_3_available()
         or is_flash_attn_2_available()
         or is_torch_npu_available()
         or is_torch_xpu_available()
@@ -82,10 +84,13 @@ def _lazy_imports(implementation: Optional[str]):
     """
     is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
+    is_fa4 = is_flash_attn_4_available()
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    if (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3):
+    if (implementation == "flash_attention_2" and is_fa2) or (
+        implementation is None and is_fa2 and not is_fa3 and not is_fa4
+    ):
         from flash_attn import flash_attn_func, flash_attn_varlen_func
         from flash_attn.bert_padding import pad_input, unpad_input
     elif is_torch_npu_available():
@@ -94,8 +99,10 @@ def _lazy_imports(implementation: Optional[str]):
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
     else:
-        if implementation == "flash_attention_3" or (implementation is None and is_fa3):
+        if implementation == "flash_attention_3" or (implementation is None and is_fa3 and not is_fa4):
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
+        elif implementation == "flash_attention_4" or (implementation is None and is_fa4):
+            from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
         # Kernels fallback
         else:
             flash_attn_func = getattr(implementation, "flash_attn_func", None)
@@ -467,6 +474,8 @@ def _process_flash_attention_kwargs(
     softcap: Optional[float] = None,
     deterministic: Optional[bool] = None,
     s_aux: Optional[torch.Tensor] = None,
+    max_seqlen_q: Optional[int] = None,
+    max_seqlen_k: Optional[int] = None,
     supports_mapping: Optional[dict[str, bool]] = None,
     **kwargs,
 ):
@@ -497,6 +506,10 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
+        max_seqlen_q (`int`, *optional*):
+            The maximum sequence length in the query tensor during a varlen forward.
+        max_seqlen_k (`int`, *optional*):
+            The maximum sequence length in the key/value tensor during a varlen forward.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -528,6 +541,12 @@ def _process_flash_attention_kwargs(
     # Only within kernel implementation atm
     if supports_mapping["s_aux"] and s_aux is not None:
         flash_kwargs["s_aux"] = s_aux
+
+    if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
+        flash_kwargs["max_seqlen_q"] = max_seqlen_q
+
+    if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
+        flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
     return flash_kwargs
 
@@ -583,7 +602,8 @@ def _flash_attention_forward(
     )
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    flash_kwargs = process_flash_kwargs_fn(
+    flash_kwargs = partial(
+        process_flash_kwargs_fn,
         query_length=query_length,
         key_length=key_states.size(1),
         is_causal=is_causal,
@@ -619,15 +639,15 @@ def _flash_attention_forward(
         if "mps" in str(q.device):
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
+        # Newer fa versions no longer accept `max_seqlen_(q|k)`
+        final_flash_kwargs = flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
         out_unpad = flash_varlen_fn(
             q,
             k,
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            max_seqlen_q=max_length_q,
-            max_seqlen_k=max_length_k,
-            **flash_kwargs,
+            **final_flash_kwargs,
         )
         if isinstance(out_unpad, tuple):
             out_unpad = out_unpad[0]
@@ -650,6 +670,8 @@ def _flash_attention_forward(
         if "mps" in str(q.device):
             cu_seq_lens_k = cu_seq_lens_k.clone()
 
+        # Newer fa versions no longer accept `max_seqlen_(q|k)`
+        final_flash_kwargs = flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
         out = flash_varlen_fn(
             q,
             k,
@@ -658,7 +680,7 @@ def _flash_attention_forward(
             cu_seqlens_k=cu_seq_lens_k,
             max_seqlen_q=max_length_q,
             max_seqlen_k=max_length_k,
-            **flash_kwargs,
+            **final_flash_kwargs,
         )
         if isinstance(out, tuple):
             out = out[0]
@@ -667,7 +689,8 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs)
+        final_flash_kwargs = flash_kwargs()
+        out = flash_fn(query_states, key_states, value_states, **final_flash_kwargs)
         if isinstance(out, tuple):
             out = out[0]
 

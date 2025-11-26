@@ -89,6 +89,7 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
@@ -617,6 +618,15 @@ def require_flash_attn_3(test_case):
     These tests are skipped when Flash Attention 3 isn't installed.
     """
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
+
+
+def require_flash_attn_4(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 4.
+
+    These tests are skipped when Flash Attention 4 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_4_available(), "test requires Flash Attention 4")(test_case)
 
 
 def require_read_token(test_case):
