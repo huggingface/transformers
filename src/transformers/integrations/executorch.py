@@ -25,7 +25,6 @@ from ..generation.configuration_utils import GenerationConfig
 from ..modeling_utils import PreTrainedModel
 from ..pytorch_utils import (
     is_torch_greater_or_equal,
-    is_torch_greater_or_equal_than_2_3,
     is_torch_greater_or_equal_than_2_6,
 )
 
@@ -751,8 +750,6 @@ def convert_and_export_with_cache(
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
     """
-    if not is_torch_greater_or_equal_than_2_3:
-        raise ImportError("torch >= 2.3 is required.")
 
     import torch.export._trace
 
@@ -1016,8 +1013,6 @@ def export_with_dynamic_cache(
     Returns:
         Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
     """
-    if not is_torch_greater_or_equal_than_2_3:
-        raise ImportError("torch >= 2.3 is required.")
 
     register_dynamic_cache_export_support()
 
