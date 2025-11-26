@@ -284,20 +284,6 @@ else:
 
 
 try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_sentencepiece_objects
-
-    _import_structure["utils.dummy_sentencepiece_objects"] = [
-        name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["tokenization_utils_sentencepiece"] = [
-        "SentencePieceBackend",
-    ]
-
-try:
     if not (is_sentencepiece_available() and is_tokenizers_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
