@@ -16,12 +16,12 @@
 import itertools
 from typing import Optional, Union
 
-from ...tokenization_utils_tokenizers import PythonBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 
 
-class ParakeetTokenizerFast(PythonBackend):
+class ParakeetTokenizer(TokenizersBackend):
     """
-    Inherits all methods from [`PythonBackend`]. Users should refer to this superclass for more information regarding those methods,
+    Inherits all methods from [`TokenizersBackend`]. Users should refer to this superclass for more information regarding those methods,
     except for `_decode` which is overridden to adapt it to CTC decoding:
     1. Group consecutive tokens
     2. Filter out the blank token
@@ -51,4 +51,4 @@ class ParakeetTokenizerFast(PythonBackend):
         )
 
 
-__all__ = ["ParakeetTokenizerFast"]
+__all__ = ["ParakeetTokenizer"]

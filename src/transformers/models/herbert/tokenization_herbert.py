@@ -72,6 +72,7 @@ class HerbertTokenizer(TokenizersBackend):
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
         sep_token: str = "</s>",
+        token_suffix: str = "</w>",
         **kwargs,
     ):
         if vocab is not None:
@@ -99,7 +100,7 @@ class HerbertTokenizer(TokenizersBackend):
                 merges=self._merges,
                 dropout=None,
                 unk_token=str(unk_token) if self._vocab else None,
-                end_of_word_suffix="</w>",
+                end_of_word_suffix=token_suffix,
             )
         )
 
@@ -107,7 +108,7 @@ class HerbertTokenizer(TokenizersBackend):
             lowercase=False, strip_accents=False, clean_text=True, handle_chinese_chars=True
         )
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
-        self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
+        self._tokenizer.decoder = decoders.BPEDecoder(suffix=token_suffix)
 
         super().__init__(
             cls_token=cls_token,

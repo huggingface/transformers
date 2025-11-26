@@ -408,7 +408,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             "Unable to read tokenizer vocabulary. Please ensure you have the required "
                             "`sentencepiece` dependency installed."
                         ) from e
-            elif vocab_filename.endswith(".json"):
+            elif vocab_filename.endswith(".json") or vocab_filename.endswith(".txt"):
                 try:
                     from .convert_slow_tokenizer import TxtConverter
 
@@ -1445,7 +1445,5 @@ class TokenizersExtractor:
         self._tokenizer.decoder = decoder
 
 
-# Backward-compatible aliases for the fast tokenizers backend
-PythonBackend = TokenizersBackend
 # Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
 PreTrainedTokenizerFast = TokenizersBackend

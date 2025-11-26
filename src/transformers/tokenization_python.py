@@ -397,7 +397,7 @@ def _insert_one_token_to_ordered_list(token_list: list[str], new_token: str):
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizer(PreTrainedTokenizerBase):
+class PythonBackend(PreTrainedTokenizerBase):
     """
     Base class for all slow tokenizers.
 
@@ -432,7 +432,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Patterns: "none", "cls_sep", "eos", "bos", "cls_double_sep"
         self.special_tokens_pattern = kwargs.pop("special_tokens_pattern", "cls_sep")
 
-        # 6. Set backend to "custom" if not already set (for direct PreTrainedTokenizer subclasses)
+        # 6. Set backend to "custom" if not already set (for direct PythonBackend subclasses)
         if "backend" not in kwargs:
             kwargs["backend"] = "custom"
 
@@ -1753,3 +1753,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     #     )
 
     #     return batch_outputs
+
+
+PreTrainedTokenizer = PythonBackend
