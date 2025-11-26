@@ -46,7 +46,7 @@ class FbgemmFp8Quantize(ConversionOps):
         # Sanity checks
         if isinstance(module, FbgemmFp8Linear):
             if self.hf_quantizer.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
+                if tensor_name == "weight" and value.dtype != torch.float8_e4m3fn:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
             else:
                 if tensor_name == "weight_scale":
@@ -60,7 +60,7 @@ class FbgemmFp8Quantize(ConversionOps):
             if tensor_name == "gate_up_proj":
                 # Process each expert separately
                 # Transpose the second and third dimension
-                transposed_param = param_value.transpose(1, 2)
+                transposed_param = value.transpose(1, 2)
 
                 # Reshape to 2D for quantization
                 original_shape = transposed_param.shape
@@ -76,7 +76,7 @@ class FbgemmFp8Quantize(ConversionOps):
             elif tensor_name == "down_proj":
                 # Process each expert separately
                 # Transpose the weights for proper quantization
-                transposed_param = param_value.transpose(1, 2)
+                transposed_param = value.transpose(1, 2)
 
                 # Reshape to 2D for quantization
                 original_shape = transposed_param.shape
@@ -90,7 +90,7 @@ class FbgemmFp8Quantize(ConversionOps):
                 new_value = new_value.transpose(1, 2)
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
         else:
-            new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
+            new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(value)
             weight_scale = weight_scale.view(weight_scale.shape[0], 1)
 
         return {target_key: new_value,
