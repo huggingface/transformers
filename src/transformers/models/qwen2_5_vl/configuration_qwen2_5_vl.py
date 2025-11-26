@@ -226,6 +226,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         if self.rope_parameters["rope_type"] == "mrope":
             self.rope_parameters["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
+
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             bos_token_id=bos_token_id,
@@ -307,7 +308,8 @@ class Qwen2_5_VLConfig(PreTrainedConfig):
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
-        super().__init__(**kwargs)
+        # FIXME: arthur/cyril - tying has to be used from the text config
+        super().__init__(**kwargs, tie_word_embeddings=False)
 
 
 __all__ = ["Qwen2_5_VLConfig", "Qwen2_5_VLTextConfig"]

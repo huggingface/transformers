@@ -214,6 +214,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         if self.rope_parameters["rope_type"] == "mrope":
             self.rope_parameters["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
+
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             bos_token_id=bos_token_id,
@@ -288,14 +289,15 @@ class Qwen2VLConfig(PreTrainedConfig):
             text_params = list(text_params) + ["rope_scaling", "rope_theta"]
             text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
             text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype")) # don't pop the dtype
-            self.text_config = self.sub_configs["text_config"](**text_config)
+            self.text_config = self.sub_configs["text_config"](**text_config)  
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
-        super().__init__(**kwargs)
+        # FIXME: arthur/cyril - tying has to be used from the text config 
+        super().__init__(**kwargs, tie_word_embeddings=False)
 
 
 __all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig"]
