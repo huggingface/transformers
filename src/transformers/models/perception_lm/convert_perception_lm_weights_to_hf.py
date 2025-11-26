@@ -26,7 +26,7 @@ from transformers import (
     GenerationConfig,
     LlamaConfig,
     LlamaTokenizer,
-    PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.auto.modeling_auto import AutoModel
@@ -447,7 +447,7 @@ class Llama3Converter(TikTokenConverter):
         super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
 
-        self.converted_tokenizer = PreTrainedTokenizerFast(
+        self.converted_tokenizer = PythonBackend(
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
             eos_token="<|eot_id|>",

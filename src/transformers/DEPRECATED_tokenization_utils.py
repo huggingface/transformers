@@ -794,7 +794,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast. "
+                "transformers.PythonBackend. "
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
@@ -874,7 +874,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
+                "transformers.PythonBackend."
             )
 
         input_ids = []

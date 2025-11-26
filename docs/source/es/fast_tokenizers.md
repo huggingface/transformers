@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Usa los tokenizadores de 🤗 Tokenizers
 
-[`PreTrainedTokenizerFast`] depende de la biblioteca [🤗 Tokenizers](https://huggingface.co/docs/tokenizers). Los tokenizadores obtenidos desde la biblioteca 🤗 Tokenizers pueden ser 
+[`PythonBackend`] depende de la biblioteca [🤗 Tokenizers](https://huggingface.co/docs/tokenizers). Los tokenizadores obtenidos desde la biblioteca 🤗 Tokenizers pueden ser 
 cargados de forma muy sencilla en los 🤗 Transformers.
 
 Antes de entrar en detalles, comencemos creando un tokenizador dummy en unas cuantas líneas:
@@ -41,13 +41,13 @@ en un archivo JSON para reutilizarlo en un futuro.
 ## Cargando directamente desde el objeto tokenizador 
 
 Veamos cómo utilizar este objeto tokenizador en la biblioteca 🤗 Transformers. La clase
-[`PreTrainedTokenizerFast`] permite una instanciación fácil, al aceptar el objeto
+[`PythonBackend`] permite una instanciación fácil, al aceptar el objeto
 *tokenizer* instanciado como argumento:
 
 ```python
->>> from transformers import PreTrainedTokenizerFast
+>>> from transformers import PythonBackend
 
->>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+>>> fast_tokenizer = PythonBackend(tokenizer_object=tokenizer)
 ```
 
 Este objeto ya puede ser utilizado con todos los métodos compartidos por los tokenizadores de 🤗 Transformers! Visita la [página sobre tokenizadores
@@ -61,13 +61,13 @@ Para cargar un tokenizador desde un archivo JSON, comencemos por guardar nuestro
 >>> tokenizer.save("tokenizer.json")
 ```
 
-La localización (path en inglés) donde este archivo es guardado puede ser incluida en el método de inicialización de [`PreTrainedTokenizerFast`]
+La localización (path en inglés) donde este archivo es guardado puede ser incluida en el método de inicialización de [`PythonBackend`]
 utilizando el parámetro `tokenizer_file`:
 
 ```python
->>> from transformers import PreTrainedTokenizerFast
+>>> from transformers import PythonBackend
 
->>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
+>>> fast_tokenizer = PythonBackend(tokenizer_file="tokenizer.json")
 ```
 
 Este objeto ya puede ser utilizado con todos los métodos compartidos por los tokenizadores de 🤗 Transformers! Visita la [página sobre tokenizadores

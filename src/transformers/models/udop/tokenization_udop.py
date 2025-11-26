@@ -101,7 +101,7 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
             return_offsets_mapping (`bool`, *optional*, defaults to `False`):
                 Whether or not to return `(char_start, char_end)` for each token.
 
-                This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
+                This is only available on fast tokenizers inheriting from [`PythonBackend`], if using
                 Python's tokenizer, this method will raise `NotImplementedError`.
             return_length  (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the lengths of the encoded inputs.

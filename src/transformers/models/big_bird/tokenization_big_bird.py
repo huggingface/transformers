@@ -33,7 +33,7 @@ class BigBirdTokenizer(TokenizersBackend):
     """
     Construct a "fast" BigBird tokenizer (backed by HuggingFace's *tokenizers* library). Based on
     [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models). This
-    tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should refer to
+    tokenizer inherits from [`PythonBackend`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods
 
     Args:

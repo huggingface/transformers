@@ -51,8 +51,8 @@ Nougat's [`VisionEncoderDecoder`] model accepts images as input and makes use of
 [`~generation.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
 The [`NougatImageProcessor`] class is responsible for preprocessing the input image and
-[`NougatTokenizerFast`] decodes the generated target tokens to the target string. The
-[`NougatProcessor`] wraps [`NougatImageProcessor`] and [`NougatTokenizerFast`] classes
+[`NougatTokenizer`] decodes the generated target tokens to the target string. The
+[`NougatProcessor`] wraps [`NougatImageProcessor`] and [`NougatTokenizer`] classes
 into a single instance to both extract the input features and decode the predicted token ids.
 
 - Step-by-step PDF transcription
@@ -111,9 +111,9 @@ The model is identical to [Donut](donut) in terms of architecture.
 [[autodoc]] NougatImageProcessorFast
     - preprocess
 
-## NougatTokenizerFast
+## NougatTokenizer
 
-[[autodoc]] NougatTokenizerFast
+[[autodoc]] NougatTokenizer
 
 ## NougatProcessor
 

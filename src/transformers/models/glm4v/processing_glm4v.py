@@ -51,7 +51,7 @@ class Glm4vProcessor(ProcessorMixin):
     Args:
         image_processor ([`Glm4vProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizerFast`], *optional*):
+        tokenizer ([`PythonBackend`], *optional*):
             The tokenizer is a required input.
         video_processor ([`Glm4vVideoProcessor`], *optional*):
             The video processor is a required input.
@@ -83,7 +83,7 @@ class Glm4vProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to PythonBackend's [`~PythonBackend.__call__`] if `text` is not `None` to encode
         the text.
 
         Args:

@@ -18,7 +18,7 @@ from transformers import (
     Llama4Processor,
     Llama4TextConfig,
     Llama4VisionConfig,
-    PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.integrations.tiktoken import TikTokenConverter
 
@@ -633,7 +633,7 @@ class Llama4Converter(TikTokenConverter):
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
 
-        self.converted_tokenizer = PreTrainedTokenizerFast(
+        self.converted_tokenizer = PythonBackend(
             tokenizer_object=tokenizer,
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=model_max_length,

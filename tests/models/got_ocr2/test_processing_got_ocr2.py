@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, GotOcr2Processor, PreTrainedTokenizerFast
+from transformers import AutoProcessor, GotOcr2Processor, PythonBackend
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -36,7 +36,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = GotOcr2ImageProcessor()
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+        tokenizer = PythonBackend.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
         processor_kwargs = {}
         processor = GotOcr2Processor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)

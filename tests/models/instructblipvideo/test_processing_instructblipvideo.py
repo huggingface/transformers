@@ -29,7 +29,7 @@ if is_vision_available():
         BertTokenizerFast,
         GPT2Tokenizer,
         InstructBlipVideoProcessor,
-        PreTrainedTokenizerFast,
+        PythonBackend,
     )
 
     if is_torchvision_available():
@@ -86,7 +86,7 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, PythonBackend)
 
         self.assertEqual(processor.video_processor.to_json_string(), video_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.video_processor, InstructBlipVideoVideoProcessor)

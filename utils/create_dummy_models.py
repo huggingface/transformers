@@ -38,7 +38,7 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoTokenizer,
     LayoutLMv3TokenizerFast,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     PythonBackend,
     logging,
 )
@@ -445,7 +445,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     return config
 
 
-def convert_tokenizer(tokenizer_fast: PreTrainedTokenizerFast):
+def convert_tokenizer(tokenizer_fast: PythonBackend):
     new_tokenizer = tokenizer_fast.train_new_from_iterator(
         data["training_ds"]["text"], TARGET_VOCAB_SIZE, show_progress=False
     )
@@ -592,7 +592,7 @@ def convert_processors(processors, tiny_config, output_folder, result):
     slow_tokenizer = None
 
     for tokenizer in tokenizers:
-        if isinstance(tokenizer, PreTrainedTokenizerFast):
+        if isinstance(tokenizer, PythonBackend):
             fast_tokenizer = tokenizer
         else:
             slow_tokenizer = tokenizer
@@ -970,7 +970,7 @@ def get_token_id_from_tokenizer(token_id_name, tokenizer, original_token_id):
 
     token = getattr(tokenizer, token_id_name.replace("_token_id", "_token"), None)
     if token is not None:
-        if isinstance(tokenizer, PreTrainedTokenizerFast):
+        if isinstance(tokenizer, PythonBackend):
             token_id = tokenizer._convert_token_to_id_with_added_voc(token)
         else:
             token_id = tokenizer._convert_token_to_id(token)
@@ -988,7 +988,7 @@ def get_config_overrides(config_class, processors):
     # Check if there is any tokenizer (prefer fast version if any)
     tokenizer = None
     for processor in processors:
-        if isinstance(processor, PreTrainedTokenizerFast):
+        if isinstance(processor, PythonBackend):
             tokenizer = processor
             break
         elif isinstance(processor, PythonBackend):

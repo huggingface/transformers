@@ -40,7 +40,7 @@ if is_vision_available():
         AutoTokenizer,
         Kosmos2_5ImageProcessor,
         Kosmos2_5Processor,
-        PreTrainedTokenizerFast,
+        PythonBackend,
     )
 
 
@@ -90,7 +90,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, PythonBackend)
 
         self.assertEqual(
             processor.image_processor.to_json_string(),

@@ -281,7 +281,7 @@ class SmolVLMProcessor(ProcessorMixin):
                 The video or batch of videos to be prepared. Each video can be a list of PIL frames, NumPy array or PyTorch
                 tensor. If is of type `list[VideoInput]`, it's assumed that this is for a single prompt i.e. of batch size 1.
             return_tensors (`Union[str, TensorType]`, *optional*):
-                If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
+                If set, will return tensors of a particular framework. See [`PythonBackend.__call__`] for more
                 information.
         """
         if text is None and images is None and videos is None:

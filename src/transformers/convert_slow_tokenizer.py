@@ -1839,13 +1839,13 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     Args:
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
-            [`~tokenization_utils_base.PreTrainedTokenizerFast`].
+            [`~tokenization_utils_base.PythonBackend`].
        from_tiktoken (bool, optional): Whether to use the `tiktoken` library to convert the tokenizer instead of sentencepiece.
             Defaults to False.
 
     Return:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
-        [`~tokenization_utils_base.PreTrainedTokenizerFast`]
+        [`~tokenization_utils_base.PythonBackend`]
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__

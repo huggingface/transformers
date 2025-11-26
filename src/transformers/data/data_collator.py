@@ -193,7 +193,7 @@ class DataCollatorWithPadding:
     Data collator that will dynamically pad the inputs received.
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`] or [`PythonBackend`]):
             The tokenizer used for encoding the data.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
@@ -245,7 +245,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     Data collator that will dynamically pad the inputs received, as well as the labels.
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`] or [`PythonBackend`]):
             The tokenizer used for encoding the data.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
@@ -423,7 +423,7 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
     of all examples have the same length.
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`] or [`PythonBackend`]):
             The tokenizer used for encoding the data.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences according to the model's padding side and padding index
@@ -489,7 +489,7 @@ class DataCollatorForSeq2Seq:
     Data collator that will dynamically pad the inputs received, as well as the labels.
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`] or [`PythonBackend`]):
             The tokenizer used for encoding the data.
         model ([`PreTrainedModel`], *optional*):
             The model that is being trained. If set and has the *prepare_decoder_input_ids_from_labels*, use it to
@@ -622,7 +622,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     are not all of the same length.
 
     Args:
-        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`] or [`PythonBackend`]):
             The tokenizer used for encoding the data.
         mlm (`bool`, *optional*, defaults to `True`):
             Whether or not to use masked language modeling. If set to `False`, the labels are the same as the inputs
@@ -652,7 +652,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     For best performance, this data collator should be used with a dataset having items that are dictionaries or
     BatchEncoding, with the `"special_tokens_mask"` key, as returned by a [`PreTrainedTokenizer`] or a
-    [`PreTrainedTokenizerFast`] with the argument `return_special_tokens_mask=True`.
+    [`PythonBackend`] with the argument `return_special_tokens_mask=True`.
 
     <Example Options and Expectations>
 

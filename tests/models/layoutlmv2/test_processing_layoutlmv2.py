@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast, PythonBackend
+from transformers import PreTrainedTokenizerBase, PythonBackend, PythonBackend
 from transformers.models.layoutlmv2 import LayoutLMv2Processor, LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
@@ -75,7 +75,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs) -> PythonBackend:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(self, **kwargs) -> PythonBackend:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:

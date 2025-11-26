@@ -36,7 +36,7 @@ class CamembertTokenizer(TokenizersBackend):
     [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`PythonBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:

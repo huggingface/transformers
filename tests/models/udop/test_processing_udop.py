@@ -19,7 +19,7 @@ from functools import cached_property
 
 from transformers import (
     PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     PythonBackend,
     UdopProcessor,
     UdopTokenizer,
@@ -82,7 +82,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return LayoutLMv3ImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
     @classmethod
-    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(cls, **kwargs) -> PythonBackend:
         return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
     @classmethod

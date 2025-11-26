@@ -58,7 +58,7 @@ if __name__ == "__main__":
     if tokenizer_config.is_file():
         text = tokenizer_config.read_text()
         json_config = json.loads(text)
-        if json_config["tokenizer_class"] == "PreTrainedTokenizerFast":
+        if json_config["tokenizer_class"] == "PythonBackend":
             json_config["model_input_names"] = ["input_ids", "attention_mask"]
             tokenizer_config.unlink()
             tokenizer_config.write_text(json.dumps(json_config, indent=2, sort_keys=True))

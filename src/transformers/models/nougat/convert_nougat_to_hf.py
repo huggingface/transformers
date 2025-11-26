@@ -31,7 +31,7 @@ from transformers import (
     MBartForCausalLM,
     NougatImageProcessor,
     NougatProcessor,
-    NougatTokenizerFast,
+    NougatTokenizer,
     VisionEncoderDecoderModel,
 )
 
@@ -162,7 +162,7 @@ def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_
     image = Image.open(images[0])
 
     tokenizer_file = checkpoint_path / "tokenizer.json"
-    tokenizer = NougatTokenizerFast(tokenizer_file=str(tokenizer_file))
+    tokenizer = NougatTokenizer(tokenizer_file=str(tokenizer_file))
     tokenizer.pad_token = "<pad>"
     tokenizer.bos_token = "<s>"
     tokenizer.eos_token = "</s>"

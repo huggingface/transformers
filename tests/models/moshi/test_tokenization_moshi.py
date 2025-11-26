@@ -19,7 +19,7 @@ from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     AutoTokenizer,
-    PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.convert_slow_tokenizer import MoshiConverter
 from transformers.testing_utils import (
@@ -40,7 +40,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = ["kmhf/hf-moshiko"]
-    tokenizer_class = PreTrainedTokenizerFast
+    tokenizer_class = PythonBackend
 
     test_slow_tokenizer = False
     test_rust_tokenizer = True
@@ -51,7 +51,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = PreTrainedTokenizerFast(
+        tokenizer = PythonBackend(
             tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
             bos_token="<s>",
             unk_token="<unk>",
@@ -60,7 +60,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> PythonBackend:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
@@ -68,7 +68,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_added_tokens_serialization(self):
         pass
 
-    @unittest.skip(reason="PreTrainedTokenizerFast doesn't have tokenizer_file in its signature")
+    @unittest.skip(reason="PythonBackend doesn't have tokenizer_file in its signature")
     def test_rust_tokenizer_signature(self):
         pass
 
@@ -77,7 +77,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def test_full_tokenizer(self):
-        tokenizer = PreTrainedTokenizerFast(
+        tokenizer = PythonBackend(
             tokenizer_object=MoshiConverter(vocab_file=SAMPLE_VOCAB).converted(),
             bos_token="<s>",
             unk_token="<unk>",

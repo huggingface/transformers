@@ -28,7 +28,7 @@ from transformers import (
     GotOcr2ForConditionalGeneration,
     GotOcr2ImageProcessor,
     GotOcr2Processor,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     is_vision_available,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
@@ -172,7 +172,7 @@ class GotOcr2Converter(TikTokenConverter):
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
-        self.tokenizer = PreTrainedTokenizerFast(
+        self.tokenizer = PythonBackend(
             tokenizer_object=tokenizer,
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=model_max_length,

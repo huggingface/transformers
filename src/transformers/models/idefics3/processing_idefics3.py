@@ -215,7 +215,7 @@ class Idefics3Processor(ProcessorMixin):
                 The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
                 image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
             return_tensors (`Union[str, TensorType]`, *optional*):
-                If set, will return tensors of a particular framework. See [`PreTrainedTokenizerFast.__call__`] for more
+                If set, will return tensors of a particular framework. See [`PythonBackend.__call__`] for more
                 information.
         """
         if text is None and images is None:

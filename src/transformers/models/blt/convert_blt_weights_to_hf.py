@@ -10,7 +10,7 @@ from safetensors.torch import load_file, save_file
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from transformers import PreTrainedTokenizerFast
+from transformers import PythonBackend
 from transformers.convert_slow_tokenizer import bytes_to_unicode
 from transformers.utils import logging as transformers_logging
 
@@ -279,7 +279,7 @@ def merge_weights(weights_path: str, entropy_weights_path: str) -> dict[str, tor
 
 def create_tokenizer_config(output_dir: str, config: dict[str, Any]):
     tokenizer_config = {
-        "tokenizer_class": "PreTrainedTokenizerFast",
+        "tokenizer_class": "PythonBackend",
         "vocab_size": config.get("vocab_size", 256),
         "model_max_length": config.get("max_seqlen", 1024),
         "model_input_names": ["input_ids", "attention_mask"],
@@ -322,7 +322,7 @@ def create_tokenizer_json(output_dir: str, config: dict[str, Any]):
         special_tokens=[(bos, 1)],
     )
 
-    tokenizer = PreTrainedTokenizerFast(
+    tokenizer = PythonBackend(
         tokenizer_object=backend,
         bos_token=config.get("bos_token", "<s>"),
         eos_token=config.get("eos_token", "</s>"),

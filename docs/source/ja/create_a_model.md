@@ -173,7 +173,7 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 🤗 Transformersで使用できる2つのタイプのトークナイザがあります：
 
 - [`PreTrainedTokenizer`]: トークナイザのPython実装です。
-- [`PreTrainedTokenizerFast`]: Rustベースの[🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/)ライブラリからのトークナイザです。
+- [`PythonBackend`]: Rustベースの[🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/)ライブラリからのトークナイザです。
 このトークナイザのタイプは、そのRust実装により、特にバッチトークナイゼーション中に高速です。
 高速なトークナイザは、トークンを元の単語または文字にマッピングする*オフセットマッピング*などの追加メソッドも提供します。
 

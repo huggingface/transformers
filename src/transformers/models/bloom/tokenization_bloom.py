@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...tokenization_utils_base import BatchEncoding
-from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PythonBackend
 from ...utils import logging
 
 
@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 
-class BloomTokenizer(PreTrainedTokenizerFast):
+class BloomTokenizer(PythonBackend):
     """
     Construct a "fast" Bloom tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
     Byte-Pair-Encoding.
@@ -54,7 +54,7 @@ class BloomTokenizer(PreTrainedTokenizerFast):
 
     </Tip>
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`PythonBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:

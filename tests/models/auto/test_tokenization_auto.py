@@ -32,7 +32,7 @@ from transformers import (
     BertTokenizerFast,
     CTRLTokenizer,
     GPT2Tokenizer,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     RobertaTokenizer,
     is_tokenizers_available,
 )
@@ -120,14 +120,14 @@ class AutoTokenizerTest(unittest.TestCase):
             shutil.copy("./tests/fixtures/vocab.txt", os.path.join(tmp_dir, "vocab.txt"))
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir, tokenizer_type="bert")
-            self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             shutil.copy("./tests/fixtures/vocab.json", os.path.join(tmp_dir, "vocab.json"))
             shutil.copy("./tests/fixtures/merges.txt", os.path.join(tmp_dir, "merges.txt"))
 
             tokenizer = AutoTokenizer.from_pretrained(tmp_dir, tokenizer_type="gpt2")
-            self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
     def test_tokenizer_from_type_incorrect_name(self):
         with pytest.raises(ValueError):
@@ -188,7 +188,7 @@ class AutoTokenizerTest(unittest.TestCase):
             tokenization_auto = importlib.reload(tokenization_auto)
             tokenizer = tokenization_auto.AutoTokenizer.from_pretrained(repo_id)  # should not raise
 
-        self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+        self.assertIsInstance(tokenizer, PythonBackend)
         self.assertTrue(tokenizer.is_fast)
         self.assertGreater(len(tokenizer("Voxtral")["input_ids"]), 0)
 
@@ -204,9 +204,9 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual("[UNK]", tokens[0])
 
     @require_tokenizers
-    def test_PreTrainedTokenizerFast_from_pretrained(self):
+    def test_PythonBackend_from_pretrained(self):
         tokenizer = AutoTokenizer.from_pretrained("robot-test/dummy-tokenizer-fast-with-model-config")
-        self.assertEqual(type(tokenizer), PreTrainedTokenizerFast)
+        self.assertEqual(type(tokenizer), PythonBackend)
         self.assertEqual(tokenizer.model_max_length, 512)
         self.assertEqual(tokenizer.vocab_size, 30000)
         self.assertEqual(tokenizer.unk_token, "[UNK]")

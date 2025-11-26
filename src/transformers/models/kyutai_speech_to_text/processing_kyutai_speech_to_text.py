@@ -29,7 +29,7 @@ class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
 class KyutaiSpeechToTextProcessor(ProcessorMixin):
     r"""
     Constructs a Moshi ASR processor which wraps [`EncodecFeatureExtractor`] and
-    [`PreTrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
+    [`PythonBackend`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities. See the [`~KyutaiSpeechToTextProcessor.__call__`] for more
     information.
     """

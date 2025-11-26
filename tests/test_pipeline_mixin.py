@@ -272,7 +272,7 @@ class PipelineTesterMixin:
             model_architecture (`type`):
                 A subclass of `PretrainedModel` or `PretrainedModel`.
             tokenizer_names (`list[str]`):
-                A list of names of a subclasses of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
+                A list of names of a subclasses of `PythonBackend` or `PreTrainedTokenizer`.
             image_processor_names (`list[str]`):
                 A list of names of subclasses of `BaseImageProcessor`.
             feature_extractor_names (`list[str]`):
@@ -368,7 +368,7 @@ class PipelineTesterMixin:
             model_architecture (`type`):
                 A subclass of `PretrainedModel` or `PretrainedModel`.
             tokenizer_name (`str`):
-                The name of a subclass of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
+                The name of a subclass of `PythonBackend` or `PreTrainedTokenizer`.
             image_processor_name (`str`):
                 The name of a subclass of `BaseImageProcessor`.
             feature_extractor_name (`str`):

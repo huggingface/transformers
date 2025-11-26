@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Use tokenizers from 🤗 Tokenizers
 
-[`PreTrainedTokenizerFast`]は[🤗 Tokenizers](https://huggingface.co/docs/tokenizers)ライブラリに依存しています。🤗 Tokenizersライブラリから取得したトークナイザーは、非常に簡単に🤗 Transformersにロードできます。
+[`PythonBackend`]は[🤗 Tokenizers](https://huggingface.co/docs/tokenizers)ライブラリに依存しています。🤗 Tokenizersライブラリから取得したトークナイザーは、非常に簡単に🤗 Transformersにロードできます。
 
 具体的な内容に入る前に、まずはいくつかの行でダミーのトークナイザーを作成することから始めましょう：
 
@@ -40,14 +40,14 @@ rendered properly in your Markdown viewer.
 
 ## Loading directly from the tokenizer object
 
-🤗 Transformersライブラリでこのトークナイザーオブジェクトをどのように活用できるかを見てみましょう。[`PreTrainedTokenizerFast`]クラスは、
+🤗 Transformersライブラリでこのトークナイザーオブジェクトをどのように活用できるかを見てみましょう。[`PythonBackend`]クラスは、
 *tokenizer*オブジェクトを引数として受け入れ、簡単にインスタンス化できるようにします。
 
 
 ```python
->>> from transformers import PreTrainedTokenizerFast
+>>> from transformers import PythonBackend
 
->>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+>>> fast_tokenizer = PythonBackend(tokenizer_object=tokenizer)
 ```
 
 このオブジェクトは、🤗 Transformers トークナイザーが共有するすべてのメソッドと一緒に使用できます！詳細については、[トークナイザーページ](main_classes/tokenizer)をご覧ください。
@@ -60,13 +60,13 @@ JSONファイルからトークナイザーを読み込むには、まずトー�
 >>> tokenizer.save("tokenizer.json")
 ```
 
-このファイルを保存したパスは、`PreTrainedTokenizerFast` の初期化メソッドに `tokenizer_file` パラメータを使用して渡すことができます：
+このファイルを保存したパスは、`PythonBackend` の初期化メソッドに `tokenizer_file` パラメータを使用して渡すことができます：
 
 
 ```python
->>> from transformers import PreTrainedTokenizerFast
+>>> from transformers import PythonBackend
 
->>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
+>>> fast_tokenizer = PythonBackend(tokenizer_file="tokenizer.json")
 ```
 
 このオブジェクトは、🤗 Transformers トークナイザーが共有するすべてのメソッドと一緒に使用できるようになりました！詳細については、[トークナイザーページ](main_classes/tokenizer)をご覧ください。

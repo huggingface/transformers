@@ -1088,7 +1088,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 Additional keyword arguments passed along to the trainer from the 🤗 Tokenizers library.
 
         Returns:
-            [`PreTrainedTokenizerFast`]: A new tokenizer of the same type as the original one, trained on
+            [`PythonBackend`]: A new tokenizer of the same type as the original one, trained on
             `text_iterator`.
 
         """

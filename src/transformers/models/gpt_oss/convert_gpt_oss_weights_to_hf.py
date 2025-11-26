@@ -28,7 +28,7 @@ from transformers import (
     GenerationConfig,
     GptOssConfig,
     GptOssForCausalLM,
-    PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
 
@@ -421,7 +421,7 @@ class GptOssConverter(TikTokenConverter):
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
-        self.tokenizer = PreTrainedTokenizerFast(
+        self.tokenizer = PythonBackend(
             tokenizer_object=tokenizer,
             bos_token="<|startoftext|>",
             eos_token="<|return|>" if chat_template else "<|endoftext|>",

@@ -56,7 +56,7 @@ class LlamaTokenizer(TokenizersBackend):
     [post-processors] (https://huggingface.co/docs/tokenizers/api/post-processors) documentation.
 
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`PythonBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:

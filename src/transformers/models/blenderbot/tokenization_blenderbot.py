@@ -60,7 +60,7 @@ class BlenderbotTokenizer(TokenizersBackend):
 
     </Tip>
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`PythonBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:

@@ -7,7 +7,7 @@ from transformers.tokenization_utils_tokenizers import TIKTOKEN_VOCAB_FILE, TOKE
 
 def convert_tiktoken_to_fast(encoding: Any, output_dir: str):
     """
-    Converts given `tiktoken` encoding to `PretrainedTokenizerFast` and saves the configuration of converted tokenizer
+    Converts given `tiktoken` encoding to `PythonBackend` and saves the configuration of converted tokenizer
     on disk.
 
     Args:

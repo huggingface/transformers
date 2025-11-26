@@ -28,7 +28,7 @@ from transformers import (
     MllamaConfig,
     MllamaForConditionalGeneration,
     MllamaImageProcessor,
-    PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
@@ -486,7 +486,7 @@ class MllamaConverter(TikTokenConverter):
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
-        self.tokenizer = PreTrainedTokenizerFast(
+        self.tokenizer = PythonBackend(
             tokenizer_object=tokenizer,
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=model_max_length,

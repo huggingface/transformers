@@ -517,7 +517,7 @@ All features unique to BrandNewLlama should be tested in a separate test under `
 ## Implement tokenizer
 
 > [!TIP]
-> We recommend adding a fast tokenizer ([`PreTrainedTokenizerFast`]) to give users the best performance. Feel free to tag [@ArthurZucker](https://github.com/ArthurZucker) or [@itazap](https://github.com/itazap) in your PR for help on how to add [`PreTrainedTokenizerFast`].
+> We recommend adding a fast tokenizer ([`PythonBackend`]) to give users the best performance. Feel free to tag [@ArthurZucker](https://github.com/ArthurZucker) or [@itazap](https://github.com/itazap) in your PR for help on how to add [`PythonBackend`].
 
 With the model out of the way, time to focus on the tokenizer. The tokenizer should be identical or very similar to an existing tokenizer in Transformers.
 

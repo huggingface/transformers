@@ -863,7 +863,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_offsets_mapping (`bool`, *optional*, defaults to `False`):
                 Whether or not to return `(char_start, char_end)` for each token.
 
-                This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
+                This is only available on fast tokenizers inheriting from [`PythonBackend`], if using
                 Python's tokenizer, this method will raise `NotImplementedError`.
             return_length  (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the lengths of the encoded inputs.
@@ -2395,11 +2395,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
 
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
-        specific [`~tokenization_utils_tokenizers.PreTrainedTokenizerFast._save_pretrained`]
+        specific [`~tokenization_utils_tokenizers.PythonBackend._save_pretrained`]
         """
         if legacy_format is False:
             raise ValueError(
-                "Only fast tokenizers (instances of PreTrainedTokenizerFast) can be saved in non legacy format."
+                "Only fast tokenizers (instances of PythonBackend) can be saved in non legacy format."
             )
 
         save_directory = str(save_directory)
@@ -2424,7 +2424,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Save only the vocabulary of the tokenizer (vocabulary + added tokens).
 
         This method won't save the configuration and special token mappings of the tokenizer. Use
-        [`~PreTrainedTokenizerFast._save_pretrained`] to save the whole state of the tokenizer.
+        [`~PythonBackend._save_pretrained`] to save the whole state of the tokenizer.
 
         Args:
             save_directory (`str`):

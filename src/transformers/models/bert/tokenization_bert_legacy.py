@@ -475,4 +475,4 @@ class WordpieceTokenizer:
         return output_tokens
 
 
-__all__ = ["BasicTokenizer", "BertTokenizerLegacy", "WordpieceTokenizer"]
+__all__ = ["BasicTokenizer", "WordpieceTokenizer"]

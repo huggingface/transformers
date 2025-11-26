@@ -23,7 +23,7 @@ import re
 import torch
 from huggingface_hub import hf_hub_download, split_torch_state_dict_into_shards
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerFast, RwkvConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, PythonBackend, RwkvConfig
 from transformers.modeling_utils import WEIGHTS_INDEX_NAME
 
 
@@ -86,7 +86,7 @@ def convert_rmkv_checkpoint_to_hf_format(
         vocab_size = 50277
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
     else:
-        tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_file)
+        tokenizer = PythonBackend(tokenizer_file=tokenizer_file)
         vocab_size = len(tokenizer)
     tokenizer.save_pretrained(output_dir)
 

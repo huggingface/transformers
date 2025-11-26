@@ -21,7 +21,7 @@ import warnings
 import torch
 from tokenizers import AddedToken, processors
 
-from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM, LlamaTokenizer, PreTrainedTokenizerFast
+from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM, LlamaTokenizer, PythonBackend
 from transformers.convert_slow_tokenizer import TikTokenConverter
 
 
@@ -459,7 +459,7 @@ class Llama3Converter(TikTokenConverter):
                 t = AutoTokenizer.from_pretrained(model_id, revision=revision)
                 additional_kwargs["chat_template"] = t.chat_template
 
-        self.converted_tokenizer = PreTrainedTokenizerFast(
+        self.converted_tokenizer = PythonBackend(
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
             eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",

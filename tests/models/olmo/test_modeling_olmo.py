@@ -21,7 +21,7 @@ from packaging import version
 from transformers import OlmoConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.models.gpt_neox.tokenization_gpt_neox import GPTNeoXTokenizer as GPTNeoXTokenizerFast
+from transformers.models.gpt_neox.tokenization_gpt_neox import GPTNeoXTokenizer as GPTNeoXTokenizer
 from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
@@ -241,7 +241,7 @@ class OlmoIntegrationTest(unittest.TestCase):
 
     @require_tokenizers
     def test_fast_special_tokens(self):
-        fast_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf")
+        fast_tokenizer = GPTNeoXTokenizer.from_pretrained("allenai/OLMo-1B-hf")
 
         original_add_eos_token = fast_tokenizer.add_eos_token
 
@@ -257,7 +257,7 @@ class OlmoIntegrationTest(unittest.TestCase):
 
     @require_tokenizers
     def test_simple_encode_decode(self):
-        rust_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMo-1B-hf")
+        rust_tokenizer = GPTNeoXTokenizer.from_pretrained("allenai/OLMo-1B-hf")
 
         self.assertEqual(rust_tokenizer.encode("This is a test"), [1552, 310, 247, 1071])
         self.assertEqual(rust_tokenizer.decode([1552, 310, 247, 1071], skip_special_tokens=True), "This is a test")

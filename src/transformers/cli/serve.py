@@ -54,7 +54,7 @@ from transformers.utils.import_utils import (
 from .. import (
     AutoConfig,
     LogitsProcessorList,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     ProcessorMixin,
     TextIteratorStreamer,
 )
@@ -305,7 +305,7 @@ class TimedModel:
         self,
         model: "PreTrainedModel",
         timeout_seconds: int,
-        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
+        processor: Union["ProcessorMixin", "PythonBackend"] | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -654,7 +654,7 @@ class Serve:
         finish_reason: str | None = None,
         tool_calls: list["ChoiceDeltaToolCall"] | None = None,
         decode_stream: DecodeStream | None = None,
-        tokenizer: PreTrainedTokenizerFast | None = None,
+        tokenizer: PythonBackend | None = None,
     ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -1726,7 +1726,7 @@ class Serve:
                 The model class to load.
 
         Returns:
-            `tuple[PreTrainedModel, Union[ProcessorMixin, PreTrainedTokenizerFast]]`: The loaded model and
+            `tuple[PreTrainedModel, Union[ProcessorMixin, PythonBackend]]`: The loaded model and
             data processor (tokenizer, audio processor, etc.).
         """
         logger.info(f"Loading {model_id_and_revision}")
@@ -1771,7 +1771,7 @@ class Serve:
 
     def load_model_and_processor(
         self, model_id_and_revision: str
-    ) -> tuple["PreTrainedModel", PreTrainedTokenizerFast]:
+    ) -> tuple["PreTrainedModel", PythonBackend]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1780,7 +1780,7 @@ class Serve:
                 The model ID and revision to load.
 
         Returns:
-            `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and processor.
+            `tuple[PreTrainedModel, PythonBackend]`: The loaded text model and processor.
         """
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
             model, processor = self._load_model_and_data_processor(model_id_and_revision)

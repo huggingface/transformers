@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast, PythonBackend
+from transformers import PreTrainedTokenizerBase, PythonBackend, PythonBackend
 from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
     require_pytesseract,
@@ -73,7 +73,7 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return cls.tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
     @classmethod
-    def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(cls, **kwargs) -> PythonBackend:
         return cls.rust_tokenizer_class.from_pretrained(cls.tokenizer_pretrained_name, **kwargs)
 
     @classmethod

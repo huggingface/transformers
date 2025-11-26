@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, Llama4Processor, PreTrainedTokenizerFast
+from transformers import AutoProcessor, Llama4Processor, PythonBackend
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
@@ -36,7 +36,7 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tmpdirname = tempfile.mkdtemp()
 
         image_processor = Llama4ImageProcessorFast(max_patches=1, size={"height": 20, "width": 20})
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("unsloth/Llama-3.2-11B-Vision-Instruct-unsloth-bnb-4bit")
+        tokenizer = PythonBackend.from_pretrained("unsloth/Llama-3.2-11B-Vision-Instruct-unsloth-bnb-4bit")
         processor_kwargs = cls.prepare_processor_dict()
         processor = Llama4Processor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(cls.tmpdirname)

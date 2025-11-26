@@ -56,9 +56,9 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 [[autodoc]] BloomConfig
     - all
 
-## BloomTokenizerFast
+## BloomTokenizer
 
-[[autodoc]] BloomTokenizerFast
+[[autodoc]] BloomTokenizer
     - all
 
 

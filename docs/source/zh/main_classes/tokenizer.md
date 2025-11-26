@@ -23,7 +23,7 @@ tokenizer负责准备输入以供模型使用。该库包含所有模型的token
 
 基类 [PreTrainedTokenizer] 和 [PreTrained TokenizerFast] 实现了在模型输入中编码字符串输入的常用方法（见下文），并从本地文件或目录或从库提供的预训练的 tokenizer（从 HuggingFace 的 AWS S3 存储库下载）实例化/保存 python 和“Fast” tokenizer。它们都依赖于包含常用方法的 [`~tokenization_utils_base.PreTrainedTokenizerBase`]和[`~tokenization_utils_base.SpecialTokensMixin`]。
 
-因此，[`PreTrainedTokenizer`] 和 [`PreTrainedTokenizerFast`] 实现了使用所有tokenizers的主要方法：
+因此，[`PreTrainedTokenizer`] 和 [`PythonBackend`] 实现了使用所有tokenizers的主要方法：
 
 - 分词（将字符串拆分为子词标记字符串），将tokens字符串转换为id并转换回来，以及编码/解码（即标记化并转换为整数）。
 - 以独立于底层结构（BPE、SentencePiece……）的方式向词汇表中添加新tokens。
@@ -45,11 +45,11 @@ tokenizer负责准备输入以供模型使用。该库包含所有模型的token
     - push_to_hub
     - all
 
-## PreTrainedTokenizerFast
+## PythonBackend
 
-[`PreTrainedTokenizerFast`] 依赖于 [tokenizers](https://huggingface.co/docs/tokenizers) 库。可以非常简单地将从 🤗 tokenizers 库获取的tokenizers加载到 🤗 transformers 中。查看 [使用 🤗 tokenizers 的分词器](../fast_tokenizers) 页面以了解如何执行此操作。
+[`PythonBackend`] 依赖于 [tokenizers](https://huggingface.co/docs/tokenizers) 库。可以非常简单地将从 🤗 tokenizers 库获取的tokenizers加载到 🤗 transformers 中。查看 [使用 🤗 tokenizers 的分词器](../fast_tokenizers) 页面以了解如何执行此操作。
 
-[[autodoc]] PreTrainedTokenizerFast
+[[autodoc]] PythonBackend
     - __call__
     - add_tokens
     - add_special_tokens

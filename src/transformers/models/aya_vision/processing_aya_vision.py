@@ -39,12 +39,12 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
 class AyaVisionProcessor(ProcessorMixin):
     r"""
     Constructs a AyaVision processor which wraps a [`AutoImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
+    [`PythonBackend`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~AyaVisionProcessor.__call__`] and [`~AyaVisionProcessor.decode`] for more information.
     Args:
         image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`], *optional*):
             The tokenizer is a required input.
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
@@ -133,7 +133,7 @@ class AyaVisionProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
+        and `kwargs` arguments to PythonBackend's [`~PythonBackend.__call__`] to encode the text.
         To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 

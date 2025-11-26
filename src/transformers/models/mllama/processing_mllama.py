@@ -169,7 +169,7 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
 class MllamaProcessor(ProcessorMixin):
     r"""
     Constructs a Mllama processor which wraps [`MllamaImageProcessor`] and
-    [`PretrainedTokenizerFast`] into a single processor that inherits both the image processor and
+    [`PythonBackend`] into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~MllamaProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
     information.
     The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
@@ -191,7 +191,7 @@ class MllamaProcessor(ProcessorMixin):
     Args:
         image_processor ([`MllamaImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`]):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -219,7 +219,7 @@ class MllamaProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
-        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
+        arguments to PythonBackend's [`~PythonBackend.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` arguments to
         MllamaImageProcessor's [`~MllamaImageProcessor.__call__`] if `images` is not `None`. Please refer
         to the docstring of the above two methods for more information.

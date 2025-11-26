@@ -102,7 +102,7 @@ LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_offsets_mapping (`bool`, *optional*, defaults to `False`):
                 Whether or not to return `(char_start, char_end)` for each token.
 
-                This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
+                This is only available on fast tokenizers inheriting from [`PythonBackend`], if using
                 Python's tokenizer, this method will raise `NotImplementedError`.
             return_length  (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the lengths of the encoded inputs.
@@ -116,7 +116,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
     r"""
     Construct a "fast" LayoutLMv2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`PythonBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:

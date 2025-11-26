@@ -671,7 +671,7 @@
     },
     "BloomForCausalLM": {
         "tokenizer_classes": [
-            "BloomTokenizerFast"
+            "BloomTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -681,7 +681,7 @@
     },
     "BloomForQuestionAnswering": {
         "tokenizer_classes": [
-            "BloomTokenizerFast"
+            "BloomTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -691,7 +691,7 @@
     },
     "BloomForSequenceClassification": {
         "tokenizer_classes": [
-            "BloomTokenizerFast"
+            "BloomTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -701,7 +701,7 @@
     },
     "BloomForTokenClassification": {
         "tokenizer_classes": [
-            "BloomTokenizerFast"
+            "BloomTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -711,7 +711,7 @@
     },
     "BloomModel": {
         "tokenizer_classes": [
-            "BloomTokenizerFast"
+            "BloomTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2150,7 +2150,7 @@
     },
     "FalconForCausalLM": {
         "tokenizer_classes": [
-            "PreTrainedTokenizerFast"
+            "PythonBackend"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2160,7 +2160,7 @@
     },
     "FalconForQuestionAnswering": {
         "tokenizer_classes": [
-            "PreTrainedTokenizerFast"
+            "PythonBackend"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2170,7 +2170,7 @@
     },
     "FalconForSequenceClassification": {
         "tokenizer_classes": [
-            "PreTrainedTokenizerFast"
+            "PythonBackend"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2180,7 +2180,7 @@
     },
     "FalconForTokenClassification": {
         "tokenizer_classes": [
-            "PreTrainedTokenizerFast"
+            "PythonBackend"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2190,7 +2190,7 @@
     },
     "FalconModel": {
         "tokenizer_classes": [
-            "PreTrainedTokenizerFast"
+            "PythonBackend"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2665,7 +2665,7 @@
     },
     "GPTNeoXForCausalLM": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2675,7 +2675,7 @@
     },
     "GPTNeoXForQuestionAnswering": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2685,7 +2685,7 @@
     },
     "GPTNeoXForSequenceClassification": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2695,7 +2695,7 @@
     },
     "GPTNeoXForTokenClassification": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -2725,7 +2725,7 @@
     },
     "GPTNeoXModel": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -4162,7 +4162,7 @@
     },
     "MptForCausalLM": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -4172,7 +4172,7 @@
     },
     "MptForQuestionAnswering": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -4182,7 +4182,7 @@
     },
     "MptForSequenceClassification": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -4192,7 +4192,7 @@
     },
     "MptForTokenClassification": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -4202,7 +4202,7 @@
     },
     "MptModel": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -5525,7 +5525,7 @@
     },
     "RwkvForCausalLM": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [
@@ -5535,7 +5535,7 @@
     },
     "RwkvModel": {
         "tokenizer_classes": [
-            "GPTNeoXTokenizerFast"
+            "GPTNeoXTokenizer"
         ],
         "processor_classes": [],
         "model_classes": [

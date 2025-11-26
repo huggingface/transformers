@@ -26,7 +26,7 @@ from transformers import (
     BatchEncoding,
     BertTokenizer,
     LlamaTokenizer,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     PythonBackend,
     TensorType,
     TokenSpan,
@@ -256,14 +256,14 @@ class TokenizerUtilsTest(unittest.TestCase):
     @require_tokenizers
     def test_instantiation_from_tokenizers(self):
         bert_tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
-        PreTrainedTokenizerFast(tokenizer_object=bert_tokenizer)
+        PythonBackend(tokenizer_object=bert_tokenizer)
 
     @require_tokenizers
     def test_instantiation_from_tokenizers_json_file(self):
         bert_tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
-            PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+            PythonBackend(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
 
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
@@ -291,17 +291,17 @@ class TokenizerUtilsTest(unittest.TestCase):
         _tokenizer = Tokenizer(tokenizers.models.BPE(vocab={"a": 1, "b": 2, "ab": 3}, merges=[("a", "b")]))
         _tokenizer.pre_tokenizer = None
 
-        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        tokenizer = PythonBackend(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
         tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 
         _tokenizer.normalizer = None
-        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        tokenizer = PythonBackend(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
         tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 
         _tokenizer.post_processor = None
-        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        tokenizer = PythonBackend(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
         tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 

@@ -36,12 +36,12 @@ class Cohere2VisionProcessorKwargs(ProcessingKwargs, total=False):
 class Cohere2VisionProcessor(ProcessorMixin):
     r"""
     Constructs a Cohere2Vision processor which wraps a [`AutoImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
+    [`PythonBackend`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~Cohere2VisionProcessor.__call__`] and [`~Cohere2VisionProcessor.decode`] for more information.
     Args:
         image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`], *optional*):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -80,7 +80,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
+        and `kwargs` arguments to PythonBackend's [`~PythonBackend.__call__`] to encode the text.
         To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
@@ -183,14 +183,14 @@ class Cohere2VisionProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to PythonBackend's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to PythonBackend's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

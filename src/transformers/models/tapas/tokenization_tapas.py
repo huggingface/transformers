@@ -715,7 +715,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
+                "transformers.PythonBackend."
             )
 
         return self._batch_encode_plus(
@@ -998,7 +998,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
                 "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
+                "transformers.PythonBackend."
             )
 
         if not isinstance(table, pd.DataFrame):

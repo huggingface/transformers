@@ -24,14 +24,14 @@ Rust library [🤗 Tokenizers](https://github.com/huggingface/tokenizers). The "
 2. additional methods to map between the original string (character and words) and the token space (e.g. getting the
    index of the token comprising a given character or the span of characters corresponding to a given token).
 
-The base classes [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`]
+The base classes [`PreTrainedTokenizer`] and [`PythonBackend`]
 implement the common methods for encoding string inputs in model inputs (see below) and instantiating/saving python and
 "Fast" tokenizers either from a local file or directory or from a pretrained tokenizer provided by the library
 (downloaded from HuggingFace's AWS S3 repository). They both rely on
 [`~tokenization_utils_base.PreTrainedTokenizerBase`] that contains the common methods, and
 [`~tokenization_utils_base.SpecialTokensMixin`].
 
-[`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`] thus implement the main
+[`PreTrainedTokenizer`] and [`PythonBackend`] thus implement the main
 methods for using all the tokenizers:
 
 - Tokenizing (splitting strings in sub-word token strings), converting tokens strings to ids and back, and
@@ -82,12 +82,12 @@ print(vision_tokenizer.image_token, vision_tokenizer.image_token_id)
     - push_to_hub
     - all
 
-## PreTrainedTokenizerFast
+## PythonBackend
 
-The [`PreTrainedTokenizerFast`] depend on the [tokenizers](https://huggingface.co/docs/tokenizers) library. The tokenizers obtained from the 🤗 tokenizers library can be
+The [`PythonBackend`] depend on the [tokenizers](https://huggingface.co/docs/tokenizers) library. The tokenizers obtained from the 🤗 tokenizers library can be
 loaded very simply into 🤗 transformers. Take a look at the [Using tokenizers from 🤗 tokenizers](../fast_tokenizers) page to understand how this is done.
 
-[[autodoc]] PreTrainedTokenizerFast
+[[autodoc]] PythonBackend
     - __call__
     - add_tokens
     - add_special_tokens

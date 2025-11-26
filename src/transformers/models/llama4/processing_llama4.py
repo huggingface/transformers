@@ -37,12 +37,12 @@ chat_template = "{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- se
 class Llama4Processor(ProcessorMixin):
     r"""
     Constructs a Llama4 processor which wraps a [`AutoImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
+    [`PythonBackend`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~Llama4Processor.__call__`] and [`~Llama4Processor.decode`] for more information.
     Args:
         image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`], *optional*):
             The tokenizer is a required input.
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
@@ -133,7 +133,7 @@ class Llama4Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
+        and `kwargs` arguments to PythonBackend's [`~PythonBackend.__call__`] to encode the text.
         To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
         Llama4ImageProcessor's [`~Llama4ImageProcessor.__call__`] if `images` is not `None`.
 

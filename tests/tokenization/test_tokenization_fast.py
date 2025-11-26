@@ -22,13 +22,13 @@ import unittest
 from tokenizers import Tokenizer, decoders, pre_tokenizers, trainers
 from tokenizers.models import BPE, WordLevel
 
-from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import AutoTokenizer, PythonBackend
 from transformers.testing_utils import require_tokenizers
 
 
 @require_tokenizers
 class PreTrainedTokenizationFastTest(unittest.TestCase):
-    rust_tokenizer_class = PreTrainedTokenizerFast
+    rust_tokenizer_class = PythonBackend
     from_pretrained_vocab_key = "tokenizer_file"
 
     @classmethod
@@ -51,7 +51,7 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
         wl_vocab = {"[UNK]": 0, "[PAD]": 1, "hello": 2, "world": 3, "test": 4}
         wordlevel_tokenizer = Tokenizer(WordLevel(wl_vocab, unk_token="[UNK]"))
         wordlevel_tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
-        fast_wl = PreTrainedTokenizerFast(
+        fast_wl = PythonBackend(
             tokenizer_object=wordlevel_tokenizer,
             unk_token="[UNK]",
             pad_token="[PAD]",
@@ -73,7 +73,7 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
         bpe_tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
         bpe_tokenizer.train_from_iterator(corpus, trainer=trainer)
         bpe_tokenizer.decoder = decoders.ByteLevel()
-        fast_bpe = PreTrainedTokenizerFast(
+        fast_bpe = PythonBackend(
             tokenizer_object=bpe_tokenizer,
             unk_token="[UNK]",
             pad_token="[PAD]",
@@ -87,25 +87,25 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
         return paths
 
     @unittest.skip(
-        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+        "We disable this test for PythonBackend because it is the only tokenizer that is not linked to any model"
     )
     def test_tokenizer_mismatch_warning(self):
         pass
 
     @unittest.skip(
-        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+        "We disable this test for PythonBackend because it is the only tokenizer that is not linked to any model"
     )
     def test_encode_decode_with_spaces(self):
         pass
 
     @unittest.skip(
-        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+        "We disable this test for PythonBackend because it is the only tokenizer that is not linked to any model"
     )
     def test_added_tokens_serialization(self):
         pass
 
     @unittest.skip(
-        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
+        "We disable this test for PythonBackend because it is the only tokenizer that is not linked to any model"
     )
     def test_additional_special_tokens_serialization(self):
         pass
@@ -120,7 +120,7 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
                     tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                     tokenizer.save_pretrained(self.tmpdirname)
-                    reloaded = PreTrainedTokenizerFast.from_pretrained(self.tmpdirname)
+                    reloaded = PythonBackend.from_pretrained(self.tmpdirname)
                     self.assertEqual(reloaded.get_vocab(), tokenizer.get_vocab())
                 finally:
                     # Even if the test fails, we must be sure that the folder is deleted and that the default tokenizer
@@ -139,7 +139,7 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
 
                     tokenizer.add_special_tokens({"pad_token": "<pad>"})
                     tokenizer.save_pretrained(self.tmpdirname)
-                    reloaded = PreTrainedTokenizerFast.from_pretrained(self.tmpdirname)
+                    reloaded = PythonBackend.from_pretrained(self.tmpdirname)
                     self.assertEqual(reloaded.pad_token, "<pad>")
                 finally:
                     # Even if the test fails, we must be sure that the folder is deleted and that the default tokenizer
@@ -176,10 +176,10 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
                 "direction": "right",
             },
         )
-        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        fast_tokenizer = PythonBackend(tokenizer_object=tokenizer)
         tmpdirname = tempfile.mkdtemp()
         fast_tokenizer.save_pretrained(tmpdirname)
-        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        fast_from_saved = PythonBackend.from_pretrained(tmpdirname)
         for tok in [fast_tokenizer, fast_from_saved]:
             self.assertEqual(tok.pad_token_id, 0)
             self.assertEqual(tok.padding_side, "right")
@@ -192,10 +192,10 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
         self.assertEqual(
             tokenizer.truncation, {"max_length": 8, "stride": 0, "strategy": "longest_first", "direction": "right"}
         )
-        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        fast_tokenizer = PythonBackend(tokenizer_object=tokenizer)
         tmpdirname = tempfile.mkdtemp()
         fast_tokenizer.save_pretrained(tmpdirname)
-        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        fast_from_saved = PythonBackend.from_pretrained(tmpdirname)
         for tok in [fast_tokenizer, fast_from_saved]:
             self.assertEqual(tok.truncation_side, "right")
             self.assertEqual(tok.init_kwargs["truncation_strategy"], "longest_first")
@@ -210,18 +210,18 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-            self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-            self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
             tokenizer.save_pretrained(temp_dir)
 
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
-            self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
-            self.assertIsInstance(tokenizer, PreTrainedTokenizerFast)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
 
 @require_tokenizers
@@ -278,7 +278,7 @@ class ReduceMutableBorrowTests(unittest.TestCase):
     def test_async_share_tokenizer(self):
         # See https://github.com/huggingface/transformers/pull/12550
         # and https://github.com/huggingface/tokenizers/issues/537
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("robot-test/dummy-tokenizer-wordlevel")
+        tokenizer = PythonBackend.from_pretrained("robot-test/dummy-tokenizer-wordlevel")
         text = "The Matrix is a 1999 science fiction action film."
 
         with concurrent.futures.ThreadPoolExecutor() as executor:

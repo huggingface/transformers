@@ -23,7 +23,7 @@ from transformers import (
     MarkupLMProcessor,
     MarkupLMTokenizer,
     PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     PythonBackend,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
@@ -71,7 +71,7 @@ class MarkupLMProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs) -> PythonBackend:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
+    def get_rust_tokenizer(self, **kwargs) -> PythonBackend:
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:

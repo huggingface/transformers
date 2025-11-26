@@ -62,7 +62,7 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
 class CsmProcessor(ProcessorMixin):
     r"""
     Constructs a Csm processor which wraps [`EncodecFeatureExtractor`] and
-    [`PretrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
+    [`PythonBackend`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities. See the [`~CsmProcessor.__call__`] for more
     information.
     The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
@@ -88,7 +88,7 @@ class CsmProcessor(ProcessorMixin):
     Args:
         feature_extractor ([`EncodecFeatureExtractor`]):
             The feature extractor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`]):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -199,7 +199,7 @@ class CsmProcessor(ProcessorMixin):
     ):
         r"""
         Main method to prepare text(s) and audio to be fed as input to the model. This method forwards the `text`
-        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode
+        arguments to PythonBackend's [`~PythonBackend.__call__`] to encode
         the text. To prepare the audio, this method forwards the `audio` arguments to
         EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`]. Please refer
         to the docstring of the above two methods for more information.

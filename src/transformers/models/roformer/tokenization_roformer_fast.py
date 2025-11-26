@@ -20,7 +20,7 @@ from typing import Optional
 from tokenizers import normalizers
 from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 
-from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PythonBackend
 from ...utils import logging
 from .tokenization_roformer import RoFormerTokenizer
 from .tokenization_utils import JiebaPreTokenizer
@@ -31,14 +31,14 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
-class RoFormerTokenizerFast(PreTrainedTokenizerFast):
+class RoFormerTokenizerFast(PythonBackend):
     r"""
     Construct a "fast" RoFormer tokenizer (backed by HuggingFace's *tokenizers* library).
 
     [`RoFormerTokenizerFast`] is almost identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece. There are some difference between them when tokenizing Chinese.
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`PythonBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Example:

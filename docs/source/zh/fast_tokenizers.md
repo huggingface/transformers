@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # 使用 🤗 Tokenizers 中的分词器
 
-[`PreTrainedTokenizerFast`] 依赖于 [🤗 Tokenizers](https://huggingface.co/docs/tokenizers) 库。从 🤗 Tokenizers 库获得的分词器可以被轻松地加载到 🤗 Transformers 中。
+[`PythonBackend`] 依赖于 [🤗 Tokenizers](https://huggingface.co/docs/tokenizers) 库。从 🤗 Tokenizers 库获得的分词器可以被轻松地加载到 🤗 Transformers 中。
 
 在了解具体内容之前，让我们先用几行代码创建一个虚拟的分词器：
 
@@ -38,12 +38,12 @@ rendered properly in your Markdown viewer.
 
 ## 直接从分词器对象加载
 
-让我们看看如何利用 🤗 Transformers 库中的这个分词器对象。[`PreTrainedTokenizerFast`] 类允许通过接受已实例化的 *tokenizer* 对象作为参数，进行轻松实例化：
+让我们看看如何利用 🤗 Transformers 库中的这个分词器对象。[`PythonBackend`] 类允许通过接受已实例化的 *tokenizer* 对象作为参数，进行轻松实例化：
 
 ```python
->>> from transformers import PreTrainedTokenizerFast
+>>> from transformers import PythonBackend
 
->>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+>>> fast_tokenizer = PythonBackend(tokenizer_object=tokenizer)
 ```
 
 现在可以使用这个对象，使用 🤗 Transformers 分词器共享的所有方法！前往[分词器页面](main_classes/tokenizer)了解更多信息。
@@ -56,12 +56,12 @@ rendered properly in your Markdown viewer.
 >>> tokenizer.save("tokenizer.json")
 ```
 
-我们保存此文件的路径可以通过 `tokenizer_file` 参数传递给 [`PreTrainedTokenizerFast`] 初始化方法：
+我们保存此文件的路径可以通过 `tokenizer_file` 参数传递给 [`PythonBackend`] 初始化方法：
 
 ```python
->>> from transformers import PreTrainedTokenizerFast
+>>> from transformers import PythonBackend
 
->>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
+>>> fast_tokenizer = PythonBackend(tokenizer_file="tokenizer.json")
 ```
 
 现在可以使用这个对象，使用 🤗 Transformers 分词器共享的所有方法！前往[分词器页面](main_classes/tokenizer)了解更多信息。

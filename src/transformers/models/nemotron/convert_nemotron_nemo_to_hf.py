@@ -25,7 +25,7 @@ from nemo.collections.nlp.parts.nlp_overrides import NLPDDPStrategy
 from nemo.utils import logging
 from pytorch_lightning import Trainer
 
-from transformers import LlamaTokenizer, PreTrainedTokenizerFast
+from transformers import LlamaTokenizer, PythonBackend
 from transformers.convert_slow_tokenizer import LlamaConverter
 
 
@@ -299,7 +299,7 @@ def extract_nemotron_tokenizer(nemo_file, model_config, output_hf_path, nemo_tok
     tokenizer_cfg = model_config.tokenizer
     if tokenizer_cfg.library == "sentencepiece":
         # For sentencepiece tokenizer, we are wrapping with HF's LlamaTokenizer
-        # and convert it to a PreTrainedTokenizerFast
+        # and convert it to a PythonBackend
         tokenizer_fn = tokenizer_cfg.model[5:]
         output_tokenizer = f"{output_hf_path}/tokenizer.model"
         if nemo_file.endswith(".nemo"):
@@ -314,8 +314,8 @@ def extract_nemotron_tokenizer(nemo_file, model_config, output_hf_path, nemo_tok
             shutil.copy(f"{nemo_file}/{tokenizer_fn}", output_tokenizer)
         # We use LlamaTokenizer for sentencepiece based tokenizer
         tokenizer = LlamaTokenizer.from_pretrained(output_hf_path, legacy=False)
-        # Convert the LlamaTokenizer to a PreTrainedTokenizerFast instance
-        tokenizer = PreTrainedTokenizerFast(
+        # Convert the LlamaTokenizer to a PythonBackend instance
+        tokenizer = PythonBackend(
             tokenizer_object=LlamaConverter(tokenizer).converted(), model_input_names=["input_ids", "token_type_ids"]
         )
         tokenizer.save_pretrained(output_hf_path)

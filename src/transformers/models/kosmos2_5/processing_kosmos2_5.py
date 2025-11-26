@@ -46,10 +46,10 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
 
 class Kosmos2_5Processor(ProcessorMixin):
     r"""
-    Constructs a Kosmos2_5 processor which wraps a PreTrainedTokenizerFast and Kosmos2_5 image processor into a single
+    Constructs a Kosmos2_5 processor which wraps a PythonBackend and Kosmos2_5 image processor into a single
     processor.
 
-    [`Kosmos2_5Processor`] offers all the functionalities of [`Kosmos2_5ImageProcessor`] and [`PreTrainedTokenizerFast`]. See
+    [`Kosmos2_5Processor`] offers all the functionalities of [`Kosmos2_5ImageProcessor`] and [`PythonBackend`]. See
     the docstring of [`~Kosmos2_5Processor.__call__`] and [`~Kosmos2_5Processor.decode`] for more information.
 
     Args:
@@ -76,7 +76,7 @@ class Kosmos2_5Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         This method uses [`Kosmos2_5ImageProcessor.preprocess`] method to prepare image(s) for the model, and
-        [`PreTrainedTokenizerFast.__call__`] to prepare text for the model.
+        [`PythonBackend.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
 

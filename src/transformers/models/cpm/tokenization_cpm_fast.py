@@ -18,7 +18,7 @@ import os
 from shutil import copyfile
 from typing import Optional
 
-from ...tokenization_utils_tokenizers import AddedToken, PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import AddedToken, PythonBackend
 from ...utils import logging
 
 
@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
-class CpmTokenizerFast(PreTrainedTokenizerFast):
+class CpmTokenizerFast(PythonBackend):
     """Runs pre-tokenization with Jieba-RS segmentation tool. It is used in CPM models."""
 
     def __init__(

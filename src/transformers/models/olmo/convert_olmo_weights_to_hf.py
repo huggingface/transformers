@@ -23,7 +23,7 @@ import yaml
 from tokenizers import Tokenizer
 
 from transformers import OlmoConfig, OlmoForCausalLM
-from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
+from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizer
 
 
 """
@@ -186,7 +186,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
 def _write_tokenizer(
     output_path: Path, config: OlmoConfig, input_tokenizer_path: Path, fix_eos_token_id: bool = True
 ) -> None:
-    print(f"Saving a {GPTNeoXTokenizerFast.__name__} to {output_path}.")
+    print(f"Saving a {GPTNeoXTokenizer.__name__} to {output_path}.")
 
     base_tokenizer = Tokenizer.from_file(str(input_tokenizer_path))
 
@@ -198,7 +198,7 @@ def _write_tokenizer(
         print("Changing eos_token_id from 0 to 50279.")
         eos_token_id = 50279
 
-    tokenizer = GPTNeoXTokenizerFast(
+    tokenizer = GPTNeoXTokenizer(
         tokenizer_object=base_tokenizer,
         eos_token=base_tokenizer.decode([eos_token_id], skip_special_tokens=False),
         pad_token=base_tokenizer.decode([pad_token_id], skip_special_tokens=False),

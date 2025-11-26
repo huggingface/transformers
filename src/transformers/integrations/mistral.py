@@ -2,7 +2,7 @@ from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from transformers.convert_slow_tokenizer import bytes_to_unicode
-from transformers.tokenization_utils_tokenizers import PreTrainedTokenizerFast
+from transformers.tokenization_utils_tokenizers import PythonBackend
 
 
 class MistralConverter:
@@ -95,7 +95,7 @@ def convert_tekken_tokenizer(tokenizer_file: str):
     vocab = specials_tokens
 
     # Convert
-    tokenizer = PreTrainedTokenizerFast(
+    tokenizer = PythonBackend(
         tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special).converted()
     )
 

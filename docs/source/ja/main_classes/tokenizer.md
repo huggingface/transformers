@@ -24,14 +24,14 @@ Rust ライブラリ [🤗 Tokenizers](https://github.com/huggingface/tokenizers
 2. 元の文字列 (文字と単語) とトークン空間の間でマッピングする追加のメソッド (例:
    特定の文字を含むトークンのインデックス、または特定のトークンに対応する文字の範囲）。
 
-基本クラス [`PreTrainedTokenizer`] および [`PreTrainedTokenizerFast`]
+基本クラス [`PreTrainedTokenizer`] および [`PythonBackend`]
 モデル入力の文字列入力をエンコードし (以下を参照)、Python をインスタンス化/保存するための一般的なメソッドを実装します。
 ローカル ファイルまたはディレクトリ、またはライブラリによって提供される事前トレーニング済みトークナイザーからの「高速」トークナイザー
 (HuggingFace の AWS S3 リポジトリからダウンロード)。二人とも頼りにしているのは、
 共通メソッドを含む [`~tokenization_utils_base.PreTrainedTokenizerBase`]
 [`~tokenization_utils_base.SpecialTokensMixin`]。
 
-したがって、[`PreTrainedTokenizer`] と [`PreTrainedTokenizerFast`] はメインを実装します。
+したがって、[`PreTrainedTokenizer`] と [`PythonBackend`] はメインを実装します。
 すべてのトークナイザーを使用するためのメソッド:
 
 - トークン化 (文字列をサブワード トークン文字列に分割)、トークン文字列を ID に変換したり、その逆の変換を行ったりします。
@@ -61,12 +61,12 @@ HuggingFace [トークナイザー ライブラリ](https://github.com/huggingfa
     - push_to_hub
     - all
 
-## PreTrainedTokenizerFast
+## PythonBackend
 
-[`PreTrainedTokenizerFast`] は [tokenizers](https://huggingface.co/docs/tokenizers) ライブラリに依存します。 🤗 トークナイザー ライブラリから取得したトークナイザーは、
+[`PythonBackend`] は [tokenizers](https://huggingface.co/docs/tokenizers) ライブラリに依存します。 🤗 トークナイザー ライブラリから取得したトークナイザーは、
 🤗 トランスに非常に簡単にロードされます。これがどのように行われるかを理解するには、[🤗 tokenizers からの tokenizers を使用する](../fast_tokenizers) ページを参照してください。
 
-[[autodoc]] PreTrainedTokenizerFast
+[[autodoc]] PythonBackend
     - __call__
     - apply_chat_template
     - batch_decode

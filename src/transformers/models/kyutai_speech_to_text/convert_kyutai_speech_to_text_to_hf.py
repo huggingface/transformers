@@ -27,7 +27,7 @@ from transformers import (
     KyutaiSpeechToTextFeatureExtractor,
     KyutaiSpeechToTextForConditionalGeneration,
     KyutaiSpeechToTextProcessor,
-    PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.convert_slow_tokenizer import MoshiConverter
 from transformers.utils.hub import cached_file
@@ -279,7 +279,7 @@ def write_processor(
     tokenizer = MoshiConverter(tokenizer_path).converted()
     original_tokenizer = sentencepiece.SentencePieceProcessor(tokenizer_path)
 
-    tokenizer = PreTrainedTokenizerFast(
+    tokenizer = PythonBackend(
         tokenizer_object=tokenizer,
         chat_template=None,
         unk_token="<unk>",

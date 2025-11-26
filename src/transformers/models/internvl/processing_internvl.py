@@ -42,12 +42,12 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
 class InternVLProcessor(ProcessorMixin):
     r"""
     Constructs a InternVL processor which wraps a [`AutoImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
+    [`PythonBackend`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~InternVLProcessor.__call__`] and [`~InternVLProcessor.decode`] for more information.
     Args:
         image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`], *optional*):
             The tokenizer is a required input.
         video_processor ([`AutoVideoProcessor`], *optional*):
             The video processor is a required input.
@@ -152,7 +152,7 @@ class InternVLProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
+        and `kwargs` arguments to PythonBackend's [`~PythonBackend.__call__`] to encode the text if `text`
         is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
         `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.

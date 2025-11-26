@@ -21,9 +21,9 @@ rendered properly in your Markdown viewer.
 1. 특히 배치 토큰화를 수행할 때 속도가 크게 향상됩니다.
 2. 원본 문자열(문자 및 단어)과 토큰 공간 사이를 매핑하는 추가적인 메소드를 제공합니다. (예: 특정 문자를 포함하는 토큰의 인덱스를 얻거나, 특정 토큰에 해당하는 문자 범위를 가져오는 등).
 
-기본 클래스인 [`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`]는 문자열 입력을 인코딩하는 메소드를 구현하며(아래 참조), 로컬 파일이나 디렉토리, 또는 라이브러리에서 제공하는 사전 훈련된 토크나이저(HuggingFace의 AWS S3 저장소에서 다운로드된)로부터 파이썬 및 "Fast" 토크나이저를 인스턴스화하거나 저장하는 기능을 제공합니다. 이 두 클래스는 공통 메소드를 포함하는 [`~tokenization_utils_base.PreTrainedTokenizerBase`]와 [`~tokenization_utils_base.SpecialTokensMixin`]에 의존합니다.
+기본 클래스인 [`PreTrainedTokenizer`]와 [`PythonBackend`]는 문자열 입력을 인코딩하는 메소드를 구현하며(아래 참조), 로컬 파일이나 디렉토리, 또는 라이브러리에서 제공하는 사전 훈련된 토크나이저(HuggingFace의 AWS S3 저장소에서 다운로드된)로부터 파이썬 및 "Fast" 토크나이저를 인스턴스화하거나 저장하는 기능을 제공합니다. 이 두 클래스는 공통 메소드를 포함하는 [`~tokenization_utils_base.PreTrainedTokenizerBase`]와 [`~tokenization_utils_base.SpecialTokensMixin`]에 의존합니다.
 
-[`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`]는 모든 토크나이저에서 사용되는 주요 메소드들을 구현합니다:
+[`PreTrainedTokenizer`]와 [`PythonBackend`]는 모든 토크나이저에서 사용되는 주요 메소드들을 구현합니다:
 
 - 토큰화(문자열을 하위 단어 토큰 문자열로 분할), 토큰 문자열을 ID로 변환 및 그 반대 과정, 그리고 인코딩/디코딩(즉, 토큰화 및 정수로 변환)을 수행합니다.
 - 구조(BPE, SentencePiece 등)에 구애받지 않고 어휘에 새로운 토큰을 추가합니다.
@@ -61,12 +61,12 @@ print(vision_tokenizer.image_token, vision_tokenizer.image_token_id)
     - all
 
 
-## PreTrainedTokenizerFast[[transformers.PreTrainedTokenizerFast]]
+## PythonBackend[[transformers.PythonBackend]]
 
-[`PreTrainedTokenizerFast`]는 [tokenizers](https://huggingface.co/docs/tokenizers) 라이브러리에 의존합니다. 🤗 tokenizers 라이브러리에서 얻은 토크나이저는
+[`PythonBackend`]는 [tokenizers](https://huggingface.co/docs/tokenizers) 라이브러리에 의존합니다. 🤗 tokenizers 라이브러리에서 얻은 토크나이저는
 🤗 transformers로 매우 간단하게 가져올 수 있습니다. 어떻게 하는지 알아보려면 [Using tokenizers from 🤗 tokenizers](../fast_tokenizers) 페이지를 참고하세요.
 
-[[autodoc]] PreTrainedTokenizerFast
+[[autodoc]] PythonBackend
     - __call__
     - add_tokens
     - add_special_tokens

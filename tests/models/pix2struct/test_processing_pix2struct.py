@@ -28,7 +28,7 @@ if is_vision_available():
         AutoProcessor,
         Pix2StructImageProcessor,
         Pix2StructProcessor,
-        PreTrainedTokenizerFast,
+        PythonBackend,
         T5Tokenizer,
     )
 
@@ -74,7 +74,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, PythonBackend)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, Pix2StructImageProcessor)

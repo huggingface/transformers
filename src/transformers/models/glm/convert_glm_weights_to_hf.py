@@ -7,7 +7,7 @@ import torch
 from safetensors.torch import load_file
 from tokenizers import processors
 
-from transformers import GlmConfig, GlmForCausalLM, PreTrainedTokenizerFast
+from transformers import GlmConfig, GlmForCausalLM, PythonBackend
 
 
 # fmt: off
@@ -134,7 +134,7 @@ def convert_config(original_config: dict):
 
 
 def convert_glm_tokenizer(input_dir, use_post_processor=False):
-    fast_tok = PreTrainedTokenizerFast.from_pretrained(input_dir, model_input_names=["input_ids", "attention_mask"])
+    fast_tok = PythonBackend.from_pretrained(input_dir, model_input_names=["input_ids", "attention_mask"])
     if use_post_processor:
         fast_tok._tokenizer.post_processor = processors.Sequence(
             [

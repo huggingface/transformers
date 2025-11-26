@@ -159,7 +159,7 @@ Riutilizza facilmente questo checkpoint per un'altra attività passando ad un mo
 L'ultima classe base di cui hai bisogno prima di utilizzare un modello per i dati testuali è un [tokenizer](main_classes/tokenizer) per convertire il testo grezzo in tensori. Ci sono due tipi di tokenizer che puoi usare con 🤗 Transformers:
 
 - [`PreTrainedTokenizer`]: un'implementazione Python di un tokenizer.
-- [`PreTrainedTokenizerFast`]: un tokenizer dalla nostra libreria [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) basata su Rust. Questo tipo di tokenizer è significativamente più veloce, specialmente durante la batch tokenization, grazie alla sua implementazione Rust. Il tokenizer veloce offre anche metodi aggiuntivi come *offset mapping* che associa i token alle loro parole o caratteri originali.
+- [`PythonBackend`]: un tokenizer dalla nostra libreria [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) basata su Rust. Questo tipo di tokenizer è significativamente più veloce, specialmente durante la batch tokenization, grazie alla sua implementazione Rust. Il tokenizer veloce offre anche metodi aggiuntivi come *offset mapping* che associa i token alle loro parole o caratteri originali.
 
 Entrambi i tokenizer supportano metodi comuni come la codifica e la decodifica, l'aggiunta di nuovi token e la gestione di token speciali.
 

@@ -160,7 +160,7 @@ DistilBertConfig {
 在将模型用于文本数据之前，你需要的最后一个基类是 [tokenizer](main_classes/tokenizer)，它用于将原始文本转换为张量。🤗 Transformers 支持两种类型的分词器：
 
 - [`PreTrainedTokenizer`]：分词器的Python实现
-- [`PreTrainedTokenizerFast`]：来自我们基于 Rust 的 [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) 库的分词器。因为其使用了 Rust 实现，这种分词器类型的速度要快得多，尤其是在批量分词（batch tokenization）的时候。快速分词器还提供其他的方法，例如*偏移映射（offset mapping）*，它将标记（token）映射到其原始单词或字符。
+- [`PythonBackend`]：来自我们基于 Rust 的 [🤗 Tokenizer](https://huggingface.co/docs/tokenizers/python/latest/) 库的分词器。因为其使用了 Rust 实现，这种分词器类型的速度要快得多，尤其是在批量分词（batch tokenization）的时候。快速分词器还提供其他的方法，例如*偏移映射（offset mapping）*，它将标记（token）映射到其原始单词或字符。
 
 这两种分词器都支持常用的方法，如编码和解码、添加新标记以及管理特殊标记。
 

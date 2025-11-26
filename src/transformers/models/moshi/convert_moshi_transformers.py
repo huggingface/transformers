@@ -26,7 +26,7 @@ from transformers import (
     MimiModel,  # initial audio encoder
     MoshiConfig,
     MoshiForConditionalGeneration,
-    PreTrainedTokenizerFast,
+    PythonBackend,
     logging,
 )
 from transformers.convert_slow_tokenizer import MoshiConverter
@@ -277,7 +277,7 @@ if __name__ == "__main__":
     if args.tokenizer_vocab_path:
         original_tokenizer = sentencepiece.SentencePieceProcessor(args.tokenizer_vocab_path)
         tokenizer = MoshiConverter(args.tokenizer_vocab_path).converted()
-        tokenizer = PreTrainedTokenizerFast(
+        tokenizer = PythonBackend(
             tokenizer_object=tokenizer,
             chat_template=None,
             unk_token="<unk>",

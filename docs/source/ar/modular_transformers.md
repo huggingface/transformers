@@ -168,10 +168,10 @@ class GemmaModel(LlamaModel):
 ### استدعاء `super()`
 قمنا مؤخرًا بشحن بعض الميزات التي تسمح لك بالانتقال من:
 ```python
-class GemmaTokenizer(LlamaTokenizer, PretrainedTokenizerFast):         |           class GemmaModel(nn.Module):
+class GemmaTokenizer(LlamaTokenizer, PythonBackend):         |           class GemmaModel(nn.Module):
     def __init__(self, eos_token="</s>"):                              |             def __init__(self):
         eos_token = AddedToken(eos_token)                              |                eos_token = AddedToken(eos_token)
-        PretrainedTokenizerFast.__init__(self, eos_token)              |                super().__init__(eos_token)
+        PythonBackend.__init__(self, eos_token)              |                super().__init__(eos_token)
 ```
 هذا مفيد عندما لا تريد تفكيك استدعاء `super()`، وتريد التمييز بين أي استدعاء super init تقوم به!
 

@@ -82,12 +82,12 @@ def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, in
 class GotOcr2Processor(ProcessorMixin):
     r"""
     Constructs a GotOcr2 processor which wraps a [`GotOcr2ImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
+    [`PythonBackend`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~GotOcr2Processor.__call__`] and [`~GotOcr2Processor.decode`] for more information.
     Args:
         image_processor ([`GotOcr2ImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`], *optional*):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -135,7 +135,7 @@ class GotOcr2Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
+        and `kwargs` arguments to PythonBackend's [`~PythonBackend.__call__`] to encode the text if `text`
         is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
         `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.

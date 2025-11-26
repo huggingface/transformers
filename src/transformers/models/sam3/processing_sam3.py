@@ -96,8 +96,8 @@ class Sam3Processor(ProcessorMixin):
     Args:
         image_processor (`Sam2ImageProcessorFast`):
             An instance of [`Sam2ImageProcessorFast`].
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
-            An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
+        tokenizer ([`PreTrainedTokenizer`, `PythonBackend`]):
+            An instance of [`PreTrainedTokenizer`, `PythonBackend`]. The tokenizer is a required input.
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
         point_pad_value (`int`, *optional*, defaults to -10):

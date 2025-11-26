@@ -280,7 +280,7 @@ else:
     _import_structure["tokenization_utils_tokenizers"] = [
         "TokenizersBackend",
         "TokenizersExtractor",
-        "PreTrainedTokenizerFast",
+        "PythonBackend",
     ]
 
 

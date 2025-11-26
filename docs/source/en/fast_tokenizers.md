@@ -45,7 +45,7 @@ This guide provides a brief overview of the tokenizer classes and how to preproc
 All tokenizers inherit from a [`PreTrainedTokenizerBase`] class that provides common methods for all tokenizers like [`~PreTrainedTokenizerBase.from_pretrained`] and [`~PreTrainedTokenizerBase.batch_decode`]. There are two main tokenizer classes that build on top of the base class.
 
 - [`PreTrainedTokenizer`] is a Python implementation, for example [`LlamaTokenizer`].
-- [`PreTrainedTokenizerFast`] is a fast Rust-based implementation from the [Tokenizers](https://hf.co/docs/tokenizers/index) library, for example [`LlamaTokenizerFast`].
+- [`PythonBackend`] is a fast Rust-based implementation from the [Tokenizers](https://hf.co/docs/tokenizers/index) library, for example [`LlamaTokenizerFast`].
 
 There are two ways you can load a tokenizer, with [`AutoTokenizer`] or a model-specific tokenizer.
 
@@ -133,7 +133,7 @@ vision_tokenizer.save_pretrained("./path/to/tokenizer")
 
 <Youtube id="3umI3tm27Vw"/>
 
-[`PreTrainedTokenizerFast`] or *fast tokenizers* are Rust-based tokenizers from the [Tokenizers](https://hf.co/docs/tokenizers) library. It is significantly faster at batched tokenization and provides additional alignment methods compared to the Python-based tokenizers.
+[`PythonBackend`] or *fast tokenizers* are Rust-based tokenizers from the [Tokenizers](https://hf.co/docs/tokenizers) library. It is significantly faster at batched tokenization and provides additional alignment methods compared to the Python-based tokenizers.
 
 [`AutoTokenizer`] automatically loads a fast tokenizer if it's supported. Otherwise, you need to explicitly load the fast tokenizer.
 
@@ -171,27 +171,27 @@ Use [`~tokenizers.Tokenizer.save`] to save the tokenizers configuration and voca
 tokenizer.save("tokenizer.json")
 ```
 
-Now you can load and reuse the tokenizer object in Transformers by passing it to the `tokenizer_object` parameter in [`PreTrainedTokenizerFast`].
+Now you can load and reuse the tokenizer object in Transformers by passing it to the `tokenizer_object` parameter in [`PythonBackend`].
 
 ```py
-from transformers import PreTrainedTokenizerFast
+from transformers import PythonBackend
 
-fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+fast_tokenizer = PythonBackend(tokenizer_object=tokenizer)
 ```
 
-To load a saved tokenizer from its JSON file, pass the file path to the `tokenizer_file` parameter in [`PreTrainedTokenizerFast`].
+To load a saved tokenizer from its JSON file, pass the file path to the `tokenizer_file` parameter in [`PythonBackend`].
 
 ```py
-from transformers import PreTrainedTokenizerFast
+from transformers import PythonBackend
 
-fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
+fast_tokenizer = PythonBackend(tokenizer_file="tokenizer.json")
 ```
 
 ## tiktoken
 
 [tiktoken](https://github.com/openai/tiktoken) is a [byte-pair encoding (BPE)](./tokenizer_summary#byte-pair-encoding-bpe) tokenizer by OpenAI. It includes several tokenization schemes or encodings for how text should be tokenized.
 
-There are currently two models trained and released with tiktoken, GPT2 and Llama3. Transformers supports models with a [tokenizer.model](https://hf.co/meta-llama/Meta-Llama-3-8B/blob/main/original/tokenizer.model) tiktoken file. The tiktoken file is automatically converted into Transformers Rust-based [`PreTrainedTokenizerFast`].
+There are currently two models trained and released with tiktoken, GPT2 and Llama3. Transformers supports models with a [tokenizer.model](https://hf.co/meta-llama/Meta-Llama-3-8B/blob/main/original/tokenizer.model) tiktoken file. The tiktoken file is automatically converted into Transformers Rust-based [`PythonBackend`].
 
 Add the `subfolder` parameter to [`~PreTrainedModel.from_pretrained`] to specify where the `tokenizer.model` tiktoken file is located.
 
@@ -203,7 +203,7 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct",
 
 ### Create a tiktoken tokenizer
 
-The tiktoken `tokenizer.model` file contains no information about additional tokens or pattern strings. If these are important, convert the tokenizer to `tokenizer.json` (the appropriate format for [`PreTrainedTokenizerFast`]).
+The tiktoken `tokenizer.model` file contains no information about additional tokens or pattern strings. If these are important, convert the tokenizer to `tokenizer.json` (the appropriate format for [`PythonBackend`]).
 
 Generate the tiktoken `tokenizer.model` file with the [tiktoken.get_encoding](https://github.com/openai/tiktoken/blob/63527649963def8c759b0f91f2eb69a40934e468/tiktoken/registry.py#L63) function, and convert it to `tokenizer.json` with [convert_tiktoken_to_fast](https://github.com/huggingface/transformers/blob/99e0ab6ed888136ea4877c6d8ab03690a1478363/src/transformers/integrations/tiktoken.py#L8).
 
@@ -216,10 +216,10 @@ encoding = get_encoding("gpt2")
 convert_tiktoken_to_fast(encoding, "config/save/dir")
 ```
 
-The resulting `tokenizer.json` file is saved to the specified directory and loaded with [`~PreTrainedTokenizerFast.from_pretrained`].
+The resulting `tokenizer.json` file is saved to the specified directory and loaded with [`~PythonBackend.from_pretrained`].
 
 ```py
-tokenizer = PreTrainedTokenizerFast.from_pretrained("config/save/dir")
+tokenizer = PythonBackend.from_pretrained("config/save/dir")
 ```
 
 ## Preprocess
