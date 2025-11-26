@@ -45,16 +45,13 @@ class FbgemmFp8Quantize(ConversionOps):
 
         # Sanity checks
         if isinstance(module, FbgemmFp8Linear):
-            if self.hf_quantizer.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and value.dtype != torch.float8_e4m3fn:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
-            else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+            if tensor_name == "weight" and value.dtype == torch.float8_e4m3fn:
+                raise ValueError("Expect unquantized weights but got a quantized weight")
+            if tensor_name == "weight_scale":
+                raise ValueError("Expect unquantized weights but got a weight_scale")
         if isinstance(module, FbgemmFp8Llama4TextExperts):
-            if not (self.hf_quantizer.pre_quantized or tensor_name == "bias"):
-                if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+            if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
+                raise ValueError("Expect unquantized weights but got a quantized weight_scale")
 
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if tensor_name == "gate_up_proj":
