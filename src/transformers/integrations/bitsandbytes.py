@@ -1,5 +1,4 @@
 import inspect
-from collections import defaultdict
 from inspect import signature
 
 from ..core_model_loading import ConversionOps
@@ -111,7 +110,7 @@ class Bnb8bitQuantize(ConversionOps):
         value = value[0] if isinstance(value, list) else value
 
         module, _ = get_module_from_name(model, full_layer_name)
- 
+
         # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
         # Since weights are saved in the correct "orientation", we skip transposing when loading.
         if issubclass(module.source_cls, Conv1D):
@@ -141,11 +140,11 @@ class Bnb8bitDeserialize(ConversionOps):
             # special case when we only fetched the weight
             # since we collected keys, we need to return it like that
             return {full_layer_name: input_dict["weight"]}
-        
+
         for key, value in input_dict.items():
             if isinstance(value, list):
                 input_dict[key] = value[0]
-                
+
         module, _ = get_module_from_name(model, full_layer_name)
 
         weight = input_dict["weight"]

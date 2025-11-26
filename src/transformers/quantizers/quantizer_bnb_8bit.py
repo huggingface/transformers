@@ -13,8 +13,9 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from .base import HfQuantizer
 from ..core_model_loading import WeightConverter
+from .base import HfQuantizer
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
