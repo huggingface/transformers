@@ -102,7 +102,6 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         hidden_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -122,8 +121,9 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         self.hidden_dropout = hidden_dropout
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.get("rotary_emb_base", 10000.0)
+        self.rope_parameters["rope_theta"] = kwargs.pop("rotary_emb_base", 10000.0)
         rope_config_standardize_and_validate(self)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
 __all__ = ["GPTNeoXJapaneseConfig"]

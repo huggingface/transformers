@@ -199,14 +199,6 @@ class ModernBertConfig(PreTrainedConfig):
         repad_logits_with_grad: Optional[bool] = False,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -262,11 +254,20 @@ class ModernBertConfig(PreTrainedConfig):
         if (rope_scaling := kwargs.pop("rope_scaling", None)) is not None:
             rope_parameters["full_attention"].update(rope_scaling)
             rope_parameters["sliding_attention"].update(rope_scaling)
-        rope_parameters["full_attention"]["rope_theta"] = getattr(self, "global_rope_theta", 160_000.0)
-        rope_parameters["sliding_attention"]["rope_theta"] = getattr(self, "local_rope_theta", 10000.0)
+        rope_parameters["full_attention"]["rope_theta"] = kwargs.pop("global_rope_theta", 160_000.0)
+        rope_parameters["sliding_attention"]["rope_theta"] = kwargs.pop("local_rope_theta", 10000.0)
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_standardize_and_validate(self)
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            cls_token_id=cls_token_id,
+            sep_token_id=sep_token_id,
+            **kwargs,
+        )
 
     def to_dict(self):
         output = super().to_dict()

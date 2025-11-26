@@ -167,7 +167,7 @@ class ApertusConfig(PreTrainedConfig):
         rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_parameters["rope_theta"] = kwargs.get("rope_theta", 12000000.0)
+        rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 12000000.0)
         rope_config_standardize_and_validate(self)
 
         super().__init__(

@@ -179,7 +179,7 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         rope_parameters = rope_scaling or rope_parameters
         self.rope_parameters = rope_parameters if rope_parameters is not None else {} or {}
         self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 4.0)
-        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 10000.0)
+        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         rope_config_standardize_and_validate(self)

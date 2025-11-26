@@ -131,7 +131,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         attention_bias: Optional[bool] = True,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -155,12 +154,13 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.get("rotary_emb_base", 10000.0)
+        self.rope_parameters["rope_theta"] = kwargs.pop("rotary_emb_base", 10000.0)
         rope_config_standardize_and_validate(self)
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
 __all__ = ["GPTNeoXConfig"]

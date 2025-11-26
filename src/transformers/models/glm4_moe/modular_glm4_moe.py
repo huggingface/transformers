@@ -199,7 +199,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         self.rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 0.5)
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 10000.0)
+        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
         rope_config_standardize_and_validate(self)
 
         # MoE arguments

@@ -183,7 +183,7 @@ class CwmConfig(LlamaConfig):
         del self.attention_bias
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 1_000_000.0)
+        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 1_000_000.0)
         rope_config_standardize_and_validate(self)
 
 

@@ -211,7 +211,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.get("rope_theta", 10000.0)
+        self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
         rope_config_standardize_and_validate(self)
 
         super().__init__(
