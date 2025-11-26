@@ -321,12 +321,12 @@ class PeftAdapterMixin:
                 for weight_converter in key_mapping:
                     patterns = weight_converter.source_keys
                     replacements = weight_converter.target_keys
-                    # mapping is either 1:1 or 1:n or n:1
+                    # mapping is either 1:1 or 1:n or n:1 or n:n
                     if len(patterns) > 1 and len(replacements) == 1:
                         replacements = len(patterns) * replacements
                     elif len(patterns) == 1 and len(replacements) > 1:
                         patterns = len(replacements) * patterns
-                    elif len(patterns) > 1 and len(replacements) > 1:
+                    elif len(patterns) > 1 and len(replacements) > 1 and len(patterns) != len(replacements):
                         raise ValueError(
                             "WeightConversion incorrectly initialized, please open an issue and report this error "
                             "here: https://github.com/huggingface/transformers/issues"
