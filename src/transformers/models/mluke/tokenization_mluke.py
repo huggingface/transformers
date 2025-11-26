@@ -517,7 +517,6 @@ class MLukeTokenizer(TokenizersBackend):
                 verbose=verbose,
                 **kwargs,
             )
-
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
         sequences, depending on the task you want to prepare them for.
@@ -563,7 +562,9 @@ class MLukeTokenizer(TokenizersBackend):
             len(text) == 0 or isinstance(text[0], (str, list, tuple))
         )
         if not (is_valid_single_text or is_valid_batch_text):
-            raise ValueError("text input must be of type `str` (single example) or `list[str]` (batch).")
+            raise ValueError(
+                "text input must be of type `str` (single example), `list[str]` (batch), or `list[tuple]` (batch pairs)."
+            )
 
         is_valid_single_text_pair = isinstance(text_pair, str)
         is_valid_batch_text_pair = isinstance(text_pair, (list, tuple)) and (
@@ -574,7 +575,7 @@ class MLukeTokenizer(TokenizersBackend):
 
         is_batched = bool(isinstance(text, (list, tuple)))
 
-        # Get proper padding and truncation strategies
+        # Convert padding and truncation to strategies
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
             truncation=truncation,
@@ -679,6 +680,7 @@ class MLukeTokenizer(TokenizersBackend):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        # If no entities are provided and task doesn't require them, delegate to parent for proper Encoding support
         if (
             entity_spans is None
             and entity_spans_pair is None
@@ -686,6 +688,7 @@ class MLukeTokenizer(TokenizersBackend):
             and entities_pair is None
             and self.task is None
         ):
+            # Delegate to parent TokenizersBackend which properly handles Encoding objects
             return super()._encode_plus(
                 text=text,
                 text_pair=text_pair,
@@ -709,13 +712,7 @@ class MLukeTokenizer(TokenizersBackend):
             )
 
         if return_offsets_mapping:
-            raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers. "
-                "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast. "
-                "More information on available tokenizers at "
-                "https://github.com/huggingface/transformers/pull/2674"
-            )
+            raise NotImplementedError("return_offset_mapping is not available when using entity-aware encoding.")
 
         if is_split_into_words:
             raise NotImplementedError("is_split_into_words is not supported in this tokenizer.")
@@ -792,19 +789,26 @@ class MLukeTokenizer(TokenizersBackend):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        # If no entities are provided and task doesn't require them, delegate to parent for proper Encoding support
         if (
             batch_entity_spans_or_entity_spans_pairs is None
             and batch_entities_or_entities_pairs is None
             and self.task is None
         ):
+            # Parent's _encode_plus handles batching internally, so we reconstruct text/text_pair
+            # from batch_text_or_text_pairs and pass to parent's _encode_plus
+            # Detect if we have pairs
             if batch_text_or_text_pairs and isinstance(batch_text_or_text_pairs[0], (tuple, list)):
+                # We have pairs
                 texts, text_pairs = zip(*batch_text_or_text_pairs)
                 texts = list(texts)
                 text_pairs = list(text_pairs)
             else:
+                # Just texts
                 texts = batch_text_or_text_pairs
                 text_pairs = None
 
+            # Delegate to parent TokenizersBackend which properly handles Encoding objects for batches
             return super()._encode_plus(
                 text=texts,
                 text_pair=text_pairs,
@@ -824,15 +828,12 @@ class MLukeTokenizer(TokenizersBackend):
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
                 verbose=verbose,
+                split_special_tokens=kwargs.get("split_special_tokens", self.split_special_tokens),
                 **kwargs,
             )
 
         if return_offsets_mapping:
-            raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers. "
-                "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
-            )
+            raise NotImplementedError("return_offset_mapping is not available when using entity-aware encoding.")
 
         if is_split_into_words:
             raise NotImplementedError("is_split_into_words is not supported in this tokenizer.")
@@ -940,10 +941,9 @@ class MLukeTokenizer(TokenizersBackend):
         **kwargs,
     ) -> tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
-            # Use the underlying tokenizer directly to avoid infinite recursion
-            # Then convert to fairseq-aligned IDs
-            tokens = self._tokenizer.encode(text, add_special_tokens=False).tokens
-            return self.convert_tokens_to_ids(tokens)
+            # Use the underlying tokenizer directly to avoid recursion
+            encoding = self._tokenizer.encode(text, add_special_tokens=False)
+            return encoding.ids
 
         def get_input_ids_and_entity_token_spans(text, entity_spans):
             if entity_spans is None:
@@ -1019,12 +1019,10 @@ class MLukeTokenizer(TokenizersBackend):
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
             first_ids = (
-                first_ids[:entity_token_end] + [self.additional_special_tokens_ids[0]] + first_ids[entity_token_end:]
+                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
             )
             first_ids = (
-                first_ids[:entity_token_start]
-                + [self.additional_special_tokens_ids[0]]
-                + first_ids[entity_token_start:]
+                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
             )
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
@@ -1046,8 +1044,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.additional_special_tokens_ids[0]),
-                (tail_token_span, self.additional_special_tokens_ids[1]),
+                (head_token_span, self.extra_special_tokens_ids[0]),
+                (tail_token_span, self.extra_special_tokens_ids[1]),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)

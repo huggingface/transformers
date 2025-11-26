@@ -351,15 +351,16 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.nllb.test_tokenization_nllb.NllbTokenizationTest.test_special_tokens_initialization
     def test_special_tokens_initialization(self):
-        # Adapted for v5 - test with tokenizer class directly
-        added_tokens = [AddedToken("<special>", lstrip=True)]
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                added_tokens = [AddedToken("<special>", lstrip=True)]
 
-        tokenizer = self.get_tokenizer(additional_special_tokens=added_tokens)
-        output = tokenizer.encode("Hey this is a <special> token")
+                tokenizer_r = self.get_tokenizer(pretrained_name, additional_special_tokens=added_tokens, **kwargs)
+                r_output = tokenizer_r.encode("Hey this is a <special> token")
 
-        special_token_id = tokenizer.encode("<special>", add_special_tokens=False)[0]
+                special_token_id = tokenizer_r.encode("<special>", add_special_tokens=False)[0]
 
-        self.assertTrue(special_token_id in output)
+                self.assertTrue(special_token_id in r_output)
 
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers

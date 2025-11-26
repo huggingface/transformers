@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...tokenization_utils_tokenizers import PreTrainedTokenizer
+from ...tokenization_utils import PythonBackend
 from ...utils import logging
 
 
@@ -52,9 +52,9 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     return vocab, raw_vocab, ids_to_tokens, emoji
 
 
-class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
+class GPTNeoXJapaneseTokenizer(PythonBackend):
     """
-    This tokenizer inherits from [`PreTrainedTokenizer`] and is based on Japanese special Sub-Word-Encoding that is
+    This tokenizer inherits from [`PythonBackend`] and is based on Japanese special Sub-Word-Encoding that is
     used in this repository (https://github.com/tanreinama/Japanese-BPEEncoder_V2). Check the repository for details.
     Japanese has a relatively large vocabulary and there is no separation between words. Furthermore, the language is a
     combination of hiragana, katakana, and kanji, and variants such as "1" and "①" are often used. In order to cope
