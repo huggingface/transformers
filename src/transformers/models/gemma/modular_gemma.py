@@ -13,9 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
-import sentencepiece as spm
 import torch
 from torch import nn
 
@@ -27,7 +26,6 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -39,11 +37,10 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
 )
-from ..llama.tokenization_llama import LlamaTokenizer
 
 
 if TYPE_CHECKING:
-    from ...tokenization_utils_base import TextInput
+    pass
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
@@ -198,7 +195,6 @@ class GemmaConfig(PreTrainedConfig):
         )
 
 
-
 class GemmaRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -349,7 +345,6 @@ class GemmaForTokenClassification(LlamaForTokenClassification):
 
 __all__ = [
     "GemmaConfig",
-    "GemmaTokenizer",
     "GemmaModel",
     "GemmaForCausalLM",
     "GemmaForSequenceClassification",

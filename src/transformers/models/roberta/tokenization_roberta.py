@@ -59,12 +59,6 @@ class RobertaTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`, *optional*):
-            Path to the vocabulary file.
-        merges_file (`str`, *optional*):
-            Path to the merges file.
-        tokenizer_file (`str`, *optional*):
-            Path to a tokenizers JSON file containing the serialization of a tokenizer.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.

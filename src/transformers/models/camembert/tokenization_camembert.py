@@ -40,9 +40,6 @@ class CamembertTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -80,6 +77,11 @@ class CamembertTokenizer(TokenizersBackend):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
+        add_prefix_space (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        vocab_file (`str`, *optional*):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        vocab (`<fill_type>`, *optional*): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

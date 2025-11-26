@@ -64,13 +64,6 @@ class BlenderbotTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
-        merges_file (`str`):
-            Path to the merges file.
-        errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See
-            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -106,11 +99,11 @@ class BlenderbotTokenizer(TokenizersBackend):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (Blenderbot tokenizer detect beginning of words by the preceding space).
-        trim_offsets (`bool`, *optional*, defaults to `True`):
-            Whether the post processing step should trim offsets to avoid including whitespaces.
+        vocab (`<fill_type>`, *optional*): <fill_docstring>
+        merges (`<fill_type>`, *optional*): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

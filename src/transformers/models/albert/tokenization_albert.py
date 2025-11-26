@@ -38,8 +38,6 @@ class AlbertTokenizer(TokenizersBackend):
     Args:
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        remove_space (`bool`, *optional*, defaults to `True`):
-            Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
         bos_token (`str`, *optional*, defaults to `"[CLS]"`):
@@ -70,6 +68,11 @@ class AlbertTokenizer(TokenizersBackend):
         mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        add_prefix_space (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        trim_offsets (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        vocab (`Optional`, *optional*): <fill_docstring>
+        merges (`Optional`, *optional*): <fill_docstring>
+        vocab_file (`Optional`, *optional*): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -37,14 +37,6 @@ class CLIPTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab (`dict`, *optional*):
-            Vocabulary dict to use for the tokenizer.
-        merges (`list`, *optional*):
-            Merges list to use for the BPE tokenizer.
-        vocab_file (`str`, *optional*):
-            Path to the vocabulary file.
-        merges_file (`str`, *optional*):
-            Path to the merges file.
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -54,6 +46,14 @@ class CLIPTokenizer(TokenizersBackend):
             The end of sequence token.
         pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        vocab (`dict`, *optional*):
+            Vocabulary dict to use for the tokenizer.
+        merges (`list`, *optional*):
+            Merges list to use for the BPE tokenizer.
+        vocab_file (`str`, *optional*):
+            Path to the vocabulary file.
+        merges_file (`str`, *optional*):
+            Path to the merges file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
