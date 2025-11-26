@@ -103,6 +103,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cvt", "CvtModel"),
         ("cwm", "CwmModel"),
         ("d_fine", "DFineModel"),
+        ("deim", "DeimModel"),
         ("dab-detr", "DabDetrModel"),
         ("dac", "DacModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
@@ -1083,6 +1084,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
         ("d_fine", "DFineForObjectDetection"),
+        ("deim", "DeimForObjectDetection"),
         ("dab-detr", "DabDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
