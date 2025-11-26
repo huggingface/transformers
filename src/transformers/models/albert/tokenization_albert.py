@@ -38,20 +38,18 @@ class AlbertTokenizer(TokenizersBackend):
     Args:
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        remove_space (`bool`, *optional*, defaults to `True`):
-            Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
         keep_accents (`bool`, *optional*, defaults to `False`):
             Whether or not to keep accents when tokenizing.
         bos_token (`str`, *optional*, defaults to `"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
+    
             <Tip>
-
+    
             When building a sequence using special tokens, this is not the token that is used for the beginning of
             sequence. The token used is the `cls_token`.
-
+    
             </Tip>
-
+    
         eos_token (`str`, *optional*, defaults to `"[SEP]"`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
             that is used for the end of sequence. The token used is the `sep_token`.
@@ -70,6 +68,11 @@ class AlbertTokenizer(TokenizersBackend):
         mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        add_prefix_space (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        trim_offsets (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        vocab (`Optional`, *optional*): <fill_docstring>
+        merges (`Optional`, *optional*): <fill_docstring>
+        vocab_file (`Optional`, *optional*): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

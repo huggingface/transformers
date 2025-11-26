@@ -81,7 +81,13 @@ class HerbertTokenizer(TokenizersBackend):
                 {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
             )
         else:
-            self._vocab = {}
+            self._vocab = {
+                str(cls_token): 0,
+                str(unk_token): 1,
+                str(pad_token): 2,
+                str(mask_token): 3,
+                str(sep_token): 4,
+            }
 
         if merges is not None:
             # Convert lists to tuples if necessary (happens when loading from JSON)
@@ -94,7 +100,7 @@ class HerbertTokenizer(TokenizersBackend):
                 vocab=self._vocab,
                 merges=self._merges,
                 dropout=None,
-                unk_token=str(unk_token),
+                unk_token=str(unk_token) if self._vocab else None,
                 end_of_word_suffix="</w>",
             )
         )

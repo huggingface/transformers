@@ -39,29 +39,26 @@ class BarthezTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
+    
             <Tip>
-
+    
             When building a sequence using special tokens, this is not the token that is used for the beginning of
             sequence. The token used is the `cls_token`.
-
+    
             </Tip>
-
+    
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-
+    
             <Tip>
-
+    
             When building a sequence using special tokens, this is not the token that is used for the end of sequence.
             The token used is the `sep_token`.
-
+    
             </Tip>
-
+    
         sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
@@ -77,8 +74,11 @@ class BarthezTokenizer(TokenizersBackend):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
+        vocab_file (`str`, *optional*):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        vocab (`<fill_type>`, *optional*): <fill_docstring>
+        add_prefix_space (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

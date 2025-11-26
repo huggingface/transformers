@@ -59,35 +59,29 @@ class RobertaTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`, *optional*):
-            Path to the vocabulary file.
-        merges_file (`str`, *optional*):
-            Path to the merges file.
-        tokenizer_file (`str`, *optional*):
-            Path to a tokenizers JSON file containing the serialization of a tokenizer.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
+    
             <Tip>
-
+    
             When building a sequence using special tokens, this is not the token that is used for the beginning of
             sequence. The token used is the `cls_token`.
-
+    
             </Tip>
-
+    
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-
+    
             <Tip>
-
+    
             When building a sequence using special tokens, this is not the token that is used for the end of sequence.
             The token used is the `sep_token`.
-
+    
             </Tip>
-
+    
         sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last

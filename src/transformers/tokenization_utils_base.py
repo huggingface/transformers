@@ -2324,6 +2324,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         for key, value in self.added_tokens_decoder.items():
             added_tokens[key] = value.__getstate__()
         tokenizer_config["added_tokens_decoder"] = added_tokens
+        tokenizer_config = self._sanitize_tokenizer_config_for_save(tokenizer_config)
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
@@ -2383,6 +2384,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             )
 
         return save_files
+
+    def _sanitize_tokenizer_config_for_save(self, tokenizer_config: dict) -> dict:
+        """
+        Hook for subclasses to tweak tokenizer_config before it is written to disk.
+        """
+        return tokenizer_config
 
     def _save_pretrained(
         self,

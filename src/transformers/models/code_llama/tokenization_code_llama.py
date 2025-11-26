@@ -66,12 +66,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
     which supports prompt infilling.
 
     Args:
-        vocab_file (`str`, *optional*):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`str`, *optional*):
-            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
-            contains everything needed to load the tokenizer.
         clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
             Whether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
             spaces.
@@ -100,6 +94,13 @@ class CodeLlamaTokenizer(TokenizersBackend):
             Whether to add an end of sequence token at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
+        legacy (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        add_prefix_space (`<fill_type>`, *optional*): <fill_docstring>
+        vocab (`<fill_type>`, *optional*): <fill_docstring>
+        merges (`<fill_type>`, *optional*): <fill_docstring>
+        vocab_file (`str`, *optional*):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

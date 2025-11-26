@@ -50,9 +50,7 @@ class BertTokenizer(TokenizersBackend):
     Args:
         vocab_file (`str`, *optional*):
             File containing the vocabulary.
-        tokenizer_file (`str`, *optional*):
-            Path to a tokenizers JSON file containing the serialization of a tokenizer.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
+        do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this

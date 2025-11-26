@@ -440,6 +440,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     def is_fast(self) -> bool:
         return True
 
+    def _sanitize_tokenizer_config_for_save(self, tokenizer_config: dict) -> dict:
+        tokenizer_config.pop("added_tokens_decoder", None)
+        tokenizer_config.pop("vocab", None)
+        tokenizer_config.pop("merges", None)
+        tokenizer_config["extra_special_tokens"] = self.special_tokens_map
+        return tokenizer_config
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
