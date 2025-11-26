@@ -114,7 +114,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
             ]
 
         else:
-            self._vocab = [tuple(item) if not isinstance(item, tuple) else item for item in vocab]
+            self._vocab = list(vocab.items()) if isinstance(vocab, dict) else vocab
             for i, (piece, _score) in enumerate(self._vocab):
                 if piece == str(unk_token):
                     unk_id = i
