@@ -1001,6 +1001,9 @@ UNDOCUMENTED_OBJECTS = [
     "add_start_docstrings",  # Internal, should never have been in the main init.
     "logger",  # Internal logger
     "logging",  # External module
+    "SentencePieceBackend",  # Backend class, not user-facing
+    "TokenizersBackend",  # Backend class, not user-facing
+    "TokenizersExtractor",  # Backend helper, not user-facing
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
     "VitPoseBackbone",  # Internal module
