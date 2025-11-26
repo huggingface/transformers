@@ -1278,7 +1278,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # from kwargs and setting _tokenizer directly after initialization.
         kwargs["tokenizer_object"] = tokenizer
         try:
-            return self.__class__(**kwargs)
+            self._tokenizer = tokenizer
+            return self
+            # return self.__class__(**kwargs)
         except TypeError as e:
             # Check if the error is due to multiple values for tokenizer_object
             if "multiple values for keyword argument 'tokenizer_object'" in str(e):

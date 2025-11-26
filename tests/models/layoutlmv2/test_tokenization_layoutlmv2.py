@@ -1250,7 +1250,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         if tokenizer.backend_tokenizer.normalizer is not None:
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
-        self.assertEqual(expected_result, decoded_input)
+        self.assertEqual(expected_result, decoded_input, f"Decoded input: {decoded_input}. If empty this means encoded inputs are just None.")
 
         # We check that the parameters of the tokenizer remained the same
         # Check we have the same number of added_tokens for both pair and non-pair inputs.

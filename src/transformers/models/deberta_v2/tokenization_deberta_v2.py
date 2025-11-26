@@ -26,13 +26,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model", "tokenizer_file": "tokenizer.json"}
 
 
-def _get_prepend_scheme(add_prefix_space: bool) -> str:
-    if add_prefix_space:
-        return "always"
-    else:
-        return "first"
-
-
 class DebertaV2Tokenizer(TokenizersBackend):
     """
     Construct a DeBERTa-v2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on Unigram tokenization.
@@ -142,16 +135,14 @@ class DebertaV2Tokenizer(TokenizersBackend):
             ]
         )
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
-
+        prepend_scheme = "always" if add_prefix_space else "never"
         list_pretokenizers = []
         if split_by_punct:
             list_pretokenizers.append(pre_tokenizers.Punctuation(behavior="isolated"))
-
-        prepend_scheme = _get_prepend_scheme(add_prefix_space)
-        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme))
+        if prepend_scheme == "always":
+            list_pretokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=not split_by_punct))
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(list_pretokenizers)
-
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         super().__init__(
