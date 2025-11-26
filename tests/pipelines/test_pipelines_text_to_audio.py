@@ -45,9 +45,11 @@ class TextToAudioPipelineTests(unittest.TestCase):
         music_generator = pipeline(
             task="text-to-audio", model="facebook/musicgen-small", do_sample=False, max_new_tokens=5
         )
+        n_ch = 1  # model generates mono audio
 
         outputs = music_generator("This is a test")
         self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 32000}, outputs)
+        self.assertEqual(len(outputs["audio"].shape), n_ch)
 
         # test two examples side-by-side
         outputs = music_generator(["This is a test", "This is a second test"])
@@ -88,6 +90,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_bark_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small")
+        n_ch = 1  # model generates mono audio
 
         forward_params = {
             # Using `do_sample=False` to force deterministic output
@@ -100,6 +103,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             {"audio": ANY(np.ndarray), "sampling_rate": 24000},
             outputs,
         )
+        self.assertEqual(len(outputs["audio"].shape), n_ch)
 
         # test two examples side-by-side
         outputs = speech_generator(
