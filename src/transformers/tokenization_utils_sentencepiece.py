@@ -55,6 +55,9 @@ class SentencePieceBackend(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
 
     def __init__(self, **kwargs):
+        # Ensure optional dependency is available before loading
+        requires_backends(self, "sentencepiece")
+
         # Extract sentencepiece-specific parameters
         self.vocab_file = kwargs.get("vocab_file")
         self.legacy = kwargs.get("legacy", True)
