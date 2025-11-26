@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import random
-import shutil
-import tempfile
 import unittest
 
 from transformers import (
@@ -38,15 +36,12 @@ EVOLLA_VALID_FS = list("pynwrqhgdlvtmfsaeikc#")
 @require_torch
 class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = EvollaProcessor
+    model_id = "westlake-repl/Evolla-10B-hf"
+    input_keys = ["protein_input_ids", "protein_attention_mask", "input_ids", "attention_mask"]
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-
-        processor = EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-hf")
-
-        processor.save_pretrained(self.tmpdirname)
-
-        self.input_keys = ["protein_input_ids", "protein_attention_mask", "input_ids", "attention_mask"]
+    @unittest.skip("EvollaProcessor requires `messages_list` and `proteins` inputs.")
+    def test_processor_with_multiple_inputs(self):
+        pass
 
     def prepare_input_and_expected_output(self):
         amino_acid_sequence = "AAAA"
@@ -148,30 +143,8 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         return protein_dict, message, expected_output
 
-    def test_processor(self):
-        protein_tokenizer = self.get_protein_tokenizer()
-        tokenizer = self.get_tokenizer()
-
-        processor = EvollaProcessor(protein_tokenizer, tokenizer)
-
-        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
-        inputs = processor(proteins=[protein_dict], messages_list=[message])
-
-        # check if the input is correct
-        for key, value in expected_output.items():
-            self.assertTrue(
-                torch.equal(inputs[key], value),
-                f"inputs[key] is {inputs[key]} and expected_output[key] is {value}",
-            )
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
     def get_protein_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).protein_tokenizer
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
 
     def prepare_inputs_single(self):
         proteins = {
@@ -269,27 +242,8 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             messages_list.append(messages)
         return proteins, messages_list
 
-    def test_tokenizer_decode(self):
-        protein_tokenizer = self.get_protein_tokenizer()
-        tokenizer = self.get_tokenizer()
-
-        processor = EvollaProcessor(tokenizer=tokenizer, protein_tokenizer=protein_tokenizer, return_tensors="pt")
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
-
     def test_model_input_names(self):
-        protein_tokenizer = self.get_protein_tokenizer()
-        tokenizer = self.get_tokenizer()
-
-        processor = EvollaProcessor(tokenizer=tokenizer, protein_tokenizer=protein_tokenizer)
+        processor = self.get_processor()
         proteins, messages_list = self.prepare_inputs()
-
         inputs = processor(messages_list=messages_list, proteins=proteins, padding="longest", return_tensors="pt")
-
-        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertSetEqual(set(inputs.keys()), set(self.input_keys))

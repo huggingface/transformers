@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import Idefics3Processor
 from transformers.image_utils import load_image
-from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -30,12 +27,10 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_vision
 class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
+    model_id = "HuggingFaceM4/Idefics3-8B-Llama3"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
                 "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
@@ -60,15 +55,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @staticmethod
     def prepare_processor_dict():
@@ -107,13 +93,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [self.fake_image_token_id]
         )
         return text_split_images
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.image1.close()
-        cls.image2.close()
-        cls.image3.close()
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()

@@ -13,13 +13,8 @@
 # limitations under the License.
 
 import os
-import shutil
-import tempfile
 import unittest
 
-import pytest
-
-from transformers import BertTokenizer, BertTokenizerFast
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
@@ -28,7 +23,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import ChineseCLIPImageProcessor, ChineseCLIPProcessor
+    from transformers import ChineseCLIPProcessor
 
 
 @require_vision
@@ -36,9 +31,8 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChineseCLIPProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         vocab_tokens = [
             "[UNK]",
             "[CLS]",
@@ -59,10 +53,14 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "t",
             "shirt",
         ]
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+        return tokenizer_class(vocab_file=vocab_file)
 
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
         image_processor_map = {
             "do_resize": True,
             "size": {"height": 224, "width": 224},
@@ -73,127 +71,4 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_std": [0.26862954, 0.26130258, 0.27577711],
             "do_convert_rgb": True,
         }
-        tokenizer = cls.get_tokenizer()
-        image_processor = ChineseCLIPImageProcessor(**image_processor_map)
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @classmethod
-    def get_tokenizer(cls, **kwargs):
-        return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
-
-    @classmethod
-    def get_rust_tokenizer(cls, **kwargs):
-        return BertTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
-
-    @classmethod
-    def get_image_processor(cls, **kwargs):
-        return ChineseCLIPImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def test_save_load_pretrained_default(self):
-        tokenizer_slow = self.get_tokenizer()
-        tokenizer_fast = self.get_rust_tokenizer()
-        image_processor = self.get_image_processor()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
-            processor_slow.save_pretrained(tmpdir)
-            processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
-
-            processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
-            processor_fast.save_pretrained(tmpdir)
-            processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
-
-        self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
-        self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, BertTokenizer)
-        self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
-
-        self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor_slow.image_processor, ChineseCLIPImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, ChineseCLIPImageProcessor)
-
-    def test_save_load_pretrained_additional_features(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor = ChineseCLIPProcessor(
-                tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
-            )
-            processor.save_pretrained(tmpdir)
-
-            tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
-
-            processor = ChineseCLIPProcessor.from_pretrained(
-                tmpdir, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
-            )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, ChineseCLIPImageProcessor)
-
-    def test_image_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        image_input = self.prepare_image_inputs()
-
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
-
-        for key in input_feat_extract:
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_tokenizer(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "Alexandra，T-shirt的价格是15便士。"
-
-        encoded_processor = processor(text=input_str)
-
-        encoded_tok = tokenizer(input_str)
-
-        for key in encoded_tok:
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "Alexandra，T-shirt的价格是15便士。"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertSetEqual(set(inputs.keys()), {"input_ids", "token_type_ids", "attention_mask", "pixel_values"})
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-    def test_tokenizer_decode(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
+        return image_processor_class(**image_processor_map)

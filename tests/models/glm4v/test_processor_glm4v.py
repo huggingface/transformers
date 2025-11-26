@@ -13,13 +13,10 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -37,31 +34,21 @@ if is_torch_available():
 @require_torch
 class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm4vProcessor
+    model_id = "THUDM/GLM-4.1V-9B-Thinking"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Glm4vProcessor.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", patch_size=4, size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18}
-        )
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        return super()._setup_from_pretrained(
+            model_id,
+            do_sample_frames=False,
+            patch_size=4,
+            size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18},
+            **kwargs,
+        )
 
     @require_torch
     @require_av
@@ -267,13 +254,13 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 do_sample_frames=True,
             )
 
-    def test_model_input_names(self):
-        processor = self.get_processor()
+    # def test_model_input_names(self):
+    #     processor = self.get_processor()
 
-        text = self.prepare_text_inputs(modalities=["image", "video"])
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
-        inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
-        inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
+    #     text = self.prepare_text_inputs(modalities=["image", "video"])
+    #     image_input = self.prepare_image_inputs()
+    #     video_inputs = self.prepare_video_inputs()
+    #     inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
+    #     inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
 
-        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+    #     self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))

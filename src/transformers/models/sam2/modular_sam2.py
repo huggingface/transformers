@@ -1370,7 +1370,7 @@ class Sam2Model(SamModel):
 
         >>> # Postprocess masks
         >>> masks = processor.post_process_masks(
-        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
+        ...     outputs.pred_masks, inputs["original_sizes"]
         ... )
         ```
         """

@@ -13,13 +13,11 @@
 # limitations under the License.
 
 import math
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoTokenizer, Lfm2VlProcessor
+from transformers import Lfm2VlProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
@@ -30,7 +28,7 @@ if is_vision_available():
     from PIL import Image
 
     if is_torchvision_available():
-        from transformers import Lfm2VlImageProcessorFast
+        pass
 
 
 @require_torch
@@ -39,26 +37,28 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm2VlProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor_kwargs = cls.prepare_processor_dict()
-        image_processor = Lfm2VlImageProcessorFast(
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
             tile_size=14,
             min_image_tokens=2,
             max_image_tokens=10,
             encoder_patch_size=2,
             do_image_splitting=False,
         )
-        tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
 
-        processor = Lfm2VlProcessor(tokenizer=tokenizer, image_processor=image_processor, **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        processor_kwargs = cls.prepare_processor_dict()
+        return tokenizer_class.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
 
+    @classmethod
+    def _setup_test_attributes(cls, processor):
         # Create images with different sizes
         cls.small_image = Image.new("RGB", (256, 256))
         cls.large_image = Image.new("RGB", (512, 1024))
         cls.high_res_image = Image.new("RGB", (1024, 1024))
-
         cls.bos_token = processor.tokenizer.bos_token
         cls.image_token = processor.image_token
 
@@ -68,15 +68,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_end_token_id = processor.tokenizer.convert_tokens_to_ids(processor.image_end_token)
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_thumbnail_token_id = processor.tokenizer.convert_tokens_to_ids(processor.image_thumbnail_token)
-
-    def get_tokenizer(self, **kwargs):
-        return Lfm2VlProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return Lfm2VlProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        return Lfm2VlProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @staticmethod
     def prepare_processor_dict():
@@ -102,6 +93,10 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         return {"chat_template": chat_template}
 
+    @unittest.skip("Lfm2VlProcessor adds special tokens to the text")
+    def test_tokenizer_defaults(self):
+        pass
+
     # Override as Lfm2VL needs images/video to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size=None):
         """This function prepares a list of PIL images for testing"""
@@ -124,10 +119,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text_split_images += [self.image_thumbnail_token_id] + [self.image_token_id] * image_seq_len
         text_split_images += [self.image_end_token_id]
         return text_split_images
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting_single_image(self):
         processor_components = self.prepare_components()
