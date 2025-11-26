@@ -1279,7 +1279,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_decoder_attention_mask(self):
-        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", forced_bos_token_id=0).to(
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large").to(
             torch_device
         )
         tokenizer = self.default_tokenizer
@@ -1302,6 +1302,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             max_new_tokens=20,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            forced_bos_token_id=0,
         )
         generated_sentence = tokenizer.batch_decode(generated_ids)[0]
         expected_sentence = "</s><pad><pad><pad><s>UN Chief Says There Is No Plan B for Peace in Syria</s>"
