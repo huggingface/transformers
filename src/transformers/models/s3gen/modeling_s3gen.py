@@ -27,11 +27,8 @@ import torchaudio.compliance.kaldi as Kaldi
 from librosa.filters import mel as librosa_mel_fn
 
 
-try:
-    from diffusers.models.transformers.transformer_2d import BasicTransformerBlock
-except ImportError:
-    # Fallback for older diffusers versions
-    from diffusers.models.attention import BasicTransformerBlock
+
+from diffusers.models.attention import BasicTransformerBlock
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
