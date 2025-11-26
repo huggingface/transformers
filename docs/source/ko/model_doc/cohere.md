@@ -119,9 +119,7 @@ print(gen_text)
 ## CohereTokenizer[[transformers.CohereTokenizer]]
 
 [[autodoc]] CohereTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - update_post_processor
     - save_vocabulary
 

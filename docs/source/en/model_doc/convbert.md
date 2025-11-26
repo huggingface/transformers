@@ -62,9 +62,7 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 ## ConvBertTokenizer
 
 [[autodoc]] ConvBertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## ConvBertTokenizerFast
