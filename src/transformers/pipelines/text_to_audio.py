@@ -194,8 +194,7 @@ class TextToAudioPipeline(Pipeline):
             forward_params.update(generate_kwargs)
 
             # ensure dict output to facilitate postprocessing
-            if self.model.config.model_type not in ["bark", "musicgen"]:
-                forward_params.update({"return_dict_in_generate": True})
+            forward_params.update({"return_dict_in_generate": True})
 
             output = self.model.generate(**model_inputs, **forward_params)
         else:
@@ -286,15 +285,14 @@ class TextToAudioPipeline(Pipeline):
         elif isinstance(audio, tuple):
             audio = audio[0]
 
-        if needs_decoding:
+        if needs_decoding and self.processor is not None:
             audio = self.processor.decode(audio)
 
-        if isinstance(audio, list) and len(audio) > 1:
-            audio = [el.to(device="cpu", dtype=torch.float).numpy() for el in audio]
-        elif isinstance(audio, list):
-            audio = audio[0].to(device="cpu", dtype=torch.float).numpy()
+        if isinstance(audio, list):
+            audio = [el.to(device="cpu", dtype=torch.float).numpy().squeeze() for el in audio]
+            audio = audio if len(audio) > 1 else audio[0]
         else:
-            audio = audio.to(device="cpu", dtype=torch.float).numpy()
+            audio = audio.to(device="cpu", dtype=torch.float).numpy().squeeze()
 
         return AudioOutput(
             audio=audio,

@@ -16,7 +16,6 @@ import collections
 import copy
 import csv
 import importlib
-import itertools
 import json
 import os
 import pickle
@@ -1210,25 +1209,12 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         if is_torch_available():
             container_types = (*container_types, KeyDataset)
         if isinstance(inputs, container_types):
-            # get first item to see if a single chat or list of chats
             if isinstance(inputs, types.GeneratorType):
-                gen_copy1, gen_copy2 = itertools.tee(inputs)
-                inputs = (x for x in gen_copy1)
-                first_item = next(gen_copy2)
-            else:
-                first_item = inputs[0]
-
-            if is_valid_message(first_item):
+                inputs = list(inputs)
+            if is_valid_message(inputs[0]):
                 inputs = Chat(inputs)
-            elif isinstance(first_item, (list, tuple)):
-                # materialize generator is needed
-                items = list(inputs) if isinstance(inputs, types.GeneratorType) else inputs
-                if all(is_valid_message(chat[0]) for chat in items):
-                    chats = (Chat(chat) for chat in items)
-                    if isinstance(inputs, types.GeneratorType):
-                        inputs = chats
-                    else:
-                        inputs = list(chats)
+            elif isinstance(inputs[0], (list, tuple)) and all(chat and is_valid_message(chat[0]) for chat in inputs):
+                inputs = [Chat(chat) for chat in inputs]
 
         if num_workers is None:
             if self._num_workers is None:
