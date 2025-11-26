@@ -2137,52 +2137,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if tokenizer_file is not None and hasattr(tokenizer, "_tokenizer"):
             from tokenizers import Tokenizer as TokenizerFast
 
-            # Store debug info for Gemma tokenizer debugging
-            if type(tokenizer).__name__ == "GemmaTokenizer":
-                import os
-                vocab_before = len(tokenizer) if hasattr(tokenizer, "__len__") else None
-                tokenizer._gemma_debug_info = {
-                    "tokenizer_file": tokenizer_file,
-                    "file_exists": os.path.exists(tokenizer_file) if tokenizer_file else False,
-                    "file_size": os.path.getsize(tokenizer_file) if tokenizer_file and os.path.exists(tokenizer_file) else None,
-                    "vocab_size_before": vocab_before,
-                }
-                if hasattr(tokenizer, "_tokenizer") and hasattr(tokenizer._tokenizer, "model"):
-                    try:
-                        if hasattr(tokenizer._tokenizer.model, "get_vocab"):
-                            vocab_dict = tokenizer._tokenizer.model.get_vocab()
-                            tokenizer._gemma_debug_info["model_vocab_size_before"] = len(vocab_dict)
-                    except:
-                        pass
-
             tokenizer._tokenizer = TokenizerFast.from_file(tokenizer_file)
-            
-            # Store debug info after loading
-            if type(tokenizer).__name__ == "GemmaTokenizer":
-                vocab_after = len(tokenizer) if hasattr(tokenizer, "__len__") else None
-                tokenizer._gemma_debug_info["vocab_size_after"] = vocab_after
-                if hasattr(tokenizer, "_tokenizer") and hasattr(tokenizer._tokenizer, "model"):
-                    try:
-                        if hasattr(tokenizer._tokenizer.model, "get_vocab"):
-                            vocab_dict = tokenizer._tokenizer.model.get_vocab()
-                            tokenizer._gemma_debug_info["model_vocab_size_after"] = len(vocab_dict)
-                    except:
-                        pass
-            
             # Re-run post-initialization if the tokenizer has it
             if hasattr(tokenizer, "_post_init"):
                 tokenizer._post_init()
-                if type(tokenizer).__name__ == "GemmaTokenizer":
-                    vocab_after_post_init = len(tokenizer) if hasattr(tokenizer, "__len__") else None
-                    tokenizer._gemma_debug_info["vocab_size_after_post_init"] = vocab_after_post_init
-        else:
-            # Store debug info for why we didn't load
-            if hasattr(tokenizer, "__class__") and tokenizer.__class__.__name__ == "GemmaTokenizer":
-                tokenizer._gemma_debug_info = {
-                    "tokenizer_file": tokenizer_file,
-                    "has_tokenizer": hasattr(tokenizer, "_tokenizer"),
-                    "reason": "tokenizer_file is None" if tokenizer_file is None else "no _tokenizer attribute",
-                }
             # If only SPM exists, try to get vocab and merges and init to load a tokenizers-backend
         else:
             spm_filename = find_sentencepiece_model_file(

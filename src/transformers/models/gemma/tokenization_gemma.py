@@ -122,22 +122,9 @@ class GemmaTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self._post_init()
-
     def _unk_id(self) -> int:
         # Align with historical Gemma convention: pad, eos, bos, unk
         return 3
-
-    def _post_init(self):
-        """Post-initialization setup that needs to run after _tokenizer is set."""
-        # Ensure decoder/normalizer/pre_tokenizer are set correctly after loading from tokenizer.json
-        if hasattr(self, "_tokenizer") and self._tokenizer is not None:
-            self._tokenizer.decoder = decoders.Sequence(
-                [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
-            )
-            self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
-            self._tokenizer.pre_tokenizer = pre_tokenizers.Split(" ", "merged_with_previous")
-        super()._post_init()
 
 
 __all__ = ["GemmaTokenizer", "GemmaTokenizerFast"]
