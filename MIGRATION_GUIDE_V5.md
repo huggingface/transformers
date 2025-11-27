@@ -253,9 +253,17 @@ Example:
 transformers chat https://router.huggingface.co/v1 HuggingFaceTB/SmolLM3-3B
 ```
 
+
 Linked PRs: 
 - https://github.com/huggingface/transformers/pull/40997
 - https://github.com/huggingface/transformers/pull/41487
+
+
+### Removal of the `run` method
+
+The `transformers run` (previously `transformers-cli run`) is an artefact of the past, was not documented nor tested,
+and isn't part of any public documentation. We're removing it for now and ask you to please let us know in case
+this is a method you are using; in which case we should bring it back with better support.
 
 ## Environment variables
 
