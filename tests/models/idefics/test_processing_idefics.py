@@ -110,8 +110,8 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor, return_tensors="pt")
 
         predicted_tokens = [
-            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
-            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
         ]
         predicted_attention_masks = [
             ([1] * 10) + ([0] * 9),
@@ -136,8 +136,8 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         predicted_tokens = [
-            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
-            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><s> Describe this image.\nAssistant:",
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><s>Describe this image.\nAssistant:",
+            "<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><s>Describe this image.\nAssistant:",
         ]
         predicted_attention_masks = [
             ([0] * 9) + ([1] * 10),
@@ -155,3 +155,19 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(max_length["attention_mask"][-1].tolist(), predicted_attention_masks[1])
         self.assertListEqual(longest["attention_mask"][-1].tolist(), predicted_attention_masks[0])
+
+    def test_tokenizer_defaults(self):
+        # Override to account for the processor prefixing the BOS token to prompts.
+        components = {attribute: self.get_component(attribute) for attribute in self.processor_class.get_attributes()}
+        processor = self.processor_class(**components)
+        tokenizer = components["tokenizer"]
+
+        input_str = ["lower newer"]
+        encoded_processor = processor(text=input_str, padding=False, return_tensors="pt")
+        encoded_tok = tokenizer(
+            [f"{tokenizer.bos_token}{input_str[0]}"], padding=False, add_special_tokens=False, return_tensors="pt"
+        )
+
+        for key in encoded_tok:
+            if key in encoded_processor:
+                self.assertListEqual(encoded_tok[key].tolist(), encoded_processor[key].tolist())
