@@ -133,12 +133,6 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] CohereTokenizer
 
-## CohereTokenizerFast
-
-[[autodoc]] CohereTokenizerFast
-    - get_special_tokens_mask
-    - update_post_processor
-    - save_vocabulary
 
 ## CohereModel
 
