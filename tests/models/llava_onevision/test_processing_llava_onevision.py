@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import os
 import unittest
 
 import torch
@@ -37,9 +38,20 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        print("tokenizer_class", tokenizer_class)
-        tokenizer = tokenizer_class.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        vocab_tokens = [
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+            ("[PAD]", 0.0),
+            ("<image>", 0.0),
+            ("<video>", 0.0),
+            ("Hello", 0.0),
+            ("world", 0.0),
+        ]
+        tokenizer = tokenizer_class(vocab=vocab_tokens, add_bos_token=True, add_eos_token=False)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = "[PAD]"
         return tokenizer
 
     @classmethod
@@ -114,3 +126,49 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
+
+    @require_torch
+    def test_apply_chat_template_video_frame_sampling(self):
+        processor = self.get_processor()
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "url": os.path.join(
+                                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),
+                                "tiny_video.mp4",
+                            ),
+                        },
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        num_frames = 3
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            num_frames=num_frames,
+            return_tensors="pt",
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
+
+        fps = 2
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            fps=fps,
+            return_tensors="pt",
+        )
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
