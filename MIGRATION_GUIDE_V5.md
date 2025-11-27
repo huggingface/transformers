@@ -246,8 +246,6 @@ When loading older tokenizers, these files are still read for backward compatibi
 
 ### Model-Specific Changes
 
-**Consolidated duplicate tokenizers:**
-
 Several models that had identical tokenizers now import from their base implementation:
 
 - **LayoutLM** → uses BertTokenizer
@@ -257,7 +255,7 @@ Several models that had identical tokenizers now import from their base implemen
 - **MT5** → uses T5Tokenizer
 - **MVP** → uses BartTokenizer
 
-This reduces code duplication without changing functionality.
+We're just gonna remove these files at term.
 
 **Removed T5-specific workarounds:**
 
