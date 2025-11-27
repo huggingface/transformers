@@ -689,7 +689,7 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     config: Swin2SRConfig
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
