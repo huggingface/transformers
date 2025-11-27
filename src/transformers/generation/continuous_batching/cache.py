@@ -379,7 +379,7 @@ class PagedAttentionCache:
         self._block_manager.mark_blocks_as_complete(
             num_complete_blocks=num_complete_blocks,
             allocated_blocks=cm.block_table[state.request_id],
-            prompt_ids=(state.full_prompt_ids + state.static_outputs),
+            prompt_ids=(state.initial_tokens + state.generated_tokens),
         )
 
 

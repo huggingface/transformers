@@ -88,7 +88,8 @@ class GenerationOutput:
     logprobs: list[float] = field(default_factory=list)
     error: str | None = None
     status: RequestStatus = RequestStatus.PENDING
-    created_time: float = field(default_factory=time.time)
+    created_time: float = field(default_factory=time.perf_counter)
+    timestamps: list[float] | None = None  # Timestamps of the generated tokens
 
     def is_finished(self) -> bool:
         return self.status == RequestStatus.FINISHED
@@ -115,21 +116,25 @@ class RequestState:
         error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
     """
 
-    # Required fields # TODO: come up with better names / not sure prompt_ids and such are not redundant
+    # Required fields
     request_id: str
-    full_prompt_ids: list[int] | None = None  # Full initial prompt
-    prompt_ids: list[int] | None = None  # Tokens IDs currently being processed
-    remaining_prompt_ids: list[int] = field(default_factory=list)  # For split requests, prefill left to process
-    static_outputs: list[int] = field(default_factory=list)  # Generated tokens
+    initial_tokens: list[int]  # Initial prompt tokens
+    # Optional fields
+    record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
+    # Internal fields
+    tokens_to_process: list[int] | None = None  # Tokens IDs currently being processed
+    remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
+    generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     max_new_tokens: int = 20  # Maximum number of new tokens to generate
     eos_token_id: int = -1  # ID of the end-of-sequence token
     streaming: bool = False  # Whether to stream tokens as they're generated
-    created_time: float = field(default_factory=time.time)  # Time the request was created
+    created_time: float = field(default_factory=time.perf_counter)  # Time the request was created
     error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
+    _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
 
     @property
     def status(self) -> RequestStatus:
@@ -138,14 +143,18 @@ class RequestState:
     @status.setter
     def status(self, value: RequestStatus):
         if self._status == RequestStatus.PENDING:
-            self.lifespan = (time.time(), -1)
+            self.lifespan = (time.perf_counter(), -1)
         elif value == RequestStatus.FINISHED:
-            self.lifespan = (self.lifespan[0], time.time())
+            self.lifespan = (self.lifespan[0], time.perf_counter())
             self.log_end_of_request()
         self._status = value
 
+    @property
+    def timestamps(self) -> list[float] | None:
+        return self._timestamps if self.record_timestamps else None
+
     def log_end_of_request(self):
-        prefill_len = len(self.full_prompt_ids)
+        prefill_len = len(self.initial_tokens)
         decode_len = self.generated_len()
         start_time = self.lifespan[0] - self.created_time
         end_time = self.lifespan[1] - self.created_time
@@ -159,7 +168,7 @@ class RequestState:
 
     def generated_len(self) -> int:
         """Get the number of tokens generated so far."""
-        return len(self.static_outputs)
+        return len(self.generated_tokens)
 
     # TODO: this logic seems one token off, check it out
     @traced
@@ -176,13 +185,17 @@ class RequestState:
         if self.status != RequestStatus.DECODING:
             return False
 
+        # If we're recording timestamps, add timestamp to the list
+        if self.record_timestamps:
+            self._timestamps.append(time.perf_counter())
+
         is_eos = token_id == self.eos_token_id and self.eos_token_id != -1
         is_max_len = self.generated_len() >= self.max_new_tokens
 
         # Only add the token if we're not finishing due to max length
         # (EOS tokens should still be added to the output)
         if not (is_max_len and not is_eos):
-            self.static_outputs.extend([token_id])
+            self.generated_tokens.extend([token_id])
 
         if is_eos or is_max_len:
             self.status = RequestStatus.FINISHED
@@ -194,12 +207,12 @@ class RequestState:
             f"request_id={self.request_id}",
             f"status={self._status}",
             f"out_tokens={self.generated_len()}",
-            f"query_length={len(self.prompt_ids)}",
-            f"remaining_tokens={len(self.remaining_prompt_ids)}",
+            f"query_length={len(self.tokens_to_process)}",
+            f"remaining_tokens={len(self.remaining_prefill_tokens)}",
             f"kv_length={self.position_offset}",
-            f"full_prompt_length={len(self.full_prompt_ids)}",
+            f"full_prompt_length={len(self.initial_tokens)}",
             f"allocated_blocks={self.allocated_blocks}",
-            f"generated_tokens={self.static_outputs}",
+            f"generated_tokens={self.generated_tokens}",
         ]
         return "RequestState(\n\t" + ",\n\t".join(msg) + "\n)"
 
@@ -207,9 +220,10 @@ class RequestState:
         """Convert the request state to a GenerationOutput object."""
         return GenerationOutput(
             request_id=self.request_id,
-            prompt_ids=self.full_prompt_ids,
+            prompt_ids=self.initial_tokens,
             status=self.status,
-            generated_tokens=self.static_outputs,
+            generated_tokens=self.generated_tokens,
             logprobs=[],
             error=self.error,
+            timestamps=self.timestamps,
         )
