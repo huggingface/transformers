@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import re
 import shutil
 import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import AddedToken, BatchEncoding, ByT5Tokenizer
+from transformers import BatchEncoding, ByT5Tokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

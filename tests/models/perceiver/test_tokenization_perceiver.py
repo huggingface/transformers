@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import re
 import shutil
 import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
+from transformers import BatchEncoding, PerceiverTokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -190,7 +188,6 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokenizer.model_max_length, 43)
 
                 shutil.rmtree(tmpdirname)
-
 
     def test_decode_invalid_byte_id(self):
         tokenizer = self.perceiver_tokenizer
