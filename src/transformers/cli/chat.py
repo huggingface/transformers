@@ -19,7 +19,7 @@ import re
 import string
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Optional
+from typing import Annotated
 
 import click
 import typer
@@ -214,7 +214,7 @@ class Chat:
         base_url: Annotated[str, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")],
         model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
         generate_flags: Annotated[
-            Optional[list[str]],
+            list[str] | None,
             typer.Argument(
                 help=(
                     "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
@@ -227,15 +227,15 @@ class Chat:
         ] = None,
         # General settings
         user: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(help="Username to display in chat interface. Defaults to the current user's name."),
         ] = None,
-        system_prompt: Annotated[Optional[str], typer.Option(help="System prompt.")] = None,
+        system_prompt: Annotated[str | None, typer.Option(help="System prompt.")] = None,
         save_folder: Annotated[str, typer.Option(help="Folder to save chat history.")] = "./chat_history/",
-        examples_path: Annotated[Optional[str], typer.Option(help="Path to a yaml file with examples.")] = None,
+        examples_path: Annotated[str | None, typer.Option(help="Path to a yaml file with examples.")] = None,
         # Generation settings
         generation_config: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(
                 help="Path to a local generation config file or to a HuggingFace repo containing a `generation_config.json` file. Other generation settings passed as CLI arguments will be applied on top of this generation config."
             ),
@@ -455,7 +455,7 @@ class Chat:
                     break
 
 
-def load_generation_config(generation_config: Optional[str]) -> GenerationConfig:
+def load_generation_config(generation_config: str | None) -> GenerationConfig:
     if generation_config is None:
         return GenerationConfig()
 
@@ -467,7 +467,7 @@ def load_generation_config(generation_config: Optional[str]) -> GenerationConfig
         return GenerationConfig.from_pretrained(generation_config)
 
 
-def parse_generate_flags(generate_flags: Optional[list[str]]) -> dict:
+def parse_generate_flags(generate_flags: list[str] | None) -> dict:
     """Parses the generate flags from the user input into a dictionary of `generate` kwargs."""
     if generate_flags is None or len(generate_flags) == 0:
         return {}
@@ -521,7 +521,7 @@ def parse_generate_flags(generate_flags: Optional[list[str]]) -> dict:
     return processed_generate_flags
 
 
-def new_chat_history(system_prompt: Optional[str] = None) -> list[dict]:
+def new_chat_history(system_prompt: str | None = None) -> list[dict]:
     """Returns a new chat conversation."""
     return [{"role": "system", "content": system_prompt}] if system_prompt else []
 

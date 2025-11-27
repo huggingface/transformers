@@ -15,7 +15,7 @@
 
 import re
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any
 
 from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
@@ -246,7 +246,7 @@ def w8a8_block_fp8_matmul_compile(
     weight_q: torch.Tensor,  # [out_features, hidden_dim]
     input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
     weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
-    block_size: Optional[tuple[int, int]] = None,  # (M=128, N=128) for weights for example
+    block_size: tuple[int, int] | None = None,  # (M=128, N=128) for weights for example
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
@@ -315,7 +315,7 @@ class FP8Linear(nn.Linear):
         out_features: int,
         bias: bool = False,
         dtype=None,
-        block_size: Optional[tuple[int, int]] = None,
+        block_size: tuple[int, int] | None = None,
         device=None,
         activation_scheme="dynamic",
     ):
@@ -655,13 +655,13 @@ class Fp8Quantize(ConversionOps):
 class Fp8Dequantize(ConversionOps):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
 
-    def __init__(self, block_size: Optional[tuple[int, int]] = None):
+    def __init__(self, block_size: tuple[int, int] | None = None):
         self.block_size = block_size
         self.reverse_op = Fp8Quantize
 
     def convert(
         self,
-        value: Union[Sequence[torch.Tensor], dict[str, torch.Tensor]],
+        value: Sequence[torch.Tensor] | dict[str, torch.Tensor],
         *,
         context: dict[str, Any],
     ) -> torch.Tensor:

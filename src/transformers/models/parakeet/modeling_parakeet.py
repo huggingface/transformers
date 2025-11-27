@@ -463,7 +463,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
         else:
-            # 0.02 is the standard default value accross the library
+            # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, ParakeetEncoderAttention):

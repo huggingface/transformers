@@ -601,6 +601,7 @@ class MoshiFlashAttention2(MoshiAttention):
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -1600,9 +1601,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
         self.num_codebooks = config.num_codebooks
         self.post_init()
-
-    def get_audio_encoder(self):
-        return self.audio_encoder
 
     def get_depth_decoder(self):
         return self.depth_decoder
