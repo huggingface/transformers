@@ -306,7 +306,10 @@ class Chat:
                     f"The server running on {url} returned status code {output.status_code} on health check (/health)."
                 )
         except requests.exceptions.ConnectionError:
-            raise ValueError(f"No server currently running on {url}")
+            raise ValueError(
+                f"No server currently running on {url}. In case you're running with a remote endpoint, please make sure"
+                f"to specify a URL following the model ID specification:\n\ntransformers chat <model_id> <base_url>"
+            )
 
         return True
 
