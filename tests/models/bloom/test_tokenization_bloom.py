@@ -17,7 +17,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers import TokenizersBackend
-from transformers.testing_utils import require_jinja, require_tokenizers
+from transformers.testing_utils import require_jinja, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -157,3 +157,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
         tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
         self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
+
+    @slow
+    def test_save_and_load_tokenizer(self):
+        return super().test_save_and_load_tokenizer()

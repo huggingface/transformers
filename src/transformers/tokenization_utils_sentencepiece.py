@@ -19,7 +19,11 @@ import os
 from shutil import copyfile
 from typing import Optional, Union
 
-import sentencepiece as spm
+
+try:
+    import sentencepiece as spm
+except ImportError:
+    spm = None
 
 from .convert_slow_tokenizer import import_protobuf
 from .tokenization_python import PreTrainedTokenizer

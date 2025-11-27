@@ -130,43 +130,17 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     #     with self.assertRaises(ValueError):
     #         tokenizer(sentence, entities=entities, entity_spans=spans + [(0, 9)])
 
-    # def test_if_tokenize_entity_classification_raise_error_with_invalid_inputs(self):
-    #     tokenizer = self.get_tokenizer(task="entity_classification")
+    @slow
+    def test_conversion_reversible(self):
+        return super().test_conversion_reversible()
 
-    #     sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-    #     span = (15, 34)
+    @slow
+    def test_jinja_loopcontrols(self):
+        return super().test_jinja_loopcontrols()
 
-    #     with self.assertRaises(ValueError):
-    #         tokenizer(sentence, entity_spans=[])
-
-    #     with self.assertRaises(ValueError):
-    #         tokenizer(sentence, entity_spans=[span, span])
-
-    #     with self.assertRaises(ValueError):
-    #         tokenizer(sentence, entity_spans=[0])
-
-    # def test_if_tokenize_entity_pair_classification_raise_error_with_invalid_inputs(self):
-    #     tokenizer = self.get_tokenizer(task="entity_pair_classification")
-
-    #     sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-    #     # head and tail information
-
-    #     with self.assertRaises(ValueError):
-    #         tokenizer(sentence, entity_spans=[])
-
-    #     with self.assertRaises(ValueError):
-    #         tokenizer(sentence, entity_spans=[0, 0])
-
-    # def test_if_tokenize_entity_span_classification_raise_error_with_invalid_inputs(self):
-    #     tokenizer = self.get_tokenizer(task="entity_span_classification")
-
-    #     sentence = "Japanese is an East Asian language spoken by about 128 million people, primarily in Japan."
-
-    #     with self.assertRaises(ValueError):
-    #         tokenizer(sentence, entity_spans=[])
-
-    #     with self.assertRaises(ValueError):
-    #         tokenizer(sentence, entity_spans=[0, 0, 0])
+    @slow
+    def test_pad_token_initialization(self):
+        return super().test_pad_token_initialization()
 
 
 @slow
