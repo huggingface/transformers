@@ -146,6 +146,15 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     """
 
     model_type = "gemma3_text"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here du to the added norm
+        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here du to the added norm
+        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here du to the added norm
+        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here du to the added norm
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
