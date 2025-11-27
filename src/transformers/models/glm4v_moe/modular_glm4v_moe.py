@@ -476,7 +476,7 @@ class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
 class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     config: Glm4vMoeConfig
     base_model_prefix = "model"
-    input_modalities = ["text", "image", "video"]
+    input_modalities = ("text", "image", "video")
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
 
