@@ -444,9 +444,10 @@ class WeightConverter(WeightTransform):
 
         # Tensors are returned from ops with the target patterns, we need to expand them to full name.
         # This means we need to grab the prefix and suffix to add to every target key
+        full_name = layer_name
         if ".*." in layer_name:
-            layer_name = layer_name.replace(".*.", ".0.")
-        prefix, _, suffix = next(layer_name.partition(k) for k in collected_tensors.keys() if k in layer_name)
+            full_name = layer_name.replace(".*.", ".0.")
+        prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
         # Rename the tensors
         collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
 
