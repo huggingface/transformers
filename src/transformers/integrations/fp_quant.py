@@ -56,10 +56,10 @@ class FpQuantQuantize(ConversionOps):
             weight_key = target_key.rsplit(".", 1)[0] + ".weight"
             dqweight_key = target_key.rsplit(".", 1)[0] + ".dqweight"
 
-            return {f"{target_key}": qweight,
-                    }
+            return {f"{target_key}": qweight}
 
         if target_key.endswith(".dqweight"):
+            print(f"target_key: {target_key}")
             # Loading a pseudo-quantized checkpoint without master weights
             dqweight = torch.nn.Parameter(value)
             
@@ -77,18 +77,23 @@ class FpQuantQuantize(ConversionOps):
         # Loading master weights or an unquantized checkpoint
         weight = torch.nn.Parameter(value)
         module.weight = weight
+
+        # print(f"module.state_dict(): {module.state_dict()}")
         # Let pre-forward handle the quantization and set None where necessary
         module.pre_forward()
-        
+
         prefix_target_key = target_key.rsplit(".", 1)[0]
 
-        return {target_key: weight,
-                f"{prefix_target_key}.act_global_scale": module.act_global_scale,
-                f"{prefix_target_key}.backward_hadamard_matrix": module.backward_hadamard_matrix,
-                f"{prefix_target_key}.forward_hadamard_matrix": module.forward_hadamard_matrix,
-                f"{prefix_target_key}.qweight": module.qweight,
-                f"{prefix_target_key}.scales": module.scales
-                }
+        # keys are set inside the module.pre_forward() method, we don't need remove them from the missing keys list
+        missing_keys.discard(target_key)
+        missing_keys.discard(f"{prefix_target_key}.backward_hadamard_matrix")
+        missing_keys.discard(f"{prefix_target_key}.forward_hadamard_matrix")
+        missing_keys.discard(f"{prefix_target_key}.act_global_scale")
+        missing_keys.discard(f"{prefix_target_key}.weight_global_scale")
+        missing_keys.discard(f"{prefix_target_key}.qweight")
+        missing_keys.discard(f"{prefix_target_key}.scales")
+        missing_keys.discard(f"{prefix_target_key}.dqweight")
+        return {}
 
 def adapt_fp_quant_config(config: FPQuantConfig):
     if config.forward_dtype == "mxfp4":
