@@ -60,7 +60,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
-addopts = "--doctest-glob='**/*.md'"
+addopts = "--doctest-glob='**/*.md' --max-worker-restart=0"
 doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
 markers = [
     "flash_attn_3_test: marks tests related to flash attention 3 (deselect with '-m \"not flash_attn_3_test\"')",
