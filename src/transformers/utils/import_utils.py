@@ -519,7 +519,7 @@ def enable_tf32(enable: bool) -> None:
         torch.backends.fp32_precision = precision_mode
         if is_torch_musa_available():
             torch.backends.mudnn.fp32_precision = precision_mode
-        else:       
+        else:
             torch.backends.cuda.matmul.fp32_precision = precision_mode
             torch.backends.cudnn.fp32_precision = precision_mode
     else:
