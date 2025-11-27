@@ -57,9 +57,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         # We have a SentencePiece fixture for testing
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        vocab, vocab_scores, merges = extractor.extract()
-        tokenizer = XLMRobertaTokenizer(vocab=vocab)
-        return tokenizer
+        _, vocab_scores, _ = extractor.extract()
+        return XLMRobertaTokenizer(vocab=vocab_scores)
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
