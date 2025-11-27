@@ -29,7 +29,7 @@ Here's an example of how you would use the `"text-to-speech"` pipeline with Dia:
 ```py
 >>> from transformers import pipeline
 
->>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626", , no_processor=False)
+>>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626")
 >>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
 >>> output = pipe(text)
 ```
