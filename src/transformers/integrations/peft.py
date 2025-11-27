@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib.metadata
 import inspect
 import json
 import os
-import re
 from typing import Any, Literal
 
-from packaging import version
-
+from ..core_model_loading import WeightRenaming, build_glob_alternation, repl
 from ..utils import (
     CONFIG_NAME,
     cached_file,
@@ -43,7 +40,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.5.0"
+MIN_PEFT_VERSION = "0.18.0"
 
 
 logger = logging.get_logger(__name__)
@@ -79,7 +76,7 @@ class PeftAdapterMixin:
     prompt tuning, prompt learning are out of scope as these adapters are not "injectable" into a torch module. For
     using these methods, please refer to the usage guide of PEFT library.
 
-    With this mixin, if the correct PEFT version is installed, it is possible to:
+    With this mixin, if the correct PEFT version is installed (>= 0.18.0), it is possible to:
 
     - Load an adapter stored on a local path or in a remote Hub repository, and inject it in the model
     - Attach new adapters in the model and train them with Trainer or by your own.
@@ -157,7 +154,6 @@ class PeftAdapterMixin:
                 dicts.
             low_cpu_mem_usage (`bool`, *optional*, defaults to `False`):
                 Reduce memory usage while loading the PEFT adapter. This should also speed up the loading process.
-                Requires PEFT version 0.13.0 or higher.
             is_trainable (`bool`, *optional*, defaults to `False`):
                 Whether the adapter should be trainable or not. If `False`, the adapter will be frozen and can only be
                 used for inference.
@@ -208,9 +204,6 @@ class PeftAdapterMixin:
             hotswap = hotswap_enabled and not_first_adapter
 
         if hotswap:
-            min_version_hotswap = "0.15.0"
-            if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_hotswap):
-                raise ValueError(f"To hotswap the adapter, you need PEFT >= v{min_version_hotswap}.")
             if (not self._hf_peft_config_loaded) or (adapter_name not in self.peft_config):
                 raise ValueError(
                     "To hotswap an adapter, there must already be an existing adapter with the same adapter name."
@@ -223,15 +216,7 @@ class PeftAdapterMixin:
         key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
         if key_mapping is None and any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
             key_mapping = self._checkpoint_conversion_mapping
-        if low_cpu_mem_usage:
-            min_version_lcmu = "0.13.0"
-            if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
-                peft_load_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
-            else:
-                raise ValueError(
-                    "The version of PEFT you are using does not support `low_cpu_mem_usage` yet, "
-                    f"please install PEFT >= {min_version_lcmu}."
-                )
+        peft_load_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
 
         adapter_name = adapter_name if adapter_name is not None else "default"
         if adapter_kwargs is None:
@@ -317,12 +302,10 @@ class PeftAdapterMixin:
             else:
                 new_key = key
 
-            if key_mapping:  # TODO dynamic weight loader for adapters
-                for pattern, replacement in key_mapping.items():
-                    new_key, n_replace = re.subn(pattern, replacement, new_key)
-                    # Early exit of the loop
-                    if n_replace > 0:
-                        break
+            if key_mapping:
+                renamings = [entry for entry in key_mapping if isinstance(entry, WeightRenaming)]
+                rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+                new_key = rename_alt.sub(lambda m: repl(m, rename_by_group), new_key).replace("\\", "")
 
             # For hotswapping, we need the adapter name to be present in the state dict keys
             if hotswap:
@@ -427,10 +410,6 @@ class PeftAdapterMixin:
                   - "warn": issue a warning
                   - "ignore": do nothing
         """
-        min_version_hotswap = "0.15.0"
-        if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_hotswap):
-            raise ValueError(f"To hotswap the adapter, you need PEFT >= v{min_version_hotswap}.")
-
         if getattr(self, "peft_config", {}):
             if check_compiled == "error":
                 raise RuntimeError("Call `enable_peft_hotswap` before loading the first adapter.")
@@ -519,11 +498,7 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, (BaseTunerLayer, ModulesToSaveWrapper)):
-                # For backward compatibility with previous PEFT versions
-                if hasattr(module, "set_adapter"):
-                    module.set_adapter(adapter_name)
-                else:
-                    module.active_adapter = adapter_name
+                module.set_adapter(adapter_name)
                 _adapters_has_been_set = True
 
         if not _adapters_has_been_set:
@@ -548,11 +523,7 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, (BaseTunerLayer, ModulesToSaveWrapper)):
-                # The recent version of PEFT need to call `enable_adapters` instead
-                if hasattr(module, "enable_adapters"):
-                    module.enable_adapters(enabled=False)
-                else:
-                    module.disable_adapters = True
+                module.enable_adapters(enabled=False)
 
     def enable_adapters(self) -> None:
         """
@@ -570,11 +541,7 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                # The recent version of PEFT need to call `enable_adapters` instead
-                if hasattr(module, "enable_adapters"):
-                    module.enable_adapters(enabled=True)
-                else:
-                    module.disable_adapters = False
+                module.enable_adapters(enabled=True)
 
     def active_adapters(self) -> list[str]:
         """
@@ -588,9 +555,6 @@ class PeftAdapterMixin:
         a single string.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
-
-        if not is_peft_available():
-            raise ImportError("PEFT is not available. Please install PEFT to use this function: `pip install peft`.")
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -703,39 +667,11 @@ class PeftAdapterMixin:
         """
 
         check_peft_version(min_version=MIN_PEFT_VERSION)
-        min_version_delete_adapter = "0.18.0"
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
 
-        # TODO: delete old version once support for PEFT < 0.18.0 is dropped
-        def old_delete_adapter(model, adapter_name, prefix=None):
-            from peft.tuners.tuners_utils import BaseTunerLayer
-            from peft.utils import ModulesToSaveWrapper
-
-            has_modules_to_save = False
-            for module in model.modules():
-                if isinstance(module, ModulesToSaveWrapper):
-                    has_modules_to_save |= True
-                    continue
-                if isinstance(module, BaseTunerLayer):
-                    if hasattr(module, "delete_adapter"):
-                        module.delete_adapter(adapter_name)
-                    else:
-                        raise ValueError(
-                            "The version of PEFT you are using is not compatible, please use a version that is greater than 0.6.1"
-                        )
-
-            if has_modules_to_save:
-                logger.warning(
-                    "The deleted adapter contains modules_to_save, which could not be deleted. For this to work, PEFT version "
-                    f">= {min_version_delete_adapter} is required."
-                )
-
-        if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_delete_adapter):
-            from peft.functional import delete_adapter
-        else:
-            delete_adapter = old_delete_adapter
+        from peft.functional import delete_adapter
 
         if isinstance(adapter_names, str):
             adapter_names = [adapter_names]

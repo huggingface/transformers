@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import os
 import re
 import shutil
@@ -22,6 +21,7 @@ from pathlib import Path
 from typing import Any, Union, overload
 
 import numpy as np
+from huggingface_hub import create_repo
 
 from transformers.audio_utils import load_audio_as
 from transformers.tokenization_utils_base import (
@@ -1198,7 +1198,8 @@ class MistralCommonTokenizer(PushToHubMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -1824,8 +1825,6 @@ class MistralCommonTokenizer(PushToHubMixin):
         commit_message: str | None = None,
         repo_id: str | None = None,
         private: bool | None = None,
-        repo_url: str | None = None,
-        organization: str | None = None,
         **kwargs,
     ) -> tuple[str, ...]:
         """
@@ -1847,8 +1846,6 @@ class MistralCommonTokenizer(PushToHubMixin):
             commit_message (`str`, *optional*): The commit message to use when pushing to the hub.
             repo_id (`str`, *optional*): The name of the repository to which push to the Hub.
             private (`bool`, *optional*): Whether the model repository is private or not.
-            repo_url (`str`, *optional*): The URL to the Git repository to which push to the Hub.
-            organization (`str`, *optional*): The name of the organization in which you would like to push your model.
             kwargs (`Dict[str, Any]`, *optional*):
                 Not supported by `MistralCommonTokenizer.save_pretrained`.
                 Will raise an error if used.
@@ -1868,9 +1865,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         if push_to_hub:
             repo_id = repo_id or str(save_directory).split(os.path.sep)[-1]
-            repo_id = self._create_repo(
-                repo_id, token=token, private=private, repo_url=repo_url, organization=organization
-            )
+            repo_id = create_repo(repo_id, token=token, private=private, exist_ok=True).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
             self._upload_modified_files(
