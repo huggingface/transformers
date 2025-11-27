@@ -290,7 +290,7 @@ if is_torch_available():
             return attention_mask
 
     class TestOffline(unittest.TestCase):
-        def test_offline(self, ):
+        def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
                 # First offline load should fail
                 with patch("transformers.utils.hub.is_offline_mode", return_value=True):
