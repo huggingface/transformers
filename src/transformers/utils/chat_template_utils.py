@@ -586,11 +586,12 @@ class Chat:
 
             # Convert OpenAI fields to Transformers fields
             for content in message["content"]:
-                content_type = content.get("type")
-                # (27 Nov 2025) Image/vision fields: https://platform.openai.com/docs/guides/images-vision
-                if content_type == "input_image":
-                    content["type"] = "image"
-                    content["image"] = content.pop("image_url")
-                if content_type == "input_text":
-                    content["type"] = "text"
+                if isinstance(content, dict):
+                    content_type = content.get("type")
+                    # (27 Nov 2025) Image/vision fields: https://platform.openai.com/docs/guides/images-vision
+                    if content_type == "input_image":
+                        content["type"] = "image"
+                        content["image"] = content.pop("image_url")
+                    if content_type == "input_text":
+                        content["type"] = "text"
         self.messages = messages
