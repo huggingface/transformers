@@ -119,6 +119,9 @@ class DeepseekV2Config(LlamaConfig):
             Number of selected groups per token for expert selection.
         topk_method (`str`, *optional*, defaults to `"greedy"`):
             The method used for selecting top-k experts in the routed gate mechanism.
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+            Whether to renormalize the router probabilities when `top_k > 1`. This flag is kept for backward
+            compatibility with previously released checkpoints and runtimes relying on the legacy DeepSeek config.
         v_head_dim (`int`, *optional*, defaults to 128):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
@@ -182,6 +185,7 @@ class DeepseekV2Config(LlamaConfig):
         routed_scaling_factor: Optional[float] = 1.0,
         topk_group: Optional[int] = None,
         topk_method: Optional[str] = "greedy",
+        norm_topk_prob: Optional[bool] = False,
         v_head_dim: Optional[int] = 128,
         num_experts_per_tok: Optional[int] = None,
         moe_intermediate_size: Optional[int] = 1407,
@@ -198,6 +202,7 @@ class DeepseekV2Config(LlamaConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.topk_group = topk_group
         self.topk_method = topk_method
+        self.norm_topk_prob = norm_topk_prob
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
         self.moe_intermediate_size = moe_intermediate_size
