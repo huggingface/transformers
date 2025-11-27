@@ -34,7 +34,6 @@ class QuarkDeserialize(ConversionOps):
         param = target_key.split("_", 1)[0]
         quant_state = target_key.split("_", 1)[-1]
         # print(f"full_layer_name: {full_layer_name}")
-        print(f"value: {value.dtype}")
 
         sub_module_state = full_layer_name.rsplit(".", 1)[0] + "." + param + "_quantizer" + "." + quant_state
 
