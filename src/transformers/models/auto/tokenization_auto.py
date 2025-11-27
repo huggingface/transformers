@@ -254,6 +254,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             "fastspeech2_conformer",
             ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
         ),
+        (
+            "fgclip2",
+            (
+                "GemmaTokenizer" if is_sentencepiece_available() else None,
+                "GemmaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("flaubert", ("FlaubertTokenizer", None)),
         ("flava", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("flex_olmo", (None, "GPT2TokenizerFast" if is_tokenizers_available() else None)),

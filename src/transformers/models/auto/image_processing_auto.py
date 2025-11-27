@@ -100,6 +100,7 @@ else:
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("emu3", ("Emu3ImageProcessor", None)),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
+            ("fgclip2", ("Fgclip2ImageProcessor", "Fgclip2ImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
