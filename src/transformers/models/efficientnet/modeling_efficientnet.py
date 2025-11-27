@@ -434,7 +434,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     config: EfficientNetConfig
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = []
 
     @torch.no_grad()
