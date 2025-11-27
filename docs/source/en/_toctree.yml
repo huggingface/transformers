@@ -620,6 +620,8 @@
         title: MVP
       - local: model_doc/myt5
         title: myt5
+      - local: model_doc/nanochat
+        title: NanoChat
       - local: model_doc/nemotron
         title: Nemotron
       - local: model_doc/nllb
