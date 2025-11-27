@@ -265,6 +265,8 @@ The `transformers run` (previously `transformers-cli run`) is an artefact of the
 and isn't part of any public documentation. We're removing it for now and ask you to please let us know in case
 this is a method you are using; in which case we should bring it back with better support.
 
+Linked PR: https://github.com/huggingface/transformers/pull/42447
+
 ## Environment variables
 
 - Legacy environment variables like `TRANSFORMERS_CACHE`, `PYTORCH_TRANSFORMERS_CACHE`, and `PYTORCH_PRETRAINED_BERT_CACHE` have been removed. Please use `HF_HOME` instead.
