@@ -2106,11 +2106,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             tied_config = copy.deepcopy(original_config)
             tied_config.get_text_config().tie_word_embeddings = True
-            tied_config.tie_word_embeddings = True
 
             untied_config = copy.deepcopy(original_config)
             untied_config.get_text_config().tie_word_embeddings = False
-            untied_config.tie_word_embeddings = False
 
             model_tied = model_class(tied_config)
             model_untied = model_class(untied_config)
