@@ -31,7 +31,7 @@ from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelFo
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..processing_utils import ProcessorMixin
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
     cached_file,
@@ -127,7 +127,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
-    from ..tokenization_utils_fast import PreTrainedTokenizerFast
+    from ..tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
 
 logger = logging.get_logger(__name__)

@@ -112,9 +112,11 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=text, images=self.image1)
 
         # fmt: off
-        tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
+        # The processor expands <|img|> to <|img|><|img|> (image_seq_len=2) before tokenization
+        # So we need to tokenize the full expanded string to match what the processor does
+        expanded_text = self.image_token * self.image_seq_len + text_str
 
-        expected_input_ids = [[self.image_token_id] * self.image_seq_len + tokenized_sentence["input_ids"]]
+        expected_input_ids = [processor.tokenizer(expanded_text, add_special_tokens=False)["input_ids"]]
         # self.assertEqual(len(inputs["input_ids"]), len(expected_input_ids))
 
         self.assertEqual(inputs["input_ids"], expected_input_ids)

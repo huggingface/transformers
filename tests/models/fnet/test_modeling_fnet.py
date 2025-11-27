@@ -37,7 +37,7 @@ if is_torch_available():
         FNetForSequenceClassification,
         FNetForTokenClassification,
         FNetModel,
-        FNetTokenizerFast,
+        FNetTokenizer,
     )
 
 
@@ -459,7 +459,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
     @slow
     @require_tokenizers
     def test_inference_long_sentence(self):
-        tokenizer = FNetTokenizerFast.from_pretrained("google/fnet-base")
+        tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
 
         inputs = tokenizer(
             "the man worked as a [MASK].",

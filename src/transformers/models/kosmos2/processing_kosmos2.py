@@ -22,7 +22,7 @@ from typing import Optional, Union
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
-from ...tokenization_utils import AddedToken
+from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
 
 

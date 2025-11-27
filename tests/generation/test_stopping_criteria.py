@@ -225,7 +225,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         true_strings = ["a", "baa", "abc"]  # "abc" is a single token
         false_strings = ["abbbbbbb", "b"]  # "abbbbbbb" is split into multiple tokens
         stop_strings = ["a"]
-        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", add_prefix_space=False)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
 

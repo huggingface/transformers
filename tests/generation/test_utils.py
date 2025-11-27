@@ -4779,6 +4779,7 @@ class TokenHealingTestCase(unittest.TestCase):
 
         healed_ids = completion_model.heal_tokens(input_ids, tokenizer=tokenizer)
         predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+        predicted = predicted.lstrip()
 
         self.assertEqual(predicted, expected)
 

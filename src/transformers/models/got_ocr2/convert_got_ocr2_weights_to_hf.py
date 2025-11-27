@@ -32,7 +32,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 
 if is_vision_available():

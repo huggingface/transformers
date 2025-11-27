@@ -26,7 +26,7 @@ class TrOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
-        return image_processor_class.from_pretrained("hf-internal-testing/tiny-random-vit")
+        return image_processor_class()
 
     @classmethod
     def _setup_tokenizer(cls):

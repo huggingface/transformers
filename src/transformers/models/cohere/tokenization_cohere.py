@@ -13,19 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This file is based on the tokenization_llama_fast.py file in transformers
+# This file is based on the tokenization_llama.py file in transformers
 
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 
-from tokenizers import processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers.models import BPE
 
-from ...tokenization_utils_base import BatchEncoding
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "tokenizer_file": {
@@ -43,7 +43,7 @@ Unless the user asks for a different style of answer, you should answer in full 
 # fmt: on
 
 
-class CohereTokenizerFast(PreTrainedTokenizerFast):
+class CohereTokenizer(TokenizersBackend):
     """
     Construct a Cohere tokenizer. Based on byte-level Byte-Pair-Encoding.
 
@@ -71,7 +71,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     </Tip>
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     Args:
@@ -100,6 +100,10 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             Whether or not the default system prompt for Cohere tokenizer should be used.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not the tokenizer should automatically add a prefix space
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        merges (`list`, *optional*):
+            Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -111,113 +115,104 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
-        merges_file=None,
-        tokenizer_file=None,
-        clean_up_tokenization_spaces=False,
-        unk_token="<UNK>",
-        bos_token="<BOS_TOKEN>",
-        eos_token="<|END_OF_TURN_TOKEN|>",
-        add_bos_token=True,
-        add_eos_token=False,
-        use_default_system_prompt=False,
-        add_prefix_space=False,
+        errors: str = "replace",
+        unk_token: str = "<UNK>",
+        bos_token: str = "<BOS_TOKEN>",
+        eos_token: str = "<|END_OF_TURN_TOKEN|>",
+        pad_token: str = "<PAD>",
+        cls_token: str = "<CLS>",
+        sep_token: str = "<SEP>",
+        mask_token: str = "<MASK_TOKEN>",
+        add_bos_token: bool = True,
+        add_eos_token: bool = False,
+        use_default_system_prompt: bool = False,
+        add_prefix_space: bool = False,
+        vocab: Optional[dict] = None,
+        merges: Optional[list] = None,
         **kwargs,
     ):
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
+        self.add_prefix_space = add_prefix_space
+        self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
+        self.tool_use_template = kwargs.pop("tool_use_template", None)
+
+        if vocab is not None:
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
+        else:
+            self._vocab = {
+                str(pad_token): 0,
+                str(unk_token): 1,
+                str(cls_token): 2,
+                str(sep_token): 3,
+                str(mask_token): 4,
+                str(bos_token): 5,
+            }
+
+        if merges is not None:
+            self._merges = merges
+        else:
+            self._merges = []
+
+        self._tokenizer = Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        self._tokenizer.normalizer = normalizers.NFC()
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Digits(individual_digits=True),
+                pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True)
+
+        tokenizer_object = self._tokenizer
+
         super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            tokenizer_file=tokenizer_file,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            tokenizer_object=tokenizer_object,
+            errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            sep_token=sep_token,
+            mask_token=mask_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
-        self.update_post_processor()
-        self.use_default_system_prompt = use_default_system_prompt
-        self.vocab_file = vocab_file
-        self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
-        self.tool_use_template = kwargs.pop("tool_use_template", None)
 
-        # This is a `tokenizers.pre_tokenizers.Sequence`
-        for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
-            if hasattr(pre_tokenizer, "add_prefix_space"):
-                pre_tokenizer.add_prefix_space = add_prefix_space
-        self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
+        self._post_init()
 
-        self.add_prefix_space = add_prefix_space
-
-    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = kwargs.get("is_split_into_words", False)
-        if not (self.add_prefix_space or not is_split_into_words):
-            raise Exception(
-                f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True to use it with"
-                " pretokenized inputs."
-            )
-
-        return super()._batch_encode_plus(*args, **kwargs)
-
-    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = kwargs.get("is_split_into_words", False)
-
-        if not (self.add_prefix_space or not is_split_into_words):
-            raise Exception(
-                f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True to use it with"
-                " pretokenized inputs."
-            )
-
-        return super()._encode_plus(*args, **kwargs)
-
-    def update_post_processor(self):
-        """
-        Updates the underlying post processor with the current `bos_token` and `eos_token`.
-        """
-        bos = self.bos_token
-        bos_token_id = self.bos_token_id
-        if bos is None and self.add_bos_token:
-            raise ValueError("add_bos_token = True but bos_token = None")
-
-        eos = self.eos_token
-        eos_token_id = self.eos_token_id
-        if eos is None and self.add_eos_token:
-            raise ValueError("add_eos_token = True but eos_token = None")
-
-        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
-
-        special_tokens = []
-        if self.add_bos_token:
-            special_tokens.append((bos, bos_token_id))
-        if self.add_eos_token:
-            special_tokens.append((eos, eos_token_id))
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=single, pair=pair, special_tokens=special_tokens
+    def _post_init(self):
+        """Post-initialization to ensure add_prefix_space is applied correctly."""
+        # Re-apply add_prefix_space setting to pre_tokenizer and decoder
+        # This is needed because when loading from pretrained, the tokenizer.json
+        # has these settings baked in and we need to override them
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Digits(individual_digits=True),
+                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, trim_offsets=True),
+            ]
         )
+        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=self.add_prefix_space, trim_offsets=True)
 
-    @property
-    def add_eos_token(self):
-        return self._add_eos_token
-
-    @property
-    def add_bos_token(self):
-        return self._add_bos_token
-
-    @add_eos_token.setter
-    def add_eos_token(self, value):
-        self._add_eos_token = value
-        self.update_post_processor()
-
-    @add_bos_token.setter
-    def add_bos_token(self, value):
-        self._add_bos_token = value
-        self.update_post_processor()
+        # Call parent to handle AddedToken properties
+        super()._post_init()
 
     def apply_tool_use_template(
         self,
@@ -285,8 +280,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >> tokenizer = CohereTokenizerFast.from_pretrained("CohereForAI/c4ai-command-r-v01")
-        >> tools = [
+        tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
+        tools = [
             {
                 "name": "internet_search",
                 "description": "Returns a list of relevant document snippets for a textual query retrieved from the internet",
@@ -294,64 +289,23 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
                     "query": {
                         "description": "Query to search the internet with",
                         "type": "str",
-                        "required": True
+                        "required": True,
                     }
-                }
+                },
             },
             {
-                "name': "directly_answer",
+                "name": "directly_answer",
                 "description": "Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history",
-                "parameter_definitions": {}
-            }
+                "parameter_definitions": {},
+            },
         ]
-        >> conversation = [
-            {"role": "user", "content": "Whats the biggest penguin in the world?"}
+        conversation = [
+            {"role": "user", "content": "Whats the biggest penguin in the world?"},
         ]
-        >> # render the prompt, ready for user to inspect, or for input into the model:
-        >> prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
-        >> print(prompt)
-        <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
-        The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
-
-        # System Preamble
-        ## Basic Rules
-        You are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user's requests, you cite your sources in your answers, according to those instructions.
-
-        # User Preamble
-        ## Task and Context
-        You help people answer their questions and other requests interactively. You will be asked a very wide array of requests on all kinds of topics. You will be equipped with a wide range of search engines or similar tools to help you, which you use to research your answer. You should focus on serving the user's needs as best you can, which will be wide-ranging.
-
-        ## Style Guide
-        Unless the user asks for a different style of answer, you should answer in full sentences, using proper grammar and spelling.
-
-        ## Available Tools
-        Here is a list of tools that you have available to you:
-
-        \\`\\`\\`python
-        def internet_search(query: str) -> list[Dict]:
-            \"\"\"Returns a list of relevant document snippets for a textual query retrieved from the internet
-
-            Args:
-                query (str): Query to search the internet with
-            \"\"\"
-            pass
-        \\`\\`\\`
-
-        \\`\\`\\`python
-        def directly_answer() -> list[Dict]:
-            \"\"\"Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
-            \"\"\"
-            pass
-        \\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Whats the biggest penguin in the world?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>Write 'Action:' followed by a json-formatted list of actions that you want to perform in order to produce a good response to the user's last input. You can use any of the supplied tools any number of times, but you should aim to execute the minimum number of necessary actions for the input. You should use the `directly-answer` tool if calling the other tools is unnecessary. The list of actions you want to call should be formatted as a list of json objects, for example:
-        \\`\\`\\`json
-        [
-            {
-                "tool_name": title of the tool in the specification,
-                "parameters": a dict of parameters to input into the tool as they are defined in the specs, or {} if it takes no parameters
-            }
-        ]\\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
-        ```
-        >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
+        # Render the prompt, ready for user to inspect, or for input into the model
+        prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
+        print(prompt)
+        >> inputs = tokenizer.encode(grounded_generation_prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
         Action: ```json
@@ -431,7 +385,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Examples:
 
         ```python
-        >> tokenizer = CohereTokenizerFast.from_pretrained('CohereForAI/c4ai-command-r-v01')
+        >> tokenizer = CohereTokenizer.from_pretrained('CohereForAI/c4ai-command-r-v01')
 
         >> # define documents:
         >> documents = [
@@ -445,38 +399,10 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         >> # render the prompt, ready for user to inspect, or for input into the model:
         >> grounded_generation_prompt = tokenizer.apply_grounded_generation_template(conversation, documents=documents, tokenize=False, add_generation_prompt=True)
         >> print(grounded_generation_prompt)
-        <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
-        The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
-
-        ## Basic Rules
-        You are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user's requests, you cite your sources in your answers, according to those instructions.
-
-        # User Preamble
-        ## Task and Context
-        You help people answer their questions and other requests interactively. You will be asked a very wide array of requests on all kinds of topics. You will be equipped with a wide range of search engines or similar tools to help you, which you use to research your answer. You should focus on serving the user's needs as best you can, which will be wide-ranging.
-
-        ## Style Guide
-        Unless the user asks for a different style of answer, you should answer in full sentences, using proper grammar and spelling.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Whats the biggest penguin in the world?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|><results>
-        Document: 0
-        title: Tall penguins
-        text: Emperor penguins are the tallest.
-
-        Document: 1
-        title: Penguin habitats
-        text: Emperor penguins only live in Antarctica.
-        </results><|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>Carefully perform the following instructions, in order, starting each with a new line.
-        Firstly, Decide which of the retrieved documents are relevant to the user's last input by writing 'Relevant Documents:' followed by comma-separated list of document numbers. If none are relevant, you should instead write 'None'.
-        Secondly, Decide which of the retrieved documents contain facts that should be cited in a good answer to the user's last input by writing 'Cited Documents:' followed a comma-separated list of document numbers. If you dont want to cite any of them, you should instead write 'None'.
-        Thirdly, Write 'Answer:' followed by a response to the user's last input in high quality natural english. Use the retrieved documents to help you. Do not insert any citations or grounding markup.
-        Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 0>my fact</co: 0> for a fact from document 0.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'''
-        ```
         >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
-        Relevant Documents: 0,1
-        Cited Documents: 0,1
-        Answer: The Emperor Penguin is the tallest or biggest penguin in the world. It is a bird that lives only in Antarctica and grows to a height of around 122 centimetres.
-        Grounded answer: The <co: 0>Emperor Penguin</co: 0> is the <co: 0>tallest</co: 0> or biggest penguin in the world. It is a bird that <co: 1>lives only in Antarctica</co: 1> and <co: 0>grows to a height of around 122 centimetres.</co: 0>
+        ```
         """
         return self.apply_chat_template(
             conversation,
@@ -486,17 +412,5 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
 
-        output = bos_token_id + token_ids_0 + eos_token_id
-
-        if token_ids_1 is not None:
-            output = output + bos_token_id + token_ids_1 + eos_token_id
-
-        return output
-
-
-__all__ = ["CohereTokenizerFast"]
+__all__ = ["CohereTokenizer"]

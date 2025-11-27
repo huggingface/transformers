@@ -120,7 +120,6 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ## MBartTokenizer
 
 [[autodoc]] MBartTokenizer
-    - build_inputs_with_special_tokens
 
 ## MBartTokenizerFast
 

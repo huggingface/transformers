@@ -19,7 +19,7 @@ import os
 import re
 from typing import Any, Optional, Union
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import is_phonemizer_available, is_uroman_available, logging
 
 
@@ -100,6 +100,7 @@ class VitsTokenizer(PreTrainedTokenizer):
             normalize=normalize,
             phonemize=phonemize,
             is_uroman=is_uroman,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
@@ -222,7 +223,9 @@ class VitsTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+        if token in self.encoder:
+            return self.encoder[token]
+        return self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""

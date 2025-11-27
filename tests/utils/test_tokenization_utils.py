@@ -23,7 +23,7 @@ import httpx
 
 from transformers import AutoTokenizer, BertTokenizer, BertTokenizerFast, GPT2TokenizerFast, is_tokenizers_available
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers
-from transformers.tokenization_utils import ExtensionsTrie, Trie
+from transformers.tokenization_python import ExtensionsTrie, Trie
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -195,7 +195,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
             tokenizer = AutoTokenizer.from_pretrained(tmp_repo.repo_id, use_fast=False, trust_remote_code=True)
             # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module
-            self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizer")
+            self.assertEqual(tokenizer.__class__.__name__, "CustomTokenizerFast")
 
 
 class TrieTest(unittest.TestCase):

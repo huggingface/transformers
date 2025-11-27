@@ -20,7 +20,7 @@ from typing import Optional
 from tokenizers import normalizers
 from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_roformer import RoFormerTokenizer
 from .tokenization_utils import JiebaPreTokenizer
@@ -83,20 +83,26 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         )
 
         normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
-        if (
-            normalizer_state.get("lowercase", do_lower_case) != do_lower_case
-            or normalizer_state.get("strip_accents", strip_accents) != strip_accents
-        ):
-            normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
-            normalizer_state["lowercase"] = do_lower_case
-            normalizer_state["strip_accents"] = strip_accents
-            self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
+        normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
+        normalizer_state["lowercase"] = do_lower_case
+        normalizer_state["strip_accents"] = strip_accents
+        self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
 
-        # Make sure we correctly set the custom PreTokenizer
         vocab = self.backend_tokenizer.get_vocab()
         self.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
         self.do_lower_case = do_lower_case
+        self.strip_accents = strip_accents
+
+    def _post_init(self):
+        super()._post_init()
+        normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
+        normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
+        normalizer_state["lowercase"] = self.do_lower_case
+        normalizer_state["strip_accents"] = getattr(self, "strip_accents", None)
+        self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
+        vocab = self.backend_tokenizer.get_vocab()
+        self.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -145,7 +151,10 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
-        return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
+        result = super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
+        vocab = self.backend_tokenizer.get_vocab()
+        self.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
+        return result
 
 
 __all__ = ["RoFormerTokenizerFast"]

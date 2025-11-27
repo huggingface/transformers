@@ -332,7 +332,6 @@ def create_safetensors_index(safetensors_index, num_shards, model_path):
         json.dump(safetensors_index, f)
 
 
-# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control

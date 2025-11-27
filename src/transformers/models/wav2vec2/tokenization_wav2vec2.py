@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...utils import (
     ModelOutput,
@@ -177,9 +177,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             word_delimiter_token=word_delimiter_token,
             replace_word_delimiter_char=replace_word_delimiter_char,
             target_lang=target_lang,
+            special_tokens_pattern="none",
             **kwargs,
         )
-
         # make sure that tokens made of several
         # characters are not split at tokenization
         for token in self.encoder:
@@ -200,6 +200,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self.init_kwargs["target_lang"] = target_lang
         self.encoder = self.vocab[target_lang]
         self.decoder = {v: k for k, v in self.encoder.items()}
+
+        # Remove conflicting entries from _added_tokens_decoder so vocabulary tokens take precedence
+        for token_id in list(self._added_tokens_decoder.keys()):
+            if token_id in self.decoder:
+                del self._added_tokens_decoder[token_id]
 
         # make sure that tokens made of several
         # characters are not split at tokenization
@@ -273,6 +278,28 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
+    def convert_ids_to_tokens(
+        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
+    ) -> Union[str, list[str]]:
+        """Overridden to prioritize vocabulary tokens over added tokens for nested vocabularies."""
+        if isinstance(ids, int):
+            if ids in self.decoder:
+                return self.decoder[ids]
+            return self._added_tokens_decoder[ids].content if ids in self._added_tokens_decoder else self.unk_token
+
+        tokens = []
+        for index in ids:
+            index = int(index)
+            if skip_special_tokens and index in self.all_special_ids:
+                continue
+            if index in self.decoder:
+                tokens.append(self.decoder[index])
+            elif index in self._added_tokens_decoder:
+                tokens.append(self._added_tokens_decoder[index].content)
+            else:
+                tokens.append(self.unk_token)
+        return tokens
+
     def convert_tokens_to_string(
         self,
         tokens: list[str],
@@ -335,6 +362,31 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             string = string.lower()
 
         return {"text": string, "char_offsets": char_offsets, "word_offsets": word_offsets}
+
+    @staticmethod
+    def clean_up_tokenization(out_string: str) -> str:
+        """
+        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
+
+        Args:
+            out_string (`str`): The text to clean up.
+
+        Returns:
+            `str`: The cleaned-up string.
+        """
+        out_string = (
+            out_string.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+        return out_string
 
     @staticmethod
     def _compute_offsets(
@@ -406,13 +458,12 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
         the whole token list and not individually on added tokens
         """
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        # Don't skip special tokens in convert_ids_to_tokens so we can handle word_delimiter_token specially
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and (
-                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
-            ):
+            if skip_special_tokens and token in self.all_special_tokens and token != self.word_delimiter_token:
                 continue
             result.append(token)
 
@@ -863,6 +914,31 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
         return string
 
+    @staticmethod
+    def clean_up_tokenization(out_string: str) -> str:
+        """
+        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
+
+        Args:
+            out_string (`str`): The text to clean up.
+
+        Returns:
+            `str`: The cleaned-up string.
+        """
+        out_string = (
+            out_string.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
+        return out_string
+
     def _decode(
         self,
         token_ids: list[int],
@@ -875,13 +951,12 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
         the whole token list and not individually on added tokens
         """
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        # Don't skip special tokens in convert_ids_to_tokens so we can handle word_delimiter_token specially
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
 
         result = []
         for token in filtered_tokens:
-            if skip_special_tokens and (
-                token in self.all_special_ids or (token != self.pad_token and token in self.all_special_tokens)
-            ):
+            if skip_special_tokens and token in self.all_special_tokens and token != self.word_delimiter_token:
                 continue
             result.append(token)
 

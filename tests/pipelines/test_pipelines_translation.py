@@ -18,7 +18,7 @@ import pytest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    MBart50TokenizerFast,
+    MBart50Tokenizer,
     MBartConfig,
     MBartForConditionalGeneration,
     TranslationPipeline,
@@ -127,7 +127,7 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
     @slow
     def test_multilingual_translation(self):
         model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-        tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+        tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
         translator = pipeline(task="translation", model=model, tokenizer=tokenizer)
         # Missing src_lang, tgt_lang

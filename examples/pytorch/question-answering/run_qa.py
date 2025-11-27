@@ -38,7 +38,6 @@ from transformers import (
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
-    PreTrainedTokenizerFast,
     TrainingArguments,
     default_data_collator,
     set_seed,
@@ -335,7 +334,8 @@ def main():
     )
 
     # Tokenizer check: this script requires a fast tokenizer.
-    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+    # Check if tokenizer has _tokenizer attribute (from tokenizers library) or is_fast property
+    if not (hasattr(tokenizer, "_tokenizer") or getattr(tokenizer, "is_fast", False)):
         raise TypeError(
             "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"

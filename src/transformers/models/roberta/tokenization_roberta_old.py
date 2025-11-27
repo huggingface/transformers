@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Facebook Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Tokenization class for Blenderbot."""
+"""Fast Tokenization classes for RoBERTa."""
 
 import json
 from typing import Optional
@@ -20,38 +20,33 @@ from typing import Optional
 from tokenizers import processors
 
 from ...tokenization_utils_base import AddedToken, BatchEncoding
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_blenderbot import BlenderbotTokenizer
+from .tokenization_roberta import RobertaTokenizer
 
 
 logger = logging.get_logger(__name__)
 
-
-VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "merges_file": "merges.txt",
-    "tokenizer_config_file": "tokenizer_config.json",
-}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
-class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
+class RobertaTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
+    Construct a "fast" RoBERTa tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
     tokenizer, using byte-level Byte-Pair-Encoding.
 
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```python
-    >>> from transformers import BlenderbotTokenizerFast
+    >>> from transformers import RobertaTokenizerFast
 
-    >>> tokenizer = BlenderbotTokenizerFast.from_pretrained("facebook/blenderbot-3B")
+    >>> tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
     >>> tokenizer("Hello world")["input_ids"]
-    [6950, 1085, 2]
+    [0, 31414, 232, 2]
 
     >>> tokenizer(" Hello world")["input_ids"]
-    [6950, 1085, 2]
+    [0, 20920, 232, 2]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
@@ -111,16 +106,15 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (Blenderbot tokenizer detect beginning of words by the preceding space).
+            other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = BlenderbotTokenizer
+    slow_tokenizer_class = RobertaTokenizer
 
-    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.__init__ with Roberta->Blenderbot, RoBERTa->Blenderbot
     def __init__(
         self,
         vocab_file=None,
@@ -187,13 +181,12 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
                 setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
     @property
-    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.mask_token with Roberta->Blenderbot, RoBERTa->Blenderbot
     def mask_token(self) -> str:
         """
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
         having been set.
 
-        Blenderbot tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
+        Roberta tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
         comprise the space before the *<mask>*.
         """
         if self._mask_token is None:
@@ -214,7 +207,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
         self._mask_token = value
 
-    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast._batch_encode_plus with Roberta->Blenderbot, RoBERTa->Blenderbot
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
         assert self.add_prefix_space or not is_split_into_words, (
@@ -224,7 +216,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._batch_encode_plus(*args, **kwargs)
 
-    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast._encode_plus with Roberta->Blenderbot, RoBERTa->Blenderbot
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
 
@@ -235,17 +226,22 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
-    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.save_vocabulary with Roberta->Blenderbot, RoBERTa->Blenderbot
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.create_token_type_ids_from_sequences with Roberta->Blenderbot, RoBERTa->Blenderbot
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+        if token_ids_1 is None:
+            return output
+
+        return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
+
     def create_token_type_ids_from_sequences(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
     ) -> list[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does not
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
@@ -264,21 +260,5 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def build_inputs_with_special_tokens(self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None):
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A Blenderbot sequence has the following format:
-        - single sequence: ` X </s>`
 
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (`list[int]`, *optional*):
-                Will be ignored
-        Returns:
-            `list[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        return token_ids_0 + [self.eos_token_id]
-
-
-__all__ = ["BlenderbotTokenizerFast"]
+__all__ = ["RobertaTokenizerFast"]

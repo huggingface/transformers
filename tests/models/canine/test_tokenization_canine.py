@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -21,7 +19,7 @@ from functools import cached_property
 
 from transformers import BatchEncoding, CanineTokenizer
 from transformers.testing_utils import require_tokenizers, require_torch
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -29,6 +27,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "nielsr/canine-s"
     tokenizer_class = CanineTokenizer
+    test_slow_tokenizer = True
     test_rust_tokenizer = False
 
     @classmethod
@@ -118,13 +117,13 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 sample_text = " He is very happy, UNwant\u00e9d,running"
 
-                additional_special_tokens = tokenizer.additional_special_tokens
+                extra_special_tokens = tokenizer.extra_special_tokens
 
                 # We can add a new special token for Canine as follows:
-                new_additional_special_token = chr(0xE007)
-                additional_special_tokens.append(new_additional_special_token)
+                new_extra_special_token = chr(0xE007)
+                extra_special_tokens.append(new_extra_special_token)
                 tokenizer.add_special_tokens(
-                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                    {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
                 )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
@@ -132,7 +131,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
                 after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
                 self.assertListEqual(before_tokens, after_tokens)
-                self.assertIn(new_additional_special_token, after_tokenizer.additional_special_tokens)
+                self.assertIn(new_extra_special_token, after_tokenizer.extra_special_tokens)
                 self.assertEqual(after_tokenizer.model_max_length, 42)
 
                 tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
@@ -171,7 +170,7 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 SPECIAL_TOKEN_1 = chr(0xE005)
                 SPECIAL_TOKEN_2 = chr(0xE006)
                 tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
-                tokenizer.add_special_tokens({"additional_special_tokens": [SPECIAL_TOKEN_2]})
+                tokenizer.add_special_tokens({"extra_special_tokens": [SPECIAL_TOKEN_2]})
 
                 token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
                 token_2 = tokenizer.tokenize(SPECIAL_TOKEN_2)
@@ -191,68 +190,11 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 new_token = chr(NEW_TOKEN)
 
                 new_token = AddedToken(new_token, lstrip=True)
-                tokenizer.add_special_tokens({"additional_special_tokens": [new_token]})
+                tokenizer.add_special_tokens({"extra_special_tokens": [new_token]})
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.save_pretrained(tmp_dir_name)
                     tokenizer.from_pretrained(tmp_dir_name)
-
-    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
-        tokenizer_list = []
-        if self.test_slow_tokenizer:
-            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
-        if self.test_rust_tokenizer:
-            tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
-
-        for tokenizer_class, tokenizer_utils in tokenizer_list:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                tokenizer_utils.save_pretrained(tmp_dir)
-
-                with open(os.path.join(tmp_dir, "special_tokens_map.json"), encoding="utf-8") as json_file:
-                    special_tokens_map = json.load(json_file)
-
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), encoding="utf-8") as json_file:
-                    tokenizer_config = json.load(json_file)
-
-                # a special token for Canine can be defined as follows:
-                NEW_TOKEN = 0xE006
-                new_token_1 = chr(NEW_TOKEN)
-
-                special_tokens_map["additional_special_tokens"] = [new_token_1]
-                tokenizer_config["additional_special_tokens"] = [new_token_1]
-
-                with open(os.path.join(tmp_dir, "special_tokens_map.json"), "w", encoding="utf-8") as outfile:
-                    json.dump(special_tokens_map, outfile)
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as outfile:
-                    json.dump(tokenizer_config, outfile)
-
-                # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
-                # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
-                # "special_tokens_map.json" files
-                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(tmp_dir, extra_ids=0)
-                self.assertIn(new_token_1, tokenizer_without_change_in_init.additional_special_tokens)
-                # self.assertIn("an_additional_special_token",tokenizer_without_change_in_init.get_vocab()) # ByT5Tokenization no vocab
-                self.assertEqual(
-                    [new_token_1],
-                    tokenizer_without_change_in_init.convert_ids_to_tokens(
-                        tokenizer_without_change_in_init.convert_tokens_to_ids([new_token_1])
-                    ),
-                )
-
-                NEW_TOKEN = 0xE007
-                new_token_2 = chr(NEW_TOKEN)
-                # Now we test that we can change the value of additional_special_tokens in the from_pretrained
-                new_added_tokens = [AddedToken(new_token_2, lstrip=True)]
-                tokenizer = tokenizer_class.from_pretrained(
-                    tmp_dir, additional_special_tokens=new_added_tokens, extra_ids=0
-                )
-
-                self.assertIn(new_token_2, tokenizer.additional_special_tokens)
-                # self.assertIn(new_token_2,tokenizer.get_vocab()) # ByT5Tokenization no vocab
-                self.assertEqual(
-                    [new_token_2], tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids([new_token_2]))
-                )
 
     @require_tokenizers
     def test_encode_decode_with_spaces(self):
@@ -295,15 +237,15 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
             self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
 
-        setattr(tokenizer, "additional_special_tokens_ids", [])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
+        setattr(tokenizer, "extra_special_tokens_ids", [])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens"), [])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens_ids"), [])
 
         additional_special_token_id = 0xE006
         additional_special_token = chr(additional_special_token_id)
-        setattr(tokenizer, "additional_special_tokens_ids", [additional_special_token_id])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [additional_special_token])
-        self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [additional_special_token_id])
+        setattr(tokenizer, "extra_special_tokens_ids", [additional_special_token_id])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens"), [additional_special_token])
+        self.assertListEqual(getattr(tokenizer, "extra_special_tokens_ids"), [additional_special_token_id])
 
     @unittest.skip(reason="tokenizer has a fixed vocab_size (namely all possible unicode code points)")
     def test_add_tokens_tokenizer(self):

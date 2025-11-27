@@ -20,7 +20,7 @@ from typing import Optional
 
 import regex
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging, requires_backends
 
 

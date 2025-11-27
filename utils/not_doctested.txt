@@ -571,7 +571,6 @@ src/transformers/models/pvt/modeling_pvt.py
 src/transformers/models/qwen2/configuration_qwen2.py
 src/transformers/models/qwen2/modeling_qwen2.py
 src/transformers/models/qwen2/tokenization_qwen2.py
-src/transformers/models/qwen2/tokenization_qwen2_fast.py
 src/transformers/models/qwen2_moe/configuration_qwen2_moe.py
 src/transformers/models/qwen2_moe/modeling_qwen2_moe.py
 src/transformers/models/rag/configuration_rag.py
@@ -727,9 +726,8 @@ src/transformers/quantizers/quantizer_gptq.py
 src/transformers/quantizers/quantizers_utils.py
 src/transformers/testing_utils.py
 src/transformers/time_series_utils.py
-src/transformers/tokenization_utils.py
+src/transformers/tokenization_python.py
 src/transformers/tokenization_utils_base.py
-src/transformers/tokenization_utils_fast.py
 src/transformers/trainer.py
 src/transformers/trainer_callback.py
 src/transformers/trainer_pt_utils.py
@@ -745,7 +743,6 @@ src/transformers/utils/dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_
 src/transformers/utils/dummy_music_objects.py
 src/transformers/utils/dummy_pt_objects.py
 src/transformers/utils/dummy_sentencepiece_and_tokenizers_objects.py
-src/transformers/utils/dummy_sentencepiece_objects.py
 src/transformers/utils/dummy_speech_objects.py
 src/transformers/utils/dummy_tokenizers_objects.py
 src/transformers/utils/dummy_vision_objects.py

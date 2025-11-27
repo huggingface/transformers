@@ -21,7 +21,7 @@ from typing import Any, Optional, Union
 
 import sentencepiece
 
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from ...tokenization_python import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
 from ...utils.import_utils import requires
 
