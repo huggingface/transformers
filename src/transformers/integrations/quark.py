@@ -40,7 +40,6 @@ class QuarkDeserialize(ConversionOps):
         # this will get the param name : weight, input, bias or output
         param = target_key.split("_", 1)[0]
         quant_state = target_key.split("_", 1)[-1]
-        # print(f"full_layer_name: {full_layer_name}")
 
         sub_module_state = full_layer_name.rsplit(".", 1)[0] + "." + param + "_quantizer" + "." + quant_state
 
