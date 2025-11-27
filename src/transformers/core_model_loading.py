@@ -674,9 +674,6 @@ def convert_and_load_state_dict_in_model(
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
-    if hf_quantizer:
-        # We will add the quantizer's deserialization WeightConverter here.
-        pass
 
     param_name_to_load: dict[str, Union[WeightRenaming | WeightConverter]] = {}
 
@@ -724,11 +721,19 @@ def convert_and_load_state_dict_in_model(
                 source_pattern = renamed_key
 
             # 5. Handle dtype casting
-            if hf_quantizer is not None and hf_quantizer.param_needs_quantization(model, renamed_key):
+            if (
+                hf_quantizer
+                and not hf_quantizer.pre_quantized
+                and hf_quantizer.param_needs_quantization(model, renamed_key)
+            ):
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
-            if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
+            if hf_quantizer and hf_quantizer.pre_quantized and original_key != renamed_key:
+                # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
+                # so we need to make sure to load the tensor with the same dtype from the checkpoint
+                _dtype = None
+            elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[matched_dtype_pattern.group()]

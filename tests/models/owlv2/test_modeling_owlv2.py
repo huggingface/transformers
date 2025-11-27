@@ -617,7 +617,6 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
         image_processor = OwlViTImageProcessor.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
-        print("processor:", processor)
 
         image = prepare_img()
         inputs = processor(
