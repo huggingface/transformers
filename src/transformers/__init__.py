@@ -174,6 +174,7 @@ _import_structure = {
     "quantizers": [],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer", "PythonBackend"],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
