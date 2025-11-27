@@ -28,68 +28,68 @@ class S3GenConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-            vocab_size (`int`, *optional*, defaults to 6561):
-                Vocabulary size of the S3 speech tokenizer.
-            token_embed_dim (`int`, *optional*, defaults to 512):
-                Dimension of the token embeddings.
-            speaker_feat_dim (`int`, *optional*, defaults to 80):
-                Number of mel bins for speaker encoder input.
-            speaker_embed_dim (`int`, *optional*, defaults to 192):
-                Dimension of the speaker embeddings.
-            encoder_output_size (`int`, *optional*, defaults to 512):
-                Output size of the conformer encoder.
-            encoder_attention_heads (`int`, *optional*, defaults to 8):
-                Number of attention heads in the conformer encoder.
-            encoder_linear_units (`int`, *optional*, defaults to 2048):
-                Dimension of the feedforward network in the conformer encoder.
-            encoder_num_blocks (`int`, *optional*, defaults to 6):
-                Number of conformer encoder blocks.
-            encoder_dropout_rate (`float`, *optional*, defaults to 0.1):
-                Dropout probability for the encoder.
-            decoder_in_channels (`int`, *optional*, defaults to 320):
-                Number of input channels for the conditional decoder (encoder output + speaker embedding).
-            decoder_out_channels (`int`, *optional*, defaults to 80):
-                Number of output channels for the decoder (mel bins).
-            decoder_channels (`List[int]`, *optional*, defaults to `[256]`):
-                List of channel dimensions for the decoder U-Net.
-            decoder_n_blocks (`int`, *optional*, defaults to 4):
-                Number of transformer blocks in each decoder stage.
-            decoder_num_mid_blocks (`int`, *optional*, defaults to 12):
-                Number of middle blocks in the decoder U-Net.
-            decoder_num_heads (`int`, *optional*, defaults to 8):
-                Number of attention heads in the decoder.
-            decoder_attention_head_dim (`int`, *optional*, defaults to 64):
-                Dimension of each attention head in the decoder.
-            decoder_act_fn (`str`, *optional*, defaults to `"gelu"`):
-                Activation function for the decoder.
-            cfm_sigma_min (`float`, *optional*, defaults to 1e-06):
-                Minimum sigma for conditional flow matching.
-            cfm_solver (`str`, *optional*, defaults to `"euler"`):
-                ODE solver for conditional flow matching.
-            cfm_t_scheduler (`str`, *optional*, defaults to `"cosine"`):
-                Time scheduler for conditional flow matching.
-            cfm_inference_cfg_rate (`float`, *optional*, defaults to 0.7):
-                Classifier-free guidance rate for inference.
-            sampling_rate (`int`, *optional*, defaults to 24000):
-                Audio sampling rate in Hz.
-            mel_bins (`int`, *optional*, defaults to 80):
-                Number of mel frequency bins.
-            n_fft (`int`, *optional*, defaults to 1920):
-                FFT size for mel spectrogram extraction (24kHz sampling rate).
-            hop_length (`int`, *optional*, defaults to 480):
-                Hop length for mel spectrogram extraction (24kHz sampling rate).
-            win_size (`int`, *optional*, defaults to 1920):
-                Window size for mel spectrogram extraction.
-            fmin (`int`, *optional*, defaults to 0):
-                Minimum frequency for mel filter bank.
-            fmax (`int`, *optional*, defaults to 8000):
-                Maximum frequency for mel filter bank.
-            input_frame_rate (`int`, *optional*, defaults to 25):
-                Frame rate of the S3 tokenizer (25 fps).
-            token_mel_ratio (`int`, *optional*, defaults to 2):
-                Ratio between mel frames and tokens (2 mel frames per token).
-            pre_lookahead_len (`int`, *optional*, defaults to 3):
-                Pre-lookahead length for causal streaming.
+        vocab_size (`int`, *optional*, defaults to 6561):
+            Vocabulary size of the S3 speech tokenizer.
+        token_embed_dim (`int`, *optional*, defaults to 512):
+            Dimension of the token embeddings.
+        speaker_feat_dim (`int`, *optional*, defaults to 80):
+            Number of mel bins for speaker encoder input.
+        speaker_embed_dim (`int`, *optional*, defaults to 192):
+            Dimension of the speaker embeddings.
+        encoder_output_size (`int`, *optional*, defaults to 512):
+            Output size of the conformer encoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads in the conformer encoder.
+        encoder_linear_units (`int`, *optional*, defaults to 2048):
+            Dimension of the feedforward network in the conformer encoder.
+        encoder_num_blocks (`int`, *optional*, defaults to 6):
+            Number of conformer encoder blocks.
+        encoder_dropout_rate (`float`, *optional*, defaults to 0.1):
+            Dropout probability for the encoder.
+        decoder_in_channels (`int`, *optional*, defaults to 320):
+            Number of input channels for the conditional decoder (encoder output + speaker embedding).
+        decoder_out_channels (`int`, *optional*, defaults to 80):
+            Number of output channels for the decoder (mel bins).
+        decoder_channels (`List[int]`, *optional*, defaults to `[256]`):
+            List of channel dimensions for the decoder U-Net.
+        decoder_n_blocks (`int`, *optional*, defaults to 4):
+            Number of transformer blocks in each decoder stage.
+        decoder_num_mid_blocks (`int`, *optional*, defaults to 12):
+            Number of middle blocks in the decoder U-Net.
+        decoder_num_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads in the decoder.
+        decoder_attention_head_dim (`int`, *optional*, defaults to 64):
+            Dimension of each attention head in the decoder.
+        decoder_act_fn (`str`, *optional*, defaults to `"gelu"`):
+            Activation function for the decoder.
+        cfm_sigma_min (`float`, *optional*, defaults to 1e-06):
+            Minimum sigma for conditional flow matching.
+        cfm_solver (`str`, *optional*, defaults to `"euler"`):
+            ODE solver for conditional flow matching.
+        cfm_t_scheduler (`str`, *optional*, defaults to `"cosine"`):
+            Time scheduler for conditional flow matching.
+        cfm_inference_cfg_rate (`float`, *optional*, defaults to 0.7):
+            Classifier-free guidance rate for inference.
+        sampling_rate (`int`, *optional*, defaults to 24000):
+            Audio sampling rate in Hz.
+        mel_bins (`int`, *optional*, defaults to 80):
+            Number of mel frequency bins.
+        n_fft (`int`, *optional*, defaults to 1920):
+            FFT size for mel spectrogram extraction (24kHz sampling rate).
+        hop_length (`int`, *optional*, defaults to 480):
+            Hop length for mel spectrogram extraction (24kHz sampling rate).
+        win_size (`int`, *optional*, defaults to 1920):
+            Window size for mel spectrogram extraction.
+        fmin (`int`, *optional*, defaults to 0):
+            Minimum frequency for mel filter bank.
+        fmax (`int`, *optional*, defaults to 8000):
+            Maximum frequency for mel filter bank.
+        input_frame_rate (`int`, *optional*, defaults to 25):
+            Frame rate of the S3 tokenizer (25 fps).
+        token_mel_ratio (`int`, *optional*, defaults to 2):
+            Ratio between mel frames and tokens (2 mel frames per token).
+        pre_lookahead_len (`int`, *optional*, defaults to 3):
+            Pre-lookahead length for causal streaming.
 
     Example:
 

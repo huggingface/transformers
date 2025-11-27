@@ -30,6 +30,7 @@ from torch import Tensor
 from ...generation.utils import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring
 from ..llama.modeling_llama import LlamaConfig, LlamaModel
 from .configuration_t3 import T3Config
 
@@ -517,6 +518,7 @@ class T3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
 
 
+@auto_docstring
 class T3Model(T3PreTrainedModel, GenerationMixin):
     """
     T3 (Token-To-Token) TTS model using LLaMA as backbone.
