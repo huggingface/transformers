@@ -231,7 +231,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                         },
                         {
                             "role": "assistant",
-                            "content": "The first image shows a statue of Liberty in the",
+                            "content": "The first image shows a statue of the Statue of",
                         },
                     ],
                 }
@@ -344,18 +344,17 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url(self):
+        # test OpenAI usage, passing a URL (27/11/2025): https://platform.openai.com/docs/guides/images-vision?api-mode=responses#giving-a-model-images-as-input
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         messages = [
             {
                 "role": "user",
                 "content": [
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                        },
+                        "type": "input_image",
+                        "image_url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                     },
-                    {"type": "text", "text": "Describe this image in one sentence."},
+                    {"type": "input_text", "text": "Describe this image in one sentence."},
                 ],
             }
         ]
@@ -365,21 +364,22 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url_base64(self):
+        # test OpenAI usage, passing a Base64 encoded image (27/11/2025): https://platform.openai.com/docs/guides/images-vision?api-mode=responses#giving-a-model-images-as-input
         with open("./tests/fixtures/tests_samples/COCO/000000039769.png", "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode("utf-8")
 
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         messages = [
             {
                 "role": "user",
                 "content": [
                     {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                        "type": "input_image",
+                        "image_url": f"data:image/jpeg;base64,{base64_image}",
                     },
-                    {"type": "text", "text": "Describe this image in one sentence."},
+                    {"type": "input_text", "text": "Describe this image in one sentence."},
                 ],
             }
         ]
         outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
-        self.assertEqual(outputs, "Two cats are sleeping on a pink blanket, with")
+        self.assertEqual(outputs, "Two cats laying on a pink blanket next to a")
