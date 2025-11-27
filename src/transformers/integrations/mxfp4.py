@@ -29,7 +29,7 @@ if is_accelerate_available():
 import re
 from contextlib import contextmanager
 
-from ..quantizers.quantizers_utils import get_module_from_name
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 
 
 logger = logging.get_logger(__name__)
@@ -434,16 +434,6 @@ def mlp_forward(self, hidden_states):
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
     return routed_out, router_logits
-
-
-def should_convert_module(current_key_name, patterns):
-    current_key_name_str = ".".join(current_key_name)
-    if not any(
-        re.match(f"{key}\\.", current_key_name_str) or re.match(f"{key}", current_key_name_str) for key in patterns
-    ):
-        return True
-    return False
-
 
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module

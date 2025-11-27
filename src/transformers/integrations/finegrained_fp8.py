@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
 
@@ -307,29 +308,25 @@ def w8a8_block_fp8_matmul_compile(
 
 
 class FP8Linear(nn.Linear):
-    dtype = torch.float8_e4m3fn
-
     def __init__(
         self,
         in_features: int,
         out_features: int,
         bias: bool = False,
-        dtype=None,
+        dtype=torch.float8_e4m3fn,
         block_size: tuple[int, int] | None = None,
-        device=None,
         activation_scheme="dynamic",
     ):
         super().__init__(in_features, out_features)
         self.in_features = in_features
         self.out_features = out_features
-
-        self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
+        self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         if self.weight.element_size() == 1:
             scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
             scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
             self.weight_scale_inv = nn.Parameter(
-                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32)
             )
         else:
             self.register_parameter("weight_scale_inv", None)
@@ -380,9 +377,7 @@ def _ceil_div(a, b):
 
 
 class FP8Expert(nn.Module):
-    dtype = torch.float8_e4m3fn
-
-    def __init__(self, config, block_size, device):
+    def __init__(self, config, block_size, dtype=torch.float8_e4m3fn):
         super().__init__()
 
         from ..activations import ACT2FN
@@ -396,10 +391,10 @@ class FP8Expert(nn.Module):
         Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
 
         self.gate_up_proj = nn.Parameter(
-            torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=FP8Expert.dtype, device=device)
+            torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=dtype)
         )
         self.down_proj = nn.Parameter(
-            torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=FP8Expert.dtype, device=device)
+            torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=dtype)
         )
 
         # Create inverse scale tiles only when using 1-byte types (fp8)
@@ -410,14 +405,14 @@ class FP8Expert(nn.Module):
             gu_scale_o = _ceil_div(Wg_out, bo)
             gu_scale_i = _ceil_div(Wg_in, bi)
             self.gate_up_proj_scale_inv = nn.Parameter(
-                torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32, device=device)
+                torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32)
             )
 
             # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
             dp_scale_o = _ceil_div(Wd_out, bo)
             dp_scale_i = _ceil_div(Wd_in, bi)
             self.down_proj_scale_inv = nn.Parameter(
-                torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32, device=device)
+                torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32)
             )
         else:
             # Match FP8Linear behavior when not using 1-byte weights
@@ -487,81 +482,46 @@ class FP8Expert(nn.Module):
             torch_accelerator_module.synchronize()
             return output.to(dtype=input.dtype)
 
-
-# TODO: we do need this.... but not recursive...
-def _replace_with_fp8_linear(
-    model,
-    tp_plan=None,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    has_been_replaced=False,
-):
-    iterator = list(model.named_parameters()).copy()
-    for name, empty_tensor in iterator:
-        current_key_name = name
-        name = name.rsplit(".", 1)[0] if "." in name else name
-        module = model.get_submodule(name)
-
-        current_key_name_str = re.sub(r"\d+", "*", current_key_name)
-        if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
-            with init_empty_weights():
-                if (
-                    "gate_up_proj" in current_key_name
-                    or "down_proj" in current_key_name
-                    and "experts" in current_key_name
-                ):  # Experts!
-                    in_features = empty_tensor.size(-2)
-                    out_features = empty_tensor.size(-1)
-                    model.set_submodule(
-                        name,
-                        FP8Expert(
-                            config=model.config,
-                            block_size=quantization_config.weight_block_size,
-                            device=empty_tensor.device,
-                        ),
-                    )
-
-                elif isinstance(module, nn.Linear):
-                    in_features = module.in_features
-                    out_features = module.out_features
-                    model.set_submodule(
-                        name,
-                        FP8Linear(
-                            in_features=in_features,
-                            out_features=out_features,
-                            bias=module.bias is not None,
-                            device=module.weight.device,
-                            dtype=module.weight.dtype,
-                            activation_scheme=quantization_config.activation_scheme,
-                            block_size=quantization_config.weight_block_size,
-                        ),
-                    )
-                has_been_replaced = True
-        # when changing a layer the TP PLAN for that layer should be updated. TODO
-
-    return model, has_been_replaced
-
-
 def replace_with_fp8_linear(
     model,
     modules_to_not_convert=None,
     quantization_config=None,
+    pre_quantized=False,
 ):
     """Helper function to replace model layers with FP8 versions."""
-    if modules_to_not_convert is None:
-        modules_to_not_convert = []
-    modules_to_not_convert += ["lm_head"]
 
-    if quantization_config.modules_to_not_convert is not None:
-        modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
-    modules_to_not_convert = list(set(modules_to_not_convert))
-    model, has_been_replaced = _replace_with_fp8_linear(
-        model,
-        tp_plan=model._tp_plan,
-        modules_to_not_convert=modules_to_not_convert,
-        quantization_config=quantization_config,
-    )
+    iterator = list(model.named_parameters()).copy()
+    for full_name, empty_tensor in iterator:
+        if not should_convert_module(full_name, modules_to_not_convert):
+            continue
+        module_name = full_name.rsplit(".", 1)[0] if "." in full_name else full_name
+        module = model.get_submodule(module_name)
+        # we need this to correctly materialize the weights during quantization
+        module_kwargs = {} if pre_quantized else {"dtype": None}
+        new_module = None
+        with init_empty_weights():
+            if (
+                "gate_up_proj" in module_name
+                or "down_proj" in module_name
+                and "experts" in module_name
+            ):
+                new_module = FP8Expert(
+                        config=model.config,
+                        block_size=quantization_config.weight_block_size,
+                        **module_kwargs
+                    )
+            elif isinstance(module, nn.Linear):
+                new_module = FP8Linear(
+                        in_features=module.in_features,
+                        out_features=module.out_features,
+                        bias=module.bias is not None,
+                        activation_scheme=quantization_config.activation_scheme,
+                        block_size=quantization_config.weight_block_size,
+                        **module_kwargs
+                    )
+            if new_module is not None:
+                model.set_submodule(module_name, new_module)
+                has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(
