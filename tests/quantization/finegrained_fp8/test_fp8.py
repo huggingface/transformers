@@ -132,25 +132,21 @@ class FP8QuantizerTest(unittest.TestCase):
         for module in model.modules():
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
-
         model = replace_with_fp8_linear(model, quantization_config=quantization_config)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
-        print(model)
-        self.assertEqual(nb_linears - 1, nb_fp8_linear)
-
+        self.assertEqual(nb_linears, nb_fp8_linear)
         with init_empty_weights():
             model = OPTForCausalLM(config)
-        quantization_config = FineGrainedFP8Config(modules_to_not_convert=["fc1"])
-        model = replace_with_fp8_linear(model, quantization_config=quantization_config)
+        quantization_config = FineGrainedFP8Config()
+        model = replace_with_fp8_linear(model, modules_to_not_convert=["fc1"], quantization_config=quantization_config)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
-
-        self.assertEqual(nb_linears - 25, nb_fp8_linear)
+        self.assertEqual(nb_linears - 24, nb_fp8_linear)
 
     def test_quantized_model(self):
         """
@@ -209,7 +205,6 @@ class FP8QuantizerTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map="auto", quantization_config=quantization_config
         )
-        print("hf_device_map", quantized_model.hf_device_map)
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
@@ -271,7 +266,7 @@ class FP8LinearTest(unittest.TestCase):
         """
         from transformers.integrations import FP8Linear
 
-        linear = FP8Linear(256, 256, block_size=(128, 128), device=self.device)
+        linear = FP8Linear(256, 256, block_size=(128, 128)).to(self.device)
         x = torch.rand((1, 5, 256)).to(self.device)
 
         x_ = linear(x)
@@ -283,7 +278,7 @@ class FP8LinearTest(unittest.TestCase):
         """
         from transformers.integrations import FP8Linear
 
-        linear = FP8Linear(128, 256, block_size=(128, 128), device=self.device)
+        linear = FP8Linear(128, 256, block_size=(128, 128)).to(self.device)
         x = torch.rand((1, 5, 128)).to(self.device)
 
         x_ = linear(x)

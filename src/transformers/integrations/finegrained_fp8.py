@@ -317,23 +317,13 @@ class FP8Linear(nn.Linear):
         activation_scheme="dynamic",
     ):
         super().__init__(in_features, out_features)
-        self.in_features = in_features
-        self.out_features = out_features
-        self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
-
-        if self.weight.element_size() == 1:
-            scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
-            scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-            self.weight_scale_inv = nn.Parameter(
-                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32)
-            )
-        else:
-            self.register_parameter("weight_scale_inv", None)
-
         self.block_size = block_size
-
         self.activation_scheme = activation_scheme
 
+        self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
+        scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
+        scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
+        self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=torch.float32))
         if bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
         else:
@@ -392,27 +382,21 @@ class FP8Expert(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=dtype))
         self.down_proj = nn.Parameter(torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=dtype))
 
-        # Create inverse scale tiles only when using 1-byte types (fp8)
-        if self.gate_up_proj.element_size() == 1:
-            bo, bi = self.block_size
+        bo, bi = self.block_size
 
-            # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
-            gu_scale_o = _ceil_div(Wg_out, bo)
-            gu_scale_i = _ceil_div(Wg_in, bi)
-            self.gate_up_proj_scale_inv = nn.Parameter(
-                torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32)
-            )
+        # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
+        gu_scale_o = _ceil_div(Wg_out, bo)
+        gu_scale_i = _ceil_div(Wg_in, bi)
+        self.gate_up_proj_scale_inv = nn.Parameter(
+            torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32)
+        )
 
-            # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
-            dp_scale_o = _ceil_div(Wd_out, bo)
-            dp_scale_i = _ceil_div(Wd_in, bi)
-            self.down_proj_scale_inv = nn.Parameter(
-                torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32)
-            )
-        else:
-            # Match FP8Linear behavior when not using 1-byte weights
-            self.register_parameter("gate_up_proj_scale_inv", None)
-            self.register_parameter("down_proj_scale_inv", None)
+        # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
+        dp_scale_o = _ceil_div(Wd_out, bo)
+        dp_scale_i = _ceil_div(Wd_in, bi)
+        self.down_proj_scale_inv = nn.Parameter(
+            torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32)
+        )
 
         # (Optional) bias per projection — many MoEs omit bias; keep None to match your FP8Linear default
         self.register_parameter("gate_up_bias", None)
@@ -485,13 +469,10 @@ def replace_with_fp8_linear(
     pre_quantized=False,
 ):
     """Helper function to replace model layers with FP8 versions."""
-
-    iterator = list(model.named_parameters()).copy()
-    for full_name, empty_tensor in iterator:
-        if not should_convert_module(full_name, modules_to_not_convert):
+    has_been_replaced = False
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        module_name = full_name.rsplit(".", 1)[0] if "." in full_name else full_name
-        module = model.get_submodule(module_name)
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
@@ -518,7 +499,6 @@ def replace_with_fp8_linear(
             "You are loading your model using fp8 but no linear modules were found in your model."
             " Please double check your model architecture."
         )
-
     return model
 
 
