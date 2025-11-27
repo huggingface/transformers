@@ -176,19 +176,6 @@ class AnyToAnyPipelineTests(unittest.TestCase):
     @slow
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
-        text = "What is the capital of France? Assistant:"
-
-        outputs = pipe(text=text, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "What is the capital of France? Assistant:",
-                    "generated_None": "What is the capital of France? Assistant: The capital of France is Paris.\n",
-                }
-            ],
-        )
-
         messages = [
             [
                 {
@@ -207,43 +194,37 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 },
             ],
         ]
-        outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
+        expected_outputs = [
             [
-                [
-                    {
-                        "input_text": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            }
-                        ],
-                        "generated_None": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            },
-                            {
-                                "role": "assistant",
-                                "content": "A digital embrace, a friendly face,\nHugging Face rises, setting the pace.\nFor AI's heart, a vibrant core,\nOpen source models, and so much more.\n\nFrom transformers deep, a powerful might,\nNLP's future, shining so bright.\nDatasets curated, a treasure trove found,\nFor researchers and builders, on fertile ground.\n\nA community thriving, a collaborative art,\nSharing knowledge, playing a vital part.\nSpaces to showcase, creations unfold,\nStories in code, bravely told.\n\nWith libraries sleek, and tools so refined,\nDemocratizing AI, for all humankind.\nFrom sentiment analysis to text generation's grace,\nHugging Face empowers, at a rapid pace.\n\nA platform of learning, a place to explore,\nUnlocking potential, and asking for more.\nSo let's give a cheer, for this innovative team,\nHugging Face's vision, a beautiful dream. \n",
-                            },
-                        ],
-                    }
-                ],
-                [
-                    {
-                        "input_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
-                        ],
-                        "generated_None": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
-                            {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
-                        ],
-                    }
-                ],
+                {
+                    "input_text": messages[0],
+                    "generated_text": [
+                        messages[0][0],
+                        {
+                            "role": "assistant",
+                            "content": "A digital embrace, a friendly face,\nHugging Face rises, setting the pace.\nFor AI's heart, a vibrant core,\nOpen source models, and so much more.\n\nFrom transformers deep, a powerful might,\nNLP's future, shining so bright.\nDatasets curated, a treasure trove found,\nFor researchers and builders, on fertile ground.\n\nA community thriving, a collaborative art,\nSharing knowledge, playing a vital part.\nSpaces to showcase, creations unfold,\nStories in code, bravely told.\n\nWith libraries sleek, and tools so refined,\nDemocratizing AI, for all humankind.\nFrom sentiment analysis to text generation's grace,\nHugging Face empowers, at a rapid pace.\n\nA platform of learning, a place to explore,\nUnlocking potential, and asking for more.\nSo let's give a cheer, for this innovative team,\nHugging Face's vision, a beautiful dream. \n",
+                        },
+                    ],
+                }
             ],
-        )
+            [
+                {
+                    "input_text": messages[1],
+                    "generated_text": [
+                        messages[1][0],
+                        {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
+                    ],
+                }
+            ],
+        ]
+
+        # single input
+        outputs = pipe(text=messages[1], generate_kwargs={"do_sample": False})
+        self.assertEqual(outputs, expected_outputs[1])
+
+        # multiple inputs
+        outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
+        self.assertEqual(outputs, expected_outputs)
 
     @slow
     def test_small_model_pt_token_audio_input(self):
