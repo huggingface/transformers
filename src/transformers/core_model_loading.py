@@ -124,6 +124,7 @@ class Chunk(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
+    @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
