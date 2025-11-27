@@ -29,6 +29,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.import_utils import is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -219,7 +220,7 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    max_seqlen_in_batch = seqlens_in_batch.max()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
     return (
@@ -268,9 +269,7 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    # NOTE: Similar to the `.item()` in prepare_fa2_from_position_ids, with torch compile,
-    # this might cause a graph break
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    max_seqlen_in_batch = seqlens_in_batch.max()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
@@ -391,12 +390,6 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
     # for some models (e.g. qwen2-vl).
     max_length_q = cu_seq_lens_q.diff().max()
-    # NOTE: With torch compile, this will cause a graph break if you don't set
-    # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
-    # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
-    # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
-    # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
-    max_length_q = max_length_q.item()
     max_length_k = max_length_q
 
     return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
@@ -506,8 +499,8 @@ def _process_flash_attention_kwargs(
     softcap: Optional[float] = None,
     deterministic: Optional[bool] = None,
     s_aux: Optional[torch.Tensor] = None,
-    max_seqlen_q: Optional[int] = None,
-    max_seqlen_k: Optional[int] = None,
+    max_seqlen_q: Optional[int | torch.IntTensor] = None,
+    max_seqlen_k: Optional[int | torch.IntTensor] = None,
     supports_mapping: Optional[dict[str, bool]] = None,
     **kwargs,
 ):
@@ -538,9 +531,9 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
-        max_seqlen_q (`int`, *optional*):
+        max_seqlen_q (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the query tensor during a varlen forward.
-        max_seqlen_k (`int`, *optional*):
+        max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the key/value tensor during a varlen forward.
     Return:
         flash_kwargs (`dict`):
@@ -574,10 +567,21 @@ def _process_flash_attention_kwargs(
     if supports_mapping["s_aux"] and s_aux is not None:
         flash_kwargs["s_aux"] = s_aux
 
+    # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
+    # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
+    #
+    # You can either set
+    #   - Env: `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`
+    #   - Before compiling: `torch._dynamo.config.capture_scalar_outputs = True`
+    # to allow torch compile to handle scalar outputs in those cases.
     if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
+        if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
+            max_seqlen_q = max_seqlen_q.item()
         flash_kwargs["max_seqlen_q"] = max_seqlen_q
 
     if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
+        if not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
+            max_seqlen_k = max_seqlen_k.item()
         flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
     return flash_kwargs
@@ -710,8 +714,6 @@ def _flash_attention_forward(
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            max_seqlen_q=max_length_q,
-            max_seqlen_k=max_length_k,
             **final_flash_kwargs,
         )
         if isinstance(out, tuple):
