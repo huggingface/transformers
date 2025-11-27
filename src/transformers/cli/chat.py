@@ -22,7 +22,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any, Optional
 from urllib.parse import urljoin, urlparse
 
-import requests
+import httpx
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -276,12 +276,12 @@ class Chat:
     def check_health(url):
         health_url = urljoin(url + "/", "health")
         try:
-            output = requests.get(health_url)
+            output = httpx.get(health_url)
             if output.status_code != 200:
                 raise ValueError(
                     f"The server running on {url} returned status code {output.status_code} on health check (/health)."
                 )
-        except requests.exceptions.ConnectionError:
+        except httpx.ConnectError:
             raise ValueError(
                 f"No server currently running on {url}. To run a local server, please run `transformers serve` in a"
                 f"separate shell. Find more information here: https://huggingface.co/docs/transformers/serving"
