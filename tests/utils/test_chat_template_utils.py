@@ -441,7 +441,6 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             Returns:
                 God knows what
             """
-            pass
 
         schema = get_json_schema(fn)
         expected_schema = {
@@ -470,7 +469,6 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             Args:
                 x: The first input
             """
-            pass
 
         schema = get_json_schema(fn)
         expected_schema = {
@@ -505,7 +503,6 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                 The output. The return description is also a big multiline
                 description that spans multiple lines.
             """
-            pass
 
         schema = get_json_schema(fn)
         expected_schema = {

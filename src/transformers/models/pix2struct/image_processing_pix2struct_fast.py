@@ -83,7 +83,6 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         """
         # Pix2Struct doesn't use standard resize/rescale/normalize parameters
         # so we skip the default validation
-        pass
 
     def render_header(
         self,

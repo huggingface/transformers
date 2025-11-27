@@ -175,7 +175,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         return log_mel_spectrogram.T
 
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
-        ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
+        ranges = np.array_split(list(range(total_frames - chunk_frames + 1)), 3)
         if len(ranges[1]) == 0:
             # if the audio is too short, we just use the first chunk
             ranges[1] = [0]

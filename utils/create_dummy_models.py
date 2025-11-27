@@ -1194,7 +1194,7 @@ def build_tiny_model_summary(results, organization=None, token=None):
     tiny_model_summary = {}
     for config_name in results:
         processors = [key for key, value in results[config_name]["processor"].items()]
-        tokenizer_classes = sorted([x for x in processors if x.endswith("TokenizerFast") or x.endswith("Tokenizer")])
+        tokenizer_classes = sorted([x for x in processors if x.endswith(("TokenizerFast", "Tokenizer"))])
         processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
 
         if "pytorch" not in results[config_name]:

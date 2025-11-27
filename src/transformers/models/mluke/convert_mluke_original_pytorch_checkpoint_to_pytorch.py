@@ -101,7 +101,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     state_dict.pop("lm_head.decoder.bias")
     state_dict_for_hugging_face = OrderedDict()
     for key in state_dict:
-        if not (key.startswith("lm_head") or key.startswith("entity_predictions")):
+        if not (key.startswith(("lm_head", "entity_predictions"))):
             state_dict_for_hugging_face[f"luke.{key}"] = state_dict[key]
         else:
             state_dict_for_hugging_face[key] = state_dict[key]

@@ -533,8 +533,6 @@ def offload_and_maybe_resave_param(
 class SkipLayer(Exception):
     """Control-flow sentinel: abort processing of the current layer only."""
 
-    pass
-
 
 def repl(m, repl_map: dict[str, str]) -> str:
     # Collect all groups that matched

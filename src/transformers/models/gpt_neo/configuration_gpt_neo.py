@@ -178,7 +178,7 @@ def custom_unfold(input, dimension, size, step):
     s[dimension] = indices
     sliced = input[s]
 
-    perm = list(range(0, rank + 1))
+    perm = list(range(rank + 1))
     perm.append(perm.pop(dimension + 1))
 
     return sliced.permute(perm)

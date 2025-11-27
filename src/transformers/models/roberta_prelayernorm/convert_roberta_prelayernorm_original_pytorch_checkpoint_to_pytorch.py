@@ -47,7 +47,7 @@ def convert_roberta_prelayernorm_checkpoint_to_pytorch(checkpoint_repo: str, pyt
             tensor_key = "roberta_prelayernorm." + tensor_key[len("roberta.") :]
 
         # The original implementation contains weights which are not used, remove them from the state_dict
-        if tensor_key.endswith(".self.LayerNorm.weight") or tensor_key.endswith(".self.LayerNorm.bias"):
+        if tensor_key.endswith((".self.LayerNorm.weight", ".self.LayerNorm.bias")):
             continue
 
         state_dict[tensor_key] = tensor_value

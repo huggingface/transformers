@@ -163,7 +163,7 @@ class HiggsHfQuantizer(HfQuantizer):
         higgs_names = {name for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
 
         def should_update(key: str) -> bool:
-            if key.endswith(".weight") or key.endswith(".bias"):
+            if key.endswith((".weight", ".bias")):
                 return False
             full_key = f"{prefix}.{key}"
             return any(name in key or name in full_key for name in higgs_names)

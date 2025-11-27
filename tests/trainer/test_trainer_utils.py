@@ -304,7 +304,7 @@ class TrainerUtilsTest(unittest.TestCase):
         ]
         # When drop_last=False, we get two last full batches by looping back to the beginning.
         expected_shards[0].extend(list(range(96, 100)))
-        expected_shards[1].extend(list(range(0, 4)))
+        expected_shards[1].extend(list(range(4)))
 
         self.assertListEqual([list(shard) for shard in sampler_shards], expected_shards)
         self.assertListEqual([len(shard) for shard in sampler_shards], [len(shard) for shard in expected_shards])
