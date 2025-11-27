@@ -34,7 +34,6 @@ from ..processing_utils import ProcessorMixin
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     cached_file,
     extract_commit_hash,
     find_adapter_config_file,
@@ -832,8 +831,7 @@ def pipeline(
         model, default_revision = get_default_model_and_revision(targeted_task, task_options)
         revision = revision if revision is not None else default_revision
         logger.warning(
-            f"No model was supplied, defaulted to {model} and revision"
-            f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model}).\n"
+            f"No model was supplied, defaulted to {model} and revision {revision}.\n"
             "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
         hub_kwargs["revision"] = revision

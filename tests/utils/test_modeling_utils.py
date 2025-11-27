@@ -26,10 +26,11 @@ import unittest.mock as mock
 import uuid
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
-from huggingface_hub import HfApi, split_torch_state_dict_into_shards
+from huggingface_hub import HfApi, snapshot_download, split_torch_state_dict_into_shards
 from parameterized import parameterized
 from pytest import mark
 
@@ -289,91 +290,38 @@ if is_torch_available():
             return attention_mask
 
     class TestOffline(unittest.TestCase):
-        def test_offline(self):
-            # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
-            from huggingface_hub import constants
+        @patch("huggingface_hub.constants")
+        def test_offline(self, mock_hf_hub_constants):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                mock_hf_hub_constants.HF_HUB_OFFLINE = True
 
-            from transformers.utils import hub
+                # First offline load should fail
+                with pytest.raises(OSError):
+                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
-            offlfine_env = hub._is_offline_mode
-            hub_cache_env = constants.HF_HUB_CACHE
-            hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
-            default_cache = constants.default_cache_path
-            transformers_cache = hub.TRANSFORMERS_CACHE
+                # Download model from Hub
+                mock_hf_hub_constants.HF_HUB_OFFLINE = False
+                snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
-            try:
-                hub._is_offline_mode = True
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    LOG.info("Temporary cache dir %s", tmpdir)
-                    constants.HF_HUB_CACHE = tmpdir
-                    constants.HUGGINGFACE_HUB_CACHE = tmpdir
-                    constants.default_cache_path = tmpdir
-                    hub.TRANSFORMERS_CACHE = tmpdir
-                    # First offline load should fail
-                    try:
-                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
-                    except OSError:
-                        LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
-                    else:
-                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
-
-                    # Download model -> Huggingface Hub not concerned by our offline mode
-                    LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
-                    hub_api = HfApi()
-                    local_dir = hub_api.snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                    LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
-
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
-            finally:
-                # Tear down: reset env as it was before calling this test
-                hub._is_offline_mode = offlfine_env
-                constants.HF_HUB_CACHE = hub_cache_env
-                constants.HUGGINGFACE_HUB_CACHE = hub_cache_env1
-                constants.default_cache_path = default_cache
-                hub.TRANSFORMERS_CACHE = transformers_cache
+                # Load again in offline mode - should work now
+                mock_hf_hub_constants.HF_HUB_OFFLINE = True
+                AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
-            # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
-            from huggingface_hub import constants
-
-            from transformers.utils import hub
-
-            hub_cache_env = constants.HF_HUB_CACHE
-            hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
-            default_cache = constants.default_cache_path
-            transformers_cache = hub.TRANSFORMERS_CACHE
-            try:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    LOG.info("Temporary cache dir %s", tmpdir)
-                    constants.HF_HUB_CACHE = tmpdir
-                    constants.HUGGINGFACE_HUB_CACHE = tmpdir
-                    constants.default_cache_path = tmpdir
-                    hub.TRANSFORMERS_CACHE = tmpdir
-                    try:
-                        AutoModelForImageClassification.from_pretrained(
-                            TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
-                        )
-                    except OSError:
-                        LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
-                    else:
-                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
-
-                    LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
-                    hub_api = HfApi()
-                    local_dir = hub_api.snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                    LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
-
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Empty cache => fail to load from cache
+                with pytest.raises(OSError):
                     AutoModelForImageClassification.from_pretrained(
-                        TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
+                        TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
                     )
-            finally:
-                # Tear down: reset env as it was before calling this test
-                constants.HF_HUB_CACHE = hub_cache_env
-                constants.HUGGINGFACE_HUB_CACHE = hub_cache_env1
-                constants.default_cache_path = default_cache
-                hub.TRANSFORMERS_CACHE = transformers_cache
+
+                # Populate cache
+                snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                # Load again from cache => success
+                AutoModelForImageClassification.from_pretrained(
+                    TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
+                )
 
 
 # Need to be serializable, which means they cannot be in a test class method
