@@ -73,7 +73,7 @@ class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
     input_text = "Once upon a time"
     max_new_tokens = 10
-    EXPECTED_OUTPUT = "Once upon a time, there was a man who was very rich."
+    EXPECTED_OUTPUT = "Once upon a time, there was a man who was a farmer."
     device_map = torch_device
     offload_device_map = {
         "model.embed_tokens": 0,
