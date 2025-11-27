@@ -313,6 +313,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "VaultGemmaConfig": ["tie_word_embeddings"],
     "GemmaConfig": ["tie_word_embeddings"],
     "CsmConfig": ["tie_codebooks_embeddings"],
+    "LayoutXLMConfig": True,
 }
 
 
