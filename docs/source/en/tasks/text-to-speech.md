@@ -19,18 +19,18 @@ rendered properly in your Markdown viewer.
 [[open-in-colab]]
 
 Text-to-speech (TTS) is the task of creating natural-sounding speech from text, where the speech can be generated in multiple
-languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as
+languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as [Dia](../model_doc/dia), [CSM](../model_doc/csm),
 [Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits) and [SpeechT5](../model_doc/speecht5).
 
-You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`). Some models, like Bark,
+You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`). Some models, like Dia,
 can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music.
-Here's an example of how you would use the `"text-to-speech"` pipeline with Bark:
+Here's an example of how you would use the `"text-to-speech"` pipeline with Dia:
 
 ```py
 >>> from transformers import pipeline
 
->>> pipe = pipeline("text-to-speech", model="suno/bark-small")
->>> text = "[clears throat] This is a test ... and I just took a long pause."
+>>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626")
+>>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
 >>> output = pipe(text)
 ```
 
@@ -45,7 +45,7 @@ For more examples on what Bark and other pretrained TTS models can do, refer to 
 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models).
 
 If you are looking to fine-tune a TTS model, the only text-to-speech models currently available in 🤗 Transformers
-are [SpeechT5](model_doc/speecht5) and [FastSpeech2Conformer](model_doc/fastspeech2_conformer), though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
+are [SpeechT5](model_doc/speecht5), [FastSpeech2Conformer](model_doc/fastspeech2_conformer), [Dia](model_doc/dia) and [CSM](model_doc/csm) though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
 
 The remainder of this guide illustrates how to:
 
