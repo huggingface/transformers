@@ -170,8 +170,8 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-        routing_weights = routing_weights.to(router_logits.dtype)
-        return routing_weights, selected_experts
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return routing_weights, selected_experts, router_logits
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
@@ -194,7 +194,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        routing_weights, selected_experts = self.gate(hidden_states)
+        routing_weights, selected_experts, _ = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
 
         if self.shared_experts is not None:

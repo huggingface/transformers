@@ -695,12 +695,15 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         # We are downloading both configs because almost all models have a `processor_config.json` but
         # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
         video_processor_dict = None
+        final_resolved_file_path = None
         if resolved_processor_file is not None:
+            final_resolved_file_path = resolved_processor_file
             processor_dict = safe_load_json_file(resolved_processor_file)
             if "video_processor" in processor_dict:
                 video_processor_dict = processor_dict["video_processor"]
 
         if resolved_video_processor_file is not None and video_processor_dict is None:
+            final_resolved_file_path = resolved_video_processor_file
             video_processor_dict = safe_load_json_file(resolved_video_processor_file)
 
         if video_processor_dict is None:
@@ -717,6 +720,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             logger.info(
                 f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
+
+        # Specific models need the original path for modification in `from_dict`, e.g. see `Ernie 4.5 VL` with fonts
+        kwargs["resolved_file_path"] = final_resolved_file_path
+
         return video_processor_dict, kwargs
 
     @classmethod
