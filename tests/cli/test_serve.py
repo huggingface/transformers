@@ -291,10 +291,9 @@ class ServeCompletionsMixin:
         # NOTE: the output of our server is wrapped by `InferenceClient`, which sends fields even when they
         # are empty.
 
-        # Finish reason: the last payload should have a finish reason of "stop", all others should be empty
-        # TODO: we may add other finish reasons in the future, and this may need more logic
+        # Finish reason: the last payload should have a finish reason of "length" or "stop", all others should be empty
         finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
-        self.assertEqual(finish_reasons[-1], "stop")
+        self.assertTrue(finish_reasons[-1] in ["length", "stop"])
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
         # Role: the first payload should have a role of "assistant", all others should be empty
@@ -327,6 +326,18 @@ class ServeCompletionsMixin:
         # The generation config sets greedy decoding, so the output is reproducible. By default, `Qwen/Qwen3-0.6B`
         # sets `do_sample=True`
         self.assertEqual(output_text, '<think>\nOkay, the user just asked, "')
+
+    def test_early_return_due_to_length(self):
+        request = {
+            "model": "Qwen/Qwen3-0.6B",
+            "messages": [{"role": "user", "content": "Hello, how are you?"}],
+            "stream": True,
+            "max_tokens": 3,
+        }
+
+        all_payloads = self.run_server(request)
+        last_payload = all_payloads[-1]
+        self.assertTrue(last_payload.choices[0]["finish_reason"] == "length")
 
     # TODO: one test for each request flag, to confirm it is working as expected
     # TODO: speed-based test to confirm that KV cache is working across requests
@@ -549,7 +560,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
         # Finally, the last payload should contain a finish reason
         finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
         # TODO: I think the finish reason for a tool call is different? double check this
-        self.assertEqual(finish_reasons[-1], "stop")
+        self.assertTrue(finish_reasons[-1] in ["stop", "length"])
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 
