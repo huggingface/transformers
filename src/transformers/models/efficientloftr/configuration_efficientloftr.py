@@ -177,7 +177,7 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {} or {}
+        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
         self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 4.0)
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
 
