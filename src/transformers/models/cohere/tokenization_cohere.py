@@ -305,7 +305,7 @@ class CohereTokenizer(TokenizersBackend):
         # Render the prompt, ready for user to inspect, or for input into the model
         prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
         print(prompt)
-        >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
+        >> inputs = tokenizer.encode(grounded_generation_prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
         Action: ```json
@@ -399,38 +399,9 @@ class CohereTokenizer(TokenizersBackend):
         >> # render the prompt, ready for user to inspect, or for input into the model:
         >> grounded_generation_prompt = tokenizer.apply_grounded_generation_template(conversation, documents=documents, tokenize=False, add_generation_prompt=True)
         >> print(grounded_generation_prompt)
-        <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
-        The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
-
-        ## Basic Rules
-        You are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user's requests, you cite your sources in your answers, according to those instructions.
-
-        # User Preamble
-        ## Task and Context
-        You help people answer their questions and other requests interactively. You will be asked a very wide array of requests on all kinds of topics. You will be equipped with a wide range of search engines or similar tools to help you, which you use to research your answer. You should focus on serving the user's needs as best you can, which will be wide-ranging.
-
-        ## Style Guide
-        Unless the user asks for a different style of answer, you should answer in full sentences, using proper grammar and spelling.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Whats the biggest penguin in the world?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|><results>
-        Document: 0
-        title: Tall penguins
-        text: Emperor penguins are the tallest.
-
-        Document: 1
-        title: Penguin habitats
-        text: Emperor penguins only live in Antarctica.
-        </results><|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>Carefully perform the following instructions, in order, starting each with a new line.
-        Firstly, Decide which of the retrieved documents are relevant to the user's last input by writing 'Relevant Documents:' followed by comma-separated list of document numbers. If none are relevant, you should instead write 'None'.
-        Secondly, Decide which of the retrieved documents contain facts that should be cited in a good answer to the user's last input by writing 'Cited Documents:' followed a comma-separated list of document numbers. If you dont want to cite any of them, you should instead write 'None'.
-        Thirdly, Write 'Answer:' followed by a response to the user's last input in high quality natural english. Use the retrieved documents to help you. Do not insert any citations or grounding markup.
-        Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols &lt;co: doc&gt; and &lt;/co: doc&gt; to indicate when a fact comes from a document in the search result, e.g &lt;co: 0&gt;my fact&lt;/co: 0&gt; for a fact from document 0.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'''
-        ```
         >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
-        Relevant Documents: 0,1
-        Cited Documents: 0,1
-        Answer: The Emperor Penguin is the tallest or biggest penguin in the world. It is a bird that lives only in Antarctica and grows to a height of around 122 centimetres.
-        Grounded answer: The &lt;co: 0&gt;Emperor Penguin&lt;/co: 0&gt; is the &lt;co: 0&gt;tallest&lt;/co: 0&gt; or biggest penguin in the world. It is a bird that &lt;co: 1&gt;lives only in Antarctica&lt;/co: 1&gt; and &lt;co: 0&gt;grows to a height of around 122 centimetres.&lt;/co: 0&gt;
         """
         return self.apply_chat_template(
             conversation,
