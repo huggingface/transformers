@@ -3943,8 +3943,6 @@ class Trainer:
             The loss of the model along with its output if return_outputs was set to True
         """
 
-        unwrapped_model = self.accelerator.unwrap_model(model)
-
         # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
         # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
         # Both standard transformer models and Liger-patched models handle shift_labels correctly,
