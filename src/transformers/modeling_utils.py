@@ -1737,7 +1737,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             if (
                 importlib.util.find_spec("flash_attn") is None
-                or "flash-attn-cute" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+                or "flash-attn-cute" not in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
             ):
                 raise ImportError(f"{preface} the package flash_attn (under cute) seems to be not installed.")
 
