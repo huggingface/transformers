@@ -47,6 +47,7 @@ from transformers.testing_utils import (
     require_jinja,
     require_tokenizers,
     require_torch,
+    slow,
 )
 from transformers.tokenization_python import AddedToken
 
@@ -2249,6 +2250,7 @@ Hey how are you doing"""  # noqa: W293
         vocab = [tokenizer.convert_ids_to_tokens(i) for i in range(len(tokenizer))]
         self.assertEqual(len(vocab), len(tokenizer))
 
+    @slow
     def test_conversion_reversible(self):
         tokenizer = self.get_tokenizer(do_lower_case=False)
         vocab = tokenizer.get_vocab()
