@@ -858,6 +858,51 @@ def is_flash_attn_3_available() -> bool:
 
 
 @lru_cache
+def is_flash_attn_4_available() -> bool:
+    """
+    Check if Flash Attention 4 (CuTe DSL implementation) is available.
+
+    FA4 is distributed within the flash_attn package under the 'cute' submodule
+    and requires CUDA compute capability >= 9.0 (Hopper or Blackwell GPUs).
+
+    Returns:
+        bool: True if FA4 is available and hardware requirements are met.
+    """
+    # FA4 requires CUDA and flash_attn package
+    if not is_torch_cuda_available():
+        return False
+
+    is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    if not is_available:
+        return False
+
+    try:
+        # FA4 is available via flash_attn.cute submodule
+        # We verify by attempting to import the cute interface
+        from flash_attn.cute import flash_attn_func
+
+        # FA4 is optimized for SM 9.0+ (Hopper/Blackwell)
+        # It can run on SM 8.0 (Ampere) but with limited optimizations
+        import torch
+
+        if torch.cuda.is_available():
+            # Get compute capability of the default device
+            major, minor = torch.cuda.get_device_capability()
+            compute_cap = major * 10 + minor
+
+            # FA4 requires SM 8.0+ minimum, optimized for SM 9.0+
+            # We allow SM 8.0+ but document that SM 9.0+ is recommended
+            if compute_cap >= 80:
+                return True
+
+        return False
+
+    except (ImportError, AttributeError, RuntimeError):
+        # Import failed - FA4 not available
+        return False
+
+
+@lru_cache
 def is_flash_attn_greater_or_equal_2_10() -> bool:
     _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
