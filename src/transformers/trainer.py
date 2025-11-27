@@ -3947,12 +3947,16 @@ class Trainer:
 
         outputs = model(**inputs)
         shift_labels = inputs["shift_labels"]
-        loss = unwrapped_model.loss_function(
-            logits=outputs.logits,
-            labels=None,
-            shift_labels=shift_labels,
-            vocab_size=unwrapped_model.config.vocab_size,
-        )
+        # When using Liger-kernel, the model already computed the loss internally and outputs.logits is None
+        if outputs.logits is None:
+            loss = outputs.loss
+        else:
+            loss = unwrapped_model.loss_function(
+                logits=outputs.logits,
+                labels=None,
+                shift_labels=shift_labels,
+                vocab_size=unwrapped_model.config.vocab_size,
+            )
 
         sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
         sp_world_size = pc.sp_size
