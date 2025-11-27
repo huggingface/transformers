@@ -96,7 +96,6 @@ class DeepseekV2Moe(nn.Module):
         self.num_group = config.n_group
         self.top_k = config.num_experts_per_tok
         self.topk_group = config.topk_group
-        self.num_experts = config.n_routed_experts
 
     def route_tokens_to_experts(self, router_logits):
         batch_size, seq_len, hidden_dim = router_logits.shape
