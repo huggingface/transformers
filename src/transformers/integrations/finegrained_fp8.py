@@ -577,8 +577,6 @@ class Fp8Quantize(ConversionOps):
     A quantization operation that creates two tensors, weight and scale out of a weight.
     """
 
-    reverse_op: type[ConversionOps]
-
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
         self.reverse_op = Fp8Dequantize
