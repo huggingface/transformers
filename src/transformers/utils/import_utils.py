@@ -516,6 +516,7 @@ def enable_tf32(enable: bool) -> None:
     pytorch_version = version.parse(get_torch_version())
     if pytorch_version >= version.parse("2.9.0"):
         precision_mode = "tf32" if enable else "ieee"
+        torch.backends.fp32_precision = precision_mode
         torch.backends.cuda.matmul.fp32_precision = precision_mode
         torch.backends.cudnn.fp32_precision = precision_mode
     else:
