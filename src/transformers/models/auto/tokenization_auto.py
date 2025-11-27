@@ -23,11 +23,10 @@ from typing import Any, Optional, Union
 
 from transformers.utils.import_utils import is_mistral_common_available
 
-from ... import PythonBackend
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from ...tokenization_python import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer, PythonBackend
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE, find_sentencepiece_model_file, load_vocab_and_merges
 from ...utils import (
     extract_commit_hash,
@@ -455,7 +454,11 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         kwargs["backend"] = "tokenizers"
         kwargs["files_loaded"] = files_loaded
         # Some old models have uploaded a tokenizer.json but haven't updated tokenizer_config.json to point to the correct tokenizer class
-        tokenizer_class = TokenizersBackend if tokenizer_class.__name__ == "PythonBackend" else tokenizer_class
+        tokenizer_class = (
+            TokenizersBackend
+            if tokenizer_class.__name__ in ("PythonBackend", "PreTrainedTokenizer")
+            else tokenizer_class
+        )
         return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
     # Try tekken.json (Mistral format)
@@ -681,6 +684,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 isinstance(tokenizer_class, type)
                 and issubclass(tokenizer_class, PreTrainedTokenizer)
                 and not any(issubclass(tokenizer_class, bc) for bc in backend_classes)
+                and tokenizer_class.__name__ not in ("PythonBackend", "PreTrainedTokenizer")
             )
 
             # Check if it's a completely custom tokenizer (not PreTrainedTokenizer, not backend class)
