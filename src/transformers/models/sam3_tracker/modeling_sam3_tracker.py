@@ -750,7 +750,7 @@ class Sam3TrackerVisionEncoderOutput(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    Segment Anything Model 2 (SAM 2) for generating segmentation masks, given an input image and
+    Segment Anything Model 3 (SAM 3) for generating segmentation masks, given an input image and
     input points and labels, boxes, or masks.
     """
 )
