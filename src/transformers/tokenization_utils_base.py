@@ -1616,7 +1616,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
         single_file_id = None
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+        if os.path.isfile(pretrained_model_name_or_path):
             # For legacy support: allow single-file loading if:
             # 1. Only one vocab file is required, OR
             # 2. It's a fast tokenizer with tokenizer_file (which is optional), OR
