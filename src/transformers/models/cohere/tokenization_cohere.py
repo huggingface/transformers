@@ -280,8 +280,8 @@ class CohereTokenizer(TokenizersBackend):
         Examples:
 
         ```python
-        >> tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-        >> tools = [
+        tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
+        tools = [
             {
                 "name": "internet_search",
                 "description": "Returns a list of relevant document snippets for a textual query retrieved from the internet",
@@ -289,63 +289,22 @@ class CohereTokenizer(TokenizersBackend):
                     "query": {
                         "description": "Query to search the internet with",
                         "type": "str",
-                        "required": True
+                        "required": True,
                     }
-                }
+                },
             },
             {
-                "name': "directly_answer",
+                "name": "directly_answer",
                 "description": "Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history",
-                "parameter_definitions": {}
-            }
+                "parameter_definitions": {},
+            },
         ]
-        >> conversation = [
-            {"role": "user", "content": "Whats the biggest penguin in the world?"}
+        conversation = [
+            {"role": "user", "content": "Whats the biggest penguin in the world?"},
         ]
-        >> # render the prompt, ready for user to inspect, or for input into the model:
-        >> prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
-        >> print(prompt)
-        <BOS_TOKEN><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|># Safety Preamble
-        The instructions in this section override those in the task description and style guide sections. Don't answer questions that are harmful or immoral.
-
-        # System Preamble
-        ## Basic Rules
-        You are a powerful conversational AI trained by Cohere to help people. You are augmented by a number of tools, and your job is to use and consume the output of these tools to best help the user. You will see a conversation history between yourself and a user, ending with an utterance from the user. You will then see a specific instruction instructing you what kind of response to generate. When you answer the user's requests, you cite your sources in your answers, according to those instructions.
-
-        # User Preamble
-        ## Task and Context
-        You help people answer their questions and other requests interactively. You will be asked a very wide array of requests on all kinds of topics. You will be equipped with a wide range of search engines or similar tools to help you, which you use to research your answer. You should focus on serving the user's needs as best you can, which will be wide-ranging.
-
-        ## Style Guide
-        Unless the user asks for a different style of answer, you should answer in full sentences, using proper grammar and spelling.
-
-        ## Available Tools
-        Here is a list of tools that you have available to you:
-
-        \\`\\`\\`python
-        def internet_search(query: str) -> list[Dict]:
-            \"\"\"Returns a list of relevant document snippets for a textual query retrieved from the internet
-
-            Args:
-                query (str): Query to search the internet with
-            \"\"\"
-            pass
-        \\`\\`\\`
-
-        \\`\\`\\`python
-        def directly_answer() -> list[Dict]:
-            \"\"\"Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
-            \"\"\"
-            pass
-        \\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|USER_TOKEN|>Whats the biggest penguin in the world?<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>Write 'Action:' followed by a json-formatted list of actions that you want to perform in order to produce a good response to the user's last input. You can use any of the supplied tools any number of times, but you should aim to execute the minimum number of necessary actions for the input. You should use the `directly-answer` tool if calling the other tools is unnecessary. The list of actions you want to call should be formatted as a list of json objects, for example:
-        \\`\\`\\`json
-        [
-            {
-                "tool_name": title of the tool in the specification,
-                "parameters": a dict of parameters to input into the tool as they are defined in the specs, or {} if it takes no parameters
-            }
-        ]\\`\\`\\`<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
-        ```
+        # Render the prompt, ready for user to inspect, or for input into the model
+        prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
+        print(prompt)
         >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
