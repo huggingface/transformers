@@ -366,7 +366,7 @@ class PvtV2PreTrainedModel(PreTrainedModel):
     config: PvtV2Config
     base_model_prefix = "pvt_v2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
