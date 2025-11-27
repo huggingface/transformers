@@ -28,8 +28,7 @@ The base classes [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`]
 implement the common methods for encoding string inputs in model inputs (see below) and instantiating/saving python and
 "Fast" tokenizers either from a local file or directory or from a pretrained tokenizer provided by the library
 (downloaded from HuggingFace's AWS S3 repository). They both rely on
-[`~tokenization_utils_base.PreTrainedTokenizerBase`] that contains the common methods, and
-[`~tokenization_utils_base.SpecialTokensMixin`].
+[`~tokenization_utils_base.PreTrainedTokenizerBase`] that contains the common methods.
 
 [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`] thus implement the main
 methods for using all the tokenizers:
