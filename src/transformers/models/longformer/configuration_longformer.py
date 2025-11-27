@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class LongformerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongformerModel`] . It
+    This is the configuration class to store the configuration of a [`LongformerModel`]. It
     is used to instantiate a Longformer model according to the specified arguments, defining the model architecture.
 
     This is the configuration class to store the configuration of a [`LongformerModel`]. It is used to instantiate an
@@ -40,7 +40,7 @@ class LongformerConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Longformer model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`LongformerModel`] .
+            the `inputs_ids` passed when calling [`LongformerModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):

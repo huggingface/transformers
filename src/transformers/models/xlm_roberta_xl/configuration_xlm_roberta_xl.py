@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class XLMRobertaXLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XLMRobertaXLModel`] .
+    This is the configuration class to store the configuration of a [`XLMRobertaXLModel`].
     It is used to instantiate a XLM_ROBERTA_XL model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     XLM_ROBERTA_XL [facebook/xlm-roberta-xl](https://huggingface.co/facebook/xlm-roberta-xl) architecture.

@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class MobileBertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MobileBertModel`] . It
+    This is the configuration class to store the configuration of a [`MobileBertModel`]. It
     is used to instantiate a MobileBERT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the MobileBERT
     [google/mobilebert-uncased](https://huggingface.co/google/mobilebert-uncased) architecture.
@@ -35,7 +35,7 @@ class MobileBertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the MobileBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`MobileBertModel`] .
+            the `inputs_ids` passed when calling [`MobileBertModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 24):

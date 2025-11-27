@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class XLMRobertaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XLMRobertaModel`] . It
+    This is the configuration class to store the configuration of a [`XLMRobertaModel`]. It
     is used to instantiate a XLM-RoBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the XLMRoBERTa
     [FacebookAI/xlm-roberta-base](https://huggingface.co/FacebookAI/xlm-roberta-base) architecture.
@@ -36,7 +36,7 @@ class XLMRobertaConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the XLM-RoBERTa model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`XLMRobertaModel`] .
+            the `inputs_ids` passed when calling [`XLMRobertaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
