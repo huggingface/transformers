@@ -109,6 +109,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    vocab_format = "dict"
 
     def __init__(
         self,
@@ -139,9 +140,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
             additional_special_tokens += [token] if token is not None else []
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(unk_token): 0,

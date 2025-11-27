@@ -87,6 +87,7 @@ class MPNetTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    vocab_format = "dict"  # WordPiece model expects dict[str, int]
 
     def __init__(
         self,
@@ -105,9 +106,7 @@ class MPNetTokenizer(TokenizersBackend):
     ):
         # Initialize vocab
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {}
 

@@ -79,6 +79,7 @@ class BertTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
     slow_tokenizer_class = None
+    vocab_format = "dict"  # WordPiece model expects dict[str, int]
 
     def __init__(
         self,
@@ -99,9 +100,7 @@ class BertTokenizer(TokenizersBackend):
         self.strip_accents = strip_accents
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(pad_token): 0,

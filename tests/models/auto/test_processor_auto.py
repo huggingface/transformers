@@ -525,7 +525,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
             # Extract vocab and merges from SentencePiece model
             extractor = SentencePieceExtractor(SAMPLE_VOCAB_LLAMA)
             vocab_ids, vocab_scores, merges = extractor.extract()
-            tokenizer = LlamaTokenizer(vocab=vocab_scores, merges=merges)
+            tokenizer = LlamaTokenizer(vocab=vocab_ids, merges=merges)
             image_processor = SiglipImageProcessor()
             chat_template = "default dummy template for testing purposes only"
             processor = LlavaProcessor(

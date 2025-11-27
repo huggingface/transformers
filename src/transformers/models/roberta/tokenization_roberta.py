@@ -110,6 +110,7 @@ class RobertaTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    vocab_format = "dict"
     slow_tokenizer_class = None
 
     def __init__(
@@ -132,9 +133,7 @@ class RobertaTokenizer(TokenizersBackend):
         self.trim_offsets = trim_offsets
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(pad_token): 0,

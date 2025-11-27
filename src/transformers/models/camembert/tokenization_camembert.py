@@ -90,6 +90,7 @@ class CamembertTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
+    vocab_format = "list"
 
     def __init__(
         self,
@@ -114,7 +115,7 @@ class CamembertTokenizer(TokenizersBackend):
         if additional_special_tokens is None:
             additional_special_tokens = ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
 
-        if vocab is not None and isinstance(vocab, list):
+        if vocab is not None:
             self._vocab = list(vocab)
             unk_index = next(i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token))
             self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_index, byte_fallback=False))

@@ -56,6 +56,7 @@ class OpenAIGPTTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    vocab_format = "dict"
 
     def __init__(
         self,
@@ -68,9 +69,7 @@ class OpenAIGPTTokenizer(TokenizersBackend):
     ):
         # Initialize vocabulary
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             # Initialize minimal vocabulary with unk token
             self._vocab = {str(unk_token): 0}

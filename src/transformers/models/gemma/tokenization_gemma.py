@@ -58,6 +58,7 @@ class GemmaTokenizer(TokenizersBackend):
     slow_tokenizer_class = None
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    vocab_format = "dict"
 
     def __init__(
         self,
@@ -78,9 +79,7 @@ class GemmaTokenizer(TokenizersBackend):
         special_tokens = {str(pad_token), str(eos_token), str(bos_token), str(unk_token)}
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(pad_token): 0,

@@ -93,6 +93,7 @@ class LlamaTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    vocab_format = "dict"
 
     def __init__(
         self,
@@ -112,9 +113,7 @@ class LlamaTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(unk_token): 0,
