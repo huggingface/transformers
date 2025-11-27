@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fast tokenizer class for Nougat.
+Tokenizer class for Nougat.
 """
 
 import re
@@ -22,9 +22,10 @@ from multiprocessing import Pool
 from typing import Optional, Union
 
 import numpy as np
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import BPE
 
-from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import is_levenshtein_available, is_nltk_available, logging, requires_backends
 
 
@@ -37,8 +38,7 @@ if is_nltk_available():
 
 logger = logging.get_logger(__name__)
 
-
-VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 
 def markdown_compatible(text: str) -> str:
@@ -346,18 +346,19 @@ def remove_slice_from_lines(lines, clean_text, slice) -> str:
     return to_delete.strip()
 
 
-class NougatTokenizerFast(PreTrainedTokenizerFast):
+class NougatTokenizer(TokenizersBackend):
     """
-    Fast tokenizer for Nougat (backed by HuggingFace tokenizers library).
+    Tokenizer for Nougat (backed by HuggingFace tokenizers library).
 
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods. This class mainly adds Nougat-specific
     methods for postprocessing the generated text.
 
     Args:
         vocab_file (`str`, *optional*):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
+            Path to the vocabulary file.
+        merges_file (`str`, *optional*):
+            Path to the merges file.
         tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
@@ -378,6 +379,12 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+
+        merges (`list`, *optional*):
+            Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -386,26 +393,127 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab_file=None,
-        tokenizer_file=None,
-        clean_up_tokenization_spaces=False,
-        unk_token="<unk>",
-        bos_token="<s>",
-        eos_token="</s>",
-        pad_token="<pad>",
+        errors: str = "replace",
+        unk_token: str = "<unk>",
+        bos_token: str = "<s>",
+        eos_token: str = "</s>",
+        pad_token: str = "<pad>",
+        vocab: Optional[dict] = None,
+        merges: Optional[list] = None,
         **kwargs,
     ):
+        if vocab is not None:
+            self._vocab = (
+                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            )
+        else:
+            self._vocab = {
+                str(bos_token): 0,
+                str(pad_token): 1,
+                str(eos_token): 2,
+                str(unk_token): 3,
+                "[START_REF]": 4,
+            }
+
+        if merges is not None:
+            self._merges = merges
+        else:
+            self._merges = []
+
+        self._tokenizer = Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        self._tokenizer.normalizer = normalizers.NFKC()
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(pattern="SPL1T-TH1S-Pl3A5E", behavior="removed", invert=False),
+                pre_tokenizers.Digits(individual_digits=True),
+                pre_tokenizers.Split(
+                    pattern=r"[\(\)\[\]\{\}]|([!\"#\$%\&'\*\+,\-\./:;<=>\?\\\^_`\|\~])\1*",
+                    behavior="isolated",
+                    invert=False,
+                ),
+                pre_tokenizers.Split(pattern="\n", behavior="isolated", invert=False),
+                pre_tokenizers.ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
+
+        # Set up post processor with bos and eos tokens
+        bos_token_id = self._vocab.get(str(bos_token), 0)
+        eos_token_id = self._vocab.get(str(eos_token), 2)
+        pad_token_id = self._vocab.get(str(pad_token), 1)
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{bos_token}:0 $A:0 {eos_token}:0",
+            pair="$A:0 $B:1",
+            special_tokens=[
+                (str(eos_token), eos_token_id),
+                (str(bos_token), bos_token_id),
+            ],
+        )
+
+        # Enable truncation and padding
+        self._tokenizer.enable_truncation(max_length=4096)
+        self._tokenizer.enable_padding(length=4096, pad_id=pad_token_id, pad_token=str(pad_token))
+
+        tokenizer_object = self._tokenizer
+
         super().__init__(
-            vocab_file=vocab_file,
-            tokenizer_file=tokenizer_file,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            tokenizer_object=tokenizer_object,
+            errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
             **kwargs,
         )
-        self.vocab_file = vocab_file
+
+    def _post_init(self):
+        """Post-initialization to ensure tokenizer settings are applied correctly."""
+        # Re-apply settings to ensure they're correct after loading from pretrained
+        self._tokenizer.normalizer = normalizers.NFKC()
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(pattern="SPL1T-TH1S-Pl3A5E", behavior="removed", invert=False),
+                pre_tokenizers.Digits(individual_digits=True),
+                pre_tokenizers.Split(
+                    pattern=r"[\(\)\[\]\{\}]|([!\"#\$%\&'\*\+,\-\./:;<=>\?\\\^_`\|\~])\1*",
+                    behavior="isolated",
+                    invert=False,
+                ),
+                pre_tokenizers.Split(pattern="\n", behavior="isolated", invert=False),
+                pre_tokenizers.ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
+
+        # Set up post processor with bos and eos tokens
+        bos_token_id = self.bos_token_id if self.bos_token_id is not None else 0
+        eos_token_id = self.eos_token_id if self.eos_token_id is not None else 2
+        pad_token_id = self.pad_token_id if self.pad_token_id is not None else 1
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{self.bos_token}:0 $A:0 {self.eos_token}:0",
+            pair="$A:0 $B:1",
+            special_tokens=[
+                (str(self.eos_token), eos_token_id),
+                (str(self.bos_token), bos_token_id),
+            ],
+        )
+
+        # Enable truncation and padding
+        self._tokenizer.enable_truncation(max_length=4096)
+        self._tokenizer.enable_padding(length=4096, pad_id=pad_token_id, pad_token=str(self.pad_token))
+
+        # Call parent to handle AddedToken properties
+        super()._post_init()
 
     def remove_hallucinated_references(self, text: str) -> str:
         """
@@ -604,4 +712,4 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             return self.post_process_single(generation, fix_markdown=fix_markdown)
 
 
-__all__ = ["NougatTokenizerFast"]
+__all__ = ["NougatTokenizer"]

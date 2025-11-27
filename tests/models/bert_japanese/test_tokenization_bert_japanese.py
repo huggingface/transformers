@@ -14,6 +14,8 @@
 
 
 import os
+import shutil
+import tempfile
 import unittest
 
 from transformers import AutoTokenizer
@@ -43,6 +45,10 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
 
+        # Create a separate temp directory for the vocab file to avoid conflicts
+        # with files saved by the base class setUpClass (e.g., tokenizer_config.json, added_tokens.json)
+        cls.vocab_tmpdirname = tempfile.mkdtemp()
+
         vocab_tokens = [
             "[UNK]",
             "[CLS]",
@@ -71,9 +77,21 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "です",
         ]
 
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.vocab_file = os.path.join(cls.vocab_tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        """Override to use vocab_tmpdirname instead of tmpdirname to avoid conflicts with saved tokenizer files."""
+        pretrained_name = pretrained_name or cls.vocab_tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        if hasattr(cls, "vocab_tmpdirname"):
+            shutil.rmtree(cls.vocab_tmpdirname, ignore_errors=True)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "こんにちは、世界。 \nこんばんは、世界。"
@@ -349,15 +367,28 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
     def setUpClass(cls):
         super().setUpClass()
 
+        # Create a separate temp directory for the vocab file to avoid conflicts
+        # with files saved by the base class setUpClass (e.g., tokenizer_config.json, added_tokens.json)
+        cls.vocab_tmpdirname = tempfile.mkdtemp()
+
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こ", "ん", "に", "ち", "は", "ば", "世", "界", "、", "。"]
 
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.vocab_file = os.path.join(cls.vocab_tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
     @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        if hasattr(cls, "vocab_tmpdirname"):
+            shutil.rmtree(cls.vocab_tmpdirname, ignore_errors=True)
+
+    @classmethod
+    @classmethod
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
-        return BertJapaneseTokenizer.from_pretrained(cls.tmpdirname, subword_tokenizer_type="character", **kwargs)
+        """Override to use vocab_tmpdirname instead of tmpdirname to avoid conflicts with saved tokenizer files."""
+        pretrained_name = pretrained_name or cls.vocab_tmpdirname
+        return BertJapaneseTokenizer.from_pretrained(pretrained_name, subword_tokenizer_type="character", **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "こんにちは、世界。 \nこんばんは、世界。"

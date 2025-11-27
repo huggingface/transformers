@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import unittest
 
-from transformers import CohereTokenizerFast
+from transformers import CohereTokenizer
 from transformers.testing_utils import (
     require_jinja,
     require_tokenizers,
@@ -27,11 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    slow_tokenizer_class = None
-    rust_tokenizer_class = CohereTokenizerFast
-    tokenizer_class = CohereTokenizerFast
-    test_rust_tokenizer = True
-    test_slow_tokenizer = False
+    tokenizer_class = CohereTokenizer
     from_pretrained_vocab_key = "tokenizer_file"
     from_pretrained_id = "hf-internal-testing/tiny-random-CohereForCausalLM"
     special_tokens_map = {
@@ -41,34 +36,21 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         "pad_token": "<PAD>",
     }
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        tokenizer = CohereTokenizerFast.from_pretrained("hf-internal-testing/tiny-random-CohereForCausalLM")
-        tokenizer.save_pretrained(cls.tmpdirname)
-
-    @classmethod
-    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
-        _kwargs = copy.deepcopy(cls.special_tokens_map)
-        _kwargs.update(kwargs)
-        kwargs = _kwargs
-        pretrained_name = pretrained_name or cls.tmpdirname
-        return CohereTokenizerFast.from_pretrained(pretrained_name, **kwargs)
+    integration_expected_tokens = ['T', 'h', 'is', 'Ġis', 'Ġa', 'Ġt', 'est', 'Ġ', 'Ł', 'ĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġb', 'orn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġf', 'als', 'Ã©', '.', 'Ċ', 'ç', 'Ķ', 'Ł', 'æ', '´', '»', 'ç', 'ļ', 'Ħ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'H', 'i', 'Ġ', 'ĠH', 'ell', 'o', 'Ċ', 'H', 'i', 'Ġ', 'Ġ', 'ĠH', 'ell', 'o', 'Ċ', 'Ċ', 'ĠĊ', 'Ġ', 'ĠĊ', 'ĠH', 'ell', 'o', 'Ċ', '<', 's', '>', 'Ċ', 'h', 'i', '<', 's', '>', 't', 'he', 're', 'Ċ', 'T', 'he', 'Ġfollow', 'ing', 'Ġst', 'r', 'ing', 'Ġsh', 'ould', 'Ġbe', 'Ġpro', 'per', 'ly', 'Ġen', 'c', 'od', 'ed', ':', 'ĠH', 'ell', 'o', '.', 'Ċ', 'B', 'ut', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à', '¸', 'Ľ', 'à', '¸', 'µ', 'Ġ', 'Ġ', 'Ġ', 'ird', 'Ġ', 'Ġ', 'Ġ', 'à', '¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġh', 'ow', 'Ġare', 'Ġy', 'ou', 'Ġdo', 'ing']  # fmt: skip
+    integration_expected_token_ids = [60, 80, 223, 307, 204, 202, 333, 167, 199, 192, 178, 166, 49, 265, 227, 712, 229, 167, 33, 26, 24, 24, 24, 20, 233, 524, 307, 222, 632, 1018, 22, 166, 160, 188, 199, 159, 120, 127, 160, 194, 172, 160, 196, 199, 161, 116, 195, 159, 192, 115, 166, 48, 81, 167, 289, 420, 87, 166, 48, 81, 167, 167, 289, 420, 87, 166, 166, 259, 167, 259, 289, 420, 87, 166, 36, 91, 38, 166, 80, 81, 36, 91, 38, 92, 203, 210, 166, 60, 203, 765, 231, 292, 90, 231, 396, 458, 299, 348, 474, 271, 551, 75, 339, 212, 34, 289, 420, 87, 22, 166, 42, 293, 167, 813, 233, 167, 153, 124, 195, 153, 124, 121, 167, 167, 167, 813, 167, 167, 167, 153, 124, 188, 166, 48, 634, 240, 291, 394, 411, 243, 793, 231]  # fmt: skip
+    expected_tokens_from_ids = ['T', 'h', 'is', 'Ġis', 'Ġa', 'Ġt', 'est', 'Ġ', 'Ł', 'ĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġb', 'orn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġf', 'als', 'Ã©', '.', 'Ċ', 'ç', 'Ķ', 'Ł', 'æ', '´', '»', 'ç', 'ļ', 'Ħ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'H', 'i', 'Ġ', 'ĠH', 'ell', 'o', 'Ċ', 'H', 'i', 'Ġ', 'Ġ', 'ĠH', 'ell', 'o', 'Ċ', 'Ċ', 'ĠĊ', 'Ġ', 'ĠĊ', 'ĠH', 'ell', 'o', 'Ċ', '<', 's', '>', 'Ċ', 'h', 'i', '<', 's', '>', 't', 'he', 're', 'Ċ', 'T', 'he', 'Ġfollow', 'ing', 'Ġst', 'r', 'ing', 'Ġsh', 'ould', 'Ġbe', 'Ġpro', 'per', 'ly', 'Ġen', 'c', 'od', 'ed', ':', 'ĠH', 'ell', 'o', '.', 'Ċ', 'B', 'ut', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à', '¸', 'Ľ', 'à', '¸', 'µ', 'Ġ', 'Ġ', 'Ġ', 'ird', 'Ġ', 'Ġ', 'Ġ', 'à', '¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġh', 'ow', 'Ġare', 'Ġy', 'ou', 'Ġdo', 'ing']  # fmt: skip
+    integration_expected_decoded_text = "This is a test ���\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     # This gives CPU OOM on a single-gpu runner (~60G RAM). On multi-gpu runner, it has ~180G RAM which is enough.
     @require_torch_multi_accelerator
     def test_torch_encode_plus_sent_to_model(self):
         super().test_torch_encode_plus_sent_to_model()
 
-    @unittest.skip(reason="This needs a slow tokenizer. Cohere does not have one!")
-    def test_encode_decode_with_spaces(self):
-        return
-
     def test_encodings_from_sample_data(self):
         """
         Assert that the created tokens are the same than the hard-coded ones
         """
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
 
         INPUT_SENTENCES = ["The quick brown fox<|END_OF_TURN_TOKEN|>", "jumps over the lazy dog<|END_OF_TURN_TOKEN|>"]
         TARGET_TOKENS = [
@@ -76,70 +58,15 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [5, 82, 332, 88, 91, 544, 206, 257, 930, 97, 239, 435, 8],
         ]
 
-        computed_tokens = tokenizer.batch_encode_plus(INPUT_SENTENCES)["input_ids"]
+        computed_tokens = tokenizer(INPUT_SENTENCES)["input_ids"]
         self.assertListEqual(TARGET_TOKENS, computed_tokens)
 
         INPUT_SENTENCES_W_BOS = [
             "<BOS_TOKEN>The quick brown fox<|END_OF_TURN_TOKEN|>",
             "<BOS_TOKEN>jumps over the lazy dog<|END_OF_TURN_TOKEN|>",
         ]
-        decoded_tokens = tokenizer.batch_decode(computed_tokens)
+        decoded_tokens = tokenizer.decode(computed_tokens)
         self.assertListEqual(decoded_tokens, INPUT_SENTENCES_W_BOS)
-
-    def test_padding(self, max_length=10):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-                # tokenizer_r.pad_token = None # Hotfixing padding = None
-                # Simple input
-                s = "This is a simple input"
-                s2 = ["This is a simple input 1", "This is a simple input 2"]
-                p = ("This is a simple input", "This is a pair")
-                p2 = [
-                    ("This is a simple input 1", "This is a simple input 2"),
-                    ("This is a simple pair 1", "This is a simple pair 2"),
-                ]
-
-                # Simple input tests
-                try:
-                    tokenizer_r.encode(s, max_length=max_length)
-                    tokenizer_r.encode_plus(s, max_length=max_length)
-
-                    tokenizer_r.batch_encode_plus(s2, max_length=max_length)
-                    tokenizer_r.encode(p, max_length=max_length)
-                    tokenizer_r.batch_encode_plus(p2, max_length=max_length)
-                except ValueError:
-                    self.fail("Cohere Tokenizer should be able to deal with padding")
-
-                tokenizer_r.pad_token = None  # Hotfixing padding = None
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
-
-                # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
-
-                # Simple input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    s2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
-
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
-
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
-
-                # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    p2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
 
     def test_pretrained_model_lists(self):
         # No `max_model_input_sizes` for Cohere model
@@ -147,8 +74,34 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
     @require_jinja
+    def test_tokenization_for_chat(self):
+        tokenizer = self.get_tokenizer()
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+        ]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        # fmt: off
+        expected_tokens = [
+            [5, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 59, 65, 59, 60, 45, 53, 71, 60, 55, 51, 45, 54, 99, 38, 65, 243, 394, 204, 336, 84, 88, 887, 374, 216, 74, 286, 22, 8, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 61, 59, 45, 58, 71, 60, 55, 51, 45, 54, 99, 38, 48, 420, 87, 9, 8],
+            [5, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 59, 65,
+            59, 60, 45, 53, 71, 60, 55, 51, 45, 54, 99, 38, 65, 243, 394, 204, 336, 84, 88, 887, 374, 216, 74, 286, 22, 8,
+            36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61, 58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 61, 59,
+            45, 58, 71, 60, 55, 51, 45, 54, 99, 38, 48, 420, 87, 9, 8, 36, 99, 59, 60, 41, 58, 60, 71, 55, 46, 71, 60, 61,
+            58, 54, 71, 60, 55, 51, 45, 54, 99, 38, 36, 99, 43, 48, 41, 60, 42, 55, 60, 71, 60, 55, 51, 45, 54, 99, 38,
+            54, 567, 235, 693, 276, 411, 243, 22, 8]
+        ]
+        # fmt: on
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)
+
+    @require_jinja
     def test_tokenization_for_tool_use(self):
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
 
         conversation = [{"role": "user", "content": "Whats the biggest penguin in the world?"}]
 
@@ -219,7 +172,7 @@ def directly_answer() -> List[Dict]:
 
     @require_jinja
     def test_tokenization_for_grounded_generation(self):
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
         conversation = [{"role": "user", "content": "Whats the biggest penguin in the world?"}]
 
         documents = [
@@ -264,8 +217,8 @@ Finally, Write 'Grounded answer:' followed by a response to the user's last inpu
         self.assertEqual(grounded_generation_prompt, expected_prompt)
 
     def test_add_prefix_space_fast(self):
-        tokenizer_w_prefix = self.get_rust_tokenizer(add_prefix_space=True)
-        tokenizer_wo_prefix = self.get_rust_tokenizer(add_prefix_space=False)
+        tokenizer_w_prefix = self.get_tokenizer(add_prefix_space=True)
+        tokenizer_wo_prefix = self.get_tokenizer(add_prefix_space=False)
         tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
         tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
         self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)

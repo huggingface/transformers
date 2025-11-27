@@ -74,6 +74,207 @@ While this is being implemented, expect varying levels of support across differe
 
 Linked PR: https://github.com/huggingface/transformers/pull/41580
 
+
+
+
+## Tokenization
+
+Just as we moved towards a single backend library for model definition, we want `Tokenizer` to be a lot more intuitive.
+With v5, you can now initialize an empty `LlamaTokenizer` and train it directly on your new task! 
+
+Defining a new tokenizer object should be as simple as this:
+```python
+from transformers import TokenizersBackend, generate_merges
+from tokenizers import pre_tokenizers, Tokenizer
+from tokenizers.model import BPE
+
+class Llama5Tokenizer(TokenizersBackend):
+    def __init__(self,        unk_token="<unk>",bos_token="<s>", eos_token="</s>", vocab=None, merges=None ):
+        if vocab is None:
+            self._vocab = {
+                str(unk_token): 0,
+                str(bos_token): 1,
+                str(eos_token): 2,
+            }
+
+        else:
+            self._vocab = vocab
+
+        if merges is not None:
+            self._merges = merges
+        else:
+            self._merges = generate_merges(filtered_vocab)
+
+        self._tokenizer = Tokenizer(
+            BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True)
+        )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
+        )
+        super().__init__(
+            tokenizer_object=self._tokenizer,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+        )
+```
+
+And now if you call `Llama5Tokenizer()` you just get an empty, trainable tokenizer that follows the definition of the authors of `Llama5` (it does not exist yet :wink:).
+
+The above is the main motivation towards refactoring tokenization: we want people to just instantiate a tokenizer like they would a model, empty or not and with exactly what they defined.
+
+### Non-tokenizers
+If you tokenizers is not common, or you just don't want to rely on `sentencepiece` nor `tokenizers` you can just import the `PythonBackend` (previousl `PreTrainedTokenzier`) which has all the API and logic for added tokens, encoding and decoding wieht them etc. 
+
+If you want to have en less features, you can use the common `PreTrainedTokenizerBase` mixin, which mostly defines `transformers` tokenizer API: `encode`, `decode`, `vocab_size`, `get_vocab`, `convert_tokens_to_ids`, `convert_ids_to_tokens`, `from_pretrained`, `save_pretrained`, etc.
+
+### Backend Architecture Changes
+
+**Moving away from "slow" vs "fast" tokenizers:**
+
+Previously, transformers maintained two parallel implementations for many tokenizers:
+- "Slow" tokenizers (`tokenization_<model>.py`) - Python-based implementations, often using [SentencePiece](https://github.com/google/sentencepiece) as the backend.
+- "Fast" tokenizers (`tokenization_<model>_fast.py`) - Rust-based implementations using the 🤗 [tokenizers](https://github.com/huggingface/tokenizers) library.
+
+In v5, we consolidate to a single tokenizer file per model: `tokenization_<model>.py`. This file will use the most appropriate backend available:
+
+1. **TokenizersBackend** (preferred): Rust-based tokenizers from the 🤗 [tokenizers](https://github.com/huggingface/tokenizers) library. In general its performances are better, but it also offers a lot more features that are comonly adopted across the ecosystem, like handling additional tokens, easily update the state of the tokenizer, automatic parallelisation etc. 
+2. **SentencePieceBackend**: For models requiring SentencePiece
+3. **PythonBackend**: Pure Python implementations
+4. **MistralCommonBackend**: Relies on `MistralCommon`'s toknenization library. (Previously `MistralCommonTokenizer`)
+
+The `AutoTokenizer` automatically selects the appropriate backend based on available files and dependencies. This is transparent, you continue to use `AutoTokenizer.from_pretrained()` as before. This allows transformers to be future-proof and modular to easily support future backends.
+
+
+### API Changes
+
+**1. Direct tokenizer initialization with vocab and merges:**
+
+In v5, you can now initialize tokenizers directly with vocabulary and merges, enabling training custom tokenizers from scratch:
+
+```python
+# v5: Initialize a blank tokenizer for training
+from transformers import LlamaTokenizer
+
+# Create a tokenizer with custom vocabulary and merges
+vocab = {"<unk>": 0, "<s>": 1, "</s>": 2, "hello": 3, "world": 4}
+merges = [("h", "e"), ("l", "l"), ("o", " ")]
+
+tokenizer = LlamaTokenizer(vocab=vocab, merges=merges)
+
+# Or initialize a blank tokenizer to train on your own dataset
+tokenizer = LlamaTokenizer()  # Creates a blank Llama-like tokenizer
+```
+But you can no longer pass a vocab file. As this accounts for `from_pretrained` use-case.
+
+**2. Simplified decoding API:**
+
+The `batch_decode` method has been unified with `decode`. Both single and batch decoding now use the same method:
+```python
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("t5-small") 
+inputs = ["hey how are you?", "fine"]
+tokenizer.decode(tokenizer.encode(inputs))
+```
+Gives:
+```diff
+- 'hey how are you?</s> fine</s>'
++ ['hey how are you?</s>', 'fine</s>']
+```
+
+This is mostly because people get `list[list[int]]` out of `generate`, but then they would use `decode` because they use `encode` and would get:
+```python
+   ...: tokenizer.decode([[1,2], [1,4]])
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+Cell In[2], line 4
+      2 tokenizer = AutoTokenizer.from_pretrained("t5-small") 
+      3 inputs = ["hey how are you?", "fine"]
+----> 4 tokenizer.decode([[1,2], [1,4]])
+
+File /raid/arthur/transformers/src/transformers/tokenization_utils_base.py:3948, in PreTrainedTokenizerBase.decode(self, token_ids, skip_special_tokens, clean_up_tokenization_spaces, **kwargs)
+   3945 # Convert inputs to python lists
+   3946 token_ids = to_py_obj(token_ids)
+-> 3948 return self._decode(
+   3949     token_ids=token_ids,
+   3950     skip_special_tokens=skip_special_tokens,
+   3951     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+   3952     **kwargs,
+   3953 )
+
+File /raid/arthur/transformers/src/transformers/tokenization_utils_fast.py:682, in PreTrainedTokenizerFast._decode(self, token_ids, skip_special_tokens, clean_up_tokenization_spaces, **kwargs)
+    680 if isinstance(token_ids, int):
+    681     token_ids = [token_ids]
+--> 682 text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+    684 clean_up_tokenization_spaces = (
+    685     clean_up_tokenization_spaces
+    686     if clean_up_tokenization_spaces is not None
+    687     else self.clean_up_tokenization_spaces
+    688 )
+    689 if clean_up_tokenization_spaces:
+
+TypeError: argument 'ids': 'list' object cannot be interpreted as an integer
+```
+
+**3. Unified encoding API:**
+
+The `encode_plus` is deprecated → call directly with `__call__`
+
+**3. `apply_chat_template` returns `BatchEncoding`:**
+
+Previously, `apply_chat_template` returned `input_ids` for backward compatibility. In v5, it now consistently returns a `BatchEncoding` dict like other tokenizer methods:
+
+```python
+# v5
+messages = [
+    {"role": "user", "content": "Hello!"},
+    {"role": "assistant", "content": "Hi there!"}
+]
+
+# Now returns BatchEncoding with input_ids, attention_mask, etc.
+outputs = tokenizer.apply_chat_template(messages, return_tensors="pt")
+print(outputs.keys())  # dict_keys(['input_ids', 'attention_mask'])
+```
+
+#### Removed legacy configuration file saving:
+
+- `special_tokens_map.json` - special tokens are now stored in `tokenizer_config.json`.
+- `added_tokens.json` - added tokens are now stored in `tokenizer.json`.
+- `added_tokens_decoder` is only stored when there is no `tokenizer.json`.
+
+When loading older tokenizers, these files are still read for backward compatibility, but new saves use the consolidated format.
+
+### Model-Specific Changes
+
+Several models that had identical tokenizers now import from their base implementation:
+
+- **LayoutLM** → uses BertTokenizer
+- **LED** → uses BartTokenizer  
+- **Longformer** → uses RobertaTokenizer
+- **LXMert** → uses BertTokenizer
+- **MT5** → uses T5Tokenizer
+- **MVP** → uses BartTokenizer
+
+We're just gonna remove these files at term.
+
+**Removed T5-specific workarounds:**
+
+The internal `_eventually_correct_t5_max_length` method has been removed. T5 tokenizers now handle max length consistently with other models.
+
+### Testing Changes
+
+Model-specific tokenization test files now focus on integration tests.
+Common tokenization API tests (e.g., `add_tokens`, `encode`, `decode`) are now centralized and automatically applied across all tokenizers. This reduces test duplication and ensures consistent behavior
+
+
+For legacy implementations, the original BERT Python tokenizer code (including `WhitespaceTokenizer`, `BasicTokenizer`, etc.) is preserved in `bert_legacy.py` for reference purposes.
+
+**Linked PRs:**
+- https://github.com/huggingface/transformers/issues/40938
+- https://github.com/huggingface/transformers/pull/40936
+- https://github.com/huggingface/transformers/pull/41626
+
+
 ## Library-wide changes with lesser impact
 
 ### `use_auth_token`
