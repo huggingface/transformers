@@ -103,6 +103,7 @@ class Conditionals:
     t3: T3Cond
     gen: dict
 
+
 @auto_docstring
 class ChatterboxModel(ChatterboxPreTrainedModel):
     """
