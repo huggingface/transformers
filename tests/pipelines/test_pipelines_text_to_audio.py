@@ -45,9 +45,11 @@ class TextToAudioPipelineTests(unittest.TestCase):
         music_generator = pipeline(
             task="text-to-audio", model="facebook/musicgen-small", do_sample=False, max_new_tokens=5
         )
+        num_channels = 1  # model generates mono audio
 
         outputs = music_generator("This is a test")
         self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 32000}, outputs)
+        self.assertEqual(len(outputs["audio"].shape), num_channels)
 
         # test two examples side-by-side
         outputs = music_generator(["This is a test", "This is a second test"])
@@ -88,6 +90,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_bark_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small")
+        num_channels = 1  # model generates mono audio
 
         forward_params = {
             # Using `do_sample=False` to force deterministic output
@@ -100,6 +103,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             {"audio": ANY(np.ndarray), "sampling_rate": 24000},
             outputs,
         )
+        self.assertEqual(len(outputs["audio"].shape), num_channels)
 
         # test two examples side-by-side
         outputs = speech_generator(
@@ -151,7 +155,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "add_special_tokens": False,
             "return_attention_mask": True,
             "return_token_type_ids": False,
-            "padding": "max_length",
         }
         outputs = speech_generator(
             "This is a test",
@@ -247,22 +250,69 @@ class TextToAudioPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_csm_model_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b")
+        speech_generator = pipeline(task="text-to-audio", model="sesame/csm-1b", device=torch_device)
+        generate_kwargs = {"max_new_tokens": 10, "output_audio": True}
+        num_channels = 1  # model generates mono audio
 
-        outputs = speech_generator("[0]This is a test")
+        outputs = speech_generator("[0]This is a test", generate_kwargs=generate_kwargs)
         self.assertEqual(outputs["sampling_rate"], 24000)
-
         audio = outputs["audio"]
         self.assertEqual(ANY(np.ndarray), audio)
+        # ensure audio and not discrete codes
+        self.assertEqual(len(audio.shape), num_channels)
 
         # test two examples side-by-side
-        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"])
+        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"], generate_kwargs=generate_kwargs)
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(audio[0].shape), num_channels)
 
         # test batching
-        outputs = speech_generator(["[0]This is a test", "[0]This is a second test"], batch_size=2)
-        self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+        batch_size = 2
+        outputs = speech_generator(
+            ["[0]This is a test", "[0]This is a second test"], generate_kwargs=generate_kwargs, batch_size=batch_size
+        )
+        self.assertEqual(len(outputs), batch_size)
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(outputs[0]["audio"].shape), num_channels)
+
+    @slow
+    @require_torch
+    def test_dia_model(self):
+        speech_generator = pipeline(task="text-to-audio", model="nari-labs/Dia-1.6B-0626", device=torch_device)
+        generate_kwargs = {"max_new_tokens": 20}
+        num_channels = 1  # model generates mono audio
+
+        outputs = speech_generator(
+            "[S1] Dia is an open weights text to dialogue model.", generate_kwargs=generate_kwargs
+        )
+        self.assertEqual(outputs["sampling_rate"], 44100)
+        audio = outputs["audio"]
+        self.assertEqual(ANY(np.ndarray), audio)
+        # ensure audio (with one channel) and not discrete codes
+        self.assertEqual(len(audio.shape), num_channels)
+
+        # test two examples side-by-side
+        outputs = speech_generator(
+            ["[S1] Dia is an open weights text to dialogue model.", "[S2] This is a second example."],
+            generate_kwargs=generate_kwargs,
+        )
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(audio[0].shape), num_channels)
+
+        # test batching
+        batch_size = 2
+        outputs = speech_generator(
+            ["[S1] Dia is an open weights text to dialogue model.", "[S2] This is a second example."],
+            generate_kwargs=generate_kwargs,
+            batch_size=2,
+        )
+        self.assertEqual(len(outputs), batch_size)
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+        self.assertEqual(len(outputs[0]["audio"].shape), num_channels)
 
     def get_test_pipeline(
         self,
