@@ -733,7 +733,7 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -1342,8 +1342,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 

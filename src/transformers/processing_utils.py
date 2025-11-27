@@ -28,6 +28,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -53,9 +54,7 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
-    download_url,
     is_offline_mode,
-    is_remote_url,
     is_torch_available,
     list_repo_templates,
     logging,
@@ -810,7 +809,7 @@ class ProcessorMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -940,13 +939,6 @@ class ProcessorMixin(PushToHubMixin):
             resolved_raw_chat_template_file = None
             resolved_audio_tokenizer_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            processor_file = pretrained_model_name_or_path
-            resolved_processor_file = download_url(pretrained_model_name_or_path)
-            # can't load chat-template and audio tokenizer when given a file url as pretrained_model_name_or_path
-            resolved_chat_template_file = None
-            resolved_raw_chat_template_file = None
-            resolved_audio_tokenizer_file = None
         else:
             if is_local:
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
@@ -1748,6 +1740,35 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return out["input_ids"]
         return prompt
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        if generation_mode is not None and generation_mode != "text":
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only [`text`]"
+            )
+        return self.post_process_image_text_to_text(
+            generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+        )
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """

@@ -22,6 +22,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
+from huggingface_hub import create_repo
+
 from .. import __version__
 from ..configuration_utils import PreTrainedConfig
 from ..utils import (
@@ -29,9 +31,7 @@ from ..utils import (
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -436,6 +436,13 @@ class GenerationConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
+        # Ensure backward compatibility for models that use `forced_bos_token_id` within their config
+        if self._from_model_config and kwargs.get("force_bos_token_to_be_generated", False):
+            self.forced_bos_token_id = self.bos_token_id
+            logger.warning_once(
+                f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
+            )
+
         # Additional attributes without default values
         if not self._from_model_config:
             # we don't want to copy values from the model config if we're initializing a `GenerationConfig` from a
@@ -743,7 +750,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -872,9 +879,6 @@ class GenerationConfig(PushToHubMixin):
             # Special case when config_path is a local file
             resolved_config_file = config_path
             is_local = True
-        elif is_remote_url(config_path):
-            configuration_file = config_path
-            resolved_config_file = download_url(config_path)
         else:
             configuration_file = config_file_name
             try:

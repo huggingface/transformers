@@ -95,6 +95,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
+        ("layoutxlm", "LayoutXLMProcessor"),
         ("lfm2_vl", "Lfm2VlProcessor"),
         ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),

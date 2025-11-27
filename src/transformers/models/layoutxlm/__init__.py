@@ -18,6 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .configuration_layoutxlm import *
     from .processing_layoutxlm import *
     from .tokenization_layoutxlm import *
     from .tokenization_layoutxlm_fast import *
