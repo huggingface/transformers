@@ -17,7 +17,7 @@ import inspect
 import json
 import os
 import re
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from packaging import version
 
@@ -107,7 +107,7 @@ class PeftAdapterMixin:
         is_trainable: bool = False,
         hotswap: bool | Literal["auto"] = "auto",
         local_files_only: bool = False,
-        adapter_kwargs: Optional[dict[str, Any]] = None,
+        adapter_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
@@ -238,9 +238,6 @@ class PeftAdapterMixin:
         if adapter_kwargs is None:
             adapter_kwargs = {}
 
-        if "local_files_only" not in adapter_kwargs:
-            adapter_kwargs["local_files_only"] = local_files_only
-
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
 
@@ -282,6 +279,7 @@ class PeftAdapterMixin:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 token=token,
+                local_files_only=local_files_only,
                 **adapter_kwargs,
             )
 
@@ -294,6 +292,7 @@ class PeftAdapterMixin:
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
                 token=token,
+                local_files_only=local_files_only,
                 **adapter_kwargs,
             )
             peft_config.inference_mode = not is_trainable
@@ -310,6 +309,8 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
+            if "local_files_only" not in adapter_kwargs:
+                adapter_kwargs["local_files_only"] = local_files_only
             adapter_state_dict = load_peft_weights(peft_model_id, token=token, device=device, **adapter_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
@@ -354,10 +355,7 @@ class PeftAdapterMixin:
                 # We only want to call prepare_model_for_compiled_hotswap once
                 self._prepare_peft_hotswap_kwargs = None
         else:
-            from peft.utils.hotswap import (
-                check_hotswap_configs_compatible,
-                hotswap_adapter_from_state_dict,
-            )
+            from peft.utils.hotswap import check_hotswap_configs_compatible, hotswap_adapter_from_state_dict
 
             check_hotswap_configs_compatible(self.peft_config[adapter_name], peft_config)
             try:
@@ -413,9 +411,7 @@ class PeftAdapterMixin:
             )
 
     def enable_peft_hotswap(
-        self,
-        target_rank: int = 128,
-        check_compiled: Literal["error", "warn", "ignore"] = "error",
+        self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"
     ) -> None:
         """Enables the possibility to hotswap PEFT adapters with different ranks, or, if the model is compiled, without
         triggering recompilation.
@@ -453,10 +449,7 @@ class PeftAdapterMixin:
                 )
 
         self._hotswap_enabled = True
-        self._prepare_peft_hotswap_kwargs = {
-            "target_rank": target_rank,
-            "check_compiled": check_compiled,
-        }
+        self._prepare_peft_hotswap_kwargs = {"target_rank": target_rank, "check_compiled": check_compiled}
 
     def add_adapter(self, adapter_config, adapter_name: str | None = None) -> None:
         r"""
@@ -620,7 +613,7 @@ class PeftAdapterMixin:
 
         return active_adapters
 
-    def get_adapter_state_dict(self, adapter_name: Optional[str] = None, state_dict: Optional[dict] = None) -> dict:
+    def get_adapter_state_dict(self, adapter_name: str | None = None, state_dict: dict | None = None) -> dict:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -696,9 +689,7 @@ class PeftAdapterMixin:
             )
         if isinstance(device_map, str):
             device_map = infer_auto_device_map(
-                self,
-                max_memory=max_memory,
-                no_split_module_classes=no_split_module_classes,
+                self, max_memory=max_memory, no_split_module_classes=no_split_module_classes
             )
         dispatch_model(
             self,
@@ -783,9 +774,6 @@ def maybe_load_adapters(
     if pretrained_model_name_or_path is None or not is_peft_available():
         return None, pretrained_model_name_or_path, adapter_kwargs
 
-    if "local_files_only" not in adapter_kwargs:
-        adapter_kwargs["local_files_only"] = download_kwargs.get("local_files_only", False)
-
     token = download_kwargs.get("token")
 
     if download_kwargs.get("commit_hash") is None:
@@ -811,11 +799,7 @@ def maybe_load_adapters(
 
     if _adapter_model_path is None:
         peft_kwargs = adapter_kwargs.copy()
-        for arg_name in (
-            "cache_dir",
-            "proxies",
-            "subfolder",
-        ):  # don't override revision
+        for arg_name in ("cache_dir", "proxies", "subfolder"):  # don't override revision
             if (arg_name not in peft_kwargs) and (arg_name in download_kwargs):
                 peft_kwargs[arg_name] = download_kwargs[arg_name]
         if "commit_hash" in download_kwargs:
