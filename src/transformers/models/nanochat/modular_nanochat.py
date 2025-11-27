@@ -210,7 +210,7 @@ class NanoChatModel(LlamaModel):
 
 @auto_docstring
 class NanoChatForCausalLM(Gemma2ForCausalLM):
-    _tp_plan = {"lm_head": "colwise_rep", "q_norm": "replicate", "k_norm": "replicate"}
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def forward(self, **super_kwargs) -> CausalLMOutputWithPast:
         r"""
