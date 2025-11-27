@@ -11,25 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import datetime
-import json
 import os
 import tempfile
 import time
 import unittest
-from pathlib import PosixPath
 from threading import Thread
 from unittest.mock import Mock, patch
 
 import httpx
-from huggingface_hub import ChatCompletionStreamOutput, InferenceClient
-from huggingface_hub.utils._cache_manager import (
-    REPO_TYPE_T,
-    CachedFileInfo,
-    CachedRepoInfo,
-    CachedRevisionInfo,
-    HFCacheInfo,
-)
+from huggingface_hub import ChatCompletionStreamOutput, InferenceClient, hf_hub_download
 from parameterized import parameterized
 
 from transformers import GenerationConfig
@@ -164,118 +154,31 @@ def test_build_chat_completion_chunk():
     assert expected_choices_content in chunk
 
 
-@require_openai
 def test_generative_model_list():
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as generative_model_config_file:
-        json.dump({"architectures": ["LlamaForCausalLM"]}, generative_model_config_file)
-        generative_model_config_file.flush()
+    with tempfile.TemporaryDirectory() as cache_dir:
+        # "download" a few models, including some non-generative models
+        hf_hub_download("Menlo/Jan-nano", "config.json", cache_dir=cache_dir)
+        hf_hub_download("Menlo/Jan-nano-128k", "config.json", cache_dir=cache_dir)
+        hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
+        hf_hub_download("HuggingFaceTB/SmolVLM-Instruct", "config.json", cache_dir=cache_dir)
+        hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)
 
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as non_generative_model_config_file:
-        json.dump({"architectures": ["BertForPreTraining"]}, non_generative_model_config_file)
-        non_generative_model_config_file.flush()
+        expected_results = {
+            "HuggingFaceTB/SmolVLM-Instruct": ["HuggingFaceTB", "SmolVLM-Instruct"],
+            "Qwen/Qwen2.5-0.5B-Instruct": ["Qwen", "Qwen2.5-0.5B-Instruct"],
+            "Menlo/Jan-nano": ["Menlo", "Jan-nano"],
+            "Menlo/Jan-nano-128k": ["Menlo", "Jan-nano-128k"],
+        }
 
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as broken_config_file:
-        json.dump({}, broken_config_file)
-        broken_config_file.flush()
+        # list models
+        result = Serve.get_gen_models(cache_dir)
+        assert len(expected_results) == len(result)
 
-    def cached_repo_factory(
-        repo_author: str,
-        repo_name: str,
-        repo_type: REPO_TYPE_T,
-        config_file_path: PosixPath,
-        git_ref: str,
-        git_blob: str,
-        refs: list[str],
-    ):
-        return CachedRepoInfo(
-            repo_id=f"{repo_author}/{repo_name}",
-            repo_type=repo_type,
-            repo_path=PosixPath(f"/.cache/huggingface/hub/models--{repo_author}--{repo_name}"),
-            size_on_disk=100_000,
-            last_accessed=datetime.datetime.now().timestamp(),
-            last_modified=datetime.datetime.now().timestamp(),
-            nb_files=2,
-            revisions=frozenset(
-                [
-                    CachedRevisionInfo(
-                        commit_hash=f"{git_ref}",
-                        snapshot_path=PosixPath(
-                            f"/.cache/huggingface/hub/models--{repo_author}--{repo_name}/snapshots/{git_ref}"
-                        ),
-                        size_on_disk=706,
-                        files=frozenset(
-                            {
-                                CachedFileInfo(
-                                    file_name="model.safetensors",
-                                    file_path=PosixPath(
-                                        f"/.cache/huggingface/hub/models--{repo_author}--{repo_name}/snapshots/{git_ref}/model.safetensors"
-                                    ),
-                                    blob_path=PosixPath(
-                                        f"/.cache/huggingface/hub/models--{repo_author}--{repo_name}/blobs/{git_blob}"
-                                    ),
-                                    size_on_disk=298,
-                                    blob_last_accessed=datetime.datetime.now().timestamp(),
-                                    blob_last_modified=datetime.datetime.now().timestamp(),
-                                ),
-                                CachedFileInfo(
-                                    file_name="config.json",
-                                    file_path=config_file_path,
-                                    blob_path=PosixPath(
-                                        f"/.cache/huggingface/hub/models--{repo_author}--{repo_name}/blobs/{git_blob}"
-                                    ),
-                                    size_on_disk=408,
-                                    blob_last_accessed=datetime.datetime.now().timestamp(),
-                                    blob_last_modified=datetime.datetime.now().timestamp(),
-                                ),
-                            }
-                        ),
-                        refs=frozenset(refs),
-                        last_modified=1739366513.8599825,
-                    )
-                ]
-            ),
-        )
+        local_repos = {repo["id"]: repo["owned_by"] for repo in result}
 
-    repos = frozenset(
-        [
-            # Correct repo, should be returned
-            cached_repo_factory(
-                "author0", "repo0", "model", PosixPath(generative_model_config_file.name), "aaa", "bbb", ["main"]
-            ),
-            # Incorrect repo, is a dataset
-            cached_repo_factory(
-                "author0", "repo1", "dataset", PosixPath(generative_model_config_file.name), "aaa", "bbb", ["main"]
-            ),
-            # Correct repo with two refs; both refs should be returned
-            cached_repo_factory(
-                "author0",
-                "repo2",
-                "model",
-                PosixPath(generative_model_config_file.name),
-                "aaa",
-                "bbb",
-                ["main", "refs/pr/2"],
-            ),
-            # Incorrect repo, the architectures field is not a generative model
-            cached_repo_factory(
-                "author0", "repo3", "model", PosixPath(non_generative_model_config_file.name), "aaa", "bbb", ["main"]
-            ),
-            # Incorrect repo, the config is just an empty JSON
-            cached_repo_factory(
-                "author0", "repo4", "model", PosixPath(broken_config_file.name), "aaa", "bbb", ["main"]
-            ),
-        ]
-    )
-    fake_cache = HFCacheInfo(size_on_disk=100_000, repos=repos, warnings=[])
-
-    with patch("transformers.cli.serve.scan_cache_dir", return_value=fake_cache):
-        result = Serve.get_gen_models()
-        repo_id_to_result = {r["id"]: r for r in result}
-
-    assert "author0/repo0" in repo_id_to_result
-    assert "author0/repo2" in repo_id_to_result
-    assert "author0/repo2@refs/pr/2" in repo_id_to_result
-    assert len(repo_id_to_result) == 3
+        for key, value in expected_results.items():
+            assert key in local_repos
+            assert local_repos[key] == value
 
 
 @require_openai
