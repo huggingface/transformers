@@ -689,7 +689,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         try:
             attn_implementation = (
                 "flash_attention_2"
-                if attn_implementation is None and self._flash_attn_2_can_dispatch()
+                if attn_implementation is None
+                and self._flash_attn_can_dispatch(flash_attn_version=2, is_init_check=is_init_check)
                 else attn_implementation
             )
         except (ValueError, ImportError):
