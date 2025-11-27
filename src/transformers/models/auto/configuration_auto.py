@@ -60,6 +60,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("biogpt", "BioGptConfig"),
         ("bit", "BitConfig"),
         ("bitnet", "BitNetConfig"),
+        ("blueberry", "BlueberryConfig"),
         ("blenderbot", "BlenderbotConfig"),
         ("blenderbot-small", "BlenderbotSmallConfig"),
         ("blip", "BlipConfig"),
