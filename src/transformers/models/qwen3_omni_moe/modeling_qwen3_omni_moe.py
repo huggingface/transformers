@@ -1376,7 +1376,7 @@ class Qwen3OmniMoeThinkerTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
+        router_scores = router_top_value
         return router_scores, router_indices
 
 
@@ -2802,7 +2802,7 @@ class Qwen3OmniMoeTalkerTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
+        router_scores = router_top_value
         return router_scores, router_indices
 
 
