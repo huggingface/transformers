@@ -1,4 +1,6 @@
 name: Build docker images (Nightly CI)
+permissions:
+  contents: read
 
 on:
   workflow_call:
