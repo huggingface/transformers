@@ -122,34 +122,36 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_token(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        text = "<image> What this is? Assistant: This is"
 
-        outputs = pipe(image, text=text)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable. The photo captures a moment of tranquility and companionship between the two feline friends.",
-                }
-            ],
-        )
+        message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+                    {"type": "text", "text": "What this is?"},
+                ],
+            }
+        ]
+        expected_output = [
+            {
+                "input_text": message,
+                "generated_text": [
+                    message[0],
+                    {
+                        "role": "assistant",
+                        "content": "This is a photo of two cats lying on a pink blanket. One cat is on the left side of the photo, and the other cat is on the right side. Both cats appear to be resting comfortably, with their bodies relaxed and their heads resting on the blanket. The background is blurred, but it looks like a cozy indoor setting with a red couch.",
+                    },
+                ],
+            }
+        ]
 
-        outputs = pipe([image, image], text=[text, text])
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
-                },
-                {
-                    "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
-                },
-            ],
-        )
+        # single input
+        outputs = pipe(message)
+        self.assertEqual(outputs, expected_output)
+
+        # multiple inputs
+        outputs = pipe([message, message])
+        self.assertEqual(outputs, [expected_output, expected_output])
 
     @require_torch
     def test_consistent_batching_behaviour(self):
