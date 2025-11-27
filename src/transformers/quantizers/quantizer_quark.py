@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 
@@ -25,7 +25,6 @@ from ..utils import is_quark_available, logging
 
 
 logger = logging.get_logger(__name__)
-from ..core_model_loading import ConversionOps
 
 
 CHECKPOINT_KEYS = {
@@ -101,12 +100,26 @@ class QuarkHfQuantizer(HfQuantizer):
         from ..integrations.quark import QuarkDeserialize
 
         return [
-            WeightConverter(source_keys=["weight_scale"], target_keys="weight_scale", operations=[QuarkDeserialize(self)]),
+            WeightConverter(
+                source_keys=["weight_scale"], target_keys="weight_scale", operations=[QuarkDeserialize(self)]
+            ),
             WeightConverter(source_keys=["bias_scale"], target_keys="bias_scale", operations=[QuarkDeserialize(self)]),
-            WeightConverter(source_keys=["input_scale"], target_keys="input_scale", operations=[QuarkDeserialize(self)]),
-            WeightConverter(source_keys=["output_scale"], target_keys="output_scale", operations=[QuarkDeserialize(self)]),
-            WeightConverter(source_keys=["weight_zero_point"], target_keys="weight_zero_point", operations=[QuarkDeserialize(self)]),
-            WeightConverter(source_keys=["bias_zero_point"], target_keys="bias_zero_point", operations=[QuarkDeserialize(self)]),
-            WeightConverter(source_keys=["input_zero_point"], target_keys="input_zero_point", operations=[QuarkDeserialize(self)]),
-            WeightConverter(source_keys=["output_zero_point"], target_keys="output_zero_point", operations=[QuarkDeserialize(self)]),
+            WeightConverter(
+                source_keys=["input_scale"], target_keys="input_scale", operations=[QuarkDeserialize(self)]
+            ),
+            WeightConverter(
+                source_keys=["output_scale"], target_keys="output_scale", operations=[QuarkDeserialize(self)]
+            ),
+            WeightConverter(
+                source_keys=["weight_zero_point"], target_keys="weight_zero_point", operations=[QuarkDeserialize(self)]
+            ),
+            WeightConverter(
+                source_keys=["bias_zero_point"], target_keys="bias_zero_point", operations=[QuarkDeserialize(self)]
+            ),
+            WeightConverter(
+                source_keys=["input_zero_point"], target_keys="input_zero_point", operations=[QuarkDeserialize(self)]
+            ),
+            WeightConverter(
+                source_keys=["output_zero_point"], target_keys="output_zero_point", operations=[QuarkDeserialize(self)]
+            ),
         ]

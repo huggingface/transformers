@@ -13,21 +13,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import get_module_from_name
 from typing import Optional
 
+from ..core_model_loading import ConversionOps
 from ..utils import is_torch_available
+
 
 if is_torch_available():
     import torch
+
 
 class QuarkDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys: Optional[list[str]] = None, full_layer_name: str | None = None, **kwargs) -> dict[str, torch.Tensor]:
-
+    def convert(
+        self,
+        input_dict: torch.Tensor,
+        model: Optional[torch.nn.Module] = None,
+        missing_keys: Optional[list[str]] = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
         # this will get the param name : weight, input, bias or output
