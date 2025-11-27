@@ -116,27 +116,9 @@ class QuarkHfQuantizer(HfQuantizer):
         # assign their values into the corresponding quantizer attributes
         # (`weight_quantizer.scale`, `input_quantizer.scale`, and so on).
 
-        return [
-            WeightConverter(
-                source_keys=["weight_scale"], target_keys="weight_scale", operations=[QuarkDeserialize(self)]
-            ),
-            WeightConverter(source_keys=["bias_scale"], target_keys="bias_scale", operations=[QuarkDeserialize(self)]),
-            WeightConverter(
-                source_keys=["input_scale"], target_keys="input_scale", operations=[QuarkDeserialize(self)]
-            ),
-            WeightConverter(
-                source_keys=["output_scale"], target_keys="output_scale", operations=[QuarkDeserialize(self)]
-            ),
-            WeightConverter(
-                source_keys=["weight_zero_point"], target_keys="weight_zero_point", operations=[QuarkDeserialize(self)]
-            ),
-            WeightConverter(
-                source_keys=["bias_zero_point"], target_keys="bias_zero_point", operations=[QuarkDeserialize(self)]
-            ),
-            WeightConverter(
-                source_keys=["input_zero_point"], target_keys="input_zero_point", operations=[QuarkDeserialize(self)]
-            ),
-            WeightConverter(
-                source_keys=["output_zero_point"], target_keys="output_zero_point", operations=[QuarkDeserialize(self)]
-            ),
-        ]
+        converters = []
+        for key in CHECKPOINT_KEYS.keys():
+            converters.append(
+                WeightConverter(source_keys=[key], target_keys=key, operations=[QuarkDeserialize(self)])
+            )
+        return converters
