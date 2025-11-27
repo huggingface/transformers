@@ -212,6 +212,21 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # These tokens are from the special tokens map
                 self.add_tokens(tokens, special_tokens=True)
 
+        try:
+            vocab_size = self._tokenizer.get_vocab_size()
+        except NotImplementedError:
+            vocab_size = 0
+
+        # Optionally patches mistral tokenizers with wrong regex
+        if vocab_size > 100000 and getattr(self._tokenizer, "pre_tokenizer", None) is not None:
+            self._tokenizer = self._patch_mistral_regex(
+                self._tokenizer,
+                self.init_kwargs.get("name_or_path", ""),
+                init_kwargs=self.init_kwargs,
+                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
+                **kwargs,
+            )
+
     @property
     def is_fast(self) -> bool:
         return True
@@ -832,10 +847,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         legacy_format: bool | None = None,
         filename_prefix: str | None = None,
     ) -> tuple[str, ...]:
-        """
-        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens as well as in a unique JSON
-        file containing {config + vocab + added-tokens}.
-        """
         save_directory = str(save_directory)
 
         tokenizer_file = os.path.join(
@@ -1043,117 +1054,128 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Some other TypeError, re-raise it
                 raise
 
-
-class TokenizersExtractor:
-    """
-    Extractor implementation for tokenizers library tokenizer.json files.
-
-    This class extracts vocab and merges from a tokenizer.json file, similar to
-    SentencePieceExtractor for .model files.
-
-    Example:
-        ```python
-        from transformers import TokenizersExtractor
-
-        extractor = TokenizersExtractor("path/to/tokenizer.json")
-        vocab_ids, vocab_scores, merges = extractor.extract()
-        ```
-    """
-
-    def __init__(self, tokenizer_file: str):
+    @classmethod
+    def _patch_mistral_regex(
+        cls,
+        tokenizer,
+        pretrained_model_name_or_path,
+        token=None,
+        cache_dir=None,
+        local_files_only=False,
+        _commit_hash=None,
+        _is_local=False,
+        init_kwargs=None,
+        fix_mistral_regex=None,
+        **kwargs,
+    ):
         """
-        Initialize the extractor with a tokenizer.json file.
-
-        Args:
-            tokenizer_file (str): Path to the tokenizer.json file
+        Patches mistral related tokenizers with incorrect regex if detected
+            1) Local file with an associated config saved next to it
+                >> Model type one of the mistral models (on older versions)
+            2) Remote models on the hub from official mistral models
+                >> Tags including `base_model:.*mistralai`
         """
-        with open(tokenizer_file, "r", encoding="utf-8") as f:
-            self.tokenizer_data = json.load(f)
+        import re
 
-        if "model" not in self.tokenizer_data:
-            raise ValueError(f"Invalid tokenizer.json file: missing 'model' key in {tokenizer_file}")
+        from huggingface_hub import model_info
+        from packaging import version
 
-        self.model_data = self.tokenizer_data["model"]
-        self.model_type = self.model_data.get("type", "Unknown")
+        from transformers.utils.hub import cached_file
 
-    def extract(self) -> tuple[dict[str, int], list[tuple[str, float]], list[tuple[str, str]], list[dict]]:
-        """
-        Extract vocabulary, scores, merges, and added_tokens from the tokenizer.json file.
+        def is_base_mistral(model_id: str) -> bool:
+            model = model_info(model_id)
+            if model.tags is not None:
+                if re.search("base_model:.*mistralai", "".join(model.tags)):
+                    return True
+            return False
 
-        Returns:
-            tuple containing:
-                - vocab_ids (dict[str, int]): Mapping from token string to token ID
-                - vocab_scores (list[tuple[str, float]]): List of (token, score) tuples.
-                  Note: tokenizer.json doesn't store scores, so all scores are 0.0
-                - merges (list[tuple[str, str]]): List of merge pairs for BPE tokenizers
-                - added_tokens (list[dict]): List of added token dicts with 'id', 'content', 'special', etc.
+        if _is_local or is_base_mistral(pretrained_model_name_or_path):
+            _config_file = cached_file(
+                pretrained_model_name_or_path,
+                "config.json",
+                cache_dir=cache_dir,
+                token=token,
+                local_files_only=local_files_only,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                _commit_hash=_commit_hash,
+            )
 
-        Raises:
-            ValueError: If the tokenizer type is not supported or vocab is missing
-        """
-        # Extract vocabulary
-        if "vocab" not in self.model_data:
-            raise ValueError(f"Tokenizer model type '{self.model_type}' does not have a 'vocab' field")
+            # Detected using a (local) mistral tokenizer
+            mistral_config_detected = False
+            if _config_file is not None:
+                with open(_config_file, encoding="utf-8") as f:
+                    _config = json.load(f)
+                transformers_version = _config.get("transformers_version")
+                transformers_model_type = _config.get("model_type")
 
-        vocab_field = self.model_data["vocab"]
+                # Detect if we can skip the mistral fix by
+                #   a) having a non-mistral tokenizer
+                #   b) fixed version of transformers
+                if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                    if (
+                        _is_local
+                        and transformers_model_type is not None
+                        and transformers_model_type
+                        not in [
+                            "mistral",
+                            "mistral3",
+                            "voxtral",
+                            "ministral",
+                            "pixtral",
+                        ]
+                    ):
+                        return tokenizer
+                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
+                    return tokenizer
 
-        # Support both dict-based (BPE/WordPiece/WordLevel) and list-based (Unigram) vocabs
-        if isinstance(vocab_field, dict):
-            # {token: id}
-            vocab_ids = dict(vocab_field)
-            # tokenizer.json doesn't store scores for these types; default to 0.0 and sort by id
-            vocab_scores = sorted([(token, 0.0) for token in vocab_field.keys()], key=lambda x: vocab_field[x[0]])
-        elif isinstance(vocab_field, list):
-            # [[token, score], ...] — ids are the list indices
-            vocab_ids = {token: idx for idx, (token, _score) in enumerate(vocab_field)}
-            vocab_scores = [(token, float(score)) for token, score in vocab_field]
-        else:
-            raise ValueError(f"Unsupported vocab type in tokenizer.json: {type(vocab_field)}")
+                mistral_config_detected = True
 
-        # Extract merges (for BPE tokenizers)
-        merges = []
-        if "merges" in self.model_data:
-            # tokenizer.json can store merges as either:
-            # 1. Lists like ["▁", "t"]
-            # 2. Strings like "▁ t"
-            for merge_item in self.model_data["merges"]:
-                if isinstance(merge_item, list):
-                    # Already in list format
-                    if len(merge_item) == 2:
-                        merges.append((merge_item[0], merge_item[1]))
+            if mistral_config_detected or (not _is_local and is_base_mistral(pretrained_model_name_or_path)):
+                # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
+                if init_kwargs and "fix_mistral_regex" in init_kwargs:
+                    setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
+
+                # only warn if its not explicitly passed
+                if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", False)
+                    logger.warning(
+                        f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
+                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e."
+                        " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
+                    )
+                elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", True)
+                    import tokenizers
+
+                    split_pretokenizer = tokenizers.pre_tokenizers.Split(
+                        pattern=tokenizers.Regex(
+                            r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+                        ),
+                        behavior="isolated",
+                    )
+                    current_pretokenizer = tokenizer.backend_tokenizer.pre_tokenizer
+                    # Check if it's already a Sequence
+                    if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Sequence):
+                        # Replace the first element (the Split pattern)
+                        tokenizer.backend_tokenizer.pre_tokenizer[0] = split_pretokenizer
                     else:
-                        logger.warning(f"Invalid merge format (expected 2 items): {merge_item}, skipping")
-                elif isinstance(merge_item, str):
-                    # String format - split on first space
-                    parts = merge_item.split(" ", 1)
-                    if len(parts) == 2:
-                        merges.append((parts[0], parts[1]))
-                    else:
-                        logger.warning(f"Invalid merge format: '{merge_item}', skipping")
-                else:
-                    logger.warning(f"Unknown merge type: {type(merge_item)}, skipping")
+                        # Replace Metaspace with ByteLevel when adding Split, as Metaspace(split=False) doesn't
+                        # work correctly with the Split pre-tokenizer and causes spaces to be lost during encoding
+                        if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Metaspace):
+                            current_pretokenizer = tokenizers.pre_tokenizers.ByteLevel(
+                                add_prefix_space=False, use_regex=False
+                            )
 
-        # Extract added_tokens from tokenizer.json
-        # These are tokens that should not be split by the tokenization algorithm
-        added_tokens_list = self.tokenizer_data.get("added_tokens", [])
-        # Convert to decoder-style mapping: id -> token dict
-        added_tokens_decoder = {}
-        for item in added_tokens_list:
-            if not isinstance(item, dict) or "id" not in item:
-                continue
-            token_id = item["id"]
-            token_kwargs = {k: v for k, v in item.items() if k != "id"}
-            try:
-                added_token_obj = AddedToken(**token_kwargs)
-            except Exception:
-                # Fallback: at minimum require content
-                content = token_kwargs.get("content")
-                if content is None:
-                    continue
-                added_token_obj = AddedToken(content, special=bool(token_kwargs.get("special", True)))
-            added_tokens_decoder[token_id] = added_token_obj
+                        # Not a Sequence, so create one with Split + current pretokenizer
+                        tokenizer.backend_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
+                            [
+                                split_pretokenizer,
+                                current_pretokenizer,
+                            ]
+                        )
 
-        return vocab_ids, vocab_scores, merges, added_tokens_decoder
+        return tokenizer
 
 
 # Backward-compatible alias: allow referring to TokenizersBackend as PreTrainedTokenizerFast
