@@ -454,7 +454,11 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         kwargs["backend"] = "tokenizers"
         kwargs["files_loaded"] = files_loaded
         # Some old models have uploaded a tokenizer.json but haven't updated tokenizer_config.json to point to the correct tokenizer class
-        tokenizer_class = TokenizersBackend if tokenizer_class.__name__ in ("PythonBackend", "PreTrainedTokenizer") else tokenizer_class
+        tokenizer_class = (
+            TokenizersBackend
+            if tokenizer_class.__name__ in ("PythonBackend", "PreTrainedTokenizer")
+            else tokenizer_class
+        )
         return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
     # Try tekken.json (Mistral format)
