@@ -44,8 +44,8 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         local_image = os.path.join(repo_root, "coco_sample.png")
         if not os.path.isfile(local_image):
-            from PIL import Image
             import numpy as np
+            from PIL import Image
 
             Image.fromarray((np.random.rand(64, 64, 3) * 255).astype("uint8")).save(local_image)
 
