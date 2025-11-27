@@ -36,7 +36,7 @@ class RopeParameters(TypedDict, total=False):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
             'llama3'], with 'default' being the original RoPE implementation.
         partial_rotary_factor (`float`, *optional*):
-            Percentage of the query and keys which will have rotary embedding.
+            The percentage of the query and key head embedding on which RoPE will be applied.
         factor (`float`, *optional*):
             Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
             most scaling types, a `factor` of x will enable the model to handle sequences of length x *
