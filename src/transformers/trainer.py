@@ -3951,7 +3951,6 @@ class Trainer:
         # so we can directly use the computed loss from the model output.
         # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
         outputs = model(**inputs)
-        shift_labels = inputs["shift_labels"]
         loss = outputs.loss
 
         sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
@@ -3959,7 +3958,7 @@ class Trainer:
         # differentiable weighted per-shard-loss aggregation across ranks
         losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
         # special dealing with SFT that has prompt tokens that aren't used in loss computation
-        good_tokens = (shift_labels != -100).view(-1).sum()
+        good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
         good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
         # Skip ranks with zero valid tokens
         total_loss = sum(
