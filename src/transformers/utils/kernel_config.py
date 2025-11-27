@@ -217,7 +217,7 @@ class KernelConfig(PushToHubMixin):
 
             if isinstance(kernel, str):
                 repo_name = kernel
-                add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
+                add_to_mapping(layer_name, current_device, repo_name, mode, compatible_mapping)
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():
                     if device != current_device:
