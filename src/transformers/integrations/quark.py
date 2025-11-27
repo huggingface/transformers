@@ -43,12 +43,12 @@ class QuarkDeserialize(ConversionOps):
         # quant_state should be in the form of scale, or zero_point
         quant_state = target_key.split("_", 1)[-1]
 
-        # here we change the name for example from the form of : 
+        # here we change the name for example from the form of :
         # model.layers.0.mlp.down_proj.weight_scale to model.layers.0.mlp.down_proj.weight_quantizer.scale to fit within
         # the QParamsLinear module of quark
         sub_module_state = full_layer_name.rsplit(".", 1)[0] + "." + param + "_quantizer" + "." + quant_state
 
-        # since quark module was expecting keys in the form of model.layers.0.mlp.down_proj.weight_scale, 
+        # since quark module was expecting keys in the form of model.layers.0.mlp.down_proj.weight_scale
         # we need to remove it from the missing_keys list
         missing_keys.discard(full_layer_name)
 
