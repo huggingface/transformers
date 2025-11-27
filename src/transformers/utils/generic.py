@@ -18,11 +18,10 @@ Generic utilities
 import inspect
 import json
 import os
-import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
@@ -499,15 +498,6 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
                 yield key, v
 
     return dict(_flatten_dict(d, parent_key, delimiter))
-
-
-@contextmanager
-def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
-    if use_temp_dir:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            yield tmp_dir
-    else:
-        yield working_dir
 
 
 def transpose(array, axes=None):

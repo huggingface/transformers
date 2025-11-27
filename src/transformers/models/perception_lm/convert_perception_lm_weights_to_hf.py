@@ -423,17 +423,13 @@ def write_model(
         model.config.dtype = torch.bfloat16
 
         print("Saving in the Transformers format.")
+        model_name = model_path.split(os.path.sep)[-1]
         if push_to_hub:
             print("Pushing to the hub.")
-            model.push_to_hub(
-                model_path,
-                safe_serialization=safe_serialization,
-                private=True,
-                use_temp_dir=True,
-            )
+            model.push_to_hub(model_name, safe_serialization=safe_serialization, private=True)
         else:
             print("Saving to disk.")
-            model.save_pretrained(model_path, safe_serialization=safe_serialization)
+            model.save_pretrained(model_name, safe_serialization=safe_serialization)
 
 
 class Llama3Converter(TikTokenConverter):
@@ -543,7 +539,8 @@ def write_tokenizer(
 
     if push_to_hub:
         print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
-        processor.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
+        model_name = tokenizer_path.split(os.path.sep)[-1]
+        processor.push_to_hub(model_name, private=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
         processor.save_pretrained(tokenizer_path)

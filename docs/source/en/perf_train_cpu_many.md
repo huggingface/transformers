@@ -203,8 +203,8 @@ spec:
               env:
               - name: LD_PRELOAD
                 value: "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9:/usr/local/lib/libiomp5.so"
-              - name: TRANSFORMERS_CACHE
-                value: "/tmp/pvc-mount/transformers_cache"
+              - name: HF_HUB_CACHE
+                value: "/tmp/pvc-mount/hub_cache"
               - name: HF_DATASETS_CACHE
                 value: "/tmp/pvc-mount/hf_datasets_cache"
               - name: LOGLEVEL
