@@ -940,7 +940,7 @@ def use_task_specific_params(model, task):
     generation_config_attrs = set(temp_config.to_dict().keys())
 
     for key, value in task_params.items():
-        if key in generation_config_attrs or hasattr(temp_config, key):
+        if key in generation_config_attrs:
             setattr(model.generation_config, key, value)
         else:
             setattr(model.config, key, value)
