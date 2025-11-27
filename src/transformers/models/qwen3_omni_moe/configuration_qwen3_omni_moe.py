@@ -532,10 +532,10 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here du to the added norm
-        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here du to the added norm
-        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here du to the added norm
-        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here du to the added norm
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
