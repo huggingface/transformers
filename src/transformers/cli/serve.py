@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import asyncio
 import base64
 import copy
@@ -34,7 +36,6 @@ from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
 import typer
 from huggingface_hub import model_info
 from huggingface_hub.constants import HF_HUB_OFFLINE
-from openai.types.chat.chat_completion import Choice
 from tokenizers.decoders import DecodeStream
 
 import transformers
@@ -52,7 +53,6 @@ from .. import (
     LogitsProcessorList,
     TextIteratorStreamer,
 )
-from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
 from ..utils import logging
 
 
@@ -62,6 +62,8 @@ if TYPE_CHECKING:
         PreTrainedTokenizerFast,
         ProcessorMixin,
     )
+
+    from ..generation.continuous_batching import ContinuousBatchingManager
 
 
 if is_librosa_available():
@@ -81,6 +83,7 @@ if serve_dependencies_available:
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
     from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
+    from openai.types.chat.chat_completion import Choice
     from openai.types.chat.chat_completion_chunk import (
         ChatCompletionChunk,
         ChoiceDelta,
@@ -234,9 +237,9 @@ class Modality(enum.Enum):
 
 def create_generation_config_from_req(
     req: dict,
-    model_generation_config: "GenerationConfig",
+    model_generation_config: GenerationConfig,
     **kwargs,
-) -> "GenerationConfig":
+) -> GenerationConfig:
     """
     Creates a generation config from the parameters of the request. If a generation config is passed in the request,
     it will be used as a baseline for parameterization. Otherwise, we will use the model's default generation config.
@@ -313,9 +316,9 @@ class TimedModel:
 
     def __init__(
         self,
-        model: "PreTrainedModel",
+        model: PreTrainedModel,
         timeout_seconds: int,
-        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
+        processor: Union[ProcessorMixin, PreTrainedTokenizerFast] | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -471,7 +474,7 @@ class Serve:
             self.load_model_and_processor(model_id_and_revision)
 
         @asynccontextmanager
-        async def lifespan(app: "FastAPI"):
+        async def lifespan(app: FastAPI):
             yield
             for model in self.loaded_models.values():
                 model.delete_model()
@@ -585,7 +588,7 @@ class Serve:
         self,
         request: dict,
         schema: TypedDict,
-        validator: "TypeAdapter",
+        validator: TypeAdapter,
         unused_fields: set,
     ):
         """
@@ -661,7 +664,7 @@ class Serve:
         model: str | None = None,
         role: str | None = None,
         finish_reason: str | None = None,
-        tool_calls: list["ChoiceDeltaToolCall"] | None = None,
+        tool_calls: list[ChoiceDeltaToolCall] | None = None,
         decode_stream: DecodeStream | None = None,
         tokenizer: PreTrainedTokenizerFast | None = None,
     ) -> ChatCompletionChunk:
@@ -825,6 +828,8 @@ class Serve:
         )["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
+            from ..generation.continuous_batching import RequestStatus
+
             try:
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
                 # they come from the assistant.
@@ -909,7 +914,7 @@ class Serve:
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
-    def get_model_modality(model: "PreTrainedModel") -> Modality:
+    def get_model_modality(model: PreTrainedModel) -> Modality:
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
@@ -1688,7 +1693,7 @@ class Serve:
         self.last_messages = messages
         return req_continues_last_messages
 
-    def get_quantization_config(self) -> Optional["BitsAndBytesConfig"]:
+    def get_quantization_config(self) -> Optional[BitsAndBytesConfig]:
         """
         Returns the quantization config for the given CLI arguments.
 
@@ -1787,9 +1792,7 @@ class Serve:
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(
-        self, model_id_and_revision: str
-    ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
+    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1814,7 +1817,7 @@ class Serve:
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 
