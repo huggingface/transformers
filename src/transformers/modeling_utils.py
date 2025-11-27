@@ -2030,7 +2030,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return getattr(self, name)
 
         if self.base_model is not self and hasattr(self.base_model, "get_encoder"):
-            return self.base_model.get_encoder(modality=modality)
+            base_encoder = self.base_model.get_encoder(modality=modality)
+            # Base model will always have attr `get_encoder` if inherited from `PreTrainedModel`
+            # But it doesn't mean that the model has an encoder module, and we need to return `self`
+            if base_encoder != self.base_model:
+                return base_encoder
 
         # If this is a base transformer model (no encoder/model attributes), return self
         return self
