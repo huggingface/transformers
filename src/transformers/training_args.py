@@ -1595,10 +1595,7 @@ class TrainingArguments:
                         f"Setting TF32 in {device_str} backends to speedup torch compile, you won't see any improvement"
                         " otherwise."
                     )
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        enable_tf32(True)
+                    enable_tf32(True)
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
@@ -1606,18 +1603,12 @@ class TrainingArguments:
         if is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        enable_tf32(True)
+                    enable_tf32(True)
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = False
-                    else:
-                        enable_tf32(False)
+                    enable_tf32(False)
                 # no need to assert on else
 
         if self.report_to == "all" or self.report_to == ["all"]:
