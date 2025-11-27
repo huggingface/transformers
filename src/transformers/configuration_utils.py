@@ -20,6 +20,7 @@ import os
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
+from huggingface_hub import create_repo
 from packaging import version
 
 from . import __version__
@@ -454,7 +455,7 @@ class PreTrainedConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
