@@ -20,6 +20,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -132,9 +133,8 @@ class NanoChatDecoderLayer(LlamaDecoderLayer):
 class NanoChatPreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         PreTrainedModel._init_weights(self, module)
-
         if isinstance(module, NanoChatAttention):
-            nn.init.normal_(
+            init.normal_(
                 module.o_proj.weight,
                 mean=0.0,
                 std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers),

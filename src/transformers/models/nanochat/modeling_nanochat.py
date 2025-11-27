@@ -26,6 +26,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -350,9 +351,8 @@ class NanoChatPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
-
         if isinstance(module, NanoChatAttention):
-            nn.init.normal_(
+            init.normal_(
                 module.o_proj.weight,
                 mean=0.0,
                 std=self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers),
