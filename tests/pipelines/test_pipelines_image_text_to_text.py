@@ -58,7 +58,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         return pipe, examples
 
     def run_pipeline_test(self, pipe, examples):
-        outputs = pipe(examples[0].get("images"), text=examples[0].get("text"))
+        outputs = pipe(images=examples[0].get("images"), text=examples[0].get("text"))
         self.assertEqual(
             outputs,
             [
@@ -159,8 +159,8 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         prompt = "a photo of"
 
-        outputs = pipe([image, image], text=[prompt, prompt], max_new_tokens=10)
-        outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
+        outputs = pipe(images=[image, image], text=[prompt, prompt], max_new_tokens=10)
+        outputs_batched = pipe(images=[image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
         self.assertEqual(outputs, outputs_batched)
 
     @slow
@@ -181,7 +181,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         ]
         # Deprecated behavior should raise an error after v5
         with self.assertRaises(ValueError):
-            outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
+            outputs = pipe(images=[image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
 
         messages = [
             {
