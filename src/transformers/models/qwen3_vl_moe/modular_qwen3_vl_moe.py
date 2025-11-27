@@ -41,7 +41,6 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLTextAttention,
     Qwen3VLTextModel,
     Qwen3VLVisionModel,
-    apply_rotary_pos_emb,
 )
 
 
@@ -349,9 +348,7 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
 
 
 class Qwen3VLMoeTextAttention(Qwen3VLTextAttention):
-    def __init__(self, config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.rotary_fn = apply_rotary_pos_emb
+    pass
 
 
 class Qwen3VLMoeTextDecoderLayer(Qwen3MoeDecoderLayer):

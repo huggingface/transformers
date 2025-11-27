@@ -34,7 +34,7 @@ try:
         get_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
-        use_kernel_forward_from_hub,
+        # use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
     )
 

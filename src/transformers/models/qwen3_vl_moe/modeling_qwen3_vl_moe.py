@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -225,11 +225,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernel_func_from_hub("rotary_fn")
 class Qwen3VLMoeTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config, layer_idx: int):
+    def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
@@ -258,7 +257,6 @@ class Qwen3VLMoeTextAttention(nn.Module):
         self.k_norm = Qwen3VLMoeTextRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -277,7 +275,7 @@ class Qwen3VLMoeTextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

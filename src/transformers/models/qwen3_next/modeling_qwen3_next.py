@@ -30,7 +30,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -348,7 +347,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernel_func_from_hub("rotary_fn")
 class Qwen3NextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -377,7 +375,6 @@ class Qwen3NextAttention(nn.Module):
         self.k_norm = Qwen3NextRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -401,7 +398,7 @@ class Qwen3NextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

@@ -35,7 +35,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1442,7 +1442,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernel_func_from_hub("rotary_fn")
 class Qwen3OmniMoeThinkerTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1475,7 +1474,6 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -1494,7 +1492,7 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -2324,7 +2322,6 @@ class Qwen3OmniMoeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_kernel_func_from_hub("rotary_fn")
 class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -2356,7 +2353,6 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -2375,7 +2371,7 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -3355,7 +3351,6 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
         return hidden_states
 
 
-@use_kernel_func_from_hub("rotary_fn")
 class Qwen3OmniMoeCode2WavAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -3385,7 +3380,6 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         self.q_norm = nn.Identity()
         self.k_norm = nn.Identity()
         self.sliding_window = config.sliding_window
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -3404,7 +3398,7 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

@@ -20,7 +20,6 @@ from typing import Optional
 import torch
 
 from ...cache_utils import Cache
-from ...integrations import use_kernel_func_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -60,7 +59,6 @@ class Qwen3RotaryEmbedding(Qwen2RotaryEmbedding):
     pass
 
 
-@use_kernel_func_from_hub("rotary_fn")
 class Qwen3Attention(LlamaAttention):
     def __init__(self, config: Qwen3Config, layer_idx: int):
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
@@ -68,7 +66,6 @@ class Qwen3Attention(LlamaAttention):
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -87,7 +84,7 @@ class Qwen3Attention(LlamaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
