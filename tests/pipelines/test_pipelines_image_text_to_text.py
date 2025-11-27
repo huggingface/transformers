@@ -69,19 +69,6 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
-        text = "What is the capital of France? Assistant:"
-
-        outputs = pipe(text=text)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "What is the capital of France? Assistant:",
-                    "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
-                }
-            ],
-        )
-
         messages = [
             [
                 {
@@ -100,43 +87,37 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 },
             ],
         ]
-        outputs = pipe(text=messages)
-        self.assertEqual(
-            outputs,
+        expected_outputs = [
             [
-                [
-                    {
-                        "input_text": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            }
-                        ],
-                        "generated_text": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            },
-                            {
-                                "role": "assistant",
-                                "content": "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and",
-                            },
-                        ],
-                    }
-                ],
-                [
-                    {
-                        "input_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
-                        ],
-                        "generated_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
-                            {"role": "assistant", "content": "Paris"},
-                        ],
-                    }
-                ],
+                {
+                    "input_text": messages[0],
+                    "generated_text": [
+                        messages[0][0],
+                        {
+                            "role": "assistant",
+                            "content": "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and",
+                        },
+                    ],
+                }
             ],
-        )
+            [
+                {
+                    "input_text": messages[1],
+                    "generated_text": [
+                        messages[1][0],
+                        {"role": "assistant", "content": "Paris"},
+                    ],
+                }
+            ],
+        ]
+
+        # single input
+        outputs = pipe(text=messages[1])
+        self.assertEqual(outputs, expected_outputs[1])
+
+        # multiple inputs
+        outputs = pipe(text=messages)
+        self.assertEqual(outputs, expected_outputs)
 
     @require_torch
     def test_small_model_pt_token(self):
