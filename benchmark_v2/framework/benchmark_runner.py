@@ -10,7 +10,6 @@ from datetime import datetime
 from queue import Queue
 from typing import Any
 
-import numpy as np
 import torch
 from datasets import Dataset
 from huggingface_hub import HfApi
