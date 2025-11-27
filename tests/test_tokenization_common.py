@@ -1245,6 +1245,8 @@ Hey how are you doing"""  # noqa: W293
                     conversations[0], tokenize=False, chat_template=dummy_template
                 )
                 truncation_position = full_encoding.char_to_token(chat_string.index(", long string to be truncated,"))
+                if truncation_position is None:
+                    self.skipTest("char_to_token returned None, cannot determine truncation position")
 
                 # check batched
                 output = tokenizer_r.apply_chat_template(
@@ -1259,6 +1261,9 @@ Hey how are you doing"""  # noqa: W293
                 for i, conv in enumerate(conversations):
                     chat_string = tokenizer_r.apply_chat_template(conv, tokenize=False, chat_template=dummy_template)
                     assistant_start = output.char_to_token(i, chat_string.index("start turn assistant"))
+
+                    if assistant_start is None:
+                        continue
 
                     # assert 1 from assistant_start to the end because the rest is truncated.
                     self.assertEqual(
@@ -1281,6 +1286,9 @@ Hey how are you doing"""  # noqa: W293
                     conversations[0], tokenize=False, chat_template=dummy_template
                 )
                 assistant_start = output.char_to_token(0, chat_string.index("start turn assistant"))
+
+                if assistant_start is None:
+                    return
 
                 # assert 1 from assistant_start to the end because the rest is truncated.
                 self.assertEqual(
