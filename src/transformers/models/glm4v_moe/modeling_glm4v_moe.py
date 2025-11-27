@@ -537,7 +537,7 @@ class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Glm4vMoePreTrainedModel(PreTrainedModel):
     config: Glm4vMoeConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -552,13 +552,16 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         "attentions": Glm4vMoeTextAttention,
         "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
     }
-    input_modalities = ["text", "image", "video"]
+    input_modalities = ("text", "image", "video")
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm4vMoeTextTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm4vMoeTextNaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @dataclass
@@ -870,7 +873,7 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
 @auto_docstring
 class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeVisionConfig
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     _no_split_modules = ["Glm4vMoeVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -982,7 +985,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
@@ -1090,7 +1093,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 
 @auto_docstring
 class Glm4vMoeModel(Glm4vMoePreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1111,12 +1114,6 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_rope_index(
         self,
@@ -1598,12 +1595,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -1611,15 +1602,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def visual(self):
-        return self.model.visual
 
     @auto_docstring
     @check_model_inputs()

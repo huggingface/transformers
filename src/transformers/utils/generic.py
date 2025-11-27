@@ -49,6 +49,12 @@ if is_torch_available():
     _is_torch_available = True
 
 
+# required for @can_return_tuple decorator to work with torchdynamo
+_is_mlx_available = False
+if is_mlx_available():
+    _is_mlx_available = True
+
+
 # vendored from distutils.util
 def strtobool(val):
     """Convert a string representation of truth to true (1) or false (0).
@@ -159,7 +165,7 @@ def is_mlx_array(x):
     """
     Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
     """
-    return False if not is_mlx_available() else _is_mlx(x)
+    return False if not _is_mlx_available else _is_mlx(x)
 
 
 def to_py_obj(obj):
@@ -867,21 +873,6 @@ def check_model_inputs(tie_last_hidden_states=True):
 
             collected_outputs = defaultdict(tuple)
             monkey_patched_layers = []
-
-            # Check attention implementation is properly set for capturing attention outputs
-            if recordable_keys.get("output_attentions", False):
-                supported_attn = ["eager", "eager_paged", "flex_attention", "sdpa"]
-                config_attn = getattr(self.config, "_attn_implementation", None)
-                sub_configs = [getattr(self.config, key, None) for key in self.config.sub_configs]
-                sub_configs_attn = [
-                    getattr(config, "_attn_implementation", None) for config in sub_configs if config is not None
-                ]
-                if config_attn not in supported_attn or any(attn not in supported_attn for attn in sub_configs_attn):
-                    warnings.warn(
-                        f"`output_attentions=True` is not supported with `attn_implementation` other than {supported_attn}. "
-                        "Please use `model.set_attn_implementation('eager')` to enable capturing attention outputs.",
-                        UserWarning,
-                    )
 
             def make_capture_wrapper(module, orig_forward, key, index):
                 @wraps(orig_forward)

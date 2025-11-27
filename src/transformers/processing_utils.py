@@ -76,6 +76,8 @@ from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_torch_available():
+    import torch
+
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
 if is_vision_available():
@@ -267,7 +269,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_center_crop: Optional[bool]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[str], device_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     disable_grouping: Optional[bool]
     image_seq_length: Optional[int]
@@ -341,7 +343,7 @@ class VideosKwargs(TypedDict, total=False):
     crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[str], device_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
     do_sample_frames: Optional[bool]
     video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
     fps: Annotated[Optional[Union[int, float]], positive_any_number()]
@@ -1746,6 +1748,35 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return out["input_ids"]
         return prompt
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        if generation_mode is not None and generation_mode != "text":
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only [`text`]"
+            )
+        return self.post_process_image_text_to_text(
+            generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+        )
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """

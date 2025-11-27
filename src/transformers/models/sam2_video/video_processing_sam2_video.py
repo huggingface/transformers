@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-from torch.nn import functional as F_t
+import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
@@ -35,6 +35,7 @@ class Sam2VideoVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    model_input_names = ["pixel_values"]
 
     def _preprocess(
         self,
@@ -93,9 +94,9 @@ class Sam2VideoVideoProcessor(BaseVideoProcessor):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
                 raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
-            interpolated_mask = F_t.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
-            interpolated_mask = F_t.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
+            interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)
             if binarize:
                 interpolated_mask = interpolated_mask > mask_threshold
             output_masks.append(interpolated_mask)

@@ -743,6 +743,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         model = T5Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="T5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(

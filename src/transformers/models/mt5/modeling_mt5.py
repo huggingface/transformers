@@ -881,10 +881,6 @@ class MT5Model(MT5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    # Copied from transformers.models.t5.modeling_t5.T5Model.get_encoder
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5Model.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
@@ -1066,10 +1062,6 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.get_encoder
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with google-t5/->google/, T5->MT5, t5->mt5
@@ -1265,10 +1257,6 @@ class MT5EncoderModel(MT5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.get_encoder
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.forward with google-t5/->google/, T5->MT5, t5->mt5
@@ -1581,10 +1569,6 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.get_encoder
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5ForQuestionAnswering.forward

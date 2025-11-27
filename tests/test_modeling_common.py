@@ -105,16 +105,11 @@ from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
-    is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
 
 from .generation.test_utils import GenerationTesterMixin
-
-
-if is_accelerate_available():
-    from accelerate.utils import compute_module_sizes
 
 
 if is_torch_available():
@@ -125,6 +120,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.integrations.accelerate import compute_module_sizes
     from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
@@ -163,7 +159,7 @@ def _test_eager_matches_sdpa_inference(
 ):
     """
     This test is written as a regular function to be able to overload it easily with different tolerances.
-    Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
+    Otherwise, `parameterize.expand` prevents it as it removes the original function from the namespace.
     """
     if not self.has_attentions:
         self.skipTest(reason="Model architecture does not support attentions")
@@ -1942,6 +1938,20 @@ class ModelTesterMixin:
             observed_main_input_name = list(model_signature.parameters.keys())[1]
             self.assertEqual(model_class.main_input_name, observed_main_input_name)
 
+    def test_model_base_model_prefix(self):
+        """
+        Normally a generative model is a base model + lm_head on top. If this test
+        fails for new model, probably the model has incorrect `base_model_prefix` or
+        the you are re-defining base blocks for a generative model.
+        There are some models which might not fit this assumption, if the model
+        has a special architecture. Feel free to skip the test in that case with
+        a reason in description.
+        """
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            self.assertTrue(model.base_model is not model)
+
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
             self.skipTest(reason="test_missing_keys is set to `False`")
@@ -2343,7 +2353,6 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_disk_offload_bin(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2357,7 +2366,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
 
@@ -2365,12 +2374,14 @@ class ModelTesterMixin:
                     max_size = int(self.model_split_percents[0] * model_size)
                     max_memory = {0: max_size, "cpu": max_size}
                     # This errors out cause it's missing an offload folder
-                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    new_model = model_class.from_pretrained(
+                        tmp_dir, device_map="auto", max_memory=max_memory, use_safetensors=False
+                    )
 
                 max_size = int(self.model_split_percents[1] * model_size)
                 max_memory = {0: max_size, "cpu": max_size}
                 new_model = model_class.from_pretrained(
-                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir, use_safetensors=False
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
@@ -2388,7 +2399,6 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_disk_offload_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2402,7 +2412,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2427,7 +2437,6 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("# TODO @CyrilVallez fix this in the other PR")
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2442,7 +2451,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2485,7 +2494,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2723,6 +2732,12 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
+                if torch_device == "xpu" and (
+                    attn_implementation == "kernels-community/flash-attn2"
+                    or attn_implementation == "flash_attention_2"
+                ):
+                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
+
             model = model_class(config)
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
@@ -2864,7 +2879,7 @@ class ModelTesterMixin:
         )
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -2872,7 +2887,7 @@ class ModelTesterMixin:
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -3016,7 +3031,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = model_sdpa.base_model
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
@@ -3034,7 +3049,7 @@ class ModelTesterMixin:
                 self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
+                model_eager = model_eager.base_model
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 
@@ -3264,7 +3279,7 @@ class ModelTesterMixin:
                         raise ValueError(f"The {attn_implementation} model should have {attn_implementation} layers")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_flash_attn_2_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_2")
@@ -3276,7 +3291,7 @@ class ModelTesterMixin:
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow
@@ -3419,7 +3434,7 @@ class ModelTesterMixin:
                 self.assertTrue(model_from_pretrained.config._attn_implementation != attn_implementation)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_from_config(self):
@@ -3636,7 +3651,10 @@ class ModelTesterMixin:
                 getattr(config, "hidden_size", None) is not None
                 and getattr(config, "num_attention_heads", None) is not None
             ):
-                head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
+                # For some models, num_attention_heads is a list of ints: we take the max to maximize the multiplier
+                num_attn_heads = getattr(config, "num_attention_heads")
+                num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
+                head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
                 config.hidden_size *= max(requested_dim // head_dim, 1)
 
             if (
