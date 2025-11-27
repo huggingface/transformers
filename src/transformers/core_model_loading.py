@@ -109,15 +109,7 @@ class ConversionOps:
 
     @abstractmethod
     def convert(
-        self,
-        input_dict: dict[str, Any],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        all_target_keys: list[str],
-        model,
-        missing_keys,
-        config,
-        **kwargs,
+        self, input_dict: dict[str, Any], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
@@ -133,14 +125,7 @@ class Chunk(ConversionOps):
         self.dim = dim
 
     def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        all_target_keys: list[str],
-        model,
-        missing_keys,
-        config,
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
@@ -172,10 +157,7 @@ class Concatenate(ConversionOps):
         input_dict: dict[str, list[torch.Tensor]],
         source_patterns: list[str],
         target_patterns: list[str],
-        all_target_keys: list[str],
-        model,
-        missing_keys,
-        config,
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
         return {target_pattern: torch.cat(tuple(input_dict.values()), dim=self.dim)}
@@ -203,14 +185,7 @@ class MergeModulelist(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self,
-        input_dict: dict[str, list[torch.Tensor]],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        all_target_keys: list[str],
-        model,
-        missing_keys,
-        config,
+        self, input_dict: dict[str, list[torch.Tensor]], source_patterns: list[str], target_patterns: list[str]
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
         for source_pattern, tensors in input_dict.items():
@@ -242,14 +217,7 @@ class SplitModulelist(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        all_target_keys: list[str],
-        model,
-        missing_keys,
-        config,
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
         all_tensors = {}
         for source_pattern, tensors in input_dict.items():
@@ -299,17 +267,15 @@ class PermuteForRope(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        input_dict: dict[str, list[torch.Tensor]],
         source_patterns: list[str],
         target_patterns: list[str],
-        all_target_keys: list[str],
-        model,
-        missing_keys,
         config,
+        **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
         output: dict[str, list[torch.Tensor]] = {}
-        for key, tensors in value.items():
+        for key, tensors in input_dict.items():
             if len(tensors) != 1:
                 raise ValueError("PermuteForRope expects a single tensor per key.")
             output[key] = [self._apply(tensors[0])]
@@ -420,15 +386,13 @@ class WeightRenaming(WeightTransform):
         target_key = self.target_patterns[0]
         collected_tensors = {target_key: self.collected_tensors[self.source_patterns[0]]}
 
-        # TODO: `all_target_keys` should not be needed, clean it up later in quantization
-        all_target_keys = [target_key]
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
-                    all_target_keys=all_target_keys,
+                    full_layer_name=target_key,
                     model=model,
                     config=config,
                     missing_keys=missing_keys,
@@ -466,15 +430,13 @@ class WeightConverter(WeightTransform):
             )
 
         collected_tensors = self.collected_tensors
-        # TODO: `all_target_keys` should not be needed, clean it up later in quantization
-        all_target_keys = [layer_name]
         for op in self.operations:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
-                    all_target_keys=all_target_keys,
+                    # Additional kwargs, ususally not used
                     model=model,
                     config=config,
                     missing_keys=missing_keys,
@@ -494,7 +456,7 @@ class WeightConverter(WeightTransform):
                     collected_tensors,
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
-                    all_target_keys=all_target_keys,
+                    full_layer_name=layer_name,
                     config=config,
                     model=model,
                     missing_keys=missing_keys,

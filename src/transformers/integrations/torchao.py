@@ -83,7 +83,7 @@ class TorchAoQuantize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor],
         model: Optional[torch.nn.Module] = None,
-        all_target_keys: list[str] | None = None,
+        full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -92,7 +92,6 @@ class TorchAoQuantize(ConversionOps):
         _, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
-        full_layer_name = all_target_keys[0]
         module, tensor_name = get_module_from_name(model, full_layer_name)
 
         module._parameters[tensor_name] = torch.nn.Parameter(value, requires_grad=value.requires_grad)
@@ -212,11 +211,10 @@ class TorchAoDeserialize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor],
         model: Optional[torch.nn.Module] = None,
-        all_target_keys: list[str] | None = None,
+        full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        full_layer_name = all_target_keys[0]
         if isinstance(self.hf_quantizer.quantization_config.quant_type, str):
             is_int_4 = "int4" in self.hf_quantizer.quantization_config.quant_type
         else:
