@@ -22,7 +22,6 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any, Optional
 from urllib.parse import urljoin, urlparse
 
-import click
 import requests
 import typer
 import yaml
@@ -198,29 +197,6 @@ class RichInterface:
         self._console.print()
 
 
-class ChatCommand(typer.core.TyperCommand):
-    """Custom Click command to override missing parameter error message.
-
-    Transformers v5 introduced a breaking change in the `transformers chat` command: the `model_id` parameter
-    is now required, and the command can no longer starts a server. This class overrides the default error message
-    to provide a more helpful message to users who may be used to the old behavior.
-    """
-
-    def parse_args(self, ctx, args):
-        try:
-            return super().parse_args(ctx, args)
-        except click.MissingParameter as e:
-            if e.param and e.param.name == "model_id":
-                typer.echo("Error: Missing argument 'MODEL_ID'.\n")
-                typer.echo(
-                    "Launching a server directly from the `transformers chat` command is no longer supported. "
-                    "Please use `transformers serve` to launch a server. "
-                    "Use --help for more information.",
-                )
-                ctx.exit(1)
-            raise
-
-
 class Chat:
     """Chat with a model from the command line."""
 
@@ -307,8 +283,8 @@ class Chat:
                 )
         except requests.exceptions.ConnectionError:
             raise ValueError(
-                f"No server currently running on {url}. In case you're running with a remote endpoint, please make sure"
-                f"to specify a URL following the model ID specification:\n\ntransformers chat <model_id> <base_url>"
+                f"No server currently running on {url}. To run a local server, please run `transformers serve` in a"
+                f"separate shell. Find more information here: https://huggingface.co/docs/transformers/serving"
             )
 
         return True
