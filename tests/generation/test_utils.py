@@ -1764,6 +1764,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -1974,6 +1975,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:

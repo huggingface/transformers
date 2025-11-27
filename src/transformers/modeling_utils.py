@@ -1576,7 +1576,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 logger.info("Detect using FlashAttention2 (via kernel `kernels-community/flash-attn2`) on XPU.")
                 return True
 
-            if importlib.util.find_spec("flash_attn") is None:
+            if importlib.util.find_spec("flash_attn") is None or "flash_attn" not in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]:
                 raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
             else:
                 # Check FA2 installed version compatibility
