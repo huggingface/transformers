@@ -1865,7 +1865,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "flash_attention_2" in applicable_attention:
             self._flash_attn_can_dispatch(flash_attn_version=2, is_init_check=is_init_check)
         elif "flash_attention_3" in applicable_attention:
-            self._flash_attn_can_dispatch(flash_attn_version=4, is_init_check=is_init_check)
+            self._flash_attn_can_dispatch(flash_attn_version=3, is_init_check=is_init_check)
         elif "flash_attention_4" in applicable_attention:
             self._flash_attn_can_dispatch(flash_attn_version=4, is_init_check=is_init_check)
         elif "flex_attention" in applicable_attention:
