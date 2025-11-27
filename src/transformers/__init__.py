@@ -279,7 +279,6 @@ else:
     # Fast tokenizers structure
     _import_structure["tokenization_utils_tokenizers"] = [
         "TokenizersBackend",
-        "TokenizersExtractor",
         "PreTrainedTokenizerFast",
     ]
 
@@ -308,7 +307,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_mistral_common_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["tokenization_mistral_common"] = ["MistralCommonTokenizer"]
+    _import_structure["tokenization_mistral_common"] = ["MistralCommonBackend"]
 
 # Vision-specific objects
 try:
@@ -695,9 +694,6 @@ if TYPE_CHECKING:
     from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
     from .tokenization_utils_tokenizers import (
         TokenizersBackend as TokenizersBackend,
-    )
-    from .tokenization_utils_tokenizers import (
-        TokenizersExtractor as TokenizersExtractor,
     )
 
     # Trainer

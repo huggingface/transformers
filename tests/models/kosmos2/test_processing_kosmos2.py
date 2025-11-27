@@ -37,6 +37,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import (
+        AutoProcessor,
         CLIPImageProcessor,
         Kosmos2Processor,
         XLMRobertaTokenizer,
@@ -57,10 +58,8 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # We have a SentencePiece fixture for testing
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
         vocab, vocab_scores, merges = extractor.extract()
-        tokenizer = XLMRobertaTokenizer(vocab=vocab_scores)
-
-        processor = Kosmos2Processor(image_processor, tokenizer)
-        processor.save_pretrained(cls.tmpdirname)
+        tokenizer = XLMRobertaTokenizer(vocab=vocab)
+        return tokenizer
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer

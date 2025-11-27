@@ -156,7 +156,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
                 self._vocab = vocab_dict
             else:
                 # Reorder to fairseq: <pad>, <unk>, <s>, </s>, ... (rest of vocab)
-                # This handles vocab from TokenizersExtractor which has <unk>=0, <s>=1, </s>=2
                 vocab_dict = {}
                 vocab_dict[str(pad_token)] = 0
                 vocab_dict[str(unk_token)] = 1

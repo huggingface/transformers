@@ -13,8 +13,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import AutoProcessor, Florence2Processor
-from transformers.models.roberta.tokenization_roberta import RobertaTokenizer as BartTokenizerFast
+from transformers import Florence2Processor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 

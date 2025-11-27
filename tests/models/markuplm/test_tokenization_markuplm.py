@@ -32,9 +32,8 @@ from transformers import (
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES, MarkupLMTokenizer
 from transformers.testing_utils import require_tokenizers, slow
-from transformers.tokenization_utils_tokenizers import TokenizersExtractor
 
-from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin
+from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizersExtractor, TokenizerTesterMixin
 
 
 logger = logging.get_logger(__name__)

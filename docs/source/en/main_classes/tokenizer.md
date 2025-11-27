@@ -110,10 +110,6 @@ loaded very simply into 🤗 transformers. Take a look at the [Using tokenizers 
 
 [[autodoc]] SentencePieceBackend
 
-## TokenizersExtractor
-
-[[autodoc]] TokenizersExtractor
-
 ## BatchEncoding
 
 [[autodoc]] BatchEncoding

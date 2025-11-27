@@ -125,7 +125,7 @@ MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
 MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": "DacModel",
     "audio_processor": "FeatureExtractionMixin",
-    "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonTokenizer"),
+    "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
     "feature_extractor": "FeatureExtractionMixin",
     "image_processor": "ImageProcessingMixin",
     "video_processor": "BaseVideoProcessor",

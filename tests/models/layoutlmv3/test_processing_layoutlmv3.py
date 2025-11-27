@@ -17,7 +17,6 @@ import os
 import unittest
 from functools import cached_property
 
-from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast, PythonBackend
 from transformers.models.layoutlmv3 import LayoutLMv3Processor, LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
