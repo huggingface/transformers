@@ -411,8 +411,7 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 1.0)
 
         # Validate the correctness of rotary position embeddings parameters
-        if "rope_theta" not in self.rope_parameters:
-            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
         rope_config_standardize_and_validate(self)
         self._rope_parameters_adjustment()
         self._rope_parameters_validation()

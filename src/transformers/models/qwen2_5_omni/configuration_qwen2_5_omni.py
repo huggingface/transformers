@@ -370,8 +370,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        if "rope_theta" not in self.rope_parameters:
-            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 1000000.0)
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 1000000.0))
         rope_config_standardize_and_validate(self, ignore_keys={"mrope_section"})
 
 
@@ -721,8 +720,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        if "rope_theta" not in self.rope_parameters:
-            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 1000000.0)
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 1000000.0))
         rope_config_standardize_and_validate(self)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
@@ -830,8 +828,7 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        if "rope_theta" not in self.rope_parameters:
-            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
         rope_config_standardize_and_validate(self)
         super().__init__(**kwargs)
 

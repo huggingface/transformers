@@ -154,8 +154,7 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
 
         # Validate the correctness of rotary position embeddings parameters
-        if "rope_theta" not in self.rope_parameters:
-            self.rope_parameters["rope_theta"] = kwargs.pop("rotary_emb_base", 10000.0)
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", 10000.0))
         rope_config_standardize_and_validate(self)
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(

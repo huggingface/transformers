@@ -170,8 +170,7 @@ class MinistralConfig(MistralConfig, PreTrainedConfig):
             ] * num_hidden_layers
 
         # Validate the correctness of rotary position embeddings parameters
-        if "rope_theta" not in self.rope_parameters:
-            self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta", 10000.0)
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
         rope_config_standardize_and_validate(self)
 
 
