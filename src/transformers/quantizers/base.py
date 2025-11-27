@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
-from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_accelerate_available, is_torch_available, logging
@@ -21,7 +20,7 @@ from .quantizers_utils import get_module_from_name
 
 
 if is_accelerate_available():
-    from accelerate.utils import find_tied_parameters
+    pass
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -57,17 +56,19 @@ def get_keys_to_not_convert(model):
 
     # remove last module
     last_module_key = {list(model.named_parameters())[-1][0]}
-    
+
     # remove output emb
     output_emb_module = model.get_output_embeddings()
     output_emb_keys = {
-        name for name, module in model.named_modules() 
+        name
+        for name, module in model.named_modules()
         if output_emb_module is not None and id(module) == id(output_emb_module)
     }
     candidates = tied_keys | last_module_key | output_emb_keys
 
     modules_to_not_convert = {name.replace(suffix, "") for name in candidates for suffix in [".weight", ".bias"]}
     return modules_to_not_convert
+
 
 class HfQuantizer(ABC):
     """

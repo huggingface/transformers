@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -390,12 +389,8 @@ class FP8Expert(nn.Module):
         Wg_out, Wg_in = 2 * self.intermediate_dim, self.hidden_dim
         Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
 
-        self.gate_up_proj = nn.Parameter(
-            torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=dtype)
-        )
-        self.down_proj = nn.Parameter(
-            torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=dtype)
-        )
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=dtype))
+        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=dtype))
 
         # Create inverse scale tiles only when using 1-byte types (fp8)
         if self.gate_up_proj.element_size() == 1:
@@ -482,6 +477,7 @@ class FP8Expert(nn.Module):
             torch_accelerator_module.synchronize()
             return output.to(dtype=input.dtype)
 
+
 def replace_with_fp8_linear(
     model,
     modules_to_not_convert=None,
@@ -500,25 +496,19 @@ def replace_with_fp8_linear(
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
         with init_empty_weights():
-            if (
-                "gate_up_proj" in module_name
-                or "down_proj" in module_name
-                and "experts" in module_name
-            ):
+            if "gate_up_proj" in module_name or "down_proj" in module_name and "experts" in module_name:
                 new_module = FP8Expert(
-                        config=model.config,
-                        block_size=quantization_config.weight_block_size,
-                        **module_kwargs
-                    )
+                    config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
+                )
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(
-                        in_features=module.in_features,
-                        out_features=module.out_features,
-                        bias=module.bias is not None,
-                        activation_scheme=quantization_config.activation_scheme,
-                        block_size=quantization_config.weight_block_size,
-                        **module_kwargs
-                    )
+                    in_features=module.in_features,
+                    out_features=module.out_features,
+                    bias=module.bias is not None,
+                    activation_scheme=quantization_config.activation_scheme,
+                    block_size=quantization_config.weight_block_size,
+                    **module_kwargs,
+                )
             if new_module is not None:
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True

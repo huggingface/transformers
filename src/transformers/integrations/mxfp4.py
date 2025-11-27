@@ -26,7 +26,6 @@ from ..core_model_loading import ConversionOps
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
-import re
 from contextlib import contextmanager
 
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
@@ -434,6 +433,7 @@ def mlp_forward(self, hidden_states):
     routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx)
     routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
     return routed_out, router_logits
+
 
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module
