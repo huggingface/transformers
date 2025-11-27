@@ -94,7 +94,7 @@ class TorchAoQuantize(ConversionOps):
 
         module, tensor_name = get_module_from_name(model, full_layer_name)
 
-        module._parameters[tensor_name] = torch.nn.Parameter(value, requires_grad=value.requires_grad).to(value.device)
+        module._parameters[tensor_name] = torch.nn.Parameter(value, requires_grad=value.requires_grad)
         # if we are quantizing tied parameters, to avoid tying the quantized weights
         # the correct order to do it is
         # 1. load the weight to model

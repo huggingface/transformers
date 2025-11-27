@@ -19,7 +19,8 @@ from __future__ import annotations
 import os
 import re
 from abc import abstractmethod
-from collections.abc import MutableMapping, MutableSet, Sequence
+from collections import defaultdict
+from collections.abc import MutableMapping, MutableSet
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -43,8 +44,6 @@ if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
     from .quantizers import HfQuantizer
 
-
-logger = logging.get_logger(__name__)
 
 logger = logging.get_logger(__name__)
 
@@ -82,13 +81,13 @@ def build_glob_alternation(
     i = 0
     for glob in globs:
         if isinstance(glob, (WeightRenaming, WeightConverter)):
-            for src in glob.source_keys:
+            for src in glob.source_patterns:
                 group_name = f"g{i}"
                 src_group_to_glob[group_name] = src
                 i += 1
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_keys[0]  # we index witht the first target
+                tgt_group_to_glob[group_name] = glob.target_patterns[0]  # we index witht the first target
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -105,81 +104,86 @@ def build_glob_alternation(
 class ConversionOps:
     """Base class for weight conversion operations."""
 
-    # The inverse operation class, will be used when saving the checkpoint
-    reverse_op: type[ConversionOps]
+    def __repr__(self):
+        return f"{self.__class__.__name__}(dim={self.dim})"
 
     @abstractmethod
     def convert(
-        self,
-        value: dict[str, Any],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
-        model,
-        missing_keys,
-        config,
-        **kwargs,
+        self, input_dict: dict[str, Any], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, list[torch.Tensor]]:
+        raise NotImplementedError
+
+    @property
+    def reverse_op(self) -> ConversionOps:
         raise NotImplementedError
 
 
 class Chunk(ConversionOps):
-    """Split a tensor along ``dim`` into equally sized chunks or using explicit ``sizes``."""
-
-    reverse_op: type[ConversionOps]
-
-    def __init__(self, dim: int = 0, chunks: Optional[int] = None, sizes: Optional[Sequence[int]] = None):
-        self.dim = dim
-        self.chunks = chunks
-        self.sizes = list(sizes) if sizes is not None else None
-        self.reverse_op = Concatenate
-
-    def convert(
-        self,
-        value: dict[str, list[torch.Tensor]],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
-        model,
-        missing_keys,
-        config,
-    ) -> dict[str, list[torch.Tensor]]:
-        tensors = next(iter(value.values()))
-        tensor = tensors[0]
-        sizes = len(target_keys)
-        chunks = torch.chunk(tensor, sizes, dim=self.dim)
-        return {full_layer_name.replace(target_keys[0], target): [chunk] for target, chunk in zip(target_keys, chunks)}
-
-
-class Concatenate(ConversionOps):
-    """Concatenate tensors along `dim` using a reusable buffer."""
-
-    reverse_op: type[ConversionOps]
+    """Split a tensor along ``dim`` into equally sized chunks."""
 
     def __init__(self, dim: int = 0):
         self.dim = dim
-        self.reverse_op = Chunk
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        targets = self.get_target_pattern(input_dict, target_patterns)
+        sizes = len(targets)
+        chunks = torch.chunk(tensor, sizes, dim=self.dim)
+        return dict(zip(targets, chunks))
+
+    def get_target_pattern(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
+        # Here we always return the target patterns
+        if len(input_dict) > 1 or len(target_patterns) == 1:
+            raise ValueError("Undefined Operation encountered!")
+        return target_patterns
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Concatenate(self.dim)
+
+
+class Concatenate(ConversionOps):
+    """Concatenate tensors along `dim`."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
 
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
-        model,
-        missing_keys,
-        config,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
-        if len(target_keys) != 1:
-            raise ValueError("Concatenate expects a single target key.")
-        if len(value) != len(source_keys):
-            raise ValueError("Concatenate received an unexpected number of tensors compared to source keys.")
+        target_pattern = self.get_target_pattern(target_patterns)
+        all_tensors = []
+        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # input directly as it's unordered!
+        for source_pattern in source_patterns:
+            tensors = input_dict[source_pattern]
+            if isinstance(tensors, list):
+                all_tensors.extend(tensors)
+            else:
+                all_tensors.append(tensors)
+        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
 
-        return {full_layer_name: torch.cat(tuple(value.values()), dim=self.dim)}
+    def get_target_pattern(self, target_patterns: list[str]) -> str:
+        # Here we always return the target pattern
+        if len(target_patterns) > 1:
+            raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Chunk(self.dim)
 
 
-class MergeModulelist(Concatenate):
+class MergeModulelist(ConversionOps):
     """
     Merge a list of tensors into a single tensor along the first dimension.
     We explicitly define this because for EP or TP you want to make sure you know what you are doing!
@@ -187,62 +191,75 @@ class MergeModulelist(Concatenate):
     """
 
     def __init__(self, dim: int = 0):
-        super().__init__(dim=dim)
-        self.reverse_op = SplitModulelist
+        self.dim = dim
 
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
-        model,
-        missing_keys,
-        config,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
-        for idx, key in enumerate(value.keys()):
-            tensors = value.get(key, [])
-            if len(source_keys) == 1:
-                key = full_layer_name
-            stacked = torch.stack(tensors, dim=self.dim)
-            merged[key] = stacked
+        for source_pattern, tensors in input_dict.items():
+            target_pattern = self.get_target_pattern(input_dict, source_pattern, target_patterns)
+            merged[target_pattern] = torch.stack(tensors, dim=self.dim)
         return merged
+
+    def get_target_pattern(self, input_dict: dict, source_pattern: str, target_patterns: list[str]) -> str:
+        # Here it's a single operation, so we use the target
+        if len(input_dict) == 1:
+            if len(target_patterns) == 1:
+                return target_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        #  Here it's the first operation in a chain, so we use the source as they were replaced before in the chain
+        else:
+            return source_pattern
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SplitModulelist(self.dim)
 
 
 class SplitModulelist(ConversionOps):
     """Inverse of :class:`MergeModulelist` using explicit split sizes per group."""
 
-    def __init__(self, sizes: Sequence[Sequence[int]], dim: int = 0):
-        if not isinstance(sizes, Sequence) or not all(isinstance(sub, Sequence) and sub for sub in sizes):
-            raise ValueError("`sizes` must be a sequence of non-empty sequences of integers.")
-        self.sizes = [list(sub) for sub in sizes]
+    def __init__(self, dim: int = 0):
         self.dim = dim
-        self.reverse_op = MergeModulelist
 
     @torch.no_grad
     def convert(
-        self,
-        value: dict[str, list[torch.Tensor]],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
-        model,
-        missing_keys,
-        config,
-    ) -> dict[str, list[torch.Tensor]]:
-        if len(value) != len(self.sizes):
-            raise ValueError("SplitModulelist received an unexpected number of tensors.")
-        result: dict[str, list[torch.Tensor]] = {}
-        for (key, tensors), split_sizes in zip(value.items(), self.sizes):
-            if len(tensors) != 1:
-                raise ValueError("SplitModulelist expects exactly one tensor per key.")
-            current_tensor = tensors[0]
-            if not isinstance(current_tensor, torch.Tensor):
-                raise TypeError("SplitModulelist can only split torch.Tensor instances.")
-            result[key] = list(torch.split(current_tensor, split_sizes, dim=self.dim))
-        return result
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        all_tensors = {}
+        for source_pattern, tensors in input_dict.items():
+            tensor = tensors[0] if isinstance(tensors, list) else tensors
+            # We split in the number of tensors present in the given dim
+            sizes = tensor.size(self.dim)
+            targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
+            chunks = torch.chunk(tensor, sizes, dim=self.dim)
+            # We squeeze each chunk here as well to make sure to give them their original shape
+            all_tensors.update({target: chunk.squeeze() for target, chunk in zip(targets, chunks)})
+        return all_tensors
+
+    def get_target_patterns(
+        self, input_dict: dict, source_pattern: str, target_patterns: list[str], sizes: int
+    ) -> list[str]:
+        # Here it's a single operation, so we use the target
+        if len(input_dict) == 1:
+            if len(target_patterns) == 1:
+                return [target_patterns[0].replace("*", f"{i}") for i in range(sizes)]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        # Here it's the last operation in a chain, so we use the source as they were replaced before in the chain
+        else:
+            return [source_pattern.replace("*", f"{i}") for i in range(sizes)]
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return MergeModulelist(self.dim)
 
 
 class PermuteForRope(ConversionOps):
@@ -264,17 +281,15 @@ class PermuteForRope(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
-        model,
-        missing_keys,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
         config,
+        **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         self.config = config
         output: dict[str, list[torch.Tensor]] = {}
-        for key, tensors in value.items():
+        for key, tensors in input_dict.items():
             if len(tensors) != 1:
                 raise ValueError("PermuteForRope expects a single tensor per key.")
             output[key] = [self._apply(tensors[0])]
@@ -283,27 +298,66 @@ class PermuteForRope(ConversionOps):
 
 @dataclass(slots=True)
 class WeightTransform:
-    source_keys: Union[str, list[str]] = field(init=True)
-    target_keys: Union[str, list[str]] = field(init=True)
+    source_patterns: Union[str, list[str]] = field(init=True)
+    target_patterns: Union[str, list[str]] = field(init=True)
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
 
-    collected_tensors: dict[str, list[Future]] = field(default_factory=dict, init=False)
-    layer_targets: dict[str, set[str]] = field(default_factory=dict, init=False)
+    collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
+    layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
     def __post_init__(self):
-        if isinstance(self.source_keys, str):
-            self.source_keys = [self.source_keys]
-        if isinstance(self.target_keys, str):
-            self.target_keys = [self.target_keys]
+        if isinstance(self.source_patterns, str):
+            self.source_patterns = [self.source_patterns]
+        if isinstance(self.target_patterns, str):
+            self.target_patterns = [self.target_patterns]
+
+        # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
+        # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
+        # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
+        for i, pattern in enumerate(self.target_patterns):
+            # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
+            pattern = pattern.removeprefix("^")
+            # This is ugly but needed for reverse mapping of Qwen2.5!
+            if r"(?!\.(language_model|visual))" in pattern:
+                pattern = pattern.replace(r"(?!\.(language_model|visual))", "")
+            # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
+            if r"(.+)" in pattern:
+                pattern = pattern.replace(r"(.+)", "")
+            self.target_patterns[i] = pattern
+
+        # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper)
+        for i, pattern in enumerate(self.source_patterns):
+            if r"\1" in pattern:
+                pattern = pattern.replace(r"\1", "")
+            self.source_patterns[i] = pattern
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
-        bucket = self.collected_tensors.setdefault(source_pattern, [])
-        bucket += [future]
+        self.collected_tensors[source_pattern].append(future)
+        self.layer_targets[target_key].add(source_key)
 
-        bucket = self.layer_targets.setdefault(target_key, set())
-        bucket.add(source_key)
+    def reset(self) -> None:
+        """Clean-up the collected tensors to make sure we don't keep references to past tensors in memory."""
+        self.collected_tensors = defaultdict(list)
+
+    def reverse_transform(self) -> WeightTransform:
+        """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
+        # TODO: check this and relax when quantizer have `reverse_op`
+        if self.quantization_operation is not None:
+            raise ValueError("Cannot reverse the transform with TP or quantization")
+
+        kwargs = {}
+        # Add the reverse ops if applicable (it needs to be provided at __init__)
+        if hasattr(self, "operations"):
+            # All reverse ops, in reverse order
+            kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
+
+        reverse_transform = self.__class__(
+            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
+        )
+
+        return reverse_transform
 
 
 @dataclass(slots=True)
@@ -319,17 +373,24 @@ class WeightRenaming(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
+        # Collect the tensor if using threading
         for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = [future.result() for future in futures]
+            self.collected_tensors[pattern] = (
+                futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
+            )
 
-        collected_tensors = self.collected_tensors
+        # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
+        # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
+        target_key = self.target_patterns[0]
+        collected_tensors = {target_key: self.collected_tensors[self.source_patterns[0]]}
+
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
-                    self.collected_tensors,
-                    source_keys=self.source_keys,
-                    target_keys=self.target_keys,
-                    full_layer_name=layer_name,
+                    collected_tensors,
+                    source_patterns=self.source_patterns,
+                    target_patterns=self.target_patterns,
+                    full_layer_name=target_key,
                     model=model,
                     config=config,
                     missing_keys=missing_keys,
@@ -344,9 +405,9 @@ class WeightConverter(WeightTransform):
 
     def __post_init__(self):
         WeightTransform.__post_init__(self)
-        if bool(len(self.source_keys) - 1) + bool(len(self.target_keys) - 1) >= 2:
+        if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             raise ValueError(
-                f"source keys={self.source_keys}, target_keys={self.target_keys} but you can only have one to many, one to one or many to one."
+                f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
             )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
@@ -360,27 +421,40 @@ class WeightConverter(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
+        # Collect all tensors if using threading
         for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = [future.result() for future in futures]
+            self.collected_tensors[pattern] = (
+                futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
+            )
 
         collected_tensors = self.collected_tensors
         for op in self.operations:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
-                    source_keys=self.source_keys,
-                    target_keys=self.target_keys,
-                    full_layer_name=layer_name,
+                    source_patterns=self.source_patterns,
+                    target_patterns=self.target_patterns,
+                    # Additional kwargs, ususally not used
                     model=model,
                     config=config,
                     missing_keys=missing_keys,
                 )
+
+        # Tensors are returned from ops with the target patterns, we need to expand them to full name.
+        # This means we need to grab the prefix and suffix to add to every target key
+        full_name = layer_name
+        if ".*." in layer_name:
+            full_name = layer_name.replace(".*.", ".0.")
+        prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
+        # Rename the tensors
+        collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
+
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
-                    source_keys=self.source_keys,
-                    target_keys=self.target_keys,
+                    source_patterns=self.source_patterns,
+                    target_patterns=self.target_patterns,
                     full_layer_name=layer_name,
                     config=config,
                     model=model,
@@ -552,7 +626,50 @@ def repl(m, repl_map: dict[str, str]) -> str:
 
     # Exactly one match => return replacement
     name = matched_groups[0]
-    return repl_map[name]
+    replacement = repl_map[name]
+    # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
+    if r"\1" in replacement and len(m.groups()) > 1:
+        replacement = replacement.replace(r"\1", m.group(1))
+
+    return replacement
+
+
+def rename_source_key(
+    source_key: str,
+    rename_alternation: re.Pattern,
+    rename_by_group: dict,
+    weight_pattern_alternation: re.Pattern | None,
+    weight_pattern_by_group: dict | None,
+    prefix: str | None = None,
+    meta_state_dict: dict | None = None,
+) -> tuple[str, re.Match | None]:
+    """
+    Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
+    the base model prefix during loading if necesary.
+    """
+    # 1. apply all renamings
+    renamed_key = rename_alternation.sub(lambda m: repl(m, rename_by_group), source_key).replace("\\", "")
+
+    # 2. apply renaming through weight conversions on the key if we have any WeightConverter
+    matched_converter_pattern = (
+        weight_pattern_alternation.search(renamed_key) if weight_pattern_alternation is not None else None
+    )
+    if matched_converter_pattern is not None:
+        renamed_key = weight_pattern_alternation.sub(lambda m: repl(m, weight_pattern_by_group), renamed_key).replace(
+            "\\", ""
+        )
+
+    # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
+    if prefix is not None and meta_state_dict is not None:
+        if (
+            renamed_key.startswith(prefix)
+            and meta_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
+        ):
+            renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
+        elif meta_state_dict.get(f"{prefix}.{renamed_key}") is not None:
+            renamed_key = f"{prefix}.{renamed_key}"
+
+    return renamed_key, matched_converter_pattern
 
 
 def convert_and_load_state_dict_in_model(
@@ -576,8 +693,8 @@ def convert_and_load_state_dict_in_model(
     {
         "model.layers.0.attention.q.weight": # Notice here there is only the first key of the target keys
             WeightConverter(
-                source_keys=["qkv"],
-                target_keys=["q", "k","v"],
+                source_patterns=["qkv"],
+                target_patterns=["q", "k","v"],
                 operations=[Chunk(dim=0, chunks=3)]),
                 collected_tensors={
                     "qkv": [Future, Future, Future]},
@@ -596,8 +713,8 @@ def convert_and_load_state_dict_in_model(
     For example for:
     ```python
     WeightConverter(
-        source_keys=["mlp.experts.*.gate_proj.weight","mlp.experts.*.up_proj.weight"],
-        target_keys="mlp.experts.gate_up_proj",
+        source_patterns=["mlp.experts.*.gate_proj.weight","mlp.experts.*.up_proj.weight"],
+        target_patterns="mlp.experts.gate_up_proj",
         operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
     )
     ```
@@ -633,8 +750,8 @@ def convert_and_load_state_dict_in_model(
     ```python
     # for "medmekk/llama-3.2-1b-float8-torchao"
     WeightConverter(
-        source_keys=[":qdata", ":scale"],
-        target_keys="",
+        source_patterns=[":qdata", ":scale"],
+        target_patterns="",
         operations=[TorchaoDeserialize()],
     )
     ```
@@ -642,8 +759,8 @@ def convert_and_load_state_dict_in_model(
     ```python
     all_weight_mapping = {
         "model.layers.13.self_attn.o_proj.weight": WeightConverter(
-            source_keys=[":qdata", ":scale"],
-            target_keys="",
+            source_patterns=[":qdata", ":scale"],
+            target_patterns="",
             operations=[TorchaoDeserialize()],
             collected_tensors={
                 ":qdata": [Future],
@@ -680,6 +797,7 @@ def convert_and_load_state_dict_in_model(
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
     rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+    weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = None, None, None
     if converters != []:
         weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
     if tp_plan != {}:
@@ -687,28 +805,22 @@ def convert_and_load_state_dict_in_model(
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_keys}
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # 1. apply all renamings
-        renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
+        # 1. Rename the key according to all renaming pattern and optional weight converter patterns
+        renamed_key, matched_pattern = rename_source_key(
+            original_key,
+            rename_alt,
+            rename_by_group,
+            weight_pattern_alt,
+            tgt_group_to_glob,
+            prefix,
+            meta_model_state_dict,
+        )
 
-        # 2. apply 1 weight conversion on the key
-        matched_pattern = weight_pattern_alt.search(renamed_key) if converters != [] else None
-        if matched_pattern is not None:  # we have a converter to apply
-            renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace("\\", "")
-
-        # 3. check if we need to add or remove prefix
-        if (
-            renamed_key.startswith(prefix)
-            and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
-        ):
-            renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
-        elif meta_model_state_dict.get(f"{prefix}.{renamed_key}") is not None:
-            renamed_key = f"{prefix}.{renamed_key}"
-
-        # 4. finally, collect the tensor into the proper converter
+        # 2. finally, collect the tensor into the proper converter
         if renamed_key in missing_keys:
             empty_param = meta_model_state_dict.get(renamed_key)
             if matched_pattern:
@@ -717,10 +829,10 @@ def convert_and_load_state_dict_in_model(
                 mapping = param_name_to_load.setdefault(renamed_key, new_converter)
                 source_pattern = src_group_to_glob[matched_pattern.lastgroup]
             else:
-                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(renamed_key, renamed_key))
-                source_pattern = renamed_key
+                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                source_pattern = original_key
 
-            # 5. Handle dtype casting
+            # 3. Handle dtype casting
             if (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
@@ -740,7 +852,7 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 6. Handle TP sharding or device_map placement -> scheduled materialization
+            # 4. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
             if device_mesh:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
@@ -769,8 +881,8 @@ def convert_and_load_state_dict_in_model(
             mapping.add_tensor(renamed_key, original_key, source_pattern, future)
         elif matched_pattern:  # add all target keys as unexpected
             mapping = pattern_to_converter[src_group_to_glob[matched_pattern.lastgroup]]
-            for k in mapping.target_keys:
-                unexpected_keys.add(renamed_key.replace(mapping.target_keys[0], k))
+            for k in mapping.target_patterns:
+                unexpected_keys.add(renamed_key.replace(mapping.target_patterns[0], k))
         else:
             unexpected_keys.add(renamed_key)
 
@@ -810,27 +922,75 @@ def convert_and_load_state_dict_in_model(
                             mapping.distributed_operation,
                             hf_quantizer,
                         )
+
+                # Cleanup the tensors
+                mapping.reset()
             except SkipLayer:
                 continue
 
+    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
+    model._weight_conversions = weight_mapping
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, misc
 
 
-# TODO this is not done yet!
-def revert_weight_conversion(model, state_dict):
-    mapping = getattr(model, "_checkpoint_conversion_mapping", {})  # IDK why but setting this will fail all llava.
-    reverse_key_mapping = [(v, k) for k, v in mapping.items()]
-    original_state_dict = {}
-    for key, value in state_dict.items():
-        for pattern, inverse_converter in reverse_key_mapping:
-            # TODO FIXME you name it
-            replacement = inverse_converter.lstrip("^")  # strip off un-needed chars and patterns
-            replacement = re.sub(r"\(.*\)", "", replacement)
-            key, n_replace = re.subn(pattern, replacement, key)
-            # Early exit of the loop
-            if n_replace > 0:
-                break
-        original_state_dict[key] = value
-    state_dict = original_state_dict
-    return state_dict
+def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
+    """
+    Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
+    if the model was created in another way and is part of the default mappings.
+    """
+    weight_conversions = getattr(model, "_weight_conversions", None)
+    # In this case, the model was not created with `from_pretrained` -> let's check if it's in the hardcoded
+    # mappings, and recreate the mapping from there if it is
+    if weight_conversions is None:
+        from .conversion_mapping import get_model_conversion_mapping
+
+        # Do not resave with the legacy renaming, if present
+        weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
+        weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
+
+    # We did not find any operations to perform -> quick escape
+    if weight_conversions is None:
+        return state_dict
+
+    # Reverse all Transform to correctly match keys
+    reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]
+    # If we are still here, we need to create the (reverse) conversion mapping from scratch
+    renamings = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    conversion_mapping = {}
+
+    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
+    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
+    rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+    weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = None, None, None
+    if converters != []:
+        weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
+
+    state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+    for original_key, tensor in state_dict:
+        # Rename the key according to all renaming pattern and optional weight converter patterns
+        renamed_key, matched_pattern = rename_source_key(
+            original_key, rename_alt, rename_by_group, weight_pattern_alt, tgt_group_to_glob
+        )
+        if matched_pattern is not None:
+            new_converter = deepcopy(pattern_to_converter[src_group_to_glob[matched_pattern.lastgroup]])
+            # each target key gets its own converter instance
+            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+            source_pattern = src_group_to_glob[matched_pattern.lastgroup]
+        else:
+            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+            source_pattern = original_key
+
+        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+
+    new_state_dict = {}
+    for first_param_name, reversed_converter in conversion_mapping.items():
+        # Apply the reverse converter
+        realized_value, misc = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        for target_name, param in realized_value.items():
+            param = param[0] if isinstance(param, list) else param
+            new_state_dict[target_name] = param
+
+    return new_state_dict
