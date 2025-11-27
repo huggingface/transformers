@@ -419,7 +419,7 @@ class PvtPreTrainedModel(PreTrainedModel):
     config: PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = []
 
     @torch.no_grad()

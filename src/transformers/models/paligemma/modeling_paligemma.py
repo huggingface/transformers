@@ -215,7 +215,7 @@ def create_causal_mask_mapping(
 class PaliGemmaPreTrainedModel(PreTrainedModel):
     config: PaliGemmaConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"

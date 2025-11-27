@@ -355,7 +355,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
     config: DeiTConfig
     base_model_prefix = "deit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeiTLayer"]
     _supports_sdpa = True

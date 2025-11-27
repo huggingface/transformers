@@ -418,7 +418,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     config: SamHQConfig
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["SamHQVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -1230,7 +1230,7 @@ class SamHQPromptEncoder(nn.Module):
     """
 )
 class SamHQModel(SamHQPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 

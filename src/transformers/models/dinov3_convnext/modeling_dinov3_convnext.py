@@ -189,7 +189,7 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["DINOv3ConvNextLayer"]
 
     @torch.no_grad()

@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -129,14 +130,16 @@ class VoxtralModelTester:
 
 
 @require_torch
-class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class VoxtralForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `VoxtralForConditionalGeneration`.
     """
 
     all_model_classes = (VoxtralForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-to-speech": VoxtralForConditionalGeneration, "audio-text-to-text": VoxtralForConditionalGeneration}
+        {"text-to-speech": VoxtralForConditionalGeneration, "any-to-any": VoxtralForConditionalGeneration}
         if is_torch_available()
         else {}
     )

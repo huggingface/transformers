@@ -64,7 +64,7 @@ class VitPosePreTrainedModel(PreTrainedModel):
     config: VitPoseConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     @torch.no_grad()

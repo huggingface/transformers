@@ -157,7 +157,7 @@ class DeepseekVLModel(JanusModel):
 
 
 class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
-    output_modalities = "text"
+    output_modalities = ("text",)
 
     def prepare_embeddings_for_image_generation(self):
         raise AttributeError("Not needed for DeepseekVL")

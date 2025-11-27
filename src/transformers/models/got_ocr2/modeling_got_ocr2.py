@@ -278,7 +278,7 @@ class GotOcr2VisionLayer(GradientCheckpointingLayer):
 class GotOcr2PreTrainedModel(PreTrainedModel):
     config: GotOcr2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
@@ -402,7 +402,7 @@ class GotOcr2VisionNeck(nn.Module):
 
 class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": GotOcr2VisionLayer, "attentions": GotOcr2VisionAttention}
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: GotOcr2VisionConfig):
         super().__init__(config)

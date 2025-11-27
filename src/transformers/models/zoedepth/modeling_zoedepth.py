@@ -1208,7 +1208,7 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     config: ZoeDepthConfig
     base_model_prefix = "zoedepth"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
 

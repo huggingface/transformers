@@ -33,7 +33,7 @@ from .configuration_colpali import ColPaliConfig
 class ColPaliPreTrainedModel(PreTrainedModel):
     config: ColPaliConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True

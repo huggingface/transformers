@@ -302,7 +302,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     config: RTDetrResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
 
     @torch.no_grad()

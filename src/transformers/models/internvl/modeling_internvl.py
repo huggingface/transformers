@@ -399,7 +399,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
@@ -474,7 +474,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 class InternVLPreTrainedModel(PreTrainedModel):
     config: InternVLConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text", "video"]
+    input_modalities = ("image", "text", "video")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 

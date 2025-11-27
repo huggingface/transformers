@@ -302,6 +302,8 @@
         title: Image tasks with IDEFICS
       - local: tasks/image_text_to_text
         title: Image-text-to-text
+      - local: tasks/any_to_any
+        title: Any-to-any
       - local: tasks/video_text_to_text
         title: Video-text-to-text
       - local: tasks/visual_document_retrieval

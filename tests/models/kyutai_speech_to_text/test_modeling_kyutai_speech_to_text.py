@@ -248,6 +248,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         {
             "feature-extraction": KyutaiSpeechToTextModel,
             "automatic-speech-recognition": KyutaiSpeechToTextForConditionalGeneration,
+            "any-to-any": KyutaiSpeechToTextForConditionalGeneration,
         }
         if is_torch_available()
         else {}

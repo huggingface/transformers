@@ -404,7 +404,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     config: Dinov2Config
     base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2Layer"]
     _supports_sdpa = True
