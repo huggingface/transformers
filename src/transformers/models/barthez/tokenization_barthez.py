@@ -17,7 +17,7 @@
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
-from ...tokenization_python import AddedToken
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -77,8 +77,11 @@ class BarthezTokenizer(TokenizersBackend):
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        vocab (`<fill_type>`, *optional*): <fill_docstring>
-        add_prefix_space (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

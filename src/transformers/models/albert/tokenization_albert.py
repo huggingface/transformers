@@ -68,11 +68,16 @@ class AlbertTokenizer(TokenizersBackend):
         mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        add_prefix_space (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        trim_offsets (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        vocab (`Optional`, *optional*): <fill_docstring>
-        merges (`Optional`, *optional*): <fill_docstring>
-        vocab_file (`Optional`, *optional*): <fill_docstring>
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
+        trim_offsets (`bool`, *optional*, defaults to `True`):
+            Whether the post processing step should trim offsets to avoid including whitespaces.
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        vocab_file (`str`, *optional*):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -93,7 +98,6 @@ class AlbertTokenizer(TokenizersBackend):
         add_prefix_space: bool = True,
         trim_offsets: bool = True,
         vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         vocab_file: Optional[str] = None,
         **kwargs,
     ):

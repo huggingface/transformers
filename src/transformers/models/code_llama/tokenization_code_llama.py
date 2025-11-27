@@ -94,10 +94,13 @@ class CodeLlamaTokenizer(TokenizersBackend):
             Whether to add an end of sequence token at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
-        legacy (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        add_prefix_space (`<fill_type>`, *optional*): <fill_docstring>
-        vocab (`<fill_type>`, *optional*): <fill_docstring>
-        merges (`<fill_type>`, *optional*): <fill_docstring>
+        add_prefix_space (`bool`, *optional*):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        merges (`list`, *optional*):
+            Custom merges list. If not provided, merges are loaded from merges_file.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
@@ -122,14 +125,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
         add_bos_token=True,
         add_eos_token=False,
         use_default_system_prompt=False,
-        legacy=False,
         add_prefix_space=None,
         vocab=None,
         merges=None,
         vocab_file=None,
         **kwargs,
     ):
-        self.legacy = legacy
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
         self.use_default_system_prompt = use_default_system_prompt
 

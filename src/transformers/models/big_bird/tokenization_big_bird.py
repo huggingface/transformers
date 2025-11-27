@@ -37,7 +37,8 @@ class BigBirdTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods
 
     Args:
-        vocab (`<fill_type>`, *optional*): <fill_docstring>
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -66,11 +67,14 @@ class BigBirdTokenizer(TokenizersBackend):
         cls_token (`str`, *optional*, defaults to `"[CLS]"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        add_prefix_space (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
+        tokenizer_file (`str`, *optional*):
+            Path to a tokenizers JSON file containing the serialization of a tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

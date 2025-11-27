@@ -301,7 +301,7 @@ class AutoTokenizerTest(unittest.TestCase):
                 tokenizer.save_pretrained(tmp_dir)
 
                 new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-                self.assertIsInstance(new_tokenizer, CustomTokenizerFast)
+                self.assertIsInstance(new_tokenizer, CustomTokenizer)
 
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:
