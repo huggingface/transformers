@@ -63,6 +63,7 @@ from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
@@ -205,7 +206,7 @@ if is_sagemaker_mp_enabled():
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
 if is_peft_available():
-    from peft import PeftModel
+    from peft import PeftMixedModel, PeftModel
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
@@ -228,12 +229,7 @@ if is_accelerate_available():
 
 def _is_peft_model(model):
     if is_peft_available():
-        classes_to_check = (PeftModel,)
-        # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
-        if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
-            from peft import PeftMixedModel
-
-            classes_to_check = (*classes_to_check, PeftMixedModel)
+        classes_to_check = (PeftModel, PeftMixedModel)
         return isinstance(model, classes_to_check)
     return False
 
@@ -2807,20 +2803,13 @@ class Trainer:
 
         # Load adapters following PR # 24096
         elif _is_peft_model(model):
-            # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-            # TODO: in the future support only specific min PEFT versions
-            if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
-                model, "load_adapter"
-            ):
+            # If training a model using PEFT, assume that adapter have been saved properly.
+            if hasattr(model, "active_adapters") and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint):
-                    # For BC for older PEFT versions
-                    if hasattr(model, "active_adapters"):
-                        active_adapters = model.active_adapters
-                        if len(active_adapters) > 1:
-                            logger.warning("Multiple active adapters detected will only consider the first adapter")
-                        active_adapter = active_adapters[0]
-                    else:
-                        active_adapter = model.active_adapter
+                    active_adapters = model.active_adapters
+                    if len(active_adapters) > 1:
+                        logger.warning("Multiple active adapters detected will only consider the first adapter")
+                    active_adapter = active_adapters[0]
 
                     if adapter_subdirs:
                         for subdir_name in adapter_subdirs:
@@ -2836,7 +2825,7 @@ class Trainer:
                         "Check some examples here: https://github.com/huggingface/peft/issues/96"
                     )
             else:
-                logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                logger.warning(f"Could not load adapter model, make sure to have PEFT >= {MIN_PEFT_VERSION} installed")
         else:
             # We load the sharded checkpoint
             load_result = load_sharded_checkpoint(
@@ -2883,18 +2872,11 @@ class Trainer:
                 )
             else:
                 if _is_peft_model(model):
-                    # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-                    # TODO: in the future support only specific min PEFT versions
-                    if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
-                        model, "load_adapter"
-                    ):
-                        # For BC for older PEFT versions
-                        if hasattr(model, "active_adapters"):
-                            active_adapter = model.active_adapters[0]
-                            if len(model.active_adapters) > 1:
-                                logger.warning("Detected multiple active adapters, will only consider the first one")
-                        else:
-                            active_adapter = model.active_adapter
+                    # If training a model using PEFT, assume that adapter have been saved properly.
+                    if hasattr(model, "active_adapters") and hasattr(model, "load_adapter"):
+                        active_adapter = model.active_adapters[0]
+                        if len(model.active_adapters) > 1:
+                            logger.warning("Detected multiple active adapters, will only consider the first one")
 
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                             try:
@@ -2925,7 +2907,9 @@ class Trainer:
                             )
                             has_been_loaded = False
                     else:
-                        logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                        logger.warning(
+                            f"Could not load adapter model, make sure to have PEFT >= {MIN_PEFT_VERSION} installed"
+                        )
                         has_been_loaded = False
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
