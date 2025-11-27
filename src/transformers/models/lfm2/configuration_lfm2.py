@@ -14,7 +14,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
+from ...modeling_rope_utils import RopeParameters
 
 
 class Lfm2Config(PreTrainedConfig):
@@ -148,20 +148,14 @@ class Lfm2Config(PreTrainedConfig):
         self.block_multiple_of = block_multiple_of
         self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
         self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         self.layer_types = layer_types
         if self.layer_types is None:
             full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
 
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters["rope_theta"] = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
-        rope_config_standardize_and_validate(self)
-
+        self.rope_parameters = rope_parameters
+        kwargs = self.convert_rope_params_to_dict(default_theta=1000000, **kwargs)
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(
             pad_token_id=pad_token_id,

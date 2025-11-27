@@ -23,10 +23,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Zamba2Config(PreTrainedConfig):
+class Zamba2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Zamba2Model`]. It is used to instantiate a
     Zamba2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -173,12 +173,6 @@ class Zamba2Config(PreTrainedConfig):
         use_long_context: Optional[bool] = False,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -195,14 +189,8 @@ class Zamba2Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.use_mem_rope = use_mem_rope
         self.use_long_context = use_long_context
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
-
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
-        rope_config_standardize_and_validate(self)
+        self.rope_parameters = rope_parameters
+        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
@@ -246,6 +234,12 @@ class Zamba2Config(PreTrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
         self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
         self.use_mem_eff_path = use_mem_eff_path
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
 
 __all__ = ["Zamba2Config"]

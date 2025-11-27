@@ -16,7 +16,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_standardize_and_validate
+from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
@@ -138,7 +138,7 @@ class MllamaVisionConfig(PreTrainedConfig):
         return len(self.supported_aspect_ratios)
 
 
-class MllamaTextConfig(PreTrainedConfig):
+class MllamaTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
     Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -247,14 +247,8 @@ class MllamaTextConfig(PreTrainedConfig):
         self.dropout = dropout
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
-
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 500000.0))
-        rope_config_standardize_and_validate(self)
+        self.rope_parameters = rope_parameters
+        kwargs = self.convert_rope_params_to_dict(default_theta=500000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

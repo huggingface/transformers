@@ -17,14 +17,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BambaConfig(PreTrainedConfig):
+class BambaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
     BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -171,17 +171,6 @@ class BambaConfig(PreTrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
         self.attn_layer_indices = attn_layer_indices
-
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
-        self.rope_parameters["partial_rotary_factor"] = 0.5
-
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
-        rope_config_standardize_and_validate(self)
-
         mamba_intermediate = mamba_expand * hidden_size
 
         if mamba_intermediate % mamba_n_heads != 0:
@@ -204,6 +193,10 @@ class BambaConfig(PreTrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
         self.z_loss_coefficient = z_loss_coefficient
+        self.rope_parameters = rope_parameters
+
+        kwargs = self.convert_rope_params_to_dict(default_theta=10_000.0, **kwargs)
+        self.rope_parameters["partial_rotary_factor"] = 0.5
 
         super().__init__(
             pad_token_id=pad_token_id,

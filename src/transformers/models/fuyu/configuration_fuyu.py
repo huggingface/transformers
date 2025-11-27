@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -25,7 +25,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class FuyuConfig(PreTrainedConfig):
+class FuyuConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
     Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -127,8 +127,6 @@ class FuyuConfig(PreTrainedConfig):
         **kwargs,
     ):
         if text_config is None:
-            rope_parameters = rope_parameters if rope_parameters is not None else {}
-            rope_parameters["partial_rotary_factor"] = kwargs.get("partial_rotary_factor", 0.5)
             text_config = {
                 "vocab_size": vocab_size,
                 "max_position_embeddings": max_position_embeddings,
@@ -170,15 +168,11 @@ class FuyuConfig(PreTrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.image_token_id = image_token_id
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 0.5)
+        self.rope_parameters = rope_parameters
+        kwargs = self.convert_rope_params_to_dict(default_theta=25000.0, **kwargs)
 
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 25000.0))
-        rope_config_standardize_and_validate(self)
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 0.5)
+        self.text_config.rope_parameters["partial_rotary_factor"] = self.rope_parameters["partial_rotary_factor"]
 
         super().__init__(
             pad_token_id=pad_token_id,

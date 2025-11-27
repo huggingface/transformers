@@ -18,14 +18,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PhimoeConfig(PreTrainedConfig):
+class PhimoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`PhimoeModel`]. It is used to instantiate a Phi-moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -167,15 +167,24 @@ class PhimoeConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
         self.input_jitter_noise = input_jitter_noise
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
+        self.rope_parameters = rope_parameters
+        kwargs = self.convert_rope_params_to_dict(default_theta=1000000, **kwargs)
 
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 1000000.0))
-        rope_config_standardize_and_validate(self)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
+    def validate(self, ignore_keys=None):
+        """
+        Validate the `rope_parameters` configuration.
+        """
+        super().validate(ignore_keys=ignore_keys)
+
+        # Run model-specific rope validation
         if self.rope_parameters["rope_type"] != "default":
             if "original_max_position_embeddings" in self.rope_parameters:
                 self.original_max_position_embeddings = self.rope_parameters["original_max_position_embeddings"]
@@ -189,14 +198,6 @@ class PhimoeConfig(PreTrainedConfig):
                 raise TypeError(
                     f"`rope_parameters`'s long_mscale field must be a number, got {rope_parameters_long_mscale}"
                 )
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
 
 
 __all__ = ["PhimoeConfig"]

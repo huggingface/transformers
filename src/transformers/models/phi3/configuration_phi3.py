@@ -18,14 +18,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Phi3Config(PreTrainedConfig):
+class Phi3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Phi3Model`]. It is used to instantiate a Phi-3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -163,17 +163,9 @@ class Phi3Config(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
+        self.rope_parameters = rope_parameters
+        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
         self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 1.0)
-
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
-        rope_config_standardize_and_validate(self)
-        self._rope_parameters_adjustment()
-        self._rope_parameters_validation()
         self.sliding_window = sliding_window
 
         super().__init__(
@@ -184,20 +176,24 @@ class Phi3Config(PreTrainedConfig):
             **kwargs,
         )
 
-    def _rope_parameters_adjustment(self):
+    def standardize_rope_params(self):
         """
         Adjust the `type` of the `rope_parameters` configuration for backward compatibility.
         """
+        super().standardize_rope_params()
         rope_parameters_type = self.rope_parameters.get("rope_type", None)
 
         # For backward compatibility if previous version used "su" or "yarn"
         if rope_parameters_type is not None and rope_parameters_type in ["su", "yarn"]:
             self.rope_parameters["rope_type"] = "longrope"
 
-    def _rope_parameters_validation(self):
+    def validate(self, ignore_keys: Optional[set] = None):
         """
         Validate the `rope_parameters` configuration.
         """
+        super().validate(ignore_keys=ignore_keys)
+
+        # Run Phi3 specific validation
         if not isinstance(self.rope_parameters, dict):
             raise ValueError(f"`rope_parameters` must be a dictionary but got {self.rope_parameters}")
         rope_parameters_type = self.rope_parameters.get("rope_type", None)

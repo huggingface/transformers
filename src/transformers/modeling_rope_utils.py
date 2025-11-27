@@ -629,7 +629,9 @@ class RotaryEmbeddingConfigMixin:
     A Mixin containing the functionality to standardize and validate RoPE parameters.
     """
 
-    def convert_rope_params_to_dict(self, default_theta=10_000.0, **kwargs):
+    def convert_rope_params_to_dict(
+        self, default_theta: int | float = 10_000.0, ignore_keys: Optional[set] = None, **kwargs
+    ):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -637,7 +639,7 @@ class RotaryEmbeddingConfigMixin:
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
         self.standardize_rope_params()
-        self.validate()
+        self.validate(ignore_keys=ignore_keys)
         return kwargs
 
     def standardize_rope_params(self):

@@ -21,7 +21,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import rope_config_standardize_and_validate
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..llama.configuration_llama import LlamaConfig
@@ -181,10 +180,7 @@ class CwmConfig(LlamaConfig):
 
         # CWM models don't use attention bias, remove it from config
         del self.attention_bias
-
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 1_000_000.0))
-        rope_config_standardize_and_validate(self)
+        kwargs = self.convert_rope_params_to_dict(default_theta=1_000_000.0, **kwargs)
 
 
 class CwmRotaryEmbedding(Qwen2RotaryEmbedding):

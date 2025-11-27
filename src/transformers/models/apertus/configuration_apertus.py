@@ -163,7 +163,6 @@ class ApertusConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.rope_parameters = rope_parameters
 
         kwargs = self.convert_rope_params_to_dict(default_theta=12000000.0, **kwargs)
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

@@ -18,10 +18,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_standardize_and_validate
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class LongcatFlashConfig(PreTrainedConfig):
+class LongcatFlashConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`LongcatFlashModel`]. It is used to instantiate
     a LongCat Flash model according to the specified arguments, defining the model architecture. Instantiating a
@@ -210,19 +210,11 @@ class LongcatFlashConfig(PreTrainedConfig):
         self.zero_expert_num = zero_expert_num
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.routed_scaling_factor = routed_scaling_factor
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        rope_parameters = rope_scaling or rope_parameters
-        self.rope_parameters = rope_parameters if rope_parameters is not None else {}
-
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000000.0))
-
+        self.rope_parameters = rope_parameters
+        kwargs = self.convert_rope_params_to_dict(default_theta=10000000, **kwargs)
         for key in ["beta_fast", "beta_slow", "factor"]:
             if key in self.rope_parameters:
                 self.rope_parameters[key] = float(self.rope_parameters[key])
-
-        rope_config_standardize_and_validate(self)
 
         super().__init__(
             pad_token_id=pad_token_id,
