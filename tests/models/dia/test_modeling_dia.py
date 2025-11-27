@@ -497,14 +497,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Theoretically works but kernel library causes issues.")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @unittest.skip(reason="Theoretically works but kernel library causes issues.")
-    def test_torchscript_simple(self):
-        pass
-
     @unittest.skip(reason="Encoder-Decoder cache can not be initialized.")
     def test_multi_gpu_data_parallel_forward(self):
         pass

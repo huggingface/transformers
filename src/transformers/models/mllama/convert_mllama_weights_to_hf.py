@@ -235,7 +235,7 @@ def write_model(
     cross_attention_num_layers = params["vision_num_cross_attention_layers"]
 
     # some constants from original code
-    rope_scaling = {
+    rope_parameters = {
         "rope_type": "llama3",
         "factor": 8.0,
         "low_freq_factor": 1.0,
@@ -280,7 +280,7 @@ def write_model(
         cross_attention_layers=cross_attention_layers_shift,
         intermediate_size=text_intermediate_size,
         max_position_embeddings=max_position_embeddings,
-        rope_scaling=rope_scaling,
+        rope_parameters=rope_parameters,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,

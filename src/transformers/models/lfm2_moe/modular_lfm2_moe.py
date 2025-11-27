@@ -16,13 +16,22 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.import_utils import is_causal_conv1d_available
-from ..lfm2.modeling_lfm2 import Lfm2Attention, Lfm2DecoderLayer, Lfm2HybridConvCache, Lfm2MLP, Lfm2ShortConv
-from ..llama.modeling_llama import LlamaForCausalLM, LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
+from ..lfm2.modeling_lfm2 import (
+    Lfm2Attention,
+    Lfm2DecoderLayer,
+    Lfm2HybridConvCache,
+    Lfm2MLP,
+    Lfm2RotaryEmbedding,
+    Lfm2ShortConv,
+)
+from ..llama.modeling_llama import LlamaForCausalLM, LlamaPreTrainedModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from .configuration_lfm2_moe import Lfm2MoeConfig
@@ -45,7 +54,7 @@ class Lfm2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Lfm2MoeRotaryEmbedding(LlamaRotaryEmbedding):
+class Lfm2MoeRotaryEmbedding(Lfm2RotaryEmbedding):
     pass
 
 
@@ -124,6 +133,13 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Lfm2MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+
 
 class Lfm2MoeModel(MixtralModel):
     def __init__(self, config: Lfm2MoeConfig):
@@ -173,15 +189,18 @@ class Lfm2MoeModel(MixtralModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        # Skip masking for decoding stage. We check shape here to be compile-friendly
+        linear_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
 
         hidden_states = inputs_embeds
-        position_embeddings = self.pos_emb(hidden_states, position_ids)
+        position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=layer_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,

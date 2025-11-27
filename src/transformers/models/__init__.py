@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
+    from .audioflamingo3 import *
     from .auto import *
     from .autoformer import *
     from .aya_vision import *
@@ -141,6 +142,9 @@ if TYPE_CHECKING:
     from .git import *
     from .glm import *
     from .glm4 import *
+    from .glm4v import *
+    from .glm4v_moe import *
+    from .glm46v import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -240,6 +244,7 @@ if TYPE_CHECKING:
     from .musicgen_melody import *
     from .mvp import *
     from .myt5 import *
+    from .nanochat import *
     from .nemotron import *
     from .nllb import *
     from .nllb_moe import *
@@ -307,6 +312,8 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3_tracker import *
+    from .sam3_tracker_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *

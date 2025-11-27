@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 import torch
-from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -76,15 +75,6 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("Hunyuan model Unsupported")
     def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("HunYuanMoEV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("HunYuanMoEV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

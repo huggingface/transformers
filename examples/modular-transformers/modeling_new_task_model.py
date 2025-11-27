@@ -104,9 +104,9 @@ class NewTaskModelPreTrainedModel(PreTrainedModel):
         std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                module.bias.zero_()
 
 
 def token_type_ids_mask_function(
@@ -125,15 +125,23 @@ def token_type_ids_mask_function(
         # If it's 1 for both query and key/value, we are in an image block
         # NOTE: static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
         # Since vmap doesn't support `if statement` we workaround it with `torch.where`
-        safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
-        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
+        safe_q_idx = torch.where(q_idx < token_type_ids.shape[1], q_idx, 0)
+        safe_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
+
+        token_type_ids_at_q_idx = token_type_ids[batch_idx, safe_q_idx]
+        token_type_ids_at_q_idx = torch.where(q_idx < token_type_ids.shape[1], token_type_ids_at_q_idx, 0)
+
+        token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_kv_idx]
         token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
 
-        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_idx]
+        image_group_ids_at_q_idx = image_group_ids[batch_idx, safe_q_idx]
+        image_group_ids_at_q_idx = torch.where(q_idx < image_group_ids.shape[1], image_group_ids_at_q_idx, -1)
+
+        image_group_ids_at_kv_idx = image_group_ids[batch_idx, safe_kv_idx]
         image_group_ids_at_kv_idx = torch.where(kv_idx < image_group_ids.shape[1], image_group_ids_at_kv_idx, -1)
 
-        is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
-        same_image_block = image_group_ids[batch_idx, q_idx] == image_group_ids_at_kv_idx
+        is_image_block = (token_type_ids_at_q_idx == 1) & (token_type_ids_at_kv_idx == 1)
+        same_image_block = image_group_ids_at_q_idx == image_group_ids_at_kv_idx
 
         # This is bidirectional attention whenever we are dealing with image tokens
         return is_image_block & same_image_block
@@ -420,7 +428,7 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     main_input_name: ClassVar[str] = "doc_input_ids"  # transformers-related
 
     def __init__(self, config):
@@ -432,7 +440,15 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
+            prefix = "model.language_model."
+            prefixed_mapping = {
+                f"{prefix}{target}": f"{prefix}{source}"
+                for target, source in self.language_model._tied_weights_keys.items()
+            }
+            if isinstance(self._tied_weights_keys, dict):
+                self._tied_weights_keys.update(prefixed_mapping)
+            else:
+                self._tied_weights_keys = prefixed_mapping
         self.post_init()
 
     def get_input_embeddings(self):

@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import Parameter
 
-from transformers.models.llama.modeling_llama import rotate_half
+from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
@@ -45,7 +45,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
@@ -54,6 +54,7 @@ from ...utils import (
     check_torch_load_is_safe,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.hub import cached_file
 
 
@@ -283,8 +284,6 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 32768):
@@ -296,43 +295,10 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -378,25 +344,24 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=152064,
-        hidden_size=3584,
-        intermediate_size=18944,
-        num_hidden_layers=28,
-        num_attention_heads=28,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=1000000.0,
-        rope_scaling=None,
-        use_sliding_window=False,
-        sliding_window=32768,
-        max_window_layers=28,
-        layer_types=None,
-        attention_dropout=0.0,
+        vocab_size: Optional[int] = 152064,
+        hidden_size: Optional[int] = 3584,
+        intermediate_size: Optional[int] = 18944,
+        num_hidden_layers: Optional[int] = 28,
+        num_attention_heads: Optional[int] = 28,
+        num_key_value_heads: Optional[int] = 4,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[int] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        use_sliding_window: Optional[bool] = False,
+        sliding_window: Optional[int] = 32768,
+        max_window_layers: Optional[int] = 28,
+        layer_types: Optional[list[str]] = None,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         super().__init__(
@@ -422,17 +387,10 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
-
-        if self.rope_scaling is None:
-            self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -443,6 +401,11 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = getattr(self, "rope_theta", 1000000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self, ignore_keys={"mrope_section"})
 
 
 class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
@@ -634,8 +597,6 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 32768):
@@ -645,43 +606,10 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
             additional layer afterwards will use SWA (Sliding Window Attention).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         position_id_per_seconds (`int`, *optional*, defaults to 25):
             The increment of position id per second.
         seconds_per_chunk (`int`, *optional*, defaults to 2):
@@ -752,12 +680,11 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         head_dim=128,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=1000000.0,
         use_sliding_window=False,
         sliding_window=32768,
         max_window_layers=28,
         attention_dropout=0.0,
-        rope_scaling=None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         position_id_per_seconds=25,
         seconds_per_chunk=2,
         audio_start_token_id=151647,
@@ -803,9 +730,10 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
         self.position_id_per_seconds = position_id_per_seconds  # zf
         self.seconds_per_chunk = seconds_per_chunk  # zf
         self.audio_start_token_id = audio_start_token_id  # zf
@@ -823,6 +751,11 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
@@ -882,7 +815,7 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         ff_mult=2,
         emb_dim=512,
         head_dim=64,
-        rope_theta=10000.0,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         max_position_embeddings=32768,
         block_size=24,
         look_ahead_layers=[10],
@@ -907,7 +840,6 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         self.ff_mult = ff_mult
         self.emb_dim = emb_dim
         self.head_dim = head_dim
-        self.rope_theta = rope_theta
         self.max_position_embeddings = max_position_embeddings
         self.block_size = block_size
         self.look_ahead_layers = look_ahead_layers
@@ -924,6 +856,14 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         self.enc_attention_channels = enc_attention_channels
         self.enc_res2net_scale = enc_res2net_scale
         self.enc_se_channels = enc_se_channels
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
         super().__init__(**kwargs)
 
 
@@ -1125,10 +1065,13 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5OmniConfig
+    input_modalities = ("image", "video", "audio", "text")
     _can_compile_fullgraph = False
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
+    input_modalities = ("image", "video", "audio", "text")
+
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
         attention_mask: torch.Tensor,
@@ -1705,6 +1648,7 @@ class SinusoidsPositionEmbedding(nn.Module):
 class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
     _supports_sdpa = True
 
@@ -1990,6 +1934,7 @@ class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
 
 class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
     config: Qwen2_5OmniVisionEncoderConfig
+    input_modalities = ("image", "video")
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
@@ -2082,16 +2027,15 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
-        self.rope_scaling = config.rope_scaling
+        self.rope_parameters = config.rope_parameters
         self.scaling = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-
-        self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config)
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
 
 class Qwen2MLP(Qwen2_5_VLMLP):
@@ -2114,7 +2058,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
 class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniThinkerConfig
     base_model_prefix = "thinker"
-    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
@@ -2246,7 +2190,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
             raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
             )
 
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -2324,7 +2268,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
         >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
         >>> images, videos = process_vision_info(conversations)
-        >>> inputs = processor(text=text, audios=audios, images=images, videos=videos, return_tensors="pt", padding=True)
+        >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
 
         >>> # Generate
         >>> inputs['use_audio_in_video'] = `True` or `False`
@@ -2525,6 +2469,8 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 
 class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config: Qwen2_5OmniTalkerConfig
+    input_modalities = ("image", "video", "audio", "text")
+
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
@@ -2535,6 +2481,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniTalkerConfig
     base_model_prefix = "talker"
+    output_modalities = ("audio",)
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)
@@ -2620,7 +2567,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
         >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
-        >>> inputs = processor(text=prompt, audios=audio, return_tensors="pt")
+        >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
@@ -2782,30 +2729,21 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 ############################
 
 
-# Using custom RoPE, will use LlamaRotaryEmbedding next version
-class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+class Qwen2_5OmniDiTRotaryEmbedding(LlamaRotaryEmbedding):
+    def __init__(self, config: Qwen2_5OmniDiTConfig, device=None):
+        super().__init__(config, device=device)
 
-    def __init__(self, dim, base=10000):
-        super().__init__()
-
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-
-    def forward(self, x):
-        batch_size, seq_len = x.shape[0], x.shape[1]
-        t = torch.arange(seq_len, device=x.device)
-        device_type = x.device.type
-        device_type = device_type if device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = t.unsqueeze(1).float() @ self.inv_freq.unsqueeze(0).float()
-            freqs = torch.stack((freqs, freqs), dim=-1)
-            freqs = freqs.reshape(*freqs.shape[:-2], -1)
-            freqs = freqs.repeat(batch_size, *([1] * freqs.dim()))
-            cos = freqs.cos()
-            sin = freqs.sin()
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[Qwen2_5OmniDiTConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(
+            config,
+            device=device,
+            seq_len=seq_len,
+        )
 
 
 # Modified from Llama with a different rotate function, will fixed in next release
@@ -3639,6 +3577,7 @@ class AMPBlock(torch.nn.Module):
 )
 class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniBigVGANConfig
+    input_modalities = "audio"
 
     def __init__(self, config: Qwen2_5OmniBigVGANConfig):
         super().__init__(config)
@@ -3774,6 +3713,7 @@ class RungeKutta4ODESolver:
 )
 class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniDiTConfig
+    input_modalities = "audio"
     _no_split_modules = ["DiTDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
@@ -3785,7 +3725,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
         self.input_embed = DiTInputEmbedding(config)
 
-        self.rotary_embed = Qwen2_5OmniDiTRotaryEmbedding(config.head_dim)
+        self.rotary_embed = Qwen2_5OmniDiTRotaryEmbedding(config=config)
 
         self.hidden_size = config.hidden_size
         self.layers = config.num_hidden_layers
@@ -3846,7 +3786,9 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         )
 
         # Compute positional encodings
-        position_embeddings = self.rotary_embed(hidden_states)
+        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+        position_ids = position_ids[None, :].repeat(batch_size, 1)
+        position_embeddings = self.rotary_embed(hidden_states, position_ids)
         blockwise_difference = self._create_block_diff(hidden_states)
 
         # Transformer blocks
@@ -3930,6 +3872,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniToken2WavConfig
     base_model_prefix = "model"
+    input_modalities = "audio"
     _no_split_modules = ["Qwen2_5OmniToken2WavDiTModel", "Qwen2_5OmniToken2WavBigVGANModel"]
 
     def __init__(self, config: Qwen2_5OmniToken2WavConfig):
@@ -3997,6 +3940,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
 )
 class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     config: Qwen2_5OmniConfig
+    output_modalities = ("audio", "text")
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
         "Qwen2_5OmniToken2WavModel",
@@ -4070,7 +4014,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             force_download=kwargs.pop("force_download", False),
             proxies=kwargs.pop("proxies", None),
             local_files_only=kwargs.pop("local_files_only", False),
-            token=kwargs.pop("use_auth_token", None),
+            token=token,
             revision=kwargs.pop("revision", None),
         )
         if spk_path is None:
@@ -4080,13 +4024,13 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         return model
 
     @torch.no_grad()
+    @deprecate_kwarg("return_audio", version="v5", new_name="generation_mode")
     # TODO: raushan, defaults should be saved in generation config
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
         speaker: str = "Chelsie",
         use_audio_in_video: bool = False,
-        return_audio: Optional[bool] = None,
         thinker_max_new_tokens: int = 1024,
         talker_max_new_tokens: int = 4096,
         talker_do_sample: bool = True,
@@ -4107,8 +4051,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 Which speaker should be used in audio response.
             use_audio_in_video (`bool`, defaults to False):
                 Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
-            return_audio (`Optional[bool]`, *optional*):
-                Whether or not return response in audio format. When `return_audio=None`, this parameter is same as `config.enable_audio_output`.
+            generation_mode (`Optional[str]`, *optional*):
+                Whether or not return response in audio format. When `generation_mode="audio"`, this parameter is same as `config.enable_audio_output`.
             kwargs (*optional*):
                 - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
                 - With a *thinker_*, *talker_*, *token2wav_* prefix, they will be input for the `generate` method of the
@@ -4120,6 +4064,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - **Text** (`torch.Tensor`): Generated text token sequence.
                 - **Audio waveform** (`torch.Tensor`): Generated audio waveform.
         """
+        # check `False` on purpose because the paramter can be `str/bool`. This is needed for BC
+        generation_mode = kwargs.pop("generation_mode", None)
+        return_audio = generation_mode != "text" and generation_mode is not False
+
         if speaker not in self.speaker_map:
             raise ValueError(f"{speaker} is not available, available speakers: {self.speaker_map.keys()}")
         if return_audio and not self.has_talker:

@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import PushToHubMixin, is_kernels_available, is_torch_available
+from ..utils import PushToHubMixin, is_torch_available
 
-
-if is_kernels_available():
-    from kernels import LayerRepository, Mode
 
 if is_torch_available():
     import torch
@@ -58,8 +55,10 @@ def infer_device(model):
 
 
 def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
-    if device not in ["cuda", "rocm", "xpu"]:
-        raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
+    from kernels import LayerRepository
+
+    if device not in ["cuda", "rocm", "xpu", "npu"]:
+        raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_id = repo_name.split(":")[0]
     compatible_mapping[layer_name] = {
@@ -82,6 +81,8 @@ class KernelConfig(PushToHubMixin):
         self.registered_layer_names = {}
 
     def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
+        from kernels import LayerRepository
+
         self.kernel_mapping[registered_name] = {
             device: {
                 mode: LayerRepository(
@@ -101,8 +102,8 @@ class KernelConfig(PushToHubMixin):
         """
         Validates the kernel_mapping to ensure that:
         1. Each layer_name in the mapping is registered in the model (i.e., the model contains a module with a matching kernel_layer_name).
-        2. Each kernel value is either a string of the form 'org/repo:layer_name' or a dict mapping device types ("cuda", "rocm", "xpu") to such strings.
-        3. Each device key in a dict is one of "cuda", "rocm", or "xpu".
+        2. Each kernel value is either a string of the form 'org/repo:layer_name' or a dict mapping device types ("cuda", "rocm", "xpu", "npu") to such strings.
+        3. Each device key in a dict is one of "cuda", "rocm", "xpu", or "npu".
         4. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
 
         Args:
@@ -153,8 +154,8 @@ class KernelConfig(PushToHubMixin):
 
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():
-                    if device not in ["cuda", "rocm", "xpu"]:
-                        raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
+                    if device not in ["cuda", "rocm", "xpu", "npu"]:
+                        raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
 
                     if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(
@@ -204,6 +205,8 @@ class KernelConfig(PushToHubMixin):
         The device is inferred from the model's parameters if not provided.
         The Mode is inferred from the model's training state.
         """
+        from kernels import Mode
+
         compatible_mapping = {}
         for layer_name, kernel in self.kernel_mapping.items():
             # Infer Mode: use Mode.TRAINING if model is training, else use Mode.INFERENCE

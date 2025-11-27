@@ -868,7 +868,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
                 first_entity_token_spans[1] = (tail_token_span[0] + 2, tail_token_span[1] + 4)
-                token_span_with_special_token_ids = reversed(token_span_with_special_token_ids)
+                token_span_with_special_token_ids.reverse()
             else:
                 first_entity_token_spans[0] = (head_token_span[0] + 2, head_token_span[1] + 4)
                 first_entity_token_spans[1] = (tail_token_span[0], tail_token_span[1] + 2)
@@ -1287,7 +1287,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has be passed for padding
         if self.model_input_names[0] not in encoded_inputs:

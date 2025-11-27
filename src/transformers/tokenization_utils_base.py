@@ -18,6 +18,8 @@ fronting encoding methods) Special token mixing (host the special tokens logic) 
 of output with special method for the Fast tokenizers)
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import os
@@ -31,6 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional, Union, overload
 
 import numpy as np
+from huggingface_hub import create_repo, list_repo_files
 from packaging import version
 
 from . import __version__
@@ -45,13 +48,11 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
-    download_url,
     extract_commit_hash,
     is_mlx_available,
     is_numpy_array,
     is_offline_mode,
     is_protobuf_available,
-    is_remote_url,
     is_tokenizers_available,
     is_torch_available,
     is_torch_device,
@@ -61,6 +62,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -782,7 +784,7 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"], *, non_blocking: bool = False) -> "BatchEncoding":
+    def to(self, device: Union[str, torch.device], *, non_blocking: bool = False) -> BatchEncoding:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
@@ -1429,6 +1431,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # we reconstruct that into a single dict while loading them.
             self.chat_template = {template["name"]: template["template"] for template in self.chat_template}
 
+        self.response_schema = kwargs.pop("response_schema", None)
+
         super().__init__(**kwargs)
 
         self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
@@ -1583,7 +1587,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
+        return_dict: bool = True,
         return_assistant_tokens_mask: bool = False,
         tokenizer_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
@@ -1656,14 +1660,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             set, will return a dict of tokenizer outputs instead.
         """
 
-        if return_dict and not tokenize:
-            raise ValueError(
-                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
-                "of tokenizer outputs to return."
-            )
+        if not tokenize:
+            return_dict = False  # dicts are only returned by the tokenizer anyway
 
-        if return_assistant_tokens_mask and not return_dict:
-            raise ValueError("`return_assistant_tokens_mask=True` is incompatible with `return_dict=False`")
+        if return_assistant_tokens_mask and not (return_dict and tokenize):
+            raise ValueError("`return_assistant_tokens_mask=True` requires `return_dict=True` and `tokenize=True`")
 
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
@@ -1778,13 +1779,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if conversation_history is None or len(conversation_history) == 0:
-            return self.apply_chat_template([message], add_generation_prompt=False, tokenize=True, **kwargs)
+            return self.apply_chat_template(
+                [message], add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
+            )
 
         conversation = conversation_history + [message]
-        tokens = self.apply_chat_template(conversation, add_generation_prompt=False, tokenize=True, **kwargs)
+        tokens = self.apply_chat_template(
+            conversation, add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
+        )
 
         prefix_tokens = self.apply_chat_template(
-            conversation_history, add_generation_prompt=False, tokenize=True, **kwargs
+            conversation_history, add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
         )
         # It's possible that the prefix tokens are not a prefix of the full list of tokens.
         # For example, if the prefix is `<s>User: Hi` and the full conversation is `<s>User: Hi</s><s>Assistant: Hello`.
@@ -1854,6 +1859,45 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
 
         return chat_template
+
+    def parse_response(
+        self,
+        response: str | list[str | int | list[int]] | np.ndarray | torch.Tensor,
+        schema: list | dict | None = None,
+    ):
+        """
+        Converts an output string created by generating text from a model into a parsed message dictionary.
+        This method is intended for use with chat models, and will read the tokenizer's `response_schema` attribute to
+        control parsing, although this can be overridden by passing a `response_schema` argument directly.
+
+        For more information, see the
+        [response parsing](https://huggingface.co/docs/transformers/main/en/chat_response_parsing) documentation.
+
+        Args:
+            response (`str`):
+                The output string generated by the model. This can be either a decoded string or list of strings,
+                or token IDs as a list/array.
+            schema (`Union[list, dict]`, *optional*):
+                A response schema that indicates the expected output format and how parsing should be performed.
+                If not provided, the tokenizer's `response_schema` attribute will be used.
+        """
+        batched = (
+            (isinstance(response, list) and not isinstance(response[0], int))
+            or getattr(response, "ndim", 0) > 1  # For torch/numpy tensors
+        )
+
+        if schema is None:
+            if getattr(self, "response_schema", None) is None:
+                raise AttributeError("This tokenizer does not have a `response_schema` for parsing chat responses!")
+            schema = self.response_schema
+        if batched:
+            if not (isinstance(response, list) and isinstance(response[0], str)):
+                response = self.batch_decode(response)
+            return [recursive_parse(single_response, schema) for single_response in response]
+        else:
+            if not isinstance(response, str):
+                response = self.decode(response)
+            return recursive_parse(response, schema)
 
     @classmethod
     def from_pretrained(
@@ -1944,23 +1988,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         assert tokenizer.unk_token == "<unk>"
         ```"""
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
         gguf_file = kwargs.get("gguf_file")
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
@@ -1976,96 +2008,94 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
         single_file_id = None
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            if len(cls.vocab_files_names) > 1 and not gguf_file:
-                raise ValueError(
-                    f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
-                    "supported for this tokenizer. Use a model identifier or the path to a directory instead."
-                )
-            warnings.warn(
-                f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated and "
-                "won't be possible anymore in v5. Use a model identifier or the path to a directory instead.",
-                FutureWarning,
-            )
-            file_id = list(cls.vocab_files_names.keys())[0]
 
-            vocab_files[file_id] = pretrained_model_name_or_path
-            single_file_id = file_id
+        if gguf_file:
+            vocab_files["vocab_file"] = gguf_file
         else:
-            if gguf_file:
-                vocab_files["vocab_file"] = gguf_file
-            else:
-                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-                additional_files_names = {
-                    "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
-                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
-                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
-                    "tokenizer_file": FULL_TOKENIZER_FILE,
-                    "chat_template_file": CHAT_TEMPLATE_FILE,
-                }
+            # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+            additional_files_names = {
+                "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
+                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
+                "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
+                "tokenizer_file": FULL_TOKENIZER_FILE,
+                "chat_template_file": CHAT_TEMPLATE_FILE,
+            }
 
-                vocab_files = {**cls.vocab_files_names, **additional_files_names}
-                if "tokenizer_file" in vocab_files:
-                    # Try to get the tokenizer config to see if there are versioned tokenizer files.
-                    fast_tokenizer_file = FULL_TOKENIZER_FILE
+            vocab_files = {**cls.vocab_files_names, **additional_files_names}
+            if "tokenizer_file" in vocab_files:
+                # Try to get the tokenizer config to see if there are versioned tokenizer files.
+                fast_tokenizer_file = FULL_TOKENIZER_FILE
 
-                    try:
-                        resolved_config_file = cached_file(
-                            pretrained_model_name_or_path,
-                            TOKENIZER_CONFIG_FILE,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            token=token,
-                            revision=revision,
-                            local_files_only=local_files_only,
-                            subfolder=subfolder,
-                            user_agent=user_agent,
-                            _raise_exceptions_for_missing_entries=False,
-                            _commit_hash=commit_hash,
-                        )
-                    except OSError:
-                        # Re-raise any error raised by cached_file in order to get a helpful error message
-                        raise
-                    except Exception:
-                        # For any other exception, we throw a generic error.
-                        raise OSError(
-                            f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                            "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                            f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                            f"containing all relevant files for a {cls.__name__} tokenizer."
-                        )
+                try:
+                    resolved_config_file = cached_file(
+                        pretrained_model_name_or_path,
+                        TOKENIZER_CONFIG_FILE,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        token=token,
+                        revision=revision,
+                        local_files_only=local_files_only,
+                        subfolder=subfolder,
+                        user_agent=user_agent,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
+                    )
+                except OSError:
+                    # Re-raise any error raised by cached_file in order to get a helpful error message
+                    raise
+                except Exception:
+                    # For any other exception, we throw a generic error.
+                    raise OSError(
+                        f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                        "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                        f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                        f"containing all relevant files for a {cls.__name__} tokenizer."
+                    )
 
-                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                    if resolved_config_file is not None:
-                        with open(resolved_config_file, encoding="utf-8") as reader:
-                            tokenizer_config = json.load(reader)
-                            if "fast_tokenizer_files" in tokenizer_config:
-                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    vocab_files["tokenizer_file"] = fast_tokenizer_file
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+                if resolved_config_file is not None:
+                    with open(resolved_config_file, encoding="utf-8") as reader:
+                        tokenizer_config = json.load(reader)
+                        if "fast_tokenizer_files" in tokenizer_config:
+                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                vocab_files["tokenizer_file"] = fast_tokenizer_file
 
-                    # This block looks for any extra chat template files
-                    if is_local:
-                        template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
-                        if template_dir.is_dir():
-                            for template_file in template_dir.glob("*.jinja"):
-                                template_name = template_file.name.removesuffix(".jinja")
-                                vocab_files[f"chat_template_{template_name}"] = (
-                                    f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
-                                )
-                    else:
-                        for template in list_repo_templates(
-                            pretrained_model_name_or_path,
-                            local_files_only=local_files_only,
-                            revision=revision,
-                            cache_dir=cache_dir,
-                            token=token,
-                        ):
-                            template = template.removesuffix(".jinja")
-                            vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
+                # This block looks for any extra chat template files
+                if is_local:
+                    template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                    if template_dir.is_dir():
+                        for template_file in template_dir.glob("*.jinja"):
+                            template_name = template_file.name.removesuffix(".jinja")
+                            vocab_files[f"chat_template_{template_name}"] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                else:
+                    for template in list_repo_templates(
+                        pretrained_model_name_or_path,
+                        local_files_only=local_files_only,
+                        revision=revision,
+                        cache_dir=cache_dir,
+                        token=token,
+                    ):
+                        template = template.removesuffix(".jinja")
+                        vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
-        # Get files from url, cache, or disk depending on the case
+        remote_files = []
+        if not is_local and not local_files_only:
+            try:
+                remote_files = list_repo_files(pretrained_model_name_or_path)
+            except Exception:
+                remote_files = []
+        elif pretrained_model_name_or_path and os.path.isdir(pretrained_model_name_or_path):
+            remote_files = os.listdir(pretrained_model_name_or_path)
+
+        if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
+            # mistral tokenizer names are different, but we can still convert them if
+            # mistral common is not there
+            other_pattern = r"tekken\.json|tokenizer\.model\.*"
+            if match := re.search(other_pattern, "\n".join(remote_files)):
+                vocab_files["vocab_file"] = match.group()
+
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():
             if file_path is None:
@@ -2073,8 +2103,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             elif single_file_id == file_id:
                 if os.path.isfile(file_path):
                     resolved_vocab_files[file_id] = file_path
-                elif is_remote_url(file_path):
-                    resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 try:
                     resolved_vocab_files[file_id] = cached_file(
@@ -2384,6 +2412,125 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
+        try:
+            vocab_size = tokenizer.vocab_size
+        except NotImplementedError:
+            vocab_size = 0
+
+        # Optionally patches mistral tokenizers with wrong regex
+        if (
+            vocab_size > 100000
+            and hasattr(tokenizer, "_tokenizer")
+            and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
+        ):
+            tokenizer = cls._patch_mistral_regex(
+                tokenizer,
+                pretrained_model_name_or_path,
+                token=token,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+                _commit_hash=_commit_hash,
+                _is_local=_is_local,
+                init_kwargs=init_kwargs,
+                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
+            )
+
+        return tokenizer
+
+    @classmethod
+    def _patch_mistral_regex(
+        cls,
+        tokenizer,
+        pretrained_model_name_or_path,
+        token=None,
+        cache_dir=None,
+        local_files_only=False,
+        _commit_hash=None,
+        _is_local=False,
+        init_kwargs=None,
+        fix_mistral_regex=None,
+    ):
+        """
+        Patches mistral related tokenizers with incorrect regex if detected
+            1) Local file with an associated config saved next to it
+                >> Model type one of the mistral models (on older versions)
+            2) Remote models on the hub from official mistral models
+                >> Tags including `base_model:.*mistralai`
+        """
+        from huggingface_hub import model_info
+
+        def is_base_mistral(model_id: str) -> bool:
+            model = model_info(model_id)
+            if model.tags is not None:
+                if re.search("base_model:.*mistralai", "".join(model.tags)):
+                    return True
+            return False
+
+        if _is_local or is_base_mistral(pretrained_model_name_or_path):
+            _config_file = cached_file(
+                pretrained_model_name_or_path,
+                "config.json",
+                cache_dir=cache_dir,
+                token=token,
+                local_files_only=local_files_only,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                _commit_hash=_commit_hash,
+            )
+
+            # Detected using a (local) mistral tokenizer
+            mistral_config_detected = False
+            if _config_file is not None:
+                with open(_config_file, encoding="utf-8") as f:
+                    _config = json.load(f)
+                transformers_version = _config.get("transformers_version")
+                transformers_model_type = _config.get("model_type")
+
+                # Detect if we can skip the mistral fix by
+                #   a) having a non-mistral tokenizer
+                #   b) fixed version of transformers
+                if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                    if (
+                        _is_local
+                        and transformers_model_type is not None
+                        and transformers_model_type
+                        not in [
+                            "mistral",
+                            "mistral3",
+                            "voxtral",
+                            "ministral",
+                            "pixtral",
+                        ]
+                    ):
+                        return tokenizer
+                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
+                    return tokenizer
+
+                mistral_config_detected = True
+
+            if mistral_config_detected or (not _is_local and is_base_mistral(pretrained_model_name_or_path)):
+                # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
+                if init_kwargs and "fix_mistral_regex" in init_kwargs:
+                    setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
+
+                # only warn if its not explicitly passed
+                if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", False)
+                    logger.warning(
+                        f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
+                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e."
+                        " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
+                    )
+                elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
+                    setattr(tokenizer, "fix_mistral_regex", True)
+                    import tokenizers
+
+                    tokenizer.backend_tokenizer.pre_tokenizer[0] = tokenizers.pre_tokenizers.Split(
+                        pattern=tokenizers.Regex(
+                            r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+                        ),
+                        behavior="isolated",
+                    )
         return tokenizer
 
     @staticmethod
@@ -2418,7 +2565,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         save_directory: Union[str, os.PathLike],
         tokenizer_config: dict,
         filename_prefix: Optional[str],
-        save_jinja_files: bool,
     ):
         """
         Writes chat templates out to the save directory if we're using the new format, and removes them from
@@ -2433,7 +2579,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         saved_raw_chat_template_files = []
-        if save_jinja_files and isinstance(self.chat_template, str):
+        if isinstance(self.chat_template, str):
             # New format for single templates is to save them as chat_template.jinja
             with open(chat_template_file, "w", encoding="utf-8") as f:
                 f.write(self.chat_template)
@@ -2441,7 +2587,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             saved_raw_chat_template_files.append(chat_template_file)
             if "chat_template" in tokenizer_config:
                 tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
-        elif save_jinja_files and isinstance(self.chat_template, dict):
+        elif isinstance(self.chat_template, dict):
             # New format for multiple templates is to save the default as chat_template.jinja
             # and the other templates in the chat_templates/ directory
             for template_name, template in self.chat_template.items():
@@ -2457,15 +2603,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f.write(template)
                     logger.info(f"chat template saved in {template_filepath}")
                     saved_raw_chat_template_files.append(template_filepath)
-            if "chat_template" in tokenizer_config:
-                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
-        elif isinstance(self.chat_template, dict):
-            # Legacy format for multiple templates:
-            # chat template dicts are saved to the config as lists of dicts with fixed key names.
-            tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
-        elif self.chat_template is not None:
-            # Legacy format for single templates: Just make them a key in tokenizer_config.json
-            tokenizer_config["chat_template"] = self.chat_template
+        if "chat_template" in tokenizer_config:
+            tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
         return tokenizer_config, saved_raw_chat_template_files
 
     def save_pretrained(
@@ -2511,20 +2650,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             A tuple of `str`: The files saved.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        save_jinja_files = kwargs.pop("save_jinja_files", True)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -2534,7 +2659,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         special_tokens_map_file = os.path.join(
@@ -2562,8 +2687,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.update(self.extra_special_tokens)
 
         tokenizer_config, saved_raw_chat_template_files = self.save_chat_templates(
-            save_directory, tokenizer_config, filename_prefix, save_jinja_files
+            save_directory, tokenizer_config, filename_prefix
         )
+        if getattr(self, "response_schema", None) is not None:
+            tokenizer_config["response_schema"] = self.response_schema
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
@@ -3379,8 +3506,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
+        if (
+            isinstance(encoded_inputs, (list, tuple))
+            and len(encoded_inputs) > 0
+            and isinstance(encoded_inputs[0], Mapping)
+        ):
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -3870,7 +4002,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -3904,7 +4036,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
+        token_ids: Union[int, list[int], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -4028,13 +4160,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Private method to put the tokenizer in input mode (when it has different modes for input/outputs)
         """
-        pass
 
     def _switch_to_target_mode(self):
         """
         Private method to put the tokenizer in target mode (when it has different modes for input/outputs)
         """
-        pass
 
     @contextmanager
     def as_target_tokenizer(self):

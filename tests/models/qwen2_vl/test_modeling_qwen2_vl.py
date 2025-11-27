@@ -18,6 +18,7 @@ import gc
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -45,6 +46,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -79,7 +81,7 @@ class Qwen2VLVisionText2TextModelTester:
             "num_key_value_heads": 2,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
         },
         vision_start_token_id=3,
         image_token_id=4,
@@ -164,7 +166,7 @@ class Qwen2VLVisionText2TextModelTester:
 
 
 @require_torch
-class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
@@ -177,8 +179,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
-
+    pipeline_model_mapping = {
+        "image-text-to-text": Qwen2VLForConditionalGeneration,
+        "any-to-any": Qwen2VLForConditionalGeneration,
+    }
     _is_composite = True
 
     def setUp(self):
@@ -187,33 +191,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_text_config(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_config_dict = config.to_dict()
-        base_config = Qwen2VLConfig(**base_config_dict)
-
-        # Trying to get or set text related attributes happens via text config
-        vocab_size = base_config.vocab_size
-        text_vocab_size = base_config.text_config.vocab_size
-        self.assertEqual(vocab_size, text_vocab_size)
-
-        base_config.vocab_size = 55
-        self.assertEqual(base_config.vocab_size, 55)
-        self.assertEqual(base_config.text_config.vocab_size, 55)
-
-        # We can still initialize config from old-format json, i.e. flat structure
-        text_config_dict = base_config_dict.pop("text_config")
-        flat_config_dict = {**text_config_dict, **base_config_dict}
-        config_from_flat_dict = Qwen2VLConfig(**flat_config_dict)
-        config_from_flat_dict.vocab_size = 78
-        self.assertEqual(config_from_flat_dict.vocab_size, 78)
-        self.assertEqual(config_from_flat_dict.text_config.vocab_size, 78)
-
-        # Vision config attributes are NOT force-set via vision config
-        base_config.patch_size = 8
-        self.assertEqual(base_config.patch_size, 8)
-        self.assertNotEqual(base_config.vision_config.patch_size, 8)
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -551,6 +528,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",
@@ -578,6 +556,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",

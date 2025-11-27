@@ -937,7 +937,7 @@ class DynamicCache(Cache):
 
     def __init__(
         self,
-        ddp_cache_data: Optional[Iterable[tuple[Optional[torch.Tensor], torch.Tensor, torch.Tensor]]] = None,
+        ddp_cache_data: Optional[Iterable[tuple[Optional[torch.Tensor], ...]]] = None,
         config: Optional[PreTrainedConfig] = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
@@ -970,9 +970,13 @@ class DynamicCache(Cache):
         # In this case, use the passed data to already fill in the Cache
         if ddp_cache_data is not None:
             # Init all the layers with the data
-            for layer_idx, (sliding_window_tensor, key_states, value_states) in enumerate(ddp_cache_data):
+            for layer_idx, kv_and_optional_sliding in enumerate(ddp_cache_data):
                 # If the config was not passed above, initialize a new cache layer for each entry of the ddp_data
                 if config is None:
+                    # kv_and_optional_sliding contains at least two elements: the key and value states. It can also
+                    # contain a third element, which is an optional sliding window tensor.
+                    sliding_window_tensor = kv_and_optional_sliding[2] if len(kv_and_optional_sliding) == 3 else None
+                    # If there is a sliding window tensor, use it to initialize the layer
                     if sliding_window_tensor is not None:
                         # Since the same layer is dispatched across replicas, sliding_window is the same for all
                         sliding_window = sliding_window_tensor[0].item()
@@ -980,7 +984,7 @@ class DynamicCache(Cache):
                     else:
                         layers.append(DynamicLayer())
                 # Update the layer with the data
-                _, _ = layers[layer_idx].update(key_states, value_states)
+                _, _ = layers[layer_idx].update(kv_and_optional_sliding[0], kv_and_optional_sliding[1])
 
         # If neither of config nor ddp_data was passed, then simply lazy init a full cache of DynamicLayer
         if len(layers) == 0:
@@ -994,7 +998,7 @@ class DynamicCache(Cache):
 
     def __iter__(self):
         for layer in self.layers:
-            yield getattr(layer, "_sliding_window_tensor", None), layer.keys, layer.values
+            yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
 
 
 class StaticCache(Cache):
@@ -1166,17 +1170,21 @@ class EncoderDecoderCache(Cache):
     """
 
     def __init__(self, *caches) -> None:
-        # For dp and ddp support, if only one argument is passed, it should be an iterable of tuples of tensors
+        # For dp and ddp support, if only one argument is passed, it should be an iterable of DynamicCache ddp data
         if len(caches) == 1:
-            self.self_attention_cache = DynamicCache()
-            self.cross_attention_cache = DynamicCache()
-            # Populate cache from the iterable
-            for layer_idx, key_value_states in enumerate(caches[0]):
-                key_states, value_states = key_value_states[:2]
-                self.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(key_value_states) > 2:
-                    key_states, value_states = key_value_states[2:]
-                    self.cross_attention_cache.update(key_states, value_states, layer_idx)
+            self_attention_cache_data, cross_attention_cache_data = [], []
+            for combined_cache_data in caches[0]:
+                if len(combined_cache_data) == 6:  # two tuple of style (self_attn_k, self_attn_v, self_attn_sliding)
+                    self_attention_cache_data.append(combined_cache_data[:3])
+                    cross_attention_cache_data.append(combined_cache_data[3:])
+                # To support old DDP-style init, we handle the case where the tuple has no sliding window tensor
+                elif len(combined_cache_data) == 4:  # two tuple of style (self_attn_k, self_attn_v)
+                    self_attention_cache_data.append(combined_cache_data[:2])
+                    cross_attention_cache_data.append(combined_cache_data[2:])
+                else:
+                    raise ValueError(f"Expected {len(combined_cache_data) = } to be 4 or 6.\n{combined_cache_data = }")
+            self.self_attention_cache = DynamicCache(self_attention_cache_data)
+            self.cross_attention_cache = DynamicCache(cross_attention_cache_data)
         # Otherwise, we should get two arguments, a self-attention cache and a cross-attention cache
         elif len(caches) == 2:
             if not isinstance(caches[0], Cache) or not isinstance(caches[1], Cache):
@@ -1190,6 +1198,11 @@ class EncoderDecoderCache(Cache):
         self.is_updated = {}
         for layer_idx in range(len(self.cross_attention_cache)):
             self.is_updated[layer_idx] = bool(self.cross_attention_cache.get_seq_length(layer_idx) > 0)
+
+    def __iter__(self):
+        """Returns tuples of style (self_attn_k, self_attn_v, self_attn_sliding, cross_attn_k, cross_attn_v, cross_attn_sliding)"""
+        for self_attention_layer, cross_attention_layer in zip(self.self_attention_cache, self.cross_attention_cache):
+            yield self_attention_layer + cross_attention_layer
 
     def __repr__(self) -> str:
         return (

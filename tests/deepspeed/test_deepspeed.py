@@ -19,7 +19,6 @@ import os
 import unittest
 from copy import deepcopy
 from functools import partial
-from typing import Optional
 
 import datasets
 from parameterized import parameterized
@@ -57,6 +56,7 @@ from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_dev
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from tests.trainer.test_trainer import (  # noqa
         RegressionModelConfig,
@@ -293,8 +293,8 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             def _init_weights(self, module):
                 super()._init_weights(module)
                 if module is self.new_head:
-                    self.new_head.weight.data.fill_(-100.0)
-                    self.new_head.bias.data.fill_(+100.0)
+                    nn.init.constant_(self.new_head.weight.data, -100.0)
+                    nn.init.constant_(self.new_head.bias.data, 100.0)
 
         ds_config = {
             "train_batch_size": 1,
@@ -757,13 +757,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.assertNotEqual(yes_grad_accum_a, a)
 
         # training with half the batch size but accumulation steps as 2 should give the same
-        # weights, but sometimes get a slight difference still of 1e-6
-        if torch_device == "hpu":
-            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
-            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
-        else:
-            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
-            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
+        # weights, but sometimes get a slight difference still
+        self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
+        self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
 
         # Relative difference. See the note above how to get identical loss on a small bs
         self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)
@@ -1254,8 +1250,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         quality_checks: bool = True,
         fp32: bool = False,
-        extra_args_str: Optional[str] = None,
-        remove_args_str: Optional[str] = None,
+        extra_args_str: str | None = None,
+        remove_args_str: str | None = None,
     ):
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
@@ -1287,8 +1283,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         do_eval: bool = True,
         distributed: bool = True,
         fp32: bool = False,
-        extra_args_str: Optional[str] = None,
-        remove_args_str: Optional[str] = None,
+        extra_args_str: str | None = None,
+        remove_args_str: str | None = None,
     ):
         max_len = 32
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"

@@ -125,7 +125,6 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (GitVisionModel,) if is_torch_available() else ()
-    fx_compatible = True
 
     test_resize_embeddings = False
 
@@ -377,12 +376,11 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "image-to-text": GitForCausalLM,
             "text-generation": GitForCausalLM,
             "image-text-to-text": GitForCausalLM,
+            "any-to-any": GitForCausalLM,
         }
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_torchscript = False
 
     # special case for GitForCausalLM model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

@@ -68,8 +68,6 @@ class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
             The non-linear activation function in the encoder and pooler.
     """
 
-    pass
-
 
 class SamHQVisionConfig(SamVisionConfig):
     pass
@@ -139,8 +137,6 @@ class SamHQConfig(SamConfig):
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
-
-    pass
 
 
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
@@ -446,7 +442,6 @@ class SamHQVisionModel(SamVisionModel):
     """
 )
 class SamHQModel(SamModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):

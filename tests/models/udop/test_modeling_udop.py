@@ -273,9 +273,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_torchscript = False
     test_resize_embeddings = True
     is_encoder_decoder = True
     test_cpu_offload = False
@@ -330,6 +328,10 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Udop has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_forward_signature(self):
@@ -546,7 +548,6 @@ class UdopEncoderOnlyModelTester:
 class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
 
-    test_torchscript = False
     test_resize_embeddings = False
 
     def setUp(self):

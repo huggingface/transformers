@@ -91,7 +91,6 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     ```"""
 
     model_type = "smolvlm_vision"
-    pass
 
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
@@ -141,7 +140,6 @@ class SmolVLMConfig(Idefics3Config):
     ```"""
 
     model_type = "smolvlm"
-    pass
 
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):
@@ -340,6 +338,8 @@ class SmolVLMModel(Idefics3Model):
 
 
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = SmolVLMModel(config)
