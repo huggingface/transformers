@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import tempfile
 import time
 import unittest
 from threading import Thread
 from unittest.mock import Mock, patch
 
 import httpx
-from huggingface_hub import ChatCompletionStreamOutput, InferenceClient
+from huggingface_hub import ChatCompletionStreamOutput, InferenceClient, hf_hub_download
 from parameterized import parameterized
 
 from transformers import GenerationConfig
@@ -151,6 +152,33 @@ def test_build_chat_completion_chunk():
         '\\"foo2\\": \\"bar2\\"}","name":"foo_bar"},"type":"function"}]},"index":0}]'
     )
     assert expected_choices_content in chunk
+
+
+def test_generative_model_list():
+    with tempfile.TemporaryDirectory() as cache_dir:
+        # "download" a few models, including some non-generative models
+        hf_hub_download("Menlo/Jan-nano", "config.json", cache_dir=cache_dir)
+        hf_hub_download("Menlo/Jan-nano-128k", "config.json", cache_dir=cache_dir)
+        hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
+        hf_hub_download("HuggingFaceTB/SmolVLM-Instruct", "config.json", cache_dir=cache_dir)
+        hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)
+
+        expected_results = {
+            "HuggingFaceTB/SmolVLM-Instruct": ["HuggingFaceTB", "SmolVLM-Instruct"],
+            "Qwen/Qwen2.5-0.5B-Instruct": ["Qwen", "Qwen2.5-0.5B-Instruct"],
+            "Menlo/Jan-nano": ["Menlo", "Jan-nano"],
+            "Menlo/Jan-nano-128k": ["Menlo", "Jan-nano-128k"],
+        }
+
+        # list models
+        result = Serve.get_gen_models(cache_dir)
+        assert len(expected_results) == len(result)
+
+        local_repos = {repo["id"]: repo["owned_by"] for repo in result}
+
+        for key, value in expected_results.items():
+            assert key in local_repos
+            assert local_repos[key] == value
 
 
 @require_openai
