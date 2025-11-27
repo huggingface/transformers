@@ -2158,17 +2158,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "bob",
         ]
         expected_ids = [1037, 6881, 2135, 3231, 7592, 2026, 2171, 2003, 3960]
-        expected_tokens_from_ids = [
-            "a",
-            "weird",
-            "##ly",
-            "test",
-            "hello",
-            "my",
-            "name",
-            "is",
-            "bob",
-        ]
+        expected_tokens_from_ids = ['a', 'weird', '##ly', 'test', 'hello', 'my', 'name', 'is', 'bob']  # fmt: skip
         expected_decoded_text = "a weirdly test hello my name is bob"
 
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutlmv2-base-uncased")
@@ -2217,17 +2207,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "bob",
         ]
         expected_ids = [1037, 6881, 2135, 3231, 7592, 2026, 2171, 2003, 3960]
-        expected_tokens_from_ids = [
-            "a",
-            "weird",
-            "##ly",
-            "test",
-            "hello",
-            "my",
-            "name",
-            "is",
-            "bob",
-        ]
+        expected_tokens_from_ids = ['a', 'weird', '##ly', 'test', 'hello', 'my', 'name', 'is', 'bob']  # fmt: skip
         expected_decoded_text = "a weirdly test hello my name is bob"
 
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutlmv2-base-uncased")

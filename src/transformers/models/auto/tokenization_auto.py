@@ -197,7 +197,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
-        ("lxmert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
         ("mamba", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("mamba2", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
@@ -224,7 +224,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mllama", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
-        ("mobilebert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
         ("modernbert", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("moonshine", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("moshi", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
@@ -234,7 +234,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
-        ("mvp", "RobertaTokenizer" if is_tokenizers_available() else None),
+        ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
         ("nemotron", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
@@ -663,7 +663,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
         if tokenizer_class is not None:
             # Check if tokenizer_class inherits from PreTrainedTokenizer (but not from TokenizersBackend/SentencePieceBackend)
             # These are edge cases with custom logic (e.g., BioGptTokenizer with Moses tokenization)
-            from ...tokenization_python import PreTrainedTokenizer
+            from ...tokenization_utils import PreTrainedTokenizer
 
             # Build list of backend classes to check against
             backend_classes = [TokenizersBackend] if TokenizersBackend else []

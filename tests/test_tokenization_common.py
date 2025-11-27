@@ -1090,7 +1090,12 @@ Hey how are you doing"""  # noqa: W293
                         - 1,
                     )
 
-                    if assistant_start is None or assistant_end is None or assistant_start2 is None or assistant_end2 is None:
+                    if (
+                        assistant_start is None
+                        or assistant_end is None
+                        or assistant_start2 is None
+                        or assistant_end2 is None
+                    ):
                         continue
 
                     # assert 1 in first assistant message
@@ -1155,7 +1160,12 @@ Hey how are you doing"""  # noqa: W293
                     0, chat_string.index(assistant_prefix_suffix[0][1][1]) + len(assistant_prefix_suffix[0][1][1]) - 1
                 )
 
-                if assistant_start is None or assistant_end is None or assistant_start2 is None or assistant_end2 is None:
+                if (
+                    assistant_start is None
+                    or assistant_end is None
+                    or assistant_start2 is None
+                    or assistant_end2 is None
+                ):
                     return
 
                 # assert 1 in assistant indices

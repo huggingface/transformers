@@ -89,17 +89,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Ġbob",
         ]
         expected_ids = [10, 7735, 352, 1296, 20760, 127, 766, 16, 22401]
-        expected_tokens_from_ids = [
-            "Ġa",
-            "Ġweird",
-            "ly",
-            "Ġtest",
-            "Ġhello",
-            "Ġmy",
-            "Ġname",
-            "Ġis",
-            "Ġbob",
-        ]
+        expected_tokens_from_ids = ['Ġa', 'Ġweird', 'ly', 'Ġtest', 'Ġhello', 'Ġmy', 'Ġname', 'Ġis', 'Ġbob']  # fmt: skip
         expected_decoded_text = " a weirdly test hello my name is bob"
 
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutlmv3-base", cls_token="<s>")
@@ -145,17 +135,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Ġbob",
         ]
         expected_ids = [10, 7735, 352, 1296, 20760, 127, 766, 16, 22401]
-        expected_tokens_from_ids = [
-            "Ġa",
-            "Ġweird",
-            "ly",
-            "Ġtest",
-            "Ġhello",
-            "Ġmy",
-            "Ġname",
-            "Ġis",
-            "Ġbob",
-        ]
+        expected_tokens_from_ids = ['Ġa', 'Ġweird', 'ly', 'Ġtest', 'Ġhello', 'Ġmy', 'Ġname', 'Ġis', 'Ġbob']  # fmt: skip
         expected_decoded_text = " a weirdly test hello my name is bob"
 
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutlmv3-base", cls_token="<s>")

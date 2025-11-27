@@ -173,7 +173,9 @@ class LlamaTokenizer(TokenizersBackend):
         # Only set pre_tokenizer/normalizer for Llama-3 style tokenizers (use Sequence)
         pre_tok = self._tokenizer.pre_tokenizer
         if pre_tok is None or type(pre_tok).__name__ != "Sequence":
-            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
+            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+                replacement="▁", prepend_scheme="first", split=False
+            )
             self._tokenizer.normalizer = None
             self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
         super()._post_init()
