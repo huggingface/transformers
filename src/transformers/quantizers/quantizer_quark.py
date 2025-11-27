@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -25,6 +25,7 @@ from ..utils import is_quark_available, logging
 
 
 logger = logging.get_logger(__name__)
+from ..core_model_loading import ConversionOps
 
 
 CHECKPOINT_KEYS = {
@@ -94,3 +95,23 @@ class QuarkHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self):
         return False
+
+    def get_quantize_ops(self):
+        import torch
+        class QuarkQuantize(ConversionOps):
+            def __init__(self, hf_quantizer):
+                self.hf_quantizer = hf_quantizer
+
+            def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
+                target_key, value = tuple(input_dict.items())[0]
+                value = value[0] if isinstance(value, list) else value
+
+                postfix = target_key.split(".")[-1]
+
+                if postfix in CHECKPOINT_KEYS:
+                    target_key = target_key.replace(postfix, CHECKPOINT_KEYS[postfix])
+
+                return {target_key: value}
+
+        # TODO: Using this class for now but the best would be to use a weight converter directly
+        return QuarkQuantize(self)

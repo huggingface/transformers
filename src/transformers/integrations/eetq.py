@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import is_accelerate_available, is_eetq_available, logging
 
 
@@ -24,6 +26,30 @@ if is_accelerate_available():
 
 logger = logging.get_logger(__name__)
 
+class EetqQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        from eetq import EetqLinear, quantize_and_preprocess_weights
+
+        module, tensor_name = get_module_from_name(model, param_name)
+        new_value, weight_scale = quantize_and_preprocess_weights(param_value)
+
+        # Samity check
+        if isinstance(module, EetqLinear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.int8:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                if tensor_name == "weight_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+
+        return {target_key:new_value,
+                f"{target_key}_scales": weight_scale}
 
 def _replace_with_eetq_linear(
     model,
@@ -56,8 +82,7 @@ def _replace_with_eetq_linear(
                     model._modules[name] = eetq.EetqLinear(
                         in_features, out_features, module.bias is not None, module.weight.device
                     )
-                    if pre_quantized:
-                        model._modules[name].register_scale(module.weight.device)
+                    model._modules[name].register_scale(module.weight.device)
                     has_been_replaced = True
 
                     # Force requires grad to False to avoid unexpected errors
