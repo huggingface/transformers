@@ -58,7 +58,7 @@ class GemmaTokenizer(TokenizersBackend):
     slow_tokenizer_class = None
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
-    vocab_format = "dict"
+    model_type = "BPE"
 
     def __init__(
         self,

@@ -62,7 +62,7 @@ class HerbertTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = None
-    vocab_format = "dict"
+    model_type = "BPE"
 
     def __init__(
         self,

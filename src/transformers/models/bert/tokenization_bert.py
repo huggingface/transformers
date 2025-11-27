@@ -79,7 +79,7 @@ class BertTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
     slow_tokenizer_class = None
-    vocab_format = "dict"  # WordPiece model expects dict[str, int]
+    model_type = "WordPiece"  # WordPiece model expects dict[str, int]
 
     def __init__(
         self,

@@ -111,7 +111,7 @@ class CohereTokenizer(TokenizersBackend):
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
-    vocab_format = "dict"
+    model_type = "BPE"
     # No `max_model_input_sizes`
 
     def __init__(

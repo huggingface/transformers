@@ -89,7 +89,7 @@ class FunnelTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = None
-    vocab_format = "dict"  # WordPiece model expects dict[str, int]
+    model_type = "WordPiece"  # WordPiece model expects dict[str, int]
     cls_token_type_id: int = 2
 
     def __init__(

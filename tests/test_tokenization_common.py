@@ -448,9 +448,10 @@ Hey how are you doing"""  # noqa: W293
             extractor = TokenizersExtractor(tokenizer_json_path)
             vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
 
-            # Determine which vocab format to use based on tokenizer's vocab_format attribute
-            vocab_format = getattr(self.tokenizer_class, "vocab_format", "list")
-            vocab = vocab_ids if vocab_format == "dict" else vocab_scores
+            # Determine which vocab format to use based on tokenizer's model_type
+            # BPE and WordPiece use dict, Unigram uses list
+            model_type = getattr(self.tokenizer_class, "model_type", "Unigram")
+            vocab = vocab_ids if model_type in ("BPE", "WordPiece") else vocab_scores
 
             # Convert added_tokens list to added_tokens_decoder dict format
             # This matches the format used by from_pretrained() from tokenizer_config.json
@@ -482,9 +483,10 @@ Hey how are you doing"""  # noqa: W293
             extractor = SentencePieceExtractor(sentencepiece_model_path)
             vocab_ids, vocab_scores, merges = extractor.extract()
 
-            # Determine which vocab format to use based on tokenizer's vocab_format attribute
-            vocab_format = getattr(self.tokenizer_class, "vocab_format", "list")
-            vocab = vocab_ids if vocab_format == "dict" else vocab_scores
+            # Determine which vocab format to use based on tokenizer's model_type
+            # BPE and WordPiece use dict, Unigram uses list
+            model_type = getattr(self.tokenizer_class, "model_type", "Unigram")
+            vocab = vocab_ids if model_type in ("BPE", "WordPiece") else vocab_scores
 
             tokenizer_from_extractor = self.tokenizer_class(vocab=vocab, merges=merges)
 

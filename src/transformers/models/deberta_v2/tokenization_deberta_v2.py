@@ -79,6 +79,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
+    model_type = "Unigram"
 
     def __init__(
         self,

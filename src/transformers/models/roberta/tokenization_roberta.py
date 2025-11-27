@@ -110,7 +110,7 @@ class RobertaTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    vocab_format = "dict"
+    model_type = "BPE"
     slow_tokenizer_class = None
 
     def __init__(
