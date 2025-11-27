@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     require_pretty_midi,
     require_torch,
 )
-from transformers.tokenization_utils import BatchEncoding
+from transformers.tokenization_python import BatchEncoding
 
 
 if is_torch_available():
