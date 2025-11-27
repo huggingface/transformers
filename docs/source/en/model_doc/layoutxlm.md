@@ -70,6 +70,12 @@ data for the model.
 As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer to [LayoutLMv2's documentation page](layoutlmv2) for all tips, code examples and notebooks.
 </Tip>
 
+
+## LayoutXLMConfig
+
+[[autodoc]] LayoutXLMConfig
+
+
 ## LayoutXLMTokenizer
 
 [[autodoc]] LayoutXLMTokenizer

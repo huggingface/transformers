@@ -808,7 +808,7 @@ class SwinPreTrainedModel(PreTrainedModel):
     config: SwinConfig
     base_model_prefix = "swin"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwinStage"]
 

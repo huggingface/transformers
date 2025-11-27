@@ -193,7 +193,12 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         else ()
     )
     pipeline_model_mapping = (
-        {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
+        {
+            "image-text-to-text": LlavaOnevisionForConditionalGeneration,
+            "any-to-any": LlavaOnevisionForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
     )
 
     # MP works but offload doesn't work when the MultiheadAttention is offloaded

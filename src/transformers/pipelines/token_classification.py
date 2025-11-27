@@ -4,7 +4,7 @@ from typing import Any, overload
 
 import numpy as np
 
-from ..models.bert.tokenization_bert import BasicTokenizer
+from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,

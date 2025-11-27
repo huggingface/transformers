@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -23,12 +21,12 @@ def eager_paged_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],  # shape [seqlen_q, seqlen_k]
+    attention_mask: torch.Tensor | None,  # shape [seqlen_q, seqlen_k]
     scaling: float,
     **kwargs,
 ):
     # Add KV cache to the key and value tensors
-    cache: Optional[PagedAttentionCache] = kwargs.pop("cache", None)
+    cache: PagedAttentionCache | None = kwargs.pop("cache", None)
     if cache is not None:
         # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
         key, value = cache.update(

@@ -767,7 +767,7 @@ class AltCLIPVisionEmbeddings(nn.Module):
 class AltCLIPPreTrainedModel(PreTrainedModel):
     config: AltCLIPConfig
     base_model_prefix = "altclip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_module = []
 
@@ -872,7 +872,7 @@ class AltCLIPVisionTransformer(nn.Module):
 class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     config: AltCLIPVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__(config)
@@ -1031,7 +1031,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config):
         super().__init__(config)

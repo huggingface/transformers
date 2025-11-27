@@ -3152,7 +3152,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
     """
 )
 class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
@@ -3508,7 +3508,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
 )
 class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     input_modalities = "audio"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
@@ -3866,8 +3866,8 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     """
 )
 class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
-    input_modalities = ["audio", "text"]
-    output_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
+    output_modalities = ("audio", "text")
     _tied_weights_keys = {
         "lm_head.weight": "shared.weight",
         "text_encoder.embed_tokens.weight": "shared.weight",

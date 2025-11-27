@@ -49,6 +49,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -249,14 +250,25 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
     """
 
     all_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
-
+    # pipeline_model_mapping = (
+    #     {
+    #         "any-to-any": Qwen2_5OmniForConditionalGeneration,
+    #         "image-text-to-text": Qwen2_5OmniThinkerForConditionalGeneration,
+    #     }
+    #     if is_torch_available()
+    #     else {}
+    # )
+    # FIXME @raushan Omni tests take ages because the model is big. Try to make it even smaller
+    pipeline_model_mapping = {}
     _is_composite = True
     model_split_percents = [0.5, 0.9]
 

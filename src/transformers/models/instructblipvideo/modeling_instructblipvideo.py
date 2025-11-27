@@ -132,7 +132,7 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config: InstructBlipVideoConfig
     base_model_prefix = "blip"
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True

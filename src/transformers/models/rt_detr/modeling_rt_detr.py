@@ -1007,7 +1007,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     config: RTDetrConfig
     base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
 
     @torch.no_grad()

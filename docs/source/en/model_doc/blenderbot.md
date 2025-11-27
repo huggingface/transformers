@@ -84,12 +84,10 @@ An example:
 ## BlenderbotTokenizer
 
 [[autodoc]] BlenderbotTokenizer
-    - build_inputs_with_special_tokens
 
 ## BlenderbotTokenizerFast
 
 [[autodoc]] BlenderbotTokenizerFast
-    - build_inputs_with_special_tokens
 
 ## BlenderbotModel
 

@@ -1435,7 +1435,7 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
     config: MaskFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):

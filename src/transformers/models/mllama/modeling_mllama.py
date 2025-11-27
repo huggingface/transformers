@@ -794,7 +794,7 @@ class MllamaRotaryEmbedding(nn.Module):
 class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "MllamaVisionEncoderLayer",
@@ -982,7 +982,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
 class MllamaVisionModel(MllamaPreTrainedModel):
     config: MllamaVisionConfig
     base_model_prefix = "vision_model"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
@@ -1180,7 +1180,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 class MllamaTextModel(MllamaPreTrainedModel):
     config: MllamaTextConfig
     base_model_prefix = "language_model.model"
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: MllamaTextConfig):
         super().__init__(config)

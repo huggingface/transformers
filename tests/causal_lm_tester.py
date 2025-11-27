@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     _COMMON_MODEL_NAMES_MAP,
     is_flaky,
     require_flash_attn,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
 )
 
@@ -550,7 +550,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @is_flaky()
     @slow

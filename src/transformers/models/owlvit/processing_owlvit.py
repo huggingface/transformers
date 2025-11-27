@@ -47,7 +47,7 @@ class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
             "padding": "max_length",
         },
         "common_kwargs": {
-            "return_tensors": "np",
+            "return_tensors": "pt",
         },
     }
 

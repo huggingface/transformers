@@ -44,6 +44,12 @@ The server supports the following REST APIs:
 - `/v1/audio/transcriptions`
 - `/v1/models`
 
+Please make sure to have the correct dependencies installed for the instructions below:
+
+```shell
+pip install transformers[serving]
+```
+
 To launch a server, simply use the `transformers serve` CLI command:
 
 ```shell
@@ -53,7 +59,7 @@ transformers serve
 The simplest way to interact with the server is through our `transformers chat` CLI
 
 ```shell
-transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B
+transformers chat Qwen/Qwen3-4B
 ```
 
 or by sending an HTTP request, like we'll see below.

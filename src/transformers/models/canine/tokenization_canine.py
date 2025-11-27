@@ -14,9 +14,7 @@
 # limitations under the License.
 """Tokenization classes for CANINE."""
 
-from typing import Optional
-
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -112,6 +110,9 @@ class CanineTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
             model_max_length=model_max_length,
+            token_type_ids_pattern="all_zeros",
+            token_type_ids_include_special_tokens=True,
+            special_tokens_pattern="cls_sep",
             **kwargs,
         )
 
@@ -149,65 +150,6 @@ class CanineTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         return "".join(tokens)
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A CANINE sequence has the following format:
-
-        - single sequence: `[CLS] X [SEP]`
-        - pair of sequences: `[CLS] A [SEP] B [SEP]`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        result = cls + token_ids_0 + sep
-        if token_ids_1 is not None:
-            result += token_ids_1 + sep
-        return result
-
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        result = [1] + ([0] * len(token_ids_0)) + [1]
-        if token_ids_1 is not None:
-            result += ([0] * len(token_ids_1)) + [1]
-        return result
-
-    # CanineTokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
-        return ()
 
 
 __all__ = ["CanineTokenizer"]

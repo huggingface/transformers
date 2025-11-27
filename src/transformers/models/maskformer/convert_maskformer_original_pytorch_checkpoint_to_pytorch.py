@@ -720,13 +720,5 @@ if __name__ == "__main__":
         image_processor.save_pretrained(save_directory / model_name)
         mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
 
-        image_processor.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        mask_former_for_instance_segmentation.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        image_processor.push_to_hub(repo_id=model_name)
+        mask_former_for_instance_segmentation.push_to_hub(repo_id=model_name)

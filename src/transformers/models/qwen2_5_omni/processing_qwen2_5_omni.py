@@ -330,6 +330,60 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+        """
+        Post-process the output of a vlm to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs[0], skip_special_tokens=skip_special_tokens, **kwargs)
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
+        """
+        if generation_mode is None or generation_mode == "text":
+            return self.post_process_image_text_to_text(
+                generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+            )
+
+        elif generation_mode == "audio":
+            # model supports only bs=1, so we will never get several audio outputs
+            audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
+            return [audio]
+
+        else:
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only `text` and `audio"
+            )
+
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names

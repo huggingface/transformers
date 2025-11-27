@@ -14,11 +14,8 @@
 import os
 import re
 from collections.abc import Callable
-from functools import partial
 from types import ModuleType
-from typing import Optional, Union
 
-from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
@@ -51,7 +48,7 @@ try:
             )
             return lambda cls: cls
 
-    _KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
+    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
@@ -207,10 +204,10 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
 }
 
-_KERNEL_MODULE_MAPPING: dict[str, Optional[ModuleType]] = {}
+_KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
 
 
-def is_kernel(attn_implementation: Optional[str]) -> bool:
+def is_kernel(attn_implementation: str | None) -> bool:
     """Check whether `attn_implementation` matches a kernel pattern from the hub."""
     return (
         attn_implementation is not None
@@ -218,7 +215,9 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: Optional[Callable] = None) -> None:
+def load_and_register_attn_kernel(
+    attn_implementation: str, attention_wrapper: Callable | None = None
+) -> ModuleType | None:
     """
     Load and register the kernel associated to `attn_implementation`.
 
@@ -234,7 +233,7 @@ def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: O
 
     actual_attn_name = attn_implementation.split("|")[1] if "|" in attn_implementation else attn_implementation
     if not is_kernel(actual_attn_name):
-        return
+        return None
     if not _kernels_available:
         raise ImportError(
             "`kernels` is either not installed or uses an incompatible version. "
@@ -263,16 +262,18 @@ def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: O
     if hasattr(kernel, "flash_attn_varlen_func"):
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
-        kernel_function = partial(attention_wrapper, implementation=kernel)
-        lazy_import_flash_attention(kernel, force_import=True)
+        kernel_function = attention_wrapper
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
+
     # Register the kernel as a valid attention
     ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
     ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
 
+    return kernel
 
-def lazy_load_kernel(kernel_name: str, mapping: dict[str, Optional[ModuleType]] = _KERNEL_MODULE_MAPPING):
+
+def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _KERNEL_MODULE_MAPPING):
     if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
         return mapping[kernel_name]
     if kernel_name not in _HUB_KERNEL_MAPPING:

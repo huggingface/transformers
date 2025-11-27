@@ -243,7 +243,7 @@ def default_flax_embed_init(tensor):
 class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
@@ -1432,7 +1432,7 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
         "attentions": Phi4MultimodalAttention,
     }
     _version = "0.0.5"
-    input_modalities = ["image", "audio", "text"]
+    input_modalities = ("image", "audio", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):

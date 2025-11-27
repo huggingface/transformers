@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import GPTSw3Tokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_jinja, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -37,7 +37,9 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUpClass()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>")
+        tokenizer = GPTSw3Tokenizer(
+            SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>", name_or_path="test"
+        )
 
         tokenizer.save_pretrained(cls.tmpdirname)
 
@@ -66,7 +68,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer().vocab_size, 2_000)
 
     def test_full_tokenizer(self):
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -96,7 +98,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_fast_encode_decode(self):
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
         texts = ["This is a test", "I was born in 92000, and this is falsé."]
         expected_ids_list = [
             [465, 287, 265, 631, 842],
@@ -127,3 +129,36 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             model_name="AI-Sweden-Models/gpt-sw3-126m",
             sequences=sequences,
         )
+
+    @require_jinja
+    def test_tokenization_for_chat(self):
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, name_or_path="test")
+        tokenizer.chat_template = (
+            "{{ eos_token }}{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
+            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
+            "{{ message['text'] }}{{ bos_token }}"
+            "{% endfor %}"
+            "Bot:"
+        )
+        # This is in English, but it's just here to make sure the chat control tokens are being added properly
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+        ]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        # fmt: off
+        expected_tokens = [
+            [2000, 1, 575, 541, 419, 530, 339, 265, 878, 708, 727, 275, 347, 541, 260, 1, 968, 263, 314, 419, 366, 354, 294, 360, 1, 575, 541, 419],
+            [2000, 1, 575, 541, 419, 530, 339, 265, 878, 708, 727, 275, 347, 541, 260, 1, 968, 263, 314, 419, 366, 354, 294, 360, 1, 575, 541, 419, 984, 429, 281, 264, 1261, 291, 260, 1, 575, 541, 419],
+            [2000, 1, 575, 541, 419, 984, 429, 281, 264, 1261, 291, 260, 1, 968, 263, 314, 419, 366, 354, 294, 360, 1, 575, 541, 419]
+            ]
+        # fmt: on
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)

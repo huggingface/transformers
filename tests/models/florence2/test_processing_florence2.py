@@ -11,22 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
 
-from transformers import AutoProcessor, BartTokenizerFast, Florence2Processor
+from transformers import Florence2Processor
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from transformers import CLIPImageProcessor
 
 
 @require_torch
@@ -35,19 +30,24 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Florence2Processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = CLIPImageProcessor.from_pretrained("florence-community/Florence-2-base")
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        image_processor = image_processor_class.from_pretrained("florence-community/Florence-2-base")
         image_processor.image_seq_length = 0
-        tokenizer = BartTokenizerFast.from_pretrained("florence-community/Florence-2-base")
+        return image_processor
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        tokenizer = tokenizer_class.from_pretrained("florence-community/Florence-2-base")
         tokenizer.image_token = "<image>"
         tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
         tokenizer.extra_special_tokens = {"image_token": "<image>"}
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = Florence2Processor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+        return tokenizer
+
+    @unittest.skip("Florence2Processor adds prefix and suffix tokens to the text")
+    def test_tokenizer_defaults(self):
+        pass
 
     @staticmethod
     def prepare_processor_dict():
@@ -66,16 +66,6 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "description_with_bboxes_or_polygons": {},
             }
         }
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_construct_prompts(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)

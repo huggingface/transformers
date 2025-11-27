@@ -53,7 +53,10 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     @classmethod
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
-        kwargs.update(cls.special_tokens_map)
+        # Update with defaults, but don't overwrite values already in kwargs
+        for key, value in cls.special_tokens_map.items():
+            if key not in kwargs:
+                kwargs[key] = value
         kwargs["phonemize"] = False
         kwargs["normalize"] = False
         pretrained_name = pretrained_name or cls.tmpdirname
@@ -102,10 +105,6 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertDictEqual(before_vocab, after_vocab)
 
                 shutil.rmtree(tmpdirname)
-
-    @unittest.skip(reason="Adding multicharacter tokens does not work the VITS tokenizer")
-    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
-        pass
 
     def test_ron_normalization(self):
         tokenizer = self.get_tokenizer()

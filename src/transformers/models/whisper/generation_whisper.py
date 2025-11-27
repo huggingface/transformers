@@ -423,7 +423,7 @@ class WhisperGenerationMixin(GenerationMixin):
         parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
         For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
+        guide](../generation_strategies).
 
         </Tip>
 

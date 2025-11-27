@@ -1,4 +1,4 @@
-# Copyright 2018 The Google AI Language Team Authors, Allegro.pl and The HuggingFace Inc. team.
+# Copyright 2020 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,129 +13,20 @@
 # limitations under the License.
 
 
-import json
-import os
 import unittest
 
-from transformers import HerbertTokenizer, HerbertTokenizerFast
-from transformers.models.herbert.tokenization_herbert import VOCAB_FILES_NAMES
-from transformers.testing_utils import get_tests_dir, require_sacremoses, require_tokenizers, slow
+from transformers import HerbertTokenizer
+from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-@require_sacremoses
 @require_tokenizers
 class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "allegro/herbert-base-cased"
     tokenizer_class = HerbertTokenizer
-    rust_tokenizer_class = HerbertTokenizerFast
-    test_rust_tokenizer = True
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        # Use a simpler test file without japanese/chinese characters
-        with open(f"{get_tests_dir()}/fixtures/sample_text_no_unicode.txt", encoding="utf-8") as f_data:
-            cls._data = f_data.read().replace("\n\n", "\n").strip()
-
-        vocab = [
-            "<s>",
-            "</s>",
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "w</w>",
-            "r</w>",
-            "t</w>",
-            "lo",
-            "low",
-            "er</w>",
-            "low</w>",
-            "lowest</w>",
-            "newer</w>",
-            "wider</w>",
-            ",</w>",
-            "<unk>",
-        ]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
-
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(cls.vocab_file, "w") as fp:
-            fp.write(json.dumps(vocab_tokens))
-        with open(cls.merges_file, "w") as fp:
-            fp.write("\n".join(merges))
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "lower newer"
-        output_text = "lower newer"
-        return input_text, output_text
-
-    def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, merges_file=self.merges_file)
-
-        text = "lower"
-        bpe_tokens = ["low", "er</w>"]
-        tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, bpe_tokens)
-
-        input_tokens = tokens + ["<unk>"]
-        input_bpe_tokens = [16, 17, 23]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        sequence = "lower,newer"
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
-    @slow
-    def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("allegro/herbert-base-cased")
-
-        text = tokenizer.encode("konstruowanie sekwencji", add_special_tokens=False)
-        text_2 = tokenizer.encode("konstruowanie wielu sekwencji", add_special_tokens=False)
-
-        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
-        encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
-
-        assert encoded_sentence == [0] + text + [2]
-        assert encoded_pair == [0] + text + [2] + text_2 + [2]
-
-    @unittest.skip(
-        "Test passes if run individually but not with the full tests (internal state of the tokenizer is modified). Will fix later"
-    )
-    def test_training_new_tokenizer_with_special_tokens_change(self):
-        pass
-
-    @unittest.skip(
-        "Test passes if run individually but not with the full tests (internal state of the tokenizer is modified). Will fix later"
-    )
-    def test_training_new_tokenizer(self):
-        pass
+    integration_expected_tokens = ['T', 'his</w>', 'is</w>', 'a</w>', 'test</w>', '<unk>', 'I</w>', 'was</w>', 'bor', 'n</w>', 'in</w>', '9', '2000</w>', ',</w>', 'and</w>', 'this</w>', 'is</w>', 'fal', 's', 'é</w>', '.</w>', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '是</w>', 'H', 'i</w>', 'Hel', 'lo</w>', 'H', 'i</w>', 'Hel', 'lo</w>', 'Hel', 'lo</w>', '<s>', 'hi</w>', '<s>', 'ther', 'e</w>', 'The</w>', 'fol', 'low', 'ing</w>', 'str', 'ing</w>', 'sho', 'uld</w>', 'be</w>', 'pro', 'per', 'ly</w>', 'en', 'c', 'ode', 'd</w>', ':</w>', 'Hel', 'lo</w>', '.</w>', 'Bu', 't</w>', 'ir', 'd</w>', 'and</w>', '<unk>', 'ี</w>', 'ir', 'd</w>', 'ด</w>', 'He', 'y</w>', 'ho', 'w</w>', 'are</w>', 'you</w>', 'do', 'ing</w>']  # fmt: skip
+    integration_expected_token_ids = [56, 22855, 6869, 1011, 14825, 3, 1056, 9873, 2822, 1016, 2651, 29, 3450, 1947, 7158, 48846, 6869, 7355, 87, 1093, 1899, 3, 3, 3, 3, 3, 1776, 44, 1009, 12156, 6170, 44, 1009, 12156, 6170, 12156, 6170, 0, 21566, 0, 40445, 1015, 7117, 9929, 13194, 5129, 15948, 5129, 14924, 48273, 11072, 2088, 3040, 8172, 2058, 71, 3909, 1038, 1335, 12156, 6170, 1899, 3025, 1026, 17435, 1038, 7158, 3, 1085, 17435, 1038, 1579, 4596, 1005, 3145, 1019, 25720, 20254, 2065, 5129]  # fmt: skip
+    expected_tokens_from_ids = ['T', 'his</w>', 'is</w>', 'a</w>', 'test</w>', '<unk>', 'I</w>', 'was</w>', 'bor', 'n</w>', 'in</w>', '9', '2000</w>', ',</w>', 'and</w>', 'this</w>', 'is</w>', 'fal', 's', 'é</w>', '.</w>', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '是</w>', 'H', 'i</w>', 'Hel', 'lo</w>', 'H', 'i</w>', 'Hel', 'lo</w>', 'Hel', 'lo</w>', '<s>', 'hi</w>', '<s>', 'ther', 'e</w>', 'The</w>', 'fol', 'low', 'ing</w>', 'str', 'ing</w>', 'sho', 'uld</w>', 'be</w>', 'pro', 'per', 'ly</w>', 'en', 'c', 'ode', 'd</w>', ':</w>', 'Hel', 'lo</w>', '.</w>', 'Bu', 't</w>', 'ir', 'd</w>', 'and</w>', '<unk>', 'ี</w>', 'ir', 'd</w>', 'ด</w>', 'He', 'y</w>', 'ho', 'w</w>', 'are</w>', 'you</w>', 'do', 'ing</w>']  # fmt: skip
+    integration_expected_decoded_text = "This is a test <unk>I was born in 92000 , and this is falsé . <unk><unk><unk><unk><unk>是 Hi Hello Hi Hello Hello <s>hi <s>there The following string should be properly encoded : Hello . But ird and <unk>ี ird ด Hey how are you doing"

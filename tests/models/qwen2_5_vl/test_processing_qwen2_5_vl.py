@@ -13,14 +13,10 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
-import pytest
 
-from transformers import AutoProcessor, Qwen2TokenizerFast
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -28,7 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessorFast
+    from transformers import Qwen2_5_VLProcessor
 
 if is_torch_available():
     import torch
@@ -39,33 +35,12 @@ if is_torch_available():
 @require_torchvision
 class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen2_5_VLProcessor
+    model_id = "Qwen/Qwen2-VL-7B-Instruct"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2_5_VLProcessor.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -77,65 +52,6 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
-
-    def test_save_load_pretrained_default(self):
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
-        video_processor = self.get_video_processor()
-
-        processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        processor.save_pretrained(self.tmpdirname)
-        processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=True)
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor.tokenizer, Qwen2TokenizerFast)
-        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessorFast)
-
-    def test_image_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
-
-        processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-
-        image_input = self.prepare_image_inputs()
-
-        input_image_proc = image_processor(image_input, return_tensors="pt")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="pt")
-
-        for key in input_image_proc:
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        video_processor = self.get_video_processor()
-
-        processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(
-            list(inputs.keys()),
-            ["input_ids", "attention_mask", "pixel_values", "image_grid_thw"],
-        )
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-        # test if it raises when no text is passed
-        with pytest.raises(TypeError):
-            processor(images=image_input)
 
     @require_torch
     @require_av

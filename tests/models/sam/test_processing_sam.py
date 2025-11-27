@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -26,7 +24,7 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, SamImageProcessor, SamProcessor
+    from transformers import SamProcessor
 
 if is_torch_available():
     import torch
@@ -38,20 +36,6 @@ if is_torch_available():
 @require_torchvision
 class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SamProcessor
-
-    @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = SamImageProcessor()
-        processor = SamProcessor(image_processor)
-        processor.save_pretrained(cls.tmpdirname)
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def prepare_mask_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
@@ -76,27 +60,15 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         self.skipTest("SamProcessor does not have a tokenizer")
 
-    def test_save_load_pretrained_additional_features(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            processor = SamProcessor(image_processor=self.get_image_processor())
-            processor.save_pretrained(tmpdir)
-
-            image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-            processor = SamProcessor.from_pretrained(tmpdir, do_normalize=False, padding_value=1.0)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, SamImageProcessor)
-
     def test_image_processor_no_masks(self):
-        image_processor = self.get_image_processor()
+        image_processor = self.get_component("image_processor")
 
         processor = SamProcessor(image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="pt")
+        input_processor = processor(images=image_input, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -113,15 +85,15 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )  # reshaped_input_size value is before padding
 
     def test_image_processor_with_masks(self):
-        image_processor = self.get_image_processor()
+        image_processor = self.get_component("image_processor")
 
         processor = SamProcessor(image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
         mask_input = self.prepare_mask_inputs()
 
-        input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
-        input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="np")
+        input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")
+        input_processor = processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -131,7 +103,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_post_process_masks(self):
-        image_processor = self.get_image_processor()
+        image_processor = self.get_component("image_processor")
 
         processor = SamProcessor(image_processor=image_processor)
         dummy_masks = [torch.ones((1, 3, 5, 5))]

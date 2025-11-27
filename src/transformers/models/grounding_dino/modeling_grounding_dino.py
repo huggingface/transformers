@@ -1368,7 +1368,7 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
     config: GroundingDinoConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):

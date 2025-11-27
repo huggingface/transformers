@@ -41,7 +41,7 @@ if is_torch_available():
 class ColQwen2PreTrainedModel(PreTrainedModel):
     config: ColQwen2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True

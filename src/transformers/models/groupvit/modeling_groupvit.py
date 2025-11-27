@@ -746,7 +746,7 @@ class GroupViTEncoderLayer(GradientCheckpointingLayer):
 class GroupViTPreTrainedModel(PreTrainedModel):
     config: GroupViTConfig
     base_model_prefix = "groupvit"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -1022,7 +1022,7 @@ class GroupViTTextTransformer(nn.Module):
 
 class GroupViTTextModel(GroupViTPreTrainedModel):
     config: GroupViTTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: GroupViTTextConfig):
         super().__init__(config)
@@ -1127,7 +1127,7 @@ class GroupViTVisionTransformer(nn.Module):
 class GroupViTVisionModel(GroupViTPreTrainedModel):
     config: GroupViTVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__(config)

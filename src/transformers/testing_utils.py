@@ -21,6 +21,7 @@ import functools
 import gc
 import importlib
 import inspect
+import json
 import logging
 import multiprocessing
 import os
@@ -41,7 +42,7 @@ from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
@@ -50,8 +51,13 @@ import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
-from transformers import Trainer
 from transformers import logging as transformers_logging
+
+
+if TYPE_CHECKING:
+    from .trainer import Trainer
+else:
+    Trainer = Any  # type: ignore
 
 from .integrations import (
     is_clearml_available,
@@ -592,7 +598,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn")
+        get_kernel("kernels-community/flash-attn2")
     except Exception as _:
         kernels_available = False
 
@@ -1808,7 +1814,7 @@ class TemporaryHubRepo:
     ```
     """
 
-    def __init__(self, namespace: Optional[str] = None, token: Optional[str] = None) -> None:
+    def __init__(self, namespace: str | None = None, token: str | None = None) -> None:
         self.token = token
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_id = Path(tmp_dir).name
@@ -1825,7 +1831,7 @@ class TemporaryHubRepo:
 
 @contextlib.contextmanager
 # adapted from https://stackoverflow.com/a/64789046/9201239
-def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
+def ExtendSysPath(path: str | os.PathLike) -> Iterator[None]:
     """
     Temporary add given path to `sys.path`.
 
@@ -2005,14 +2011,12 @@ class TestCasePlus(unittest.TestCase):
         paths = [self.repo_root_dir_str, self.src_dir_str]
         if "/examples" in self.test_file_dir_str:
             paths.append(self.examples_dir_str)
-        else:
-            paths.append(self.tests_dir_str)
         paths.append(env.get("PYTHONPATH", ""))
 
         env["PYTHONPATH"] = ":".join(paths)
         return env
 
-    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None):
+    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None, return_pathlib_obj=False):
         """
         Args:
             tmp_dir (`string`, *optional*):
@@ -2032,6 +2036,8 @@ class TestCasePlus(unittest.TestCase):
             after (`bool`, *optional*):
                 If `True`, delete the `tmp_dir` at the end of the test if `False`, leave the `tmp_dir` and its contents
                 intact at the end of the test.
+            return_pathlib_obj (`bool`, *optional*):
+                If `True` will return a pathlib.Path object
 
         Returns:
             tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp dir
@@ -2078,7 +2084,7 @@ class TestCasePlus(unittest.TestCase):
             # register for deletion
             self.teardown_tmp_dirs.append(tmp_dir)
 
-        return tmp_dir
+        return Path(tmp_dir).resolve() if return_pathlib_obj else tmp_dir
 
     def python_one_liner_max_rss(self, one_liner_str):
         """
@@ -2565,7 +2571,7 @@ class RequestCounter:
         return sum(self._counter.values())
 
 
-def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
+def is_flaky(max_attempts: int = 5, wait_before_retry: float | None = None, description: str | None = None):
     """
     To decorate flaky tests. They will be retried on failures.
 
@@ -2606,7 +2612,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
     return decorator
 
 
-def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
+def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
     """
     To decorate tests that download from the Hub. They can fail due to a
     variety of network issues such as timeouts, connection resets, etc.
@@ -3160,9 +3166,9 @@ def cleanup(device: str, gc_collect=False):
 
 
 # Type definition of key used in `Expectations` class.
-DeviceProperties = tuple[Optional[str], Optional[int], Optional[int]]
+DeviceProperties = tuple[str | None, int | None, int | None]
 # Helper type. Makes creating instances of `Expectations` smoother.
-PackedDeviceProperties = tuple[Optional[str], Union[None, int, tuple[int, int]]]
+PackedDeviceProperties = tuple[str | None, None | int | tuple[int, int]]
 
 
 @cache
@@ -3191,7 +3197,7 @@ def get_device_properties() -> DeviceProperties:
 
 
 def unpack_device_properties(
-    properties: Optional[PackedDeviceProperties] = None,
+    properties: PackedDeviceProperties | None = None,
 ) -> DeviceProperties:
     """
     Unpack a `PackedDeviceProperties` tuple into consistently formatted `DeviceProperties` tuple. If properties is None, it is fetched.
@@ -3748,7 +3754,7 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
-def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):
+def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
     """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
         tmp.write(script)
@@ -4076,3 +4082,13 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
     cache[(id(obj), indent, mode, prefix)] = output
 
     return output
+
+
+def write_file(file, content):
+    with open(file, "w") as f:
+        f.write(content)
+
+
+def read_json_file(file):
+    with open(file, "r") as fh:
+        return json.load(fh)

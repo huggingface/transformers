@@ -25,7 +25,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import TOKENIZER_CONFIG_FILE
+from ...tokenization_python import TOKENIZER_CONFIG_FILE
 from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -95,6 +95,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
+        ("layoutxlm", "LayoutXLMProcessor"),
         ("lfm2_vl", "Lfm2VlProcessor"),
         ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),

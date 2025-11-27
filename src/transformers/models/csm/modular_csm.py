@@ -126,7 +126,7 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 class CsmPreTrainedModel(PreTrainedModel):
     config: CsmConfig
     base_model_prefix = "model"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]

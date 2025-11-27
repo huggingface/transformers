@@ -72,7 +72,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_bias (`bool`, *optional*, defaults to `False`):

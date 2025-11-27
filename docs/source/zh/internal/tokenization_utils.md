@@ -30,9 +30,6 @@ rendered properly in your Markdown viewer.
     - __call__
     - all
 
-## SpecialTokensMixin
-
-[[autodoc]] tokenization_utils_base.SpecialTokensMixin
 
 ## Enums和namedtuples(命名元组)
 
