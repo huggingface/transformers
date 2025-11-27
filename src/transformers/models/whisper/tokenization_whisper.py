@@ -204,6 +204,7 @@ class WhisperTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model_type = "BPE"
 
     def __init__(
         self,

@@ -89,6 +89,7 @@ class FunnelTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = None
+    model_type = "WordPiece"  # WordPiece model expects dict[str, int]
     cls_token_type_id: int = 2
 
     def __init__(
@@ -117,9 +118,7 @@ class FunnelTokenizer(TokenizersBackend):
         self.wordpieces_prefix = wordpieces_prefix
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(pad_token): 0,

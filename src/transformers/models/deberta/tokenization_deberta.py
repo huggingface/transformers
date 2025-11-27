@@ -93,6 +93,7 @@ class DebertaTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
+    model_type = "BPE"
 
     def __init__(
         self,
@@ -114,9 +115,7 @@ class DebertaTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(unk_token): 0,

@@ -2175,12 +2175,18 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         files_loaded = [spm_filename]
                         init_kwargs["backend"] = "tokenizers"
                         init_kwargs["files_loaded"] = files_loaded
+                        
+                        # Determine which vocab format to use based on tokenizer's model_type
+                        # BPE and WordPiece use dict, Unigram uses list
+                        model_type = getattr(cls, "model_type", "Unigram")
+                        vocab = vocab_ids if model_type in ("BPE", "WordPiece") else vocab_scores
+                        
                         # If tokenizer needs merges too (BPE), pass both; unigram models only need vocab
                         if "merges" in class_sig.parameters:
                             return cls.from_pretrained(
                                 pretrained_model_name_or_path,
                                 *init_inputs,
-                                vocab=vocab_scores,
+                                vocab=vocab,
                                 merges=merges,
                                 **init_kwargs,
                             )
@@ -2188,7 +2194,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                             return cls.from_pretrained(
                                 pretrained_model_name_or_path,
                                 *init_inputs,
-                                vocab=vocab_scores,
+                                vocab=vocab,
                                 **init_kwargs,
                             )
                     except Exception as e:

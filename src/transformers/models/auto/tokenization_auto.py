@@ -517,15 +517,21 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                         files_loaded.append(spm_file)
                         kwargs["backend"] = "tokenizers"
                         kwargs["files_loaded"] = files_loaded
+                        
+                        # Determine which vocab format to use based on tokenizer's model_type
+                        # BPE and WordPiece use dict, Unigram uses list
+                        model_type = getattr(tokenizer_class, "model_type", "Unigram")
+                        vocab = vocab_ids if model_type in ("BPE", "WordPiece") else vocab_scores
+                        
                         # If tokenizer needs both vocab and merges (BPE models)
                         if "merges" in fast_sig.parameters:
                             return tokenizer_class.from_pretrained(
-                                pretrained_model_name_or_path, *inputs, vocab=vocab_scores, merges=merges, **kwargs
+                                pretrained_model_name_or_path, *inputs, vocab=vocab, merges=merges, **kwargs
                             )
                         # If tokenizer only needs vocab (Unigram models like NLLB, SeamlessM4T)
                         else:
                             return tokenizer_class.from_pretrained(
-                                pretrained_model_name_or_path, *inputs, vocab=vocab_scores, **kwargs
+                                pretrained_model_name_or_path, *inputs, vocab=vocab, **kwargs
                             )
                     except Exception:
                         pass

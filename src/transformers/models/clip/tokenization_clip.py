@@ -59,6 +59,7 @@ class CLIPTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
+    model_type = "BPE"
 
     def __init__(
         self,
@@ -76,7 +77,7 @@ class CLIPTokenizer(TokenizersBackend):
         self.merges_file = merges_file
 
         if vocab is not None:
-            _vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
+            _vocab = vocab
         else:
             _vocab = {
                 str(bos_token): 0,

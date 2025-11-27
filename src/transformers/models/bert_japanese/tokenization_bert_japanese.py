@@ -36,6 +36,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "spm_file": "spiece.model"}
 SPIECE_UNDERLINE = "▁"
 
 
+# Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
@@ -47,6 +48,7 @@ def load_vocab(vocab_file):
     return vocab
 
 
+# Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
@@ -612,6 +614,7 @@ class CharacterTokenizer:
         return output_tokens
 
 
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -773,6 +776,7 @@ class BasicTokenizer:
         return "".join(output)
 
 
+# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 

@@ -83,6 +83,7 @@ class AlbertTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
+    model_type = "Unigram"
 
     def __init__(
         self,
@@ -109,7 +110,7 @@ class AlbertTokenizer(TokenizersBackend):
         self.keep_accents = keep_accents
 
         if vocab is not None:
-            self._vocab_scores = [(token, 0.0) for token in vocab.keys()] if isinstance(vocab, dict) else list(vocab)
+            self._vocab_scores = list(vocab)
         else:
             self._vocab_scores = [
                 (str(pad_token), 0.0),

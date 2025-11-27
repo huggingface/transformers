@@ -98,6 +98,7 @@ class XLNetTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
+    model_type = "Unigram"
 
     def __init__(
         self,

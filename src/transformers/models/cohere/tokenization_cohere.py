@@ -111,6 +111,7 @@ class CohereTokenizer(TokenizersBackend):
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
+    model_type = "BPE"
     # No `max_model_input_sizes`
 
     def __init__(
@@ -139,9 +140,7 @@ class CohereTokenizer(TokenizersBackend):
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
         if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
+            self._vocab = vocab
         else:
             self._vocab = {
                 str(pad_token): 0,
