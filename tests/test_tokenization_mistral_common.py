@@ -284,7 +284,10 @@ class TestMistralCommonBackend(unittest.TestCase):
         ) + expected_long
         self.assertEqual(tokens_with_padding_and_truncation, expected_long_padding)
 
-        # Test encode with unsupported kwargs
+        # Test 8:
+        # encode empty string
+        self.assertEqual(self.tokenizer.encode("", add_special_tokens=False), [])
+
         with self.assertRaises(
             ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.encode`."
         ):
@@ -321,6 +324,10 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(self.tokenizer.decode(np.array(tokens_ids), skip_special_tokens=True), string)
 
         # Test 5:
+        # decode empty string
+        self.assertEqual(self.tokenizer.decode([], skip_special_tokens=True), "")
+
+        # Test 6:
         # decode with unsupported kwargs
         with self.assertRaises(
             ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.decode`."
@@ -385,7 +392,14 @@ class TestMistralCommonBackend(unittest.TestCase):
             ["Hello, world!", "Hello, world!"],
         )
 
-        # Test 2:
+        # Test 4:
+        # decode empty list
+        self.assertEqual(self.tokenizer.batch_decode([], skip_special_tokens=True), [])
+        self.assertEqual(
+            self.tokenizer.batch_decode([batch_tokens_ids[0], []], skip_special_tokens=True), [string, ""]
+        )
+
+        # Test 5:
         # batch_decode with unsupported kwargs
         with self.assertRaises(
             ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_decode`."
@@ -410,6 +424,11 @@ class TestMistralCommonBackend(unittest.TestCase):
         tokens = self.tokenizer.convert_ids_to_tokens(ids, skip_special_tokens=True)
         self.assertEqual(tokens, expected_tokens)
 
+        # Test 3:
+        # with empty list
+        tokens = self.tokenizer.convert_ids_to_tokens([])
+        self.assertEqual(tokens, [])
+
         with self.assertRaises(ValueError):
             self.tokenizer.convert_ids_to_tokens(ids[0], skip_special_tokens=True)
         token = self.tokenizer.convert_ids_to_tokens(ids[1], skip_special_tokens=True)
@@ -429,14 +448,26 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(id, expected_ids[0])
         self.assertEqual(id, self.tokenizer.convert_tokens_to_ids(tokens[0]))
 
+        # Test 3:
+        # with empty list
+        ids = self.tokenizer.convert_tokens_to_ids([])
+        self.assertEqual(ids, [])
+
     def test_tokenize(self):
         string = "Hello world!"
+        # Test 1:
+        # with string
         expected_tokens = [
             self.ref_tokenizer.instruct_tokenizer.tokenizer.id_to_piece(id)
             for id in self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=False, eos=False)
         ]
         tokens = self.tokenizer.tokenize(string)
         self.assertEqual(tokens, expected_tokens)
+
+        # Test 2:
+        # with empty string
+        tokens = self.tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
 
         with self.assertRaises(
             ValueError, msg="Kwargs [add_special_tokens] are not supported by `MistralCommonBackend.tokenize`."
@@ -1548,6 +1579,13 @@ class TestMistralCommonBackend(unittest.TestCase):
         self.assertEqual(tokens["attention_mask"], [1] * len(expected_tokens))
         self.assertEqual(tokens["special_tokens_mask"], [1] + [0] * (len(expected_tokens) - 2) + [1])
 
+        # Test 7:
+        # empty string
+        tokens = self.tokenizer("", add_special_tokens=False)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], [])
+        self.assertEqual(tokens["attention_mask"], [])
+
         with self.assertRaises(
             ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonBackend.__call__`."
         ):
@@ -1747,6 +1785,26 @@ class TestMistralCommonBackend(unittest.TestCase):
             tokens["special_tokens_mask"],
             [[1] + [0] * (len(expected_tokens[0]) - 2) + [1], [1] + [0] * (len(expected_tokens[1]) - 2) + [1]],
         )
+
+        # Test 6:
+        # empty string in batch
+        expected_tokens = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(t, bos=False, eos=False) for t in text
+        ]
+        expected_tokens.append([])
+        tokens = self.tokenizer(text + [""], add_special_tokens=False, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], expected_tokens)
+        self.assertEqual(tokens["attention_mask"], [[1] * len(t) for t in expected_tokens])
+        self.assertEqual(tokens["special_tokens_mask"], [[0] * len(t) for t in expected_tokens])
+
+        # Test 7:
+        # empty batch
+        tokens = self.tokenizer([""], add_special_tokens=False, return_special_tokens_mask=True)
+        self.assertIsInstance(tokens, BatchEncoding)
+        self.assertEqual(tokens["input_ids"], [[]])
+        self.assertEqual(tokens["attention_mask"], [[]])
+        self.assertEqual(tokens["special_tokens_mask"], [[]])
 
     def test_batch_call_with_truncation(self):
         # Test 1:
