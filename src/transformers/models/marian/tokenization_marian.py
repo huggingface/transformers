@@ -20,7 +20,7 @@ from typing import Any, Optional, Union
 
 import sentencepiece
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 from ...utils.import_utils import requires
 
@@ -128,7 +128,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.encoder = load_json(vocab)
         if str(unk_token) not in self.encoder:
             raise KeyError("<unk> token must be in the vocab")
-        assert str(pad_token) in self.encoder
 
         if separate_vocabs:
             self.target_encoder = load_json(target_vocab_file)
@@ -151,6 +150,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         # Multilingual target side: default to using first supported language code.
 
         self._setup_normalizer()
+
+        self._decode_use_source_tokenizer = False
 
         super().__init__(
             # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
@@ -180,7 +181,11 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.punc_normalizer(x) if x else ""
 
     def _convert_token_to_id(self, token):
-        return self.current_encoder.get(token, self.current_encoder[self.unk_token])
+        if token in self.current_encoder:
+            return self.current_encoder[token]
+        # The Marian vocab is not aligned with the SentencePiece IDs, so falling back to raw
+        # SentencePiece indices would map to unrelated tokens. Treat such pieces as unknown.
+        return self.current_encoder[self.unk_token]
 
     def remove_language_code(self, text: str):
         """Remove language codes like >>fr<< before sentencepiece"""
@@ -197,7 +202,12 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the decoder."""
-        return self.decoder.get(index, self.unk_token)
+        if index in self.decoder:
+            return self.decoder[index]
+        # Fall back to SPM model for IDs not in external vocab
+        spm_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
+        piece = spm_model.IdToPiece(index)
+        return piece if piece else self.unk_token
 
     def batch_decode(self, sequences, **kwargs):
         """
@@ -247,6 +257,23 @@ class MarianTokenizer(PreTrainedTokenizer):
             `str`: The decoded sentence.
         """
         return super().decode(token_ids, **kwargs)
+
+    def _decode(
+        self,
+        token_ids,
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """Internal decode method that handles use_source_tokenizer parameter."""
+        default_use_source = not self.separate_vocabs
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", default_use_source)
+        return super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
@@ -351,6 +378,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         # for backward compatibility
         if not hasattr(self, "sp_model_kwargs"):
             self.sp_model_kwargs = {}
+        if not hasattr(self, "_decode_use_source_tokenizer"):
+            self._decode_use_source_tokenizer = False
 
         self.spm_source, self.spm_target = (load_spm(f, self.sp_model_kwargs) for f in self.spm_files)
         self.current_spm = self.spm_source
