@@ -19,7 +19,7 @@ import re
 import string
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Optional, Any, Coroutine
+from typing import Annotated, Any, Optional
 
 import click
 import typer
@@ -103,22 +103,17 @@ class RichInterface:
         self.model_id = model_id
         self.user_id = user_id
 
-    async def stream_output(
-        self, stream: AsyncIterator[ChatCompletionStreamOutput]
-    ) -> tuple[str | Any, str | None, list[int]]:
+    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str | Any, str | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
             finish_reason: str | None = None
-            completion_tokens: int = 0
             async for token in await stream:
                 outputs = token.choices[0].delta.content
                 finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
 
                 if not outputs:
                     continue
-
-                completion_tokens += 1
 
                 # Escapes single words encased in <>, e.g. <think> -> \<think\>, for proper rendering in Markdown.
                 # It only escapes single words that may have `_`, optionally following a `/` (e.g. </think>)
@@ -154,7 +149,7 @@ class RichInterface:
 
         self._console.print()
 
-        return text, finish_reason, completion_tokens
+        return text, finish_reason
 
     def input(self) -> str:
         """Gets user input from the console."""
@@ -473,19 +468,12 @@ class Chat:
                         },
                     )
 
-                    model_output, finish_reason, completion_tokens = await interface.stream_output(stream)
+                    model_output, finish_reason = await interface.stream_output(stream)
 
                     chat.append({"role": "assistant", "content": model_output})
 
                     if finish_reason == "length":
-                        limit_hit = completion_tokens > config.max_new_tokens
-                        if limit_hit is not None:
-                            limit_message = f"Generation stopped after reaching the token limit ({limit_hit} tokens)."
-                        else:
-                            limit_message = "Generation stopped after reaching the token limit."
-
-                        interface.print_color(limit_message, "yellow")
-
+                        interface.print_color("Generation stopped after reaching the token limit.", "yellow")
                         if interface.confirm("Continue generating?"):
                             pending_user_input = "Please continue. Do not repeat text.”"
                             continue
