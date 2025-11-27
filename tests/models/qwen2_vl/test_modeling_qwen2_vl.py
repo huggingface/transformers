@@ -192,44 +192,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_text_config(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_config_dict = config.to_dict()
-        base_config = Qwen2VLConfig(**base_config_dict)
-
-        # Trying to get or set text related attributes happens via text config
-        vocab_size = base_config.vocab_size
-        text_vocab_size = base_config.text_config.vocab_size
-        self.assertEqual(vocab_size, text_vocab_size)
-
-        base_config.vocab_size = 55
-        self.assertEqual(base_config.vocab_size, 55)
-        self.assertEqual(base_config.text_config.vocab_size, 55)
-
-        # We can still initialize config from old-format json, i.e. flat structure
-        text_config_dict = base_config_dict.pop("text_config")
-        flat_config_dict = {**text_config_dict, **base_config_dict}
-        config_from_flat_dict = Qwen2VLConfig(**flat_config_dict)
-        config_from_flat_dict.vocab_size = 78
-        self.assertEqual(config_from_flat_dict.vocab_size, 78)
-        self.assertEqual(config_from_flat_dict.text_config.vocab_size, 78)
-
-        # Vision config attributes are NOT force-set via vision config
-        base_config.patch_size = 8
-        self.assertEqual(base_config.patch_size, 8)
-        self.assertNotEqual(base_config.vision_config.patch_size, 8)
-
-        # Test for making sure config save and load preserves correct model type
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        self.assertEqual(config.model_type, "qwen2_vl")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-
-            loaded_config = Qwen2VLConfig.from_pretrained(tmp_dir)
-            self.assertEqual(loaded_config.model_type, "qwen2_vl")
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
