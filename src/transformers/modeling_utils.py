@@ -2249,7 +2249,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_mapping = self._tied_weights_keys
         text_config = self.config.get_text_config(decoder=True)
-        tie_word_embeddings = getattr(text_config, "tie_word_embeddings", self.config.tie_word_embeddings)
+        if not hasattr(text_config, "tie_word_embeddings"):
+            logger.warning(
+                f"Text config {text_config.__class__.__name__} does not have 'tie_word_embeddings' attribute. "
+                "This may cause issues with weight tying."
+            )
+        tie_word_embeddings = text_config.tie_word_embeddings
         # If the config does not specify any tying, return empty dict
         if not tie_word_embeddings and not self.config.tie_encoder_decoder:
             return {}
