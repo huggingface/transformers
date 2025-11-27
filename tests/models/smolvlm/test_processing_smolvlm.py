@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import SmolVLMProcessor
 from transformers.image_utils import load_image
-from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -31,13 +28,10 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
     videos_input_name = "pixel_values"
+    model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = SmolVLMProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct", **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
                 "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
@@ -58,32 +52,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.video_token = processor.video_token
         cls.fake_image_token = processor.fake_image_token
         cls.global_img_token = processor.global_image_token
-
         cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
         cls.image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.image_token)
         cls.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.fake_image_token)
         cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.image1.close()
-        cls.image2.close()
-        cls.image3.close()
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @staticmethod
     def prepare_processor_dict():

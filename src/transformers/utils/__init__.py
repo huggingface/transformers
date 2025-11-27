@@ -95,12 +95,10 @@ from .hub import (
     cached_file,
     default_cache_path,
     define_sagemaker_information,
-    download_url,
     extract_commit_hash,
     has_file,
     http_user_agent,
     is_offline_mode,
-    is_remote_url,
     list_repo_templates,
     try_to_load_from_cache,
 )

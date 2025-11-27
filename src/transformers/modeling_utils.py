@@ -105,7 +105,6 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
-    download_url,
     has_file,
     is_accelerate_available,
     is_flash_attn_2_available,
@@ -113,7 +112,6 @@ from .utils import (
     is_flash_attn_4_available,
     is_kernels_available,
     is_offline_mode,
-    is_remote_url,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -533,9 +531,6 @@ def _get_resolved_checkpoint_files(
         elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
             archive_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            filename = pretrained_model_name_or_path
-            resolved_archive_file = download_url(pretrained_model_name_or_path)
         else:
             # set correct filename
             if transformers_explicit_filename is not None:
@@ -2121,7 +2116,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return getattr(self, name)
 
         if self.base_model is not self and hasattr(self.base_model, "get_encoder"):
-            return self.base_model.get_encoder(modality=modality)
+            base_encoder = self.base_model.get_encoder(modality=modality)
+            # Base model will always have attr `get_encoder` if inherited from `PreTrainedModel`
+            # But it doesn't mean that the model has an encoder module, and we need to return `self`
+            if base_encoder != self.base_model:
+                return base_encoder
 
         # If this is a base transformer model (no encoder/model attributes), return self
         return self
@@ -4746,6 +4745,7 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "paged|flash_attention_3": paged_attention_forward,
         "paged|flash_attention_2": paged_attention_forward,
         "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,
