@@ -19,7 +19,11 @@ import os
 from shutil import copyfile
 from typing import Optional, Union
 
-import sentencepiece as spm
+
+try:
+    import sentencepiece as spm
+except ImportError:
+    spm = None
 
 from .convert_slow_tokenizer import import_protobuf
 from .tokenization_python import PreTrainedTokenizer
@@ -295,7 +299,7 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple[str, float]], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.

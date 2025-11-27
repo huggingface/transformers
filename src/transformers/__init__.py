@@ -131,6 +131,7 @@ _import_structure = {
     "loss": [],
     "modelcard": ["ModelCard"],
     "pipelines": [
+        "AnyToAnyPipeline",
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
@@ -173,6 +174,7 @@ _import_structure = {
     "quantizers": [],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer", "PythonBackend"],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
@@ -201,10 +203,7 @@ _import_structure = {
     "utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
-        "PYTORCH_PRETRAINED_BERT_CACHE",
-        "PYTORCH_TRANSFORMERS_CACHE",
         "SPIECE_UNDERLINE",
-        "TRANSFORMERS_CACHE",
         "WEIGHTS_NAME",
         "TensorType",
         "add_end_docstrings",
@@ -278,7 +277,6 @@ else:
     # Fast tokenizers structure
     _import_structure["tokenization_utils_tokenizers"] = [
         "TokenizersBackend",
-        "TokenizersExtractor",
         "PreTrainedTokenizerFast",
     ]
 
@@ -308,7 +306,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_mistral_common_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["tokenization_mistral_common"] = ["MistralCommonTokenizer"]
+    _import_structure["tokenization_mistral_common"] = ["MistralCommonBackend"]
 
 # Vision-specific objects
 try:
@@ -640,6 +638,7 @@ if TYPE_CHECKING:
     from .optimization import get_wsd_schedule as get_wsd_schedule
 
     # Pipelines
+    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
@@ -691,14 +690,10 @@ if TYPE_CHECKING:
     from .tokenization_utils_base import TokenSpan as TokenSpan
 
     # Tokenization
-    if is_sentencepiece_available():
-        from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
+    from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
     from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
     from .tokenization_utils_tokenizers import (
         TokenizersBackend as TokenizersBackend,
-    )
-    from .tokenization_utils_tokenizers import (
-        TokenizersExtractor as TokenizersExtractor,
     )
 
     # Trainer
@@ -723,10 +718,7 @@ if TYPE_CHECKING:
     # Files and general utilities
     from .utils import CONFIG_NAME as CONFIG_NAME
     from .utils import MODEL_CARD_NAME as MODEL_CARD_NAME
-    from .utils import PYTORCH_PRETRAINED_BERT_CACHE as PYTORCH_PRETRAINED_BERT_CACHE
-    from .utils import PYTORCH_TRANSFORMERS_CACHE as PYTORCH_TRANSFORMERS_CACHE
     from .utils import SPIECE_UNDERLINE as SPIECE_UNDERLINE
-    from .utils import TRANSFORMERS_CACHE as TRANSFORMERS_CACHE
     from .utils import WEIGHTS_NAME as WEIGHTS_NAME
     from .utils import TensorType as TensorType
     from .utils import add_end_docstrings as add_end_docstrings

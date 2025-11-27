@@ -237,26 +237,6 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         self.assertTrue(abs(sum(np.asarray(input_values_8[1])[1000:])) < 1e-3)
         self.assertTrue(abs(sum(np.asarray(input_values_8[2])[1200:])) < 1e-3)
 
-    def test_save_pretrained(self):
-        pretrained_name = list(self.tokenizer_class.pretrained_vocab_files_map["vocab_file"].keys())[0]
-        tokenizer = self.get_tokenizer(pretrained_name)
-        tmpdirname2 = tempfile.mkdtemp()
-
-        tokenizer_files = tokenizer.save_pretrained(tmpdirname2)
-        self.assertSequenceEqual(
-            sorted(tuple(VOCAB_FILES_NAMES.values()) + ("special_tokens_map.json", "added_tokens.json")),
-            sorted(x.split(os.path.sep)[-1] for x in tokenizer_files),
-        )
-
-        # Checks everything loads correctly in the same way
-        tokenizer_p = self.tokenizer_class.from_pretrained(tmpdirname2)
-
-        # Check special tokens are set accordingly on Rust and Python
-        for key in tokenizer.special_tokens_map:
-            self.assertTrue(key in tokenizer_p.special_tokens_map)
-
-        shutil.rmtree(tmpdirname2)
-
     def test_get_vocab(self):
         tokenizer = self.get_tokenizer()
         vocab_dict = tokenizer.get_vocab()

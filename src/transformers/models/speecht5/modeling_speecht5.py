@@ -2309,7 +2309,7 @@ def _generate_speech(
     """
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
-    input_modalities = "text"
+    input_modalities = ("text",)
     main_input_name = "input_ids"
 
     def __init__(self, config: SpeechT5Config):

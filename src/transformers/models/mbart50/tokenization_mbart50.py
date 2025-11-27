@@ -114,13 +114,10 @@ class MBart50Tokenizer(TokenizersBackend):
 
             vocab = [(str(item[0]), float(item[1])) for item in vocab]
 
-            # Check if vocab already includes language codes (from TokenizersExtractor/tokenizer.json)
             vocab_tokens = [item[0] for item in vocab]
             has_language_codes = any(lang_code in vocab_tokens for lang_code in FAIRSEQ_LANGUAGE_CODES)
 
             if has_language_codes:
-                # Vocab from TokenizersExtractor is already in fairseq format with language codes
-                # Just use it as-is
                 self._vocab_scores = vocab
             else:
                 # Vocab from SentencePieceExtractor is in sentencepiece format:

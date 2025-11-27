@@ -106,10 +106,6 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    @unittest.skip(reason="Adding multicharacter tokens does not work the VITS tokenizer")
-    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
-        pass
-
     def test_ron_normalization(self):
         tokenizer = self.get_tokenizer()
         tokenizer.language = "ron"

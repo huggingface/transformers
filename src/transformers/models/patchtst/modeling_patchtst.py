@@ -553,7 +553,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     config: PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = False
 
     @torch.no_grad()

@@ -281,6 +281,7 @@ OBJECTS_TO_IGNORE = {
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
+    "AnyToAnyPipeline",
     "ImageToImagePipeline",
     "ImageToTextPipeline",
     "InformerConfig",
@@ -421,7 +422,6 @@ OBJECTS_TO_IGNORE = {
     "SeamlessM4TConfig",  # use of unconventional markdown
     "SeamlessM4Tv2Config",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
-    "SpecialTokensMixin",
     "Speech2Text2Config",
     "Speech2Text2Tokenizer",
     "Speech2TextTokenizer",

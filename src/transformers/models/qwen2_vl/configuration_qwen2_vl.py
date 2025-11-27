@@ -14,6 +14,7 @@
 # limitations under the License.
 """Qwen2VL model configuration"""
 
+import inspect
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -115,6 +116,12 @@ class Qwen2VLTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        bos_token_id (`int`, *optional*, defaults to 151643):
+            The id of the _beginning-of-stream_ token.
+        eos_token_id (`int`, *optional*, defaults to 151645):
+            The id of the _end-of-stream_ token.
+        pad_token_id (`int`, *optional*):
+            The id of the _padding_ token.
 
     ```python
     >>> from transformers import Qwen2VLTextModel, Qwen2VLConfig
@@ -168,6 +175,9 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        bos_token_id: Optional[int] = 151643,
+        eos_token_id: Optional[int] = 151645,
+        pad_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -210,7 +220,14 @@ class Qwen2VLTextConfig(PreTrainedConfig):
         if self.rope_parameters["rope_type"] == "mrope":
             self.rope_parameters["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            **kwargs,
+        )
 
 
 class Qwen2VLConfig(PreTrainedConfig):
@@ -265,11 +282,6 @@ class Qwen2VLConfig(PreTrainedConfig):
         vision_end_token_id=151653,
         **kwargs,
     ):
-        # We need to init super() here so that it does not reset values
-        # that are in text config to the BaseClass defaults. The Base
-        # config has many text related defaults and not all defaults are same as for `Qwen2VLTextConfig`
-        super().__init__(**kwargs)
-
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -278,39 +290,21 @@ class Qwen2VLConfig(PreTrainedConfig):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
-            # For BC use all kwargs to init `TextConfig`
-            self.text_config = self.sub_configs["text_config"](**kwargs)
+            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
+            text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
+            text_params = list(text_params) + ["rope_scaling", "rope_theta"]
+            text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+            text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+            self.text_config = self.sub_configs["text_config"](**text_config)
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
-        # Attention implementation to use. It sets it recursively on sub-configs so we call it again in the end
-        self._attn_implementation = kwargs.pop("attn_implementation", None)
-
-    def __setattr__(self, key, value):
-        if (
-            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
-            and key not in ["_name_or_path", "model_type", "dtype", "_attn_implementation_internal"]
-            and key in text_config.__dict__
-        ):
-            setattr(text_config, key, value)
-        else:
-            super().__setattr__(key, value)
-
-    def __getattribute__(self, key):
-        if "text_config" in super().__getattribute__("__dict__") and key not in [
-            "_name_or_path",
-            "model_type",
-            "dtype",
-            "_attn_implementation_internal",
-        ]:
-            text_config = super().__getattribute__("text_config")
-            if key in text_config.__dict__:
-                return getattr(text_config, key)
-
-        return super().__getattribute__(key)
+        # FIXME: arthur/cyril - tying has to be used from the text config
+        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig"]

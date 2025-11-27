@@ -37,6 +37,7 @@ from transformers import (
     Qwen2TokenizerFast,
     Qwen3MoeConfig,
     RobertaTokenizer,
+    TokenizersBackend,
     is_tokenizers_available,
     logging,
 )
@@ -301,7 +302,7 @@ class AutoTokenizerTest(unittest.TestCase):
                 tokenizer.save_pretrained(tmp_dir)
 
                 new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-                self.assertIsInstance(new_tokenizer, CustomTokenizer)
+                self.assertIsInstance(new_tokenizer, TokenizersBackend)
 
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:

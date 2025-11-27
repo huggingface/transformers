@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
 
 import numpy as np
-from huggingface_hub import list_repo_files
+from huggingface_hub import create_repo, list_repo_files
 from packaging import version
 
 from . import __version__
@@ -46,13 +46,11 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
-    download_url,
     extract_commit_hash,
     is_mlx_available,
     is_numpy_array,
     is_offline_mode,
     is_protobuf_available,
-    is_remote_url,
     is_tokenizers_available,
     is_torch_available,
     is_torch_device,
@@ -1211,6 +1209,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self, new_tokens: Union[str, AddedToken, Sequence[Union[str, AddedToken]]], special_tokens: bool = False
     ) -> int:
         """
+        #TODO remove this from here! PreTrainedTOkeniuzerBase should be agnostic of AddedToken.
+
         Add a list of new tokens. If the new tokens are not in the vocabulary, they are added to the end. Added tokens and
         tokens from the vocabulary of the tokenization algorithm are therefore not treated in the same way.
 
@@ -1616,7 +1616,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
         single_file_id = None
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+        if os.path.isfile(pretrained_model_name_or_path):
             # For legacy support: allow single-file loading if:
             # 1. Only one vocab file is required, OR
             # 2. It's a fast tokenizer with tokenizer_file (which is optional), OR
@@ -1650,65 +1650,63 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
 
-                vocab_files = {**cls.vocab_files_names, **additional_files_names}
-                if "tokenizer_file" in vocab_files:
-                    # Try to get the tokenizer config to see if there are versioned tokenizer files.
-                    fast_tokenizer_file = FULL_TOKENIZER_FILE
+            vocab_files = {**cls.vocab_files_names, **additional_files_names}
+            if "tokenizer_file" in vocab_files:
+                # Try to get the tokenizer config to see if there are versioned tokenizer files.
+                fast_tokenizer_file = FULL_TOKENIZER_FILE
 
-                    try:
-                        resolved_config_file = cached_file(
-                            pretrained_model_name_or_path,
-                            TOKENIZER_CONFIG_FILE,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            token=token,
-                            revision=revision,
-                            local_files_only=local_files_only,
-                            subfolder=subfolder,
-                            user_agent=user_agent,
-                            _raise_exceptions_for_missing_entries=False,
-                            _commit_hash=commit_hash,
-                        )
-                    except OSError:
-                        # Re-raise any error raised by cached_file in order to get a helpful error message
-                        raise
-                    except Exception:
-                        # For any other exception, we throw a generic error.
-                        raise OSError(
-                            f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                            "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                            f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                            f"containing all relevant files for a {cls.__name__} tokenizer."
-                        )
+                try:
+                    resolved_config_file = cached_file(
+                        pretrained_model_name_or_path,
+                        TOKENIZER_CONFIG_FILE,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        token=token,
+                        revision=revision,
+                        local_files_only=local_files_only,
+                        subfolder=subfolder,
+                        user_agent=user_agent,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
+                    )
+                except OSError:
+                    # Re-raise any error raised by cached_file in order to get a helpful error message
+                    raise
+                except Exception:
+                    # For any other exception, we throw a generic error.
+                    raise OSError(
+                        f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                        "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                        f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                        f"containing all relevant files for a {cls.__name__} tokenizer."
+                    )
 
-                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                    if resolved_config_file is not None:
-                        with open(resolved_config_file, encoding="utf-8") as reader:
-                            tokenizer_config = json.load(reader)
-                            if "fast_tokenizer_files" in tokenizer_config:
-                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    vocab_files["tokenizer_file"] = fast_tokenizer_file
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+                if resolved_config_file is not None:
+                    with open(resolved_config_file, encoding="utf-8") as reader:
+                        tokenizer_config = json.load(reader)
+                        if "fast_tokenizer_files" in tokenizer_config:
+                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                vocab_files["tokenizer_file"] = fast_tokenizer_file
 
-                    # This block looks for any extra chat template files
-                    if is_local:
-                        template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
-                        if template_dir.is_dir():
-                            for template_file in template_dir.glob("*.jinja"):
-                                template_name = template_file.name.removesuffix(".jinja")
-                                vocab_files[f"chat_template_{template_name}"] = (
-                                    f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
-                                )
-                    else:
-                        for template in list_repo_templates(
-                            pretrained_model_name_or_path,
-                            local_files_only=local_files_only,
-                            revision=revision,
-                            cache_dir=cache_dir,
-                            token=token,
-                        ):
-                            template = template.removesuffix(".jinja")
-                            vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
+                # This block looks for any extra chat template files
+                if is_local:
+                    template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                    if template_dir.is_dir():
+                        for template_file in template_dir.glob("*.jinja"):
+                            template_name = template_file.name.removesuffix(".jinja")
+                            vocab_files[f"chat_template_{template_name}"] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                else:
+                    for template in list_repo_templates(
+                        pretrained_model_name_or_path,
+                        local_files_only=local_files_only,
+                        revision=revision,
+                        cache_dir=cache_dir,
+                        token=token,
+                    ):
+                        template = template.removesuffix(".jinja")
+                        vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         remote_files = []
         if not is_local and not local_files_only:
@@ -1733,8 +1731,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             elif single_file_id == file_id:
                 if os.path.isfile(file_path):
                     resolved_vocab_files[file_id] = file_path
-                elif is_remote_url(file_path):
-                    resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 try:
                     resolved_vocab_files[file_id] = cached_file(
@@ -1974,6 +1970,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
+        init_kwargs["is_local"] = _is_local
 
         #### Handle tokenizer serialization of added and special tokens
         added_tokens_decoder: dict[int, AddedToken] = {}
@@ -2199,7 +2196,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                                 vocab=vocab,
                                 **init_kwargs,
                             )
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not extract vocab/merges from the SentencePiece model to initialize a Tokenizers backend: {e}. We are falling back so we are falling back to the standard loading method."
+                        )
                         pass
             # Fallback to vocab.json + merges.txt (BPE) or just vocab.json (WordLevel/WordPiece)
             vocab, merges, files_loaded = load_vocab_and_merges(
@@ -2243,145 +2243,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
-        try:
-            vocab_size = tokenizer.vocab_size
-        except NotImplementedError:
-            vocab_size = 0
-
-        # Optionally patches mistral tokenizers with wrong regex
-        if (
-            vocab_size > 100000
-            and hasattr(tokenizer, "_tokenizer")
-            and getattr(tokenizer._tokenizer, "pre_tokenizer", None) is not None
-        ):
-            tokenizer = cls._patch_mistral_regex(
-                tokenizer,
-                pretrained_model_name_or_path,
-                token=token,
-                cache_dir=cache_dir,
-                local_files_only=local_files_only,
-                _commit_hash=_commit_hash,
-                _is_local=_is_local,
-                init_kwargs=init_kwargs,
-                fix_mistral_regex=kwargs.get("fix_mistral_regex"),
-            )
-
-        return tokenizer
-
-    @classmethod
-    def _patch_mistral_regex(
-        cls,
-        tokenizer,
-        pretrained_model_name_or_path,
-        token=None,
-        cache_dir=None,
-        local_files_only=False,
-        _commit_hash=None,
-        _is_local=False,
-        init_kwargs=None,
-        fix_mistral_regex=None,
-    ):
-        """
-        Patches mistral related tokenizers with incorrect regex if detected
-            1) Local file with an associated config saved next to it
-                >> Model type one of the mistral models (on older versions)
-            2) Remote models on the hub from official mistral models
-                >> Tags including `base_model:.*mistralai`
-        """
-        from huggingface_hub import model_info
-
-        def is_base_mistral(model_id: str) -> bool:
-            model = model_info(model_id)
-            if model.tags is not None:
-                if re.search("base_model:.*mistralai", "".join(model.tags)):
-                    return True
-            return False
-
-        if _is_local or is_base_mistral(pretrained_model_name_or_path):
-            _config_file = cached_file(
-                pretrained_model_name_or_path,
-                "config.json",
-                cache_dir=cache_dir,
-                token=token,
-                local_files_only=local_files_only,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-                _commit_hash=_commit_hash,
-            )
-
-            # Detected using a (local) mistral tokenizer
-            mistral_config_detected = False
-            if _config_file is not None:
-                with open(_config_file, encoding="utf-8") as f:
-                    _config = json.load(f)
-                transformers_version = _config.get("transformers_version")
-                transformers_model_type = _config.get("model_type")
-
-                # Detect if we can skip the mistral fix by
-                #   a) having a non-mistral tokenizer
-                #   b) fixed version of transformers
-                if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
-                    if (
-                        _is_local
-                        and transformers_model_type is not None
-                        and transformers_model_type
-                        not in [
-                            "mistral",
-                            "mistral3",
-                            "voxtral",
-                            "ministral",
-                            "pixtral",
-                        ]
-                    ):
-                        return tokenizer
-                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
-                    return tokenizer
-
-                mistral_config_detected = True
-
-            if mistral_config_detected or (not _is_local and is_base_mistral(pretrained_model_name_or_path)):
-                # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
-                if init_kwargs and "fix_mistral_regex" in init_kwargs:
-                    setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])
-
-                # only warn if its not explicitly passed
-                if fix_mistral_regex is None and not getattr(tokenizer, "fix_mistral_regex", False):
-                    setattr(tokenizer, "fix_mistral_regex", False)
-                    logger.warning(
-                        f"The tokenizer you are loading from '{pretrained_model_name_or_path}'"
-                        f" with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e."
-                        " This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue."
-                    )
-                elif fix_mistral_regex is True or getattr(tokenizer, "fix_mistral_regex", False):
-                    setattr(tokenizer, "fix_mistral_regex", True)
-                    import tokenizers
-
-                    split_pretokenizer = tokenizers.pre_tokenizers.Split(
-                        pattern=tokenizers.Regex(
-                            r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
-                        ),
-                        behavior="isolated",
-                    )
-                    current_pretokenizer = tokenizer.backend_tokenizer.pre_tokenizer
-                    # Check if it's already a Sequence
-                    if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Sequence):
-                        # Replace the first element (the Split pattern)
-                        tokenizer.backend_tokenizer.pre_tokenizer[0] = split_pretokenizer
-                    else:
-                        # Replace Metaspace with ByteLevel when adding Split, as Metaspace(split=False) doesn't
-                        # work correctly with the Split pre-tokenizer and causes spaces to be lost during encoding
-                        if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Metaspace):
-                            current_pretokenizer = tokenizers.pre_tokenizers.ByteLevel(
-                                add_prefix_space=False, use_regex=False
-                            )
-
-                        # Not a Sequence, so create one with Split + current pretokenizer
-                        tokenizer.backend_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
-                            [
-                                split_pretokenizer,
-                                current_pretokenizer,
-                            ]
-                        )
 
         return tokenizer
 
@@ -2457,12 +2318,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
-        special_tokens_map_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + SPECIAL_TOKENS_MAP_FILE
-        )
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
@@ -2496,7 +2354,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # no typefields, this way old fast and slow can load it
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True, save=True)
-
         # Process added tokens separately: allows previous versions to ignore it!
         added_tokens = {}
         for key, value in self.added_tokens_decoder.items():
@@ -2505,6 +2362,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
+
+        # tokenizers backend don't need to save added_tokens_decoder
+        if any(base.__name__ == "TokenizersBackend" for base in self.__class__.__mro__):
+            tokenizer_config.pop("added_tokens_decoder", None)
+
         # Remove the Fast at the end if we can save the slow tokenizer
         if tokenizer_class.endswith("Fast") and getattr(self, "can_save_slow_tokenizer", False):
             tokenizer_class = tokenizer_class[:-4]
@@ -2513,7 +2375,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenizer_config["auto_map"] = self._auto_map
         if getattr(self, "_processor_class", None) is not None:
             tokenizer_config["processor_class"] = self._processor_class
-
+        tokenizer_config.pop("files_loaded", None)
         # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
         if self._auto_class is not None:
@@ -2536,14 +2398,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Sanitize AddedTokens in special_tokens_map
 
-        # Typefields are not saved for FC, special should not be saved either
-        write_dict = self.convert_added_tokens(self.special_tokens_map, save=True, add_type_field=False)
-        with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-            f.write(out_str)
-        logger.info(f"Special tokens file saved in {special_tokens_map_file}")
-
-        file_names = (tokenizer_config_file, special_tokens_map_file, *saved_raw_chat_template_files)
+        file_names = (tokenizer_config_file, *saved_raw_chat_template_files)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
@@ -3055,8 +2910,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
+        if (
+            isinstance(encoded_inputs, (list, tuple))
+            and len(encoded_inputs) > 0
+            and isinstance(encoded_inputs[0], Mapping)
+        ):
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
