@@ -418,7 +418,7 @@ class PatchTSTEncoderLayer(nn.Module):
         super().__init__()
 
         self.channel_attention = config.channel_attention
-        # Multi-Head attention
+
         self.self_attn = PatchTSTAttention(
             embed_dim=config.d_model,
             num_heads=config.num_attention_heads,
@@ -555,6 +555,8 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     input_modalities = ("time",)
     supports_gradient_checkpointing = False
+    _supports_flash_attn = True
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
