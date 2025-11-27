@@ -28,7 +28,7 @@ from diffusers.models.attention import BasicTransformerBlock
 from librosa.filters import mel as librosa_mel_fn
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, auto_docstring
+from ...utils import add_start_docstrings_to_model_forward, auto_docstring
 from ..hiftnet.configuration_hiftnet import HiFTNetConfig
 from ..hiftnet.modeling_hiftnet import HiFTGenerator
 from ..s3tokenizer.configuration_s3tokenizer import S3TokenizerConfig
@@ -1424,6 +1424,7 @@ class S3GenModel(S3GenPreTrainedModel):
     """
     The S3Gen Model for converting speech tokens to mel spectrograms and waveforms.
     """
+
     def __init__(self, config: S3GenConfig):
         super().__init__(config)
         self.config = config
