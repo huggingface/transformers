@@ -422,7 +422,7 @@ class CohereTokenizer(TokenizersBackend):
         Firstly, Decide which of the retrieved documents are relevant to the user's last input by writing 'Relevant Documents:' followed by comma-separated list of document numbers. If none are relevant, you should instead write 'None'.
         Secondly, Decide which of the retrieved documents contain facts that should be cited in a good answer to the user's last input by writing 'Cited Documents:' followed a comma-separated list of document numbers. If you dont want to cite any of them, you should instead write 'None'.
         Thirdly, Write 'Answer:' followed by a response to the user's last input in high quality natural english. Use the retrieved documents to help you. Do not insert any citations or grounding markup.
-        Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 0>my fact</co: 0> for a fact from document 0.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'''
+        Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols &lt;co: doc&gt; and &lt;/co: doc&gt; to indicate when a fact comes from a document in the search result, e.g &lt;co: 0&gt;my fact&lt;/co: 0&gt; for a fact from document 0.<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>'''
         ```
         >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
@@ -430,7 +430,7 @@ class CohereTokenizer(TokenizersBackend):
         Relevant Documents: 0,1
         Cited Documents: 0,1
         Answer: The Emperor Penguin is the tallest or biggest penguin in the world. It is a bird that lives only in Antarctica and grows to a height of around 122 centimetres.
-        Grounded answer: The <co: 0>Emperor Penguin</co: 0> is the <co: 0>tallest</co: 0> or biggest penguin in the world. It is a bird that <co: 1>lives only in Antarctica</co: 1> and <co: 0>grows to a height of around 122 centimetres.</co: 0>
+        Grounded answer: The &lt;co: 0&gt;Emperor Penguin&lt;/co: 0&gt; is the &lt;co: 0&gt;tallest&lt;/co: 0&gt; or biggest penguin in the world. It is a bird that &lt;co: 1&gt;lives only in Antarctica&lt;/co: 1&gt; and &lt;co: 0&gt;grows to a height of around 122 centimetres.&lt;/co: 0&gt;
         """
         return self.apply_chat_template(
             conversation,
