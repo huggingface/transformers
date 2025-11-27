@@ -20,8 +20,9 @@ import string
 import time
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, Optional
+from urllib.parse import urljoin, urlparse
 
-import click
+import httpx
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -44,6 +45,7 @@ if is_rich_available():
     from rich.live import Live
     from rich.markdown import Markdown
 
+DEFAULT_HTTP_ENDPOINT = {"hostname": "localhost", "port": 8000}
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
     string.ascii_letters + string.digits + string.whitespace + r".!\"#$%&'()*+,\-/:<=>?@[]^_`{|}~"
@@ -195,29 +197,6 @@ class RichInterface:
         self._console.print()
 
 
-class ChatCommand(typer.core.TyperCommand):
-    """Custom Click command to override missing parameter error message.
-
-    Transformers v5 introduced a breaking change in the `transformers chat` command: the `model_id` parameter
-    is now required, and the command can no longer starts a server. This class overrides the default error message
-    to provide a more helpful message to users who may be used to the old behavior.
-    """
-
-    def parse_args(self, ctx, args):
-        try:
-            return super().parse_args(ctx, args)
-        except click.MissingParameter as e:
-            if e.param and e.param.name == "model_id":
-                typer.echo("Error: Missing argument 'MODEL_ID'.\n")
-                typer.echo(
-                    "Launching a server directly from the `transformers chat` command is no longer supported. "
-                    "Please use `transformers serve` to launch a server. "
-                    "Use --help for more information.",
-                )
-                ctx.exit(1)
-            raise
-
-
 class Chat:
     """Chat with a model from the command line."""
 
@@ -225,8 +204,10 @@ class Chat:
     # TODO: refactor into a proper module with helpers + 1 main method
     def __init__(
         self,
-        base_url: Annotated[str, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")],
         model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
+        base_url: Annotated[
+            Optional[str], typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
+        ] = f"http://{DEFAULT_HTTP_ENDPOINT['hostname']}:{DEFAULT_HTTP_ENDPOINT['port']}",
         generate_flags: Annotated[
             list[str] | None,
             typer.Argument(
@@ -257,6 +238,11 @@ class Chat:
     ) -> None:
         """Chat with a model from the command line."""
         self.base_url = base_url
+
+        parsed = urlparse(self.base_url)
+        if parsed.hostname == DEFAULT_HTTP_ENDPOINT["hostname"] and parsed.port == DEFAULT_HTTP_ENDPOINT["port"]:
+            self.check_health(self.base_url)
+
         self.model_id = model_id
         self.system_prompt = system_prompt
         self.save_folder = save_folder
@@ -286,8 +272,23 @@ class Chat:
         # Run chat session
         asyncio.run(self._inner_run())
 
-    # -----------------------------------------------------------------------------------------------------------------
-    # User commands
+    @staticmethod
+    def check_health(url):
+        health_url = urljoin(url + "/", "health")
+        try:
+            output = httpx.get(health_url)
+            if output.status_code != 200:
+                raise ValueError(
+                    f"The server running on {url} returned status code {output.status_code} on health check (/health)."
+                )
+        except httpx.ConnectError:
+            raise ValueError(
+                f"No server currently running on {url}. To run a local server, please run `transformers serve` in a"
+                f"separate shell. Find more information here: https://huggingface.co/docs/transformers/serving"
+            )
+
+        return True
+
     def handle_non_exit_user_commands(
         self,
         user_input: str,
@@ -361,9 +362,6 @@ class Chat:
             interface.print_help()
 
         return chat, valid_command, config
-
-    # -----------------------------------------------------------------------------------------------------------------
-    # Main logic
 
     async def _inner_run(self):
         interface = RichInterface(model_id=self.model_id, user_id=self.user)
