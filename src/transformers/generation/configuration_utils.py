@@ -31,9 +31,7 @@ from ..utils import (
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -437,6 +435,13 @@ class GenerationConfig(PushToHubMixin):
         self._from_model_config = kwargs.pop("_from_model_config", False)
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
+
+        # Ensure backward compatibility for models that use `forced_bos_token_id` within their config
+        if self._from_model_config and kwargs.get("force_bos_token_to_be_generated", False):
+            self.forced_bos_token_id = self.bos_token_id
+            logger.warning_once(
+                f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
+            )
 
         # Additional attributes without default values
         if not self._from_model_config:
@@ -874,9 +879,6 @@ class GenerationConfig(PushToHubMixin):
             # Special case when config_path is a local file
             resolved_config_file = config_path
             is_local = True
-        elif is_remote_url(config_path):
-            configuration_file = config_path
-            resolved_config_file = download_url(config_path)
         else:
             configuration_file = config_file_name
             try:

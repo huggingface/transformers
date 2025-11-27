@@ -409,14 +409,14 @@ class FP8Expert(nn.Module):
             # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
             gu_scale_o = _ceil_div(Wg_out, bo)
             gu_scale_i = _ceil_div(Wg_in, bi)
-            self.gate_up_proj_scales_inv = nn.Parameter(
+            self.gate_up_proj_scale_inv = nn.Parameter(
                 torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32, device=device)
             )
 
             # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
             dp_scale_o = _ceil_div(Wd_out, bo)
             dp_scale_i = _ceil_div(Wd_in, bi)
-            self.down_proj_scales_inv = nn.Parameter(
+            self.down_proj_scale_inv = nn.Parameter(
                 torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32, device=device)
             )
         else:
@@ -452,11 +452,11 @@ class FP8Expert(nn.Module):
             _, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states.index_select(0, token_idx)
             gate, up = self.linear(
-                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scales_inv[expert_idx]
+                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
             ).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = self.linear(
-                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scales_inv[expert_idx]
+                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
             )
 
             routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
@@ -643,7 +643,7 @@ class Fp8Quantize(ConversionOps):
         if target_keys.endswith("weight"):
             scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
         else:
-            scale_key = target_keys + "_scales_inv"
+            scale_key = target_keys + "_scale_inv"
 
         # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
         return {

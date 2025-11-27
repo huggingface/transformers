@@ -172,7 +172,7 @@ if __name__ == "__main__":
 
     # Model parameters
     parser.add_argument("--sliding-window", type=int, default=0)
-    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
+    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn2", help="Attention implementation")
 
     # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable

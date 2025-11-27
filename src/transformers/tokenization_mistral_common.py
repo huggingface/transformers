@@ -1198,7 +1198,8 @@ class MistralCommonTokenizer(PushToHubMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -1457,12 +1458,13 @@ class MistralCommonTokenizer(PushToHubMixin):
         def _maybe_adapt_message(message: dict[str, Any]) -> None:
             """Adapt message to `mistral-common` format and leave validation to `mistral-common`."""
             if not isinstance(message, dict):
-                return
+                return message
             maybe_list_content: str | list[dict[str, str | dict[str, Any]]] | None = message.get("content")
             if not maybe_list_content or isinstance(maybe_list_content, str):
-                return
+                return message
 
             normalized_content: list[dict[str, str | dict[str, Any]]] = []
+            message = message.copy()
             for content in maybe_list_content:
                 content_type = content.get("type", None)
                 if not content_type:
@@ -1498,6 +1500,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 else:
                     normalized_content.append(content)
             message["content"] = normalized_content
+            return message
 
         outputs = []
         images: list[np.ndarray] = []
@@ -1506,7 +1509,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         for conversation in conversations:
             messages: list[dict[str, str | list[dict[str, str | dict[str, Any]]]]] = []
             for message in conversation:
-                _maybe_adapt_message(message)
+                message = _maybe_adapt_message(message)
                 messages.append(message)
 
             chat_request = ChatCompletionRequest.from_openai(
@@ -1758,12 +1761,11 @@ class MistralCommonTokenizer(PushToHubMixin):
         if init_inputs:
             raise ValueError("`init_inputs` are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
-        # Handle kwargs and AutoTokenizer case
-        ignore_subset = {"_from_auto", "trust_remote_code"}
-        if kwargs and not (set_kwargs := set(kwargs.keys())).issubset(ignore_subset):
-            raise ValueError(
-                f"Kwargs {list(set_kwargs - ignore_subset)} are not supported by `MistralCommonTokenizer.from_pretrained`."
-            )
+        # Handle kwargs and AutoTokenizer/AutoProcessor case
+        if kwargs and not set(kwargs.keys()).issubset(
+            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto"}
+        ):
+            raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
         if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(
