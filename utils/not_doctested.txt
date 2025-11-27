@@ -290,7 +290,6 @@ src/transformers/cli/add_fast_image_processor.py
 src/transformers/cli/add_new_model_like.py
 src/transformers/cli/chat.py
 src/transformers/cli/download.py
-src/transformers/cli/run.py
 src/transformers/cli/serve.py
 src/transformers/cli/system.py
 src/transformers/cli/transformers.py

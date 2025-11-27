@@ -22,6 +22,7 @@ from functools import partial
 from typing import Any, Optional, Union
 
 import numpy as np
+from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
@@ -43,9 +44,7 @@ from .utils import (
     TensorType,
     add_start_docstrings,
     copy_func,
-    download_url,
     is_offline_mode,
-    is_remote_url,
     is_torch_available,
     is_torchcodec_available,
     is_torchvision_v2_available,
@@ -570,7 +569,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -638,10 +637,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             resolved_video_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            video_processor_file = pretrained_model_name_or_path
-            resolved_processor_file = None
-            resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             video_processor_file = VIDEO_PROCESSOR_NAME
             try:
