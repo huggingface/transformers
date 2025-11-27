@@ -742,17 +742,14 @@ class ContinuousBatchingManager:
         """
         if "paged|" not in model.config._attn_implementation:
             attn_implementation = f"paged|{model.config._attn_implementation}"
-
-            from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-
-            if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
-                # load_and_register_attn_kernel is imported here to avoid CUDA init
-                from ...integrations.flash_paged import paged_attention_forward
-                from ...integrations.hub_kernels import load_and_register_attn_kernel
-
-                load_and_register_attn_kernel(attn_implementation, paged_attention_forward)
-
             model.config._attn_implementation = attn_implementation
+
+            # lazy loading flash attention including kernel variations
+            if "flash" in attn_implementation:
+                from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+
+                lazy_import_paged_flash_attention(attn_implementation)
+
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
