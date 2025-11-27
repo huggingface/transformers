@@ -3947,8 +3947,8 @@ class Trainer:
 
         outputs = model(**inputs)
         shift_labels = inputs["shift_labels"]
-        # When using Liger-kernel, the model already computed the loss internally and outputs.logits is None
-        if outputs.logits is None:
+        # When using Liger-kernel, the model already computed the loss and outputs.logits is None
+        if outputs.loss is not None:
             loss = outputs.loss
         else:
             loss = unwrapped_model.loss_function(
