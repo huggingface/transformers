@@ -16,11 +16,11 @@ import importlib.metadata
 import inspect
 import json
 import os
-import re
 from typing import Any, Literal
 
 from packaging import version
 
+from ..core_model_loading import WeightRenaming, build_glob_alternation, repl
 from ..utils import (
     CONFIG_NAME,
     cached_file,
@@ -318,25 +318,9 @@ class PeftAdapterMixin:
                 new_key = key
 
             if key_mapping:
-                for weight_converter in key_mapping:
-                    patterns = weight_converter.source_keys
-                    replacements = weight_converter.target_keys
-                    # mapping is either 1:1 or 1:n or n:1 or n:n
-                    if len(patterns) > 1 and len(replacements) == 1:
-                        replacements = len(patterns) * replacements
-                    elif len(patterns) == 1 and len(replacements) > 1:
-                        patterns = len(replacements) * patterns
-                    elif len(patterns) > 1 and len(replacements) > 1 and len(patterns) != len(replacements):
-                        raise ValueError(
-                            "WeightConversion incorrectly initialized, please open an issue and report this error "
-                            "here: https://github.com/huggingface/transformers/issues"
-                        )
-
-                    for pattern, replacement in zip(patterns, replacements, strict=True):
-                        new_key, n_replace = re.subn(pattern, replacement, new_key)
-                        # Early exit of the loop
-                        if n_replace > 0:
-                            break
+                renamings = [entry for entry in key_mapping if isinstance(entry, WeightRenaming)]
+                rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+                new_key = rename_alt.sub(lambda m: repl(m, rename_by_group), new_key).replace("\\", "")
 
             # For hotswapping, we need the adapter name to be present in the state dict keys
             if hotswap:
