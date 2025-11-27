@@ -240,6 +240,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("ernie4_5", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("ernie4_5_moe", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         ("esm", ("EsmTokenizer", None)),
+        ("evo2", ("Evo2Tokenizer", None)),
         ("evolla", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
         (
             "exaone4",
