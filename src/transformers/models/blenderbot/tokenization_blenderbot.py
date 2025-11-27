@@ -102,8 +102,10 @@ class BlenderbotTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (Blenderbot tokenizer detect beginning of words by the preceding space).
-        vocab (`<fill_type>`, *optional*): <fill_docstring>
-        merges (`<fill_type>`, *optional*): <fill_docstring>
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        merges (`list`, *optional*):
+            Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -77,11 +77,14 @@ class CamembertTokenizer(TokenizersBackend):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-        add_prefix_space (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        vocab (`<fill_type>`, *optional*): <fill_docstring>
+        vocab (`dict`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

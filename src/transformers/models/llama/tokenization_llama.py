@@ -170,12 +170,15 @@ class LlamaTokenizer(TokenizersBackend):
 
     def _post_init(self):
         """Post-initialization setup that needs to run after _tokenizer is set."""
-        # TODO: how to do this cleanly? Need to trigger re-adding special tokens after setting the normalizer in Tokenizers
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
-        self._tokenizer.normalizer = (
-            None  # normalizers.Sequence([normalizers.Prepend("▁"), normalizers.Replace(pattern=" ", content="▁")])
-        )
-        self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
+        # Only set pre_tokenizer/normalizer for Llama-3 style tokenizers (use Sequence)
+        pre_tok = self._tokenizer.pre_tokenizer
+        if pre_tok is None or type(pre_tok).__name__ != "Sequence":
+            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+                replacement="▁", prepend_scheme="first", split=False
+            )
+            self._tokenizer.normalizer = None
+            self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
+        super()._post_init()
         self.update_post_processor()
 
 

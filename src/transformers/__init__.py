@@ -282,6 +282,7 @@ else:
         "PreTrainedTokenizerFast",
     ]
 
+
 try:
     if not (is_sentencepiece_available() and is_tokenizers_available()):
         raise OptionalDependencyNotAvailable()
@@ -691,6 +692,8 @@ if TYPE_CHECKING:
     from .tokenization_utils_base import TokenSpan as TokenSpan
 
     # Tokenization
+    if is_sentencepiece_available():
+        from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
     from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
     from .tokenization_utils_tokenizers import (
         TokenizersBackend as TokenizersBackend,

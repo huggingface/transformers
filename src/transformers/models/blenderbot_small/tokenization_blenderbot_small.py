@@ -97,7 +97,6 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
-        self.special_tokens_pattern = None
         super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
         self.special_tokens_pattern = None
 

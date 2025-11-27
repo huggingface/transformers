@@ -49,83 +49,9 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_seq2seq = False
 
     input_text = "Hello😊 <s>intro</s> falsé-world! 生活的真谛"
-    integration_expected_tokens = [
-        "Hello",
-        "ðŁĺ",
-        "Ĭ",
-        "Ġ",
-        "<s>",
-        "int",
-        "ro",
-        "</s>",
-        "Ġfals",
-        "Ã©",
-        "-",
-        "world",
-        "!",
-        "Ġç",
-        "Ķ",
-        "Ł",
-        "æ",
-        "´",
-        "»",
-        "çļĦ",
-        "çľ",
-        "Ł",
-        "è",
-        "°",
-        "Ľ",
-    ]
-    integration_expected_token_ids = [
-        31414,
-        18636,
-        27969,
-        0,
-        2544,
-        1001,
-        2,
-        506,
-        1536,
-        1140,
-        12,
-        8331,
-        328,
-        48998,
-        37127,
-        20024,
-        2023,
-        44574,
-        49122,
-        4333,
-        36484,
-        7487,
-        3726,
-    ]
-    expected_tokens_from_ids = [
-        "Hello",
-        "ðŁĺ",
-        "Ĭ",
-        "<s>",
-        "int",
-        "ro",
-        "</s>",
-        "f",
-        "als",
-        "Ã©",
-        "-",
-        "world",
-        "!",
-        "çĶŁ",
-        "æ",
-        "´",
-        "»",
-        "çļĦ",
-        "çľ",
-        "Ł",
-        "è",
-        "°",
-        "Ľ",
-    ]
+    integration_expected_tokens = ['Hello', 'ðŁĺ', 'Ĭ', 'Ġ', '<s>', 'int', 'ro', '</s>', 'Ġfals', 'Ã©', '-', 'world', '!', 'Ġç', 'Ķ', 'Ł', 'æ', '´', '»', 'çļĦ', 'çľ', 'Ł', 'è', '°', 'Ľ']  # fmt: skip
+    integration_expected_token_ids = [31414, 18636, 27969, 0, 2544, 1001, 2, 506, 1536, 1140, 12, 8331, 328, 48998, 37127, 20024, 2023, 44574, 49122, 4333, 36484, 7487, 3726]  # fmt: skip
+    expected_tokens_from_ids = ['Hello', 'ðŁĺ', 'Ĭ', '<s>', 'int', 'ro', '</s>', 'f', 'als', 'Ã©', '-', 'world', '!', 'çĶŁ', 'æ', '´', '»', 'çļĦ', 'çľ', 'Ł', 'è', '°', 'Ľ']  # fmt: skip
     integration_expected_decoded_text = "Hello😊<s>intro</s>falsé-world!生活的真谛"
     text_from_tokens = "Hello😊 <s>intro</s> falsé-world! 生活的真谛"
 
@@ -216,7 +142,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "merges": merges,
                 "do_lower_case": False,
                 "keep_accents": True,
-                "added_tokens_decoder": added_tokens_decoder,
+                "added_tokens_decoder": dict(added_tokens_decoder.items()),
             }
 
             tags_dict = getattr(reference_tokenizer, "tags_dict", None)
@@ -1382,7 +1308,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
                     special_token in new_tokenizer.all_special_tokens,
-                    msg=f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
                 )
 
             else:

@@ -197,7 +197,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
-        ("lxmert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
         ("mamba", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("mamba2", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
@@ -224,7 +224,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mllama", "LlamaTokenizerFast" if is_tokenizers_available() else None),
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
-        ("mobilebert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
         ("modernbert", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("moonshine", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("moshi", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
@@ -234,7 +234,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
-        ("mvp", "RobertaTokenizer" if is_tokenizers_available() else None),
+        ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
         ("nemotron", "PreTrainedTokenizerFast" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
@@ -523,6 +523,13 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                             )
                     except Exception:
                         pass
+            except ImportError as e:
+                if "sentencepiece" in str(e).lower() or "SentencePiece" in str(e):
+                    raise ImportError(
+                        f"This checkpoint only contains a SentencePiece model file ({spm_file}), but the `sentencepiece` library is not installed. "
+                        f"Please install sentencepiece to load this tokenizer: `pip install sentencepiece`"
+                    ) from e
+                raise
             except Exception:
                 pass
 

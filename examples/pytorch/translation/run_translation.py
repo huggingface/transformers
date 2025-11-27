@@ -55,12 +55,12 @@ from transformers import (
     MBart50TokenizerFast,
     MBartTokenizer,
     MBartTokenizerFast,
-    SentencePieceBackend,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     default_data_collator,
     set_seed,
 )
+from transformers.tokenization_utils_sentencepiece import SentencePieceBackend
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
