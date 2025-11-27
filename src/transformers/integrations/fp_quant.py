@@ -42,7 +42,6 @@ class FpQuantQuantize(ConversionOps):
         # if target_device == "cpu" and param_name.endswith("weight"):
         #     # Works agains hard-coded missing key dispatch to CPU
         #     return
-        print("module: ", list(module.named_parameters()))
         # The module holds either:
         #  * `weight` when `store_master_weights=True`
         #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
@@ -76,7 +75,6 @@ class FpQuantQuantize(ConversionOps):
                 }
 
         # Loading master weights or an unquantized checkpoint
-        print("##### value: ", value.device)
         weight = torch.nn.Parameter(value)
         module.weight = weight
         # Let pre-forward handle the quantization and set None where necessary

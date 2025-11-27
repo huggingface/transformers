@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -97,6 +97,7 @@ class QuarkHfQuantizer(HfQuantizer):
         return False
 
     def get_quantize_ops(self):
+        import torch
         class QuarkQuantize(ConversionOps):
             def __init__(self, hf_quantizer):
                 self.hf_quantizer = hf_quantizer
