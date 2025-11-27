@@ -161,7 +161,16 @@ class Concatenate(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
-        return {target_pattern: torch.cat(tuple(input_dict.values()), dim=self.dim)}
+        all_tensors = []
+        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # input directly as it's unordered!
+        for source_pattern in source_patterns:
+            tensors = input_dict[source_pattern]
+            if isinstance(tensors, list):
+                all_tensors.extend(tensors)
+            else:
+                all_tensors.append(tensors)
+        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
         # Here we always return the target pattern
@@ -347,22 +356,6 @@ class WeightTransform:
         reverse_transform = self.__class__(
             source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
         )
-
-        # In this case, we already called `add_tensor` at least once, and we will use the saved keys to revert
-        # (i.e. we will be able to retrieve directly the correct params thanks to the `collected_tensors` which
-        # will hold the full param names entries)
-        if len(self.layer_targets) > 0:
-            # Find the full names of the params we will need to use later for the reverse transform
-            reverse_layer_targets = defaultdict(set)
-            reverse_collected_tensors = defaultdict(list)
-            for target_key, all_sources in self.layer_targets.items():
-                matched_target_pattern = next(pat for pat in self.target_patterns if re.search(pat, target_key))
-                reverse_collected_tensors[matched_target_pattern].append(target_key)
-                for source in all_sources:
-                    reverse_layer_targets[source].add(target_key)
-            reverse_collected_tensors = {k: sorted(set(v)) for k, v in reverse_collected_tensors.items()}
-            reverse_transform.layer_targets = reverse_layer_targets
-            reverse_transform.collected_tensors = reverse_collected_tensors
 
         return reverse_transform
 
@@ -935,81 +928,65 @@ def convert_and_load_state_dict_in_model(
             except SkipLayer:
                 continue
 
-    # Keep computed mapping as attribute for later saving
-    model._weight_loading_mapping = param_name_to_load
+    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
+    model._weight_conversions = weight_mapping
     thread_pool.shutdown(wait=False)
     return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, misc
 
 
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
-    """ "
+    """
     Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
     if the model was created in another way and is part of the default mappings.
     """
-    conversion_mapping = getattr(model, "_weight_loading_mapping", None)
-    need_to_reverse = True
+    weight_conversions = getattr(model, "_weight_conversions", None)
     # In this case, the model was not created with `from_pretrained` -> let's check if it's in the hardcoded
     # mappings, and recreate the mapping from there if it is
-    if conversion_mapping is None:
+    if weight_conversions is None:
         from .conversion_mapping import get_model_conversion_mapping
 
         # Do not resave with the legacy renaming, if present
         weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
+        weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
 
-        # We did not find any operations to perform -> quick escape
-        if len(weight_conversions) == 0:
-            return state_dict
+    # We did not find any operations to perform -> quick escape
+    if weight_conversions is None:
+        return state_dict
 
-        conversion_mapping = {}
-        need_to_reverse = False
+    # Reverse all Transform to correctly match keys
+    reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]
+    # If we are still here, we need to create the (reverse) conversion mapping from scratch
+    renamings = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    conversion_mapping = {}
 
-        # Already reverse all Transform to correctly match keys
-        reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]
-        # If we are still here, we need to create the (reverse) conversion mapping from scratch
-        renamings = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightRenaming)]
-        converters = [entry for entry in reverse_weight_conversion if isinstance(entry, WeightConverter)]
-        pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
+    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
+    rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+    weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = None, None, None
+    if converters != []:
+        weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
 
-        # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
-        # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
-        rename_alt, _, rename_by_group = build_glob_alternation(renamings)
-        weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = None, None, None
-        if converters != []:
-            weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
+    state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+    for original_key, tensor in state_dict:
+        # Rename the key according to all renaming pattern and optional weight converter patterns
+        renamed_key, matched_pattern = rename_source_key(
+            original_key, rename_alt, rename_by_group, weight_pattern_alt, tgt_group_to_glob
+        )
+        if matched_pattern is not None:
+            new_converter = deepcopy(pattern_to_converter[src_group_to_glob[matched_pattern.lastgroup]])
+            # each target key gets its own converter instance
+            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
+            source_pattern = src_group_to_glob[matched_pattern.lastgroup]
+        else:
+            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+            source_pattern = original_key
 
-        state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
-        for original_key, tensor in state_dict:
-            # Rename the key according to all renaming pattern and optional weight converter patterns
-            renamed_key, matched_pattern = rename_source_key(
-                original_key, rename_alt, rename_by_group, weight_pattern_alt, tgt_group_to_glob
-            )
-            if matched_pattern is not None:
-                new_converter = deepcopy(pattern_to_converter[src_group_to_glob[matched_pattern.lastgroup]])
-                # each target key gets its own converter instance
-                mapping = conversion_mapping.setdefault(renamed_key, new_converter)
-                source_pattern = src_group_to_glob[matched_pattern.lastgroup]
-            else:
-                mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-                source_pattern = original_key
-
-            mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
 
     new_state_dict = {}
-    for first_param_name, converter in conversion_mapping.items():
-        # In this case, the mapping was obtained from the loaded model, we need to reverse the ops
-        if need_to_reverse:
-            reversed_converter = converter.reverse_transform()
-            # The `collected_tensors` only contain the full param keys after `reverse_transform` is called, we
-            # need to populate it with the actual tensors
-            reversed_converter.collected_tensors = {
-                k: [model.get_parameter_or_buffer(param) for param in params]
-                for k, params in reversed_converter.collected_tensors.items()
-            }
-            first_param_name = next(iter(reversed_converter.layer_targets.keys()))
-        # In this case, we just created the mapping above, the ops are already reversed
-        else:
-            reversed_converter = converter
-
+    for first_param_name, reversed_converter in conversion_mapping.items():
         # Apply the reverse converter
         realized_value, misc = reversed_converter.convert(first_param_name, model=model, config=model.config)
         for target_name, param in realized_value.items():

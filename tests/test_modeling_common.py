@@ -4173,7 +4173,10 @@ def compare_state_dicts(state_dict1, state_dict2) -> bool:
 
     for k, v1 in state_dict1.items():
         v2 = state_dict2[k]
-        torch.testing.assert_close(v1, v2)
+        try:
+            torch.testing.assert_close(v1, v2)
+        except Exception as e:
+            raise AssertionError(f"For key {k}: {e}")
 
     return True
 
