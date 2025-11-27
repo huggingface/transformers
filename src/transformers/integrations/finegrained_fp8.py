@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -498,16 +499,18 @@ def _replace_with_fp8_linear(
 ):
     iterator = list(model.named_parameters()).copy()
     for name, empty_tensor in iterator:
-        current_key_name_parts = name.split(".")
+        current_key_name = name
         name = name.rsplit(".", 1)[0] if "." in name else name
         module = model.get_submodule(name)
 
-        if not any(key in current_key_name_parts for key in (modules_to_not_convert or [])):
+        if not any(
+            re.search(rf"(^|\.){re.escape(key)}(\.|$)", current_key_name) for key in (modules_to_not_convert or [])
+        ):
             with init_empty_weights():
                 if (
-                    "gate_up_proj" in current_key_name_parts
-                    or "down_proj" in current_key_name_parts
-                    and "experts" in current_key_name_parts
+                    "gate_up_proj" in current_key_name
+                    or "down_proj" in current_key_name
+                    and "experts" in current_key_name
                 ):  # Experts!
                     in_features = empty_tensor.size(-2)
                     out_features = empty_tensor.size(-1)
