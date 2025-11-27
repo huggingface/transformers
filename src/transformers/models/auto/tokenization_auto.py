@@ -663,7 +663,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
         if tokenizer_class is not None:
             # Check if tokenizer_class inherits from PreTrainedTokenizer (but not from TokenizersBackend/SentencePieceBackend)
             # These are edge cases with custom logic (e.g., BioGptTokenizer with Moses tokenization)
-            from ...tokenization_utils import PreTrainedTokenizer
+            from ...tokenization_python import PreTrainedTokenizer
 
             # Build list of backend classes to check against
             backend_classes = [TokenizersBackend] if TokenizersBackend else []
