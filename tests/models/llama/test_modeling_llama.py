@@ -122,7 +122,6 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         expected_mean = expected_means.get_expectation().to(torch_device)
         actual_mean = out.logits.float().mean(-1)
-        print("actual_mean", actual_mean)
         self.assertTrue(
             torch.allclose(
                 expected_mean,
