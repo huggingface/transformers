@@ -30,10 +30,8 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     copy_func,
-    download_url,
     is_numpy_array,
     is_offline_mode,
-    is_remote_url,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
@@ -430,10 +428,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             resolved_feature_extractor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            feature_extractor_file = pretrained_model_name_or_path
-            resolved_processor_file = None
-            resolved_feature_extractor_file = download_url(pretrained_model_name_or_path)
         else:
             feature_extractor_file = FEATURE_EXTRACTOR_NAME
             try:

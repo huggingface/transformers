@@ -48,13 +48,11 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
-    download_url,
     extract_commit_hash,
     is_mlx_available,
     is_numpy_array,
     is_offline_mode,
     is_protobuf_available,
-    is_remote_url,
     is_tokenizers_available,
     is_torch_available,
     is_torch_device,
@@ -2010,94 +2008,77 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
         single_file_id = None
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            if len(cls.vocab_files_names) > 1 and not gguf_file:
-                raise ValueError(
-                    f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
-                    "supported for this tokenizer. Use a model identifier or the path to a directory instead."
-                )
-            warnings.warn(
-                f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated and "
-                "won't be possible anymore in v5. Use a model identifier or the path to a directory instead.",
-                FutureWarning,
-            )
-            file_id = list(cls.vocab_files_names.keys())[0]
 
-            vocab_files[file_id] = pretrained_model_name_or_path
-            single_file_id = file_id
+        if gguf_file:
+            vocab_files["vocab_file"] = gguf_file
         else:
-            if gguf_file:
-                vocab_files["vocab_file"] = gguf_file
-            else:
-                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-                additional_files_names = {
-                    "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
-                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
-                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
-                    "tokenizer_file": FULL_TOKENIZER_FILE,
-                    "chat_template_file": CHAT_TEMPLATE_FILE,
-                }
+            # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+            additional_files_names = {
+                "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
+                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
+                "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
+                "tokenizer_file": FULL_TOKENIZER_FILE,
+                "chat_template_file": CHAT_TEMPLATE_FILE,
+            }
 
-                vocab_files = {**cls.vocab_files_names, **additional_files_names}
-                if "tokenizer_file" in vocab_files:
-                    # Try to get the tokenizer config to see if there are versioned tokenizer files.
-                    fast_tokenizer_file = FULL_TOKENIZER_FILE
+            vocab_files = {**cls.vocab_files_names, **additional_files_names}
+            if "tokenizer_file" in vocab_files:
+                # Try to get the tokenizer config to see if there are versioned tokenizer files.
+                fast_tokenizer_file = FULL_TOKENIZER_FILE
 
-                    try:
-                        resolved_config_file = cached_file(
-                            pretrained_model_name_or_path,
-                            TOKENIZER_CONFIG_FILE,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            token=token,
-                            revision=revision,
-                            local_files_only=local_files_only,
-                            subfolder=subfolder,
-                            user_agent=user_agent,
-                            _raise_exceptions_for_missing_entries=False,
-                            _commit_hash=commit_hash,
-                        )
-                    except OSError:
-                        # Re-raise any error raised by cached_file in order to get a helpful error message
-                        raise
-                    except Exception:
-                        # For any other exception, we throw a generic error.
-                        raise OSError(
-                            f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                            "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                            f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                            f"containing all relevant files for a {cls.__name__} tokenizer."
-                        )
+                try:
+                    resolved_config_file = cached_file(
+                        pretrained_model_name_or_path,
+                        TOKENIZER_CONFIG_FILE,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        token=token,
+                        revision=revision,
+                        local_files_only=local_files_only,
+                        subfolder=subfolder,
+                        user_agent=user_agent,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
+                    )
+                except OSError:
+                    # Re-raise any error raised by cached_file in order to get a helpful error message
+                    raise
+                except Exception:
+                    # For any other exception, we throw a generic error.
+                    raise OSError(
+                        f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+                        "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+                        f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+                        f"containing all relevant files for a {cls.__name__} tokenizer."
+                    )
 
-                    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                    if resolved_config_file is not None:
-                        with open(resolved_config_file, encoding="utf-8") as reader:
-                            tokenizer_config = json.load(reader)
-                            if "fast_tokenizer_files" in tokenizer_config:
-                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                    vocab_files["tokenizer_file"] = fast_tokenizer_file
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+                if resolved_config_file is not None:
+                    with open(resolved_config_file, encoding="utf-8") as reader:
+                        tokenizer_config = json.load(reader)
+                        if "fast_tokenizer_files" in tokenizer_config:
+                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                vocab_files["tokenizer_file"] = fast_tokenizer_file
 
-                    # This block looks for any extra chat template files
-                    if is_local:
-                        template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
-                        if template_dir.is_dir():
-                            for template_file in template_dir.glob("*.jinja"):
-                                template_name = template_file.name.removesuffix(".jinja")
-                                vocab_files[f"chat_template_{template_name}"] = (
-                                    f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
-                                )
-                    else:
-                        for template in list_repo_templates(
-                            pretrained_model_name_or_path,
-                            local_files_only=local_files_only,
-                            revision=revision,
-                            cache_dir=cache_dir,
-                            token=token,
-                        ):
-                            template = template.removesuffix(".jinja")
-                            vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
+                # This block looks for any extra chat template files
+                if is_local:
+                    template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                    if template_dir.is_dir():
+                        for template_file in template_dir.glob("*.jinja"):
+                            template_name = template_file.name.removesuffix(".jinja")
+                            vocab_files[f"chat_template_{template_name}"] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+                else:
+                    for template in list_repo_templates(
+                        pretrained_model_name_or_path,
+                        local_files_only=local_files_only,
+                        revision=revision,
+                        cache_dir=cache_dir,
+                        token=token,
+                    ):
+                        template = template.removesuffix(".jinja")
+                        vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         remote_files = []
         if not is_local and not local_files_only:
@@ -2122,8 +2103,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             elif single_file_id == file_id:
                 if os.path.isfile(file_path):
                     resolved_vocab_files[file_id] = file_path
-                elif is_remote_url(file_path):
-                    resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 try:
                     resolved_vocab_files[file_id] = cached_file(

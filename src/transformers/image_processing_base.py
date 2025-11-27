@@ -28,9 +28,7 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     copy_func,
-    download_url,
     is_offline_mode,
-    is_remote_url,
     logging,
     safe_load_json_file,
 )
@@ -283,10 +281,6 @@ class ImageProcessingMixin(PushToHubMixin):
             resolved_image_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            image_processor_file = pretrained_model_name_or_path
-            resolved_processor_file = None
-            resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
             image_processor_file = image_processor_filename
             try:

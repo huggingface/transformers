@@ -43,9 +43,7 @@ from .utils import (
     TensorType,
     add_start_docstrings,
     copy_func,
-    download_url,
     is_offline_mode,
-    is_remote_url,
     is_torch_available,
     is_torchcodec_available,
     is_torchvision_v2_available,
@@ -638,10 +636,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             resolved_video_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            video_processor_file = pretrained_model_name_or_path
-            resolved_processor_file = None
-            resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             video_processor_file = VIDEO_PROCESSOR_NAME
             try:

@@ -29,9 +29,7 @@ from ..utils import (
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -879,9 +877,6 @@ class GenerationConfig(PushToHubMixin):
             # Special case when config_path is a local file
             resolved_config_file = config_path
             is_local = True
-        elif is_remote_url(config_path):
-            configuration_file = config_path
-            resolved_config_file = download_url(config_path)
         else:
             configuration_file = config_file_name
             try:

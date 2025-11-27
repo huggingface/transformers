@@ -105,14 +105,12 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
-    download_url,
     has_file,
     is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_kernels_available,
     is_offline_mode,
-    is_remote_url,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -531,9 +529,6 @@ def _get_resolved_checkpoint_files(
         elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
             archive_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            filename = pretrained_model_name_or_path
-            resolved_archive_file = download_url(pretrained_model_name_or_path)
         else:
             # set correct filename
             if transformers_explicit_filename is not None:

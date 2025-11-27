@@ -20,16 +20,8 @@ import unittest.mock as mock
 from pathlib import Path
 
 import httpx
-from huggingface_hub.file_download import http_get
 
-from transformers import (
-    AlbertTokenizer,
-    AutoTokenizer,
-    BertTokenizer,
-    BertTokenizerFast,
-    GPT2TokenizerFast,
-    is_tokenizers_available,
-)
+from transformers import AutoTokenizer, BertTokenizer, BertTokenizerFast, GPT2TokenizerFast, is_tokenizers_available
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers
 from transformers.tokenization_utils import ExtensionsTrie, Trie
 
@@ -82,33 +74,6 @@ class TokenizerUtilTester(unittest.TestCase):
             _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
-
-    def test_legacy_load_from_one_file(self):
-        # This test is for deprecated behavior and can be removed in v5
-        try:
-            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
-            with open(tmp_file, "wb") as f:
-                http_get("https://huggingface.co/albert/albert-base-v1/resolve/main/spiece.model", f)
-
-            _ = AlbertTokenizer.from_pretrained(tmp_file)
-        finally:
-            os.remove(tmp_file)
-
-        # Supporting this legacy load introduced a weird bug where the tokenizer would load local files if they are in
-        # the current folder and have the right name.
-        if os.path.isfile("tokenizer.json"):
-            # We skip the test if the user has a `tokenizer.json` in this folder to avoid deleting it.
-            self.skipTest(reason="Skipping test as there is a `tokenizer.json` file in the current folder.")
-        try:
-            with open("tokenizer.json", "wb") as f:
-                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)
-            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-            # The tiny random BERT has a vocab size of 1024, tiny openai-community/gpt2 as a vocab size of 1000
-            self.assertEqual(tokenizer.vocab_size, 1000)
-            # Tokenizer should depend on the remote checkpoint, not the local tokenizer.json file.
-
-        finally:
-            os.remove("tokenizer.json")
 
 
 @is_staging_test
