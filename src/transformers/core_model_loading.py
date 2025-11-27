@@ -105,7 +105,7 @@ class ConversionOps:
     """Base class for weight conversion operations."""
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(dim={self.dim})"
+        return f"{self.__class__.__name__}(dim={self.dim}, {self.reverse_op}"
 
     @abstractmethod
     def convert(
@@ -637,6 +637,44 @@ def repl(m, repl_map: dict[str, str]) -> str:
     return replacement
 
 
+def rename_source_key(
+    source_key: str,
+    rename_alternation: re.Pattern,
+    rename_by_group: dict,
+    weight_pattern_alternation: re.Pattern,
+    weight_pattern_by_group: dict,
+    prefix: str | None = None,
+    meta_state_dict: dict | None = None,
+) -> tuple[str, re.Match | None]:
+    """
+    Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
+    the base model prefix during loading if necesary.
+    """
+    # 1. apply all renamings
+    renamed_key = rename_alternation.sub(lambda m: repl(m, rename_by_group), source_key).replace("\\", "")
+
+    # 2. apply renaming through weight conversions on the key if we have any WeightConverter
+    matched_converter_pattern = (
+        weight_pattern_alternation.search(renamed_key) if weight_pattern_alternation is not None else None
+    )
+    if matched_converter_pattern is not None:
+        renamed_key = weight_pattern_alternation.sub(lambda m: repl(m, weight_pattern_by_group), renamed_key).replace(
+            "\\", ""
+        )
+
+    # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
+    if prefix is not None and meta_state_dict is not None:
+        if (
+            renamed_key.startswith(prefix)
+            and meta_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
+        ):
+            renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
+        elif meta_state_dict.get(f"{prefix}.{renamed_key}") is not None:
+            renamed_key = f"{prefix}.{renamed_key}"
+
+    return renamed_key, matched_converter_pattern
+
+
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
@@ -762,6 +800,7 @@ def convert_and_load_state_dict_in_model(
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
     rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+    weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = None, None, None
     if converters != []:
         weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
     if tp_plan != {}:
@@ -773,24 +812,18 @@ def convert_and_load_state_dict_in_model(
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # 1. apply all renamings
-        renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
+        # 1. Rename the key according to all renaming pattern and optional weight converter patterns
+        renamed_key, matched_pattern = rename_source_key(
+            original_key,
+            rename_alt,
+            rename_by_group,
+            weight_pattern_alt,
+            tgt_group_to_glob,
+            prefix,
+            meta_model_state_dict,
+        )
 
-        # 2. apply 1 weight conversion on the key
-        matched_pattern = weight_pattern_alt.search(renamed_key) if converters != [] else None
-        if matched_pattern is not None:  # we have a converter to apply
-            renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace("\\", "")
-
-        # 3. check if we need to add or remove prefix
-        if (
-            renamed_key.startswith(prefix)
-            and meta_model_state_dict.get(re.sub(f"^{prefix}.", "", renamed_key, count=1)) is not None
-        ):
-            renamed_key = re.sub(f"^{prefix}.", "", renamed_key, count=1)
-        elif meta_model_state_dict.get(f"{prefix}.{renamed_key}") is not None:
-            renamed_key = f"{prefix}.{renamed_key}"
-
-        # 4. finally, collect the tensor into the proper converter
+        # 2. finally, collect the tensor into the proper converter
         if renamed_key in missing_keys:
             empty_param = meta_model_state_dict.get(renamed_key)
             if matched_pattern:
@@ -802,7 +835,7 @@ def convert_and_load_state_dict_in_model(
                 mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
                 source_pattern = original_key
 
-            # 5. Handle dtype casting
+            # 3. Handle dtype casting
             if (
                 hf_quantizer
                 and not hf_quantizer.pre_quantized
@@ -822,7 +855,7 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 6. Handle TP sharding or device_map placement -> scheduled materialization
+            # 4. Handle TP sharding or device_map placement -> scheduled materialization
             future = None
             if device_mesh:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
@@ -936,20 +969,17 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
         # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
         rename_alt, _, rename_by_group = build_glob_alternation(renamings)
+        weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = None, None, None
         if converters != []:
             weight_pattern_alt, src_group_to_glob, tgt_group_to_glob = build_glob_alternation(converters)
 
         state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
         for original_key, tensor in state_dict:
-            # apply all renamings
-            renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
-
-            # apply weight conversion on the key
-            matched_pattern = weight_pattern_alt.search(renamed_key) if converters != [] else None
+            # Rename the key according to all renaming pattern and optional weight converter patterns
+            renamed_key, matched_pattern = rename_source_key(
+                original_key, rename_alt, rename_by_group, weight_pattern_alt, tgt_group_to_glob
+            )
             if matched_pattern is not None:
-                renamed_key = weight_pattern_alt.sub(lambda m: repl(m, tgt_group_to_glob), renamed_key).replace(
-                    "\\", ""
-                )
                 new_converter = deepcopy(pattern_to_converter[src_group_to_glob[matched_pattern.lastgroup]])
                 # each target key gets its own converter instance
                 mapping = conversion_mapping.setdefault(renamed_key, new_converter)
