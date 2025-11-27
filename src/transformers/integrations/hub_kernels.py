@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 try:
     from kernels import (
         Device,
+        FuncRepository,
         LayerRepository,
         Mode,
         get_kernel,
@@ -40,7 +41,6 @@ try:
     _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
     _kernels_available = True
     _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
-
 
     def use_kernel_forward_from_hub(layer_name: str):
         if _kernels_enabled:
@@ -165,13 +165,10 @@ try:
                 )
             }
         },
-    }
-
-    _HUB_FUNC_KERNEL_MAPPING: dict[str, dict[Union[Device, str], LayerRepository]] = {
-        "rotary_fn": {
+        "rotary_pos_emb": {
             "xpu": {
-                Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-community/rotary", layer_name="apply_rotary_transformers"
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
                 )
             }
         },
@@ -188,7 +185,6 @@ try:
                 "kernels uses an incompatible version. Please install the latest version with `pip install -U kernels`."
             )
         register_kernel_mapping(mapping)
-        register_kernel_mapping(_HUB_FUNC_KERNEL_MAPPING)
 
 
 except ImportError:
@@ -198,12 +194,6 @@ except ImportError:
     # Stub to make decorators int transformers work when `kernels`
     # is not installed.
     def use_kernel_forward_from_hub(*args, **kwargs):
-        def decorator(cls):
-            return cls
-
-        return decorator
-
-    def use_kernel_func_from_hub(*args, **kwargs):
         def decorator(cls):
             return cls
 
@@ -339,7 +329,6 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
-    "use_kernel_func_from_hub",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
