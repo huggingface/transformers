@@ -105,7 +105,7 @@ class ConversionOps:
     """Base class for weight conversion operations."""
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(dim={self.dim}, {self.reverse_op}"
+        return f"{self.__class__.__name__}(dim={self.dim})"
 
     @abstractmethod
     def convert(
@@ -186,7 +186,11 @@ class MergeModulelist(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self, input_dict: dict[str, list[torch.Tensor]], source_patterns: list[str], target_patterns: list[str]
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
         for source_pattern, tensors in input_dict.items():
@@ -641,8 +645,8 @@ def rename_source_key(
     source_key: str,
     rename_alternation: re.Pattern,
     rename_by_group: dict,
-    weight_pattern_alternation: re.Pattern,
-    weight_pattern_by_group: dict,
+    weight_pattern_alternation: re.Pattern | None,
+    weight_pattern_by_group: dict | None,
     prefix: str | None = None,
     meta_state_dict: dict | None = None,
 ) -> tuple[str, re.Match | None]:

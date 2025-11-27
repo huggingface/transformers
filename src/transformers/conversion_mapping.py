@@ -203,8 +203,9 @@ def get_model_conversion_mapping(
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
         if model_specific_conversions is not None:
             weight_conversions.extend(model_specific_conversions)
-        elif add_legacy:
-            weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
+
+    if add_legacy:
+        weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
     # Add the ones from the quantizer as well if provided
     if hf_quantizer is not None:
