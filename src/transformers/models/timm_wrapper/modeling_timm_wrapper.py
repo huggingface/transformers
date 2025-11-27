@@ -82,7 +82,7 @@ def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timm_model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     config: TimmWrapperConfig
     _no_split_modules = []
     model_tags = ["timm"]

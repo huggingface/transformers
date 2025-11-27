@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,13 @@
 # limitations under the License.
 
 import enum
-from typing import Any, Union, overload
+from typing import Any, Optional, Union, overload
 
+import numpy as np
+
+from ..audio_utils import AudioInput
 from ..generation import GenerationConfig
+from ..image_utils import ImageInput
 from ..processing_utils import ProcessingKwargs, Unpack
 from ..utils import (
     add_end_docstrings,
@@ -25,23 +29,20 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from ..utils.chat_template_utils import Chat
+from ..video_utils import VideoInput
 from .base import Pipeline, build_pipeline_init_args
 
+
+if is_torch_available():
+    import torch
+
+    from ..models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+    from .pt_utils import KeyDataset
 
 if is_vision_available():
     from PIL import Image
 
-    from ..image_utils import load_images, valid_images
-
-
-if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
-    from .pt_utils import KeyDataset
-
 logger = logging.get_logger(__name__)
-
-IMAGE_TOKEN = "<image>"
 
 
 class ReturnType(enum.Enum):
@@ -50,13 +51,26 @@ class ReturnType(enum.Enum):
     FULL_TEXT = 2
 
 
+class Chat:
+    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages: list[dict]):
+        for message in messages:
+            if not ("role" in message and "content" in message):
+                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+        self.messages = messages
+
+
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
-class ImageTextToTextPipeline(Pipeline):
+class AnyToAnyPipeline(Pipeline):
     """
-    Image-text-to-text pipeline using an `AutoModelForImageTextToText`. This pipeline generates text given an image and text.
-    When the underlying model is a conversational model, it can also accept one or more chats,
-    in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
-    Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+    Multimodal Generation pipeline using an `AutoModelForMultimodalLM`. This pipeline generates text given any
+    combination of multimodal data and text.When the underlying model is a conversational model, it can also
+    accept one or more chats, in which case the pipeline will operate in chat mode and will continue the
+    chat(s) by adding its response(s). Each chat takes the form of a list of dicts, where each dict contains
+    "role" and "content" keys.
 
     Unless the model you're using explicitly sets these generation parameters in its configuration files
     (`generation_config.json`), the following default values will be used:
@@ -67,7 +81,7 @@ class ImageTextToTextPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> pipe = pipeline(task="image-text-to-text", model="Salesforce/blip-image-captioning-base")
+    >>> pipe = pipeline(task="any-to-any", model="google/gemma-3n-E4B-it")
     >>> pipe("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", text="A photo of")
     [{'generated_text': 'a photo of two birds'}]
     ```
@@ -75,7 +89,7 @@ class ImageTextToTextPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+    >>> pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
     >>> messages = [
     >>>     {
     >>>         "role": "user",
@@ -106,11 +120,11 @@ class ImageTextToTextPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
-    This image-text to text pipeline can currently be loaded from pipeline() using the following task identifier:
-    "image-text-to-text".
+    This multimodal pipeline can currently be loaded from pipeline() using the following task identifier:
+    "any-to-any".
 
     See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?pipeline_tag=image-text-to-text).
+    [huggingface.co/models](https://huggingface.co/models?pipeline_tag=any-to-any).
     """
 
     _load_processor = True
@@ -126,8 +140,12 @@ class ImageTextToTextPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        requires_backends(self, "vision")
-        self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
+        if "image" in self.model.input_modalities or "video" in self.model.input_modalities:
+            requires_backends(self, "vision")
+            requires_backends(self, "torchvision")
+        if "audio" in self.model.input_modalities:
+            requires_backends(self, "librosa")
+        self.check_model_type(MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES)
 
     def _sanitize_parameters(
         self,
@@ -141,6 +159,7 @@ class ImageTextToTextPipeline(Pipeline):
         stop_sequence=None,
         continue_final_message=None,
         skip_special_tokens=None,
+        generation_mode=None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         forward_kwargs = {}
@@ -155,35 +174,52 @@ class ImageTextToTextPipeline(Pipeline):
             preprocess_params["continue_final_message"] = continue_final_message
 
         # Forward kwargs
-        if generate_kwargs is not None:
-            forward_kwargs["generate_kwargs"] = generate_kwargs
+        forward_kwargs["generate_kwargs"] = generate_kwargs or {}
+        if generation_mode is not None and generation_mode != "text":
+            forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
+        if kwargs.get("load_audio_from_video"):
+            forward_kwargs["generate_kwargs"]["use_audio_in_video"] = True
         if stop_sequence is not None:
-            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                logger.warning_once(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    " the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
-        if generate_kwargs is not None:
-            forward_kwargs["generate_kwargs"] = generate_kwargs
+            if isinstance(stop_sequence, str):
+                stop_sequence = [stop_sequence]
+            forward_kwargs["generate_kwargs"]["stop_strings"] = stop_sequence
+            forward_kwargs["generate_kwargs"]["tokenizer"] = self.processor.tokenizer
+
         if max_new_tokens is not None:
-            if "generate_kwargs" not in forward_kwargs:
-                forward_kwargs["generate_kwargs"] = {}
-            if "max_new_tokens" in forward_kwargs["generate_kwargs"]:
+            if generate_kwargs is not None and "max_new_tokens" in generate_kwargs:
                 raise ValueError(
-                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter,"
-                    " please use only one"
+                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and "
+                    "once as a direct argument. Please use only one."
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
-        # Postprocess params
         if return_full_text is not None and return_type is None:
             if return_tensors is not None:
                 raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
             return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
-        if return_tensors is not None and return_type is None:
+        elif return_tensors is not None and return_type is None:
             return_type = ReturnType.TENSORS
+        # We don't want to set the global default to FULLTEXT at init time. That is why
+        # `_postprocess_params` is checked before setting the default value
+        elif return_type is None and generation_mode in [None, "text"] and hasattr(self, "_postprocess_params"):
+            return_type = ReturnType.FULL_TEXT
+
+        # Postprocess params
+        if generation_mode not in [None, "text"] and return_type is not None:
+            raise ValueError(
+                f"`return_type` cannot be set to {return_type} when generation_mode={generation_mode}. "
+                "Set `return_type=None` or generation_mode='text'"
+            )
+        if generation_mode not in [None, "text", "image", "audio"]:
+            raise ValueError(
+                f"`generation_mode` can be only one of the `text`, `audio`, `image` but got generation_mode[={generation_mode}]"
+            )
+        elif generation_mode is not None and generation_mode not in self.model.output_modalities:
+            raise ValueError(
+                f"`generation_mode={generation_mode}` is not supported for {self.model.__class__.__name__}. "
+                f"The model can only output the following modalities: {self.model.output_modalities}"
+            )
+
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if continue_final_message is not None:
@@ -192,39 +228,55 @@ class ImageTextToTextPipeline(Pipeline):
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
         if skip_special_tokens is not None:
             postprocess_params["skip_special_tokens"] = skip_special_tokens
-
+        postprocess_params["generation_mode"] = generation_mode
         return preprocess_params, forward_kwargs, postprocess_params
 
     @overload
     def __call__(
         self,
-        image: Union[str, "Image.Image"] | None = None,
-        text: str | None = None,
+        text: Optional[str] = None,
+        images: Optional[Union[str, "Image.Image"]] = None,
+        videos: Optional[Union[str, "np.ndarray", "torch.Tensor"]] = None,
+        audio: Optional[Union[str, "np.ndarray"]] = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
         self,
-        image: list[str] | list["Image.Image"] | None = None,
-        text: list[str] | None = None,
+        text: Optional[list[str]] = None,
+        images: Optional[Union[list[str], list["Image.Image"]]] = None,
+        videos: Optional[Union[list[str], list["np.ndarray"], list["torch.Tensor"]]] = None,
+        audio: Optional[Union[list[str], list["np.ndarray"]]] = None,
         **kwargs: Any,
     ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        images: Union[
-            str, list[str], list[list[str]], "Image.Image", list["Image.Image"], list[list["Image.Image"]], list[dict]
-        ]
-        | None = None,
-        text: str | list[str] | list[dict] | None = None,
+        text: Union[str, list[str], list[dict]],
+        images: Optional[
+            Union[
+                str,
+                list[str],
+                list[list[str]],
+                ImageInput,
+            ]
+        ] = None,
+        videos: Optional[Union[str, list[str], VideoInput]] = None,
+        audio: Optional[Union[str, list[str], AudioInput]] = None,
         **kwargs,
-    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
-        Generate a text given text and the image(s) passed as inputs.
+        Generate a text given text and optionally multimodal data passed as inputs.
 
         Args:
-            images (`str`, `list[str]`, `PIL.Image, `list[PIL.Image]`, `list[dict[str, Union[str, PIL.Image]]]`):
+            text (`str`, `list[str]`, `list[dict]`):
+                The text to be used for generation. If a list of strings is passed, the length of the list should be
+                the same as the number of images. Text can also follow the chat format: a list of dictionaries where
+                each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'
+                and 'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of
+                dictionary containing the text of the message and the type of the message.
+            images (`str`, `list[str]`, `ImageInput`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image
@@ -233,13 +285,24 @@ class ImageTextToTextPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Finally, this pipeline also supports
                 the chat format (see `text`) containing images and text in this argument.
-            text (str, list[str], `list[dict[str, Union[str, PIL.Image]]]`):
-                The text to be used for generation. If a list of strings is passed, the length of the list should be
-                the same as the number of images. Text can also follow the chat format: a list of dictionaries where
-                each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'
-                and 'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of
-                dictionary containing the text of the message and the type of the message. The type of the message
-                can be either 'text' or 'image'. If the type is 'image', no text is needed.
+            videos (`str`, `list[str]`, `VideoInput`):
+                The pipeline handles three types of videos:
+
+                - A string containing a HTTP(s) link pointing to a video
+                - A string containing a local path to a video
+                - A video loaded and decoded to array format
+
+                The pipeline accepts either a single video or a batch of videos. Finally, this pipeline also supports
+                the chat format (see `text`) containing videos and text in this argument.
+            audio (`str`, `list[str]`, `AudioInput`):
+                The pipeline handles three types of audios:
+
+                - A string containing a HTTP(s) link pointing to an audio
+                - A string containing a local path to an audio
+                - An audio loaded in PIL directly
+
+                The pipeline accepts either a single audios or a batch of audios. Finally, this pipeline also supports
+                the chat format (see `text`) containing audios and text in this argument.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Returns the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -259,52 +322,33 @@ class ImageTextToTextPipeline(Pipeline):
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot
             return a combination of both `generated_text` and `generated_token_ids`):
 
-            - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
-            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
+            - **generated_text** (`str`, present when `return_text=True` and `generation_mode="text") -- The generated text.
+            - **generated_audio** (`np.ndarray`, present when `generation_mode="audio") -- The generated audio.
+            - **generated_image** (`PIL.Image.Image`, present when `generation_mode="image") -- The generated image.
+            - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True` and `generation_mode="text") -- The token
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
 
-        def _is_chat(arg):
-            return isinstance(arg, (list, tuple, KeyDataset)) and isinstance(arg[0], (list, tuple, dict))
-
-        if _is_chat(text):
-            if images is not None:
-                raise ValueError(
-                    "Invalid input: you passed `chat` and `images` as separate input arguments. "
-                    "Images must be placed inside the chat message's `content`. For example, "
-                    "'content': ["
-                    "      {'type': 'image', 'url': 'image_url'}, {'type': 'text', 'text': 'Describe the image.'}}"
-                    "]"
-                )
+        if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(text[0], dict):
+            if isinstance(text[0], dict) and "role" in text[0]:
                 return super().__call__(Chat(text), **kwargs)
-            else:
+            elif isinstance(text[0], (list, tuple)) and isinstance(text[0][0], dict) and "role" in text[0][0]:
                 chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
                 return super().__call__(chats, **kwargs)
 
-        # Same as above, but the `images` argument contains the chat. This can happen e.g. is the user only passes a
-        # chat as a positional argument.
-        elif text is None and _is_chat(images):
-            # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(images[0], dict):
-                return super().__call__(Chat(images), **kwargs)
-            else:
-                chats = [Chat(image) for image in images]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
-
-        elif images is not None and text is None and not valid_images(images):
+        if text is not None and not (isinstance(text, str) or (isinstance(text, list) and isinstance(text[0], str))):
             """
             Supports the following format
-            - {"image": image, "text": text}
-            - [{"image": image, "text": text}]
+            - {"text": text, "image": image, "video": video, "audio": audio}
+            - [{"text": text, "image": image, "video": video, "audio": audio}]
             - Generator and datasets
             This is a common pattern in other multimodal pipelines, so we support it here as well.
             """
-            return super().__call__(images, **kwargs)
+            return super().__call__(text, **kwargs)
 
         # encourage the user to use the chat format if supported
         if getattr(self.processor, "chat_template", None) is not None:
@@ -314,13 +358,7 @@ class ImageTextToTextPipeline(Pipeline):
                 "information, see https://huggingface.co/docs/transformers/en/chat_templating"
             )
 
-        # support text only generation
-        if images is None:
-            return super().__call__(text, **kwargs)
-        if text is None:
-            raise ValueError("You must provide text for this pipeline.")
-
-        return super().__call__({"images": images, "text": text}, **kwargs)
+        return super().__call__({"text": text, "images": images, "video": videos, "audio": audio}, **kwargs)
 
     def preprocess(self, inputs=None, timeout=None, continue_final_message=None, **processing_kwargs):
         if isinstance(inputs, Chat):
@@ -328,56 +366,64 @@ class ImageTextToTextPipeline(Pipeline):
             # because very few models support multiple separate, consecutive assistant messages
             if continue_final_message is None:
                 continue_final_message = inputs.messages[-1]["role"] == "assistant"
+
+            # Handle Mistral tokenizer which does not accept processing kwargs
+            chat_template_kwargs = {"add_generation_prompt": not continue_final_message, **processing_kwargs}
+            if self.processor.tokenizer.__class__.__name__ == "MistralCommonTokenizer":
+                chat_template_kwargs = {
+                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                }
+
             model_inputs = self.processor.apply_chat_template(
                 inputs.messages,
-                add_generation_prompt=not continue_final_message,
                 continue_final_message=continue_final_message,
                 return_tensors="pt",
                 tokenize=True,
                 return_dict=True,
-            )
+                **chat_template_kwargs,
+            ).to(dtype=self.dtype)
             model_inputs["text"] = inputs
             return model_inputs
+
         # In case we only have text inputs
         if isinstance(inputs, (list, tuple, str)):
-            images = None
             text = inputs
-            inputs_text = inputs
+            inputs = {}
         else:
-            images = load_images(inputs["images"], timeout=timeout)
-            text = inputs["text"]
-            inputs_text = inputs["text"]
+            inputs = inputs.copy()  # avoid in-place changes if users passed dict
+            text = inputs.pop("text")
 
-        # if batched text inputs, we set padding to True unless specified otherwise
+            # Feature extractor do not load audio files and expect a decode array
+            if "audio" in inputs and hasattr(self.processor, "feature_extractor"):
+                inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
+
+        # If batched text inputs, we set padding to True unless specified otherwise
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processing_kwargs.setdefault("padding", True)
-        model_inputs = self.processor(images=images, text=text, return_tensors="pt", **processing_kwargs).to(
+
+        # Multimodal data is loaded in preprocessors so we pass all ipnuts directly to `self.processor`
+        model_inputs = self.processor(text=text, **inputs, return_tensors="pt", **processing_kwargs).to(
             dtype=self.dtype
         )
-
-        model_inputs["text"] = inputs_text
-
+        model_inputs["text"] = text
         return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):
         generate_kwargs = {} if generate_kwargs is None else generate_kwargs
         prompt_text = model_inputs.pop("text")
-        input_ids = (
-            model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
-        )  # for decoder-only models
+        input_ids = model_inputs.get("input_ids", model_inputs.get("decoder_input_ids"))
 
         # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
-
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}
 
     def postprocess(
         self,
         model_outputs,
-        return_type=ReturnType.FULL_TEXT,
+        return_type=None,
         continue_final_message=None,
         skip_special_tokens=None,
         **postprocess_kwargs,
@@ -394,11 +440,11 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        generated_texts = self.processor.post_process_image_text_to_text(
+        generation_mode = postprocess_kwargs["generation_mode"] or "text"
+        if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
+            generated_sequence = self.model.decode_image_tokens(generated_sequence.to(self.model.device))
+        generated_outputs = self.processor.post_process_multimodal_output(
             generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
-        )
-        decoded_inputs = self.processor.post_process_image_text_to_text(
-            input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
         )
 
         # Force consistent behavior for including the input text in the output
@@ -406,7 +452,11 @@ class ImageTextToTextPipeline(Pipeline):
             # Remove the input text from the generated text if the generated text starts with the input text
             # (accounting for the possibility of a space between the input and generated text)
             new_generated_texts = []
-            for text_generated, decoded_input in zip(generated_texts, decoded_inputs):
+            postprocess_kwargs["generation_mode"] = "text"
+            decoded_inputs = self.processor.post_process_multimodal_output(
+                input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
+            )
+            for text_generated, decoded_input in zip(generated_outputs, decoded_inputs):
                 # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
                 index_input_text = text_generated.find(decoded_input)
                 # Limit the search to 2 residual characters, like spaces or new lines, to avoid removing a large part of the answer
@@ -415,10 +465,10 @@ class ImageTextToTextPipeline(Pipeline):
                     new_generated_texts.append(text_generated[index_input_text + len(decoded_input) :])
                 else:
                     new_generated_texts.append(text_generated)
-            generated_texts = new_generated_texts
+            generated_outputs = new_generated_texts
         if return_type == ReturnType.FULL_TEXT:
             full_texts = []
-            for prompt_text, generated_text in zip(input_texts, generated_texts):
+            for prompt_text, generated_text in zip(input_texts, generated_outputs):
                 if isinstance(prompt_text, str):
                     generated_text = prompt_text + generated_text
                 elif isinstance(prompt_text, Chat):
@@ -442,14 +492,14 @@ class ImageTextToTextPipeline(Pipeline):
                             {"role": "assistant", "content": generated_text}
                         ]
                 full_texts.append(generated_text)
-            generated_texts = full_texts
+            generated_outputs = full_texts
 
         records = [
             {
                 "input_text": input_text.messages if isinstance(input_text, Chat) else input_text,
-                "generated_text": generated_text,
+                f"generated_{generation_mode}": generated_output,
             }
-            for input_text, generated_text in zip(input_texts, generated_texts)
+            for input_text, generated_output in zip(input_texts, generated_outputs)
         ]
 
         return records
