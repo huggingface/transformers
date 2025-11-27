@@ -402,6 +402,7 @@ class CohereTokenizer(TokenizersBackend):
         >> inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
+        ```
         """
         return self.apply_chat_template(
             conversation,
