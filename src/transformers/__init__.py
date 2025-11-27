@@ -173,7 +173,7 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_utils": ["PreTrainedTokenizer", "PythonBackend"],
+    "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
     "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -681,8 +681,8 @@ if TYPE_CHECKING:
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
     # Tokenization
-    from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
-    from .tokenization_utils import PythonBackend as PythonBackend
+    from .tokenization_python import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_python import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
