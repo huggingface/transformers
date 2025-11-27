@@ -98,30 +98,12 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
         super().post_init()
 
-    @staticmethod
-    def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
-        """
-        Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
-        We don't want this behavior for timm wrapped models. Instead, this method adds a
-        "timm_model." prefix to enable loading official timm Hub checkpoints.
-        """
-        if "timm_model." not in key:
-            return f"timm_model.{key}", True
-        return key, False
-
-    def _fix_state_dict_key_on_save(self, key):
-        """
-        Overrides original method to remove "timm_model." prefix from state_dict keys.
-        Makes the saved checkpoint compatible with the `timm` library.
-        """
-        return key.replace("timm_model.", ""), True
-
     def load_state_dict(self, state_dict, *args, **kwargs):
         """
         Override original method to fix state_dict keys on load for cases when weights are loaded
         without using the `from_pretrained` method (e.g., in Trainer to resume from checkpoint).
         """
-        state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
+        state_dict = {f"timm_model.{k}" if "timm_model." not in k else k: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
     @torch.no_grad()
