@@ -4745,6 +4745,7 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "paged|flash_attention_4": paged_attention_forward,
         "paged|flash_attention_3": paged_attention_forward,
         "paged|flash_attention_2": paged_attention_forward,
         "paged|sdpa": sdpa_attention_paged_forward,
