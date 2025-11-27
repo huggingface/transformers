@@ -130,6 +130,7 @@ _import_structure = {
     "loss": [],
     "modelcard": ["ModelCard"],
     "pipelines": [
+        "AnyToAnyPipeline",
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
@@ -636,6 +637,7 @@ if TYPE_CHECKING:
     from .optimization import get_wsd_schedule as get_wsd_schedule
 
     # Pipelines
+    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
