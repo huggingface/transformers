@@ -202,10 +202,7 @@ _import_structure = {
     "utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
-        "PYTORCH_PRETRAINED_BERT_CACHE",
-        "PYTORCH_TRANSFORMERS_CACHE",
         "SPIECE_UNDERLINE",
-        "TRANSFORMERS_CACHE",
         "WEIGHTS_NAME",
         "TensorType",
         "add_end_docstrings",
@@ -711,10 +708,7 @@ if TYPE_CHECKING:
     # Files and general utilities
     from .utils import CONFIG_NAME as CONFIG_NAME
     from .utils import MODEL_CARD_NAME as MODEL_CARD_NAME
-    from .utils import PYTORCH_PRETRAINED_BERT_CACHE as PYTORCH_PRETRAINED_BERT_CACHE
-    from .utils import PYTORCH_TRANSFORMERS_CACHE as PYTORCH_TRANSFORMERS_CACHE
     from .utils import SPIECE_UNDERLINE as SPIECE_UNDERLINE
-    from .utils import TRANSFORMERS_CACHE as TRANSFORMERS_CACHE
     from .utils import WEIGHTS_NAME as WEIGHTS_NAME
     from .utils import TensorType as TensorType
     from .utils import add_end_docstrings as add_end_docstrings

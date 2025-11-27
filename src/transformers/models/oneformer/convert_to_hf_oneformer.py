@@ -1180,13 +1180,6 @@ if __name__ == "__main__":
         processor.save_pretrained(save_directory / model_name)
         oneformer_for_universal_segmentation.save_pretrained(save_directory / model_name)
 
-        processor.push_to_hub(
-            repo_id=os.path.join("shi-labs", config_file.stem),
-            commit_message="Add configs",
-            use_temp_dir=True,
-        )
-        oneformer_for_universal_segmentation.push_to_hub(
-            repo_id=os.path.join("shi-labs", config_file.stem),
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        model_id = f"shi-labs/{model_name}"
+        processor.push_to_hub(repo_id=model_id)
+        oneformer_for_universal_segmentation.push_to_hub(repo_id=model_id)

@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional, Union, overload
 
 import numpy as np
-from huggingface_hub import list_repo_files
+from huggingface_hub import create_repo, list_repo_files
 from packaging import version
 
 from . import __version__
@@ -2659,7 +2659,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         special_tokens_map_file = os.path.join(

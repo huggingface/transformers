@@ -36,7 +36,7 @@ from typing import Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import split_torch_state_dict_into_shards
+from huggingface_hub import create_repo, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
@@ -3013,8 +3013,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        ignore_metadata_errors = kwargs.pop("ignore_metadata_errors", False)
-
         if token is not None:
             kwargs["token"] = token
 
@@ -3055,7 +3053,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         metadata = {}
@@ -3340,9 +3338,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if push_to_hub:
             # Eventually create an empty model card
-            model_card = create_and_tag_model_card(
-                repo_id, self.model_tags, token=token, ignore_metadata_errors=ignore_metadata_errors
-            )
+            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
 
             # Update model card if needed:
             model_card.save(os.path.join(save_directory, "README.md"))
