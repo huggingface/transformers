@@ -84,7 +84,7 @@ class InformerPreTrainedModel(PreTrainedModel):
     config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = True
 
     @torch.no_grad()

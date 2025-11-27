@@ -2304,7 +2304,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     config_class = Qwen3OmniMoeConfig
-    output_modalities = ["text", "audio"]
+    output_modalities = ("text", "audio")
 
     def __init__(self, config: Qwen3OmniMoeConfig):
         super().__init__(config)

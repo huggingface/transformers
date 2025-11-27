@@ -3233,7 +3233,7 @@ class TestGetEncoder(unittest.TestCase):
             num_hidden_layers=2,
             num_attention_heads=4,
         )
-        model = MistralModel(cfg)
+        model = MistralForCausalLM(cfg)
         encoder = model.get_encoder()
 
         assert encoder is model, f"Base model get_encoder() should return self, got {type(encoder)}"

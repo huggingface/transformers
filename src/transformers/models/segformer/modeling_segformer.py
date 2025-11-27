@@ -412,7 +412,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
     config: SegformerConfig
     base_model_prefix = "segformer"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
 
 @auto_docstring

@@ -281,6 +281,7 @@ OBJECTS_TO_IGNORE = {
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
+    "AnyToAnyPipeline",
     "ImageToImagePipeline",
     "ImageToTextPipeline",
     "InformerConfig",

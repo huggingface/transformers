@@ -211,7 +211,7 @@ ZeRO-2는 GPU에서 옵티마이저와 그레이디언트를 분할합니다. �
         "overlap_comm": true,
         "reduce_scatter": true,
         "reduce_bucket_size": 5e8,
-        "contiguous_gradients": true
+        "contiguous_gradients": true,
         "round_robin_gradients": true
     }
 }
