@@ -23,6 +23,8 @@ from enum import Enum
 from functools import cached_property
 from typing import Any
 
+from packaging import version
+
 from .debug_utils import DebugOption
 from .trainer_utils import (
     FSDPOption,
@@ -1604,8 +1606,12 @@ class TrainingArguments:
                     if is_torch_musa_available():
                         torch.backends.mudnn.allow_tf32 = True
                     else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                        if version.parse(torch.__version__) >= version.parse("2.9.0"):
+                            torch.backends.cuda.matmul.fp32_precision = "tf32"
+                            torch.backends.cudnn.conv.fp32_precision = "tf32"
+                        else:
+                            torch.backends.cuda.matmul.allow_tf32 = True
+                            torch.backends.cudnn.allow_tf32 = True
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
@@ -1616,8 +1622,12 @@ class TrainingArguments:
                     if is_torch_musa_available():
                         torch.backends.mudnn.allow_tf32 = True
                     else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                        if version.parse(torch.__version__) >= version.parse("2.9.0"):
+                            torch.backends.cuda.matmul.fp32_precision = "tf32"
+                            torch.backends.cudnn.conv.fp32_precision = "tf32"
+                        else:
+                            torch.backends.cuda.matmul.allow_tf32 = True
+                            torch.backends.cudnn.allow_tf32 = True
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
@@ -1625,8 +1635,12 @@ class TrainingArguments:
                     if is_torch_musa_available():
                         torch.backends.mudnn.allow_tf32 = False
                     else:
-                        torch.backends.cuda.matmul.allow_tf32 = False
-                        torch.backends.cudnn.allow_tf32 = False
+                        if version.parse(torch.__version__) >= version.parse("2.9.0"):
+                            torch.backends.cuda.matmul.fp32_precision = "ieee"
+                            torch.backends.cudnn.conv.fp32_precision = "ieee"
+                        else:
+                            torch.backends.cuda.matmul.allow_tf32 = False
+                            torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
         if self.report_to == "all" or self.report_to == ["all"]:

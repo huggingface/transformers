@@ -149,8 +149,14 @@ tf32는 NVIDIA Ampere GPU에서 기본적으로 활성화되어 있지만, fp32 
 
 ```py
 import torch
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
+from packaging import version
+
+if version.parse(torch.__version__) >= version.parse("2.9.0"):
+    torch.backends.cuda.matmul.fp32_precision = "tf32"
+    torch.backends.cudnn.conv.fp32_precision = "tf32"
+else:
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 ```
 
 tf32 모드에서 혼합 정밀도 학습을 활성화하려면 [`TrainingArguments`]에서 [tf32()](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.tf32) 옵션을 설정하세요.

@@ -247,7 +247,12 @@ class CodeSimilarityAnalyzer:
             logging.getLogger(name).setLevel(logging.ERROR)
         huggingface_hub_logging.set_verbosity_error()
         transformers_logging.set_verbosity_error()
-        torch.backends.cuda.matmul.allow_tf32 = True
+        from packaging import version
+
+        if version.parse(torch.__version__) >= version.parse("2.9.0"):
+            torch.backends.cuda.matmul.fp32_precision = "tf32"
+        else:
+            torch.backends.cuda.matmul.allow_tf32 = True
         torch.set_grad_enabled(False)
 
         self.models_root = MODELS_ROOT
