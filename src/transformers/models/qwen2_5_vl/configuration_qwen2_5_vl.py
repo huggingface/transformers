@@ -230,7 +230,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         if self.rope_parameters.get("rope_type", self.rope_parameters.get("type")) == "mrope":
             self.rope_parameters["rope_type"] = "default"
         self.standardize_rope_params()
-        self.validate(ignore_keys=ignore_keys)
+        self.validate_rope(ignore_keys=ignore_keys)
         return kwargs
 
 

@@ -166,7 +166,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         )
 
 
-class CsmConfig(PreTrainedConfig):
+class CsmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`CsmForConditionalGeneration`]. It is used to instantiate an CSM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration

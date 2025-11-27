@@ -279,7 +279,7 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate()
+        self.validate_rope()
         return kwargs
 
     def to_dict(self):

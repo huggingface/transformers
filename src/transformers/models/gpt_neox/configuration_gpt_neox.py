@@ -167,7 +167,7 @@ class GPTNeoXConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", default_theta))
         self.standardize_rope_params()
-        self.validate()
+        self.validate_rope()
         return kwargs
 
 
