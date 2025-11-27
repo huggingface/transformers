@@ -178,11 +178,11 @@ class PhimoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             **kwargs,
         )
 
-    def validate(self, ignore_keys=None):
+    def validate_rope(self, ignore_keys=None):
         """
         Validate the `rope_parameters` configuration.
         """
-        super().validate(ignore_keys=ignore_keys)
+        super().validate_rope(ignore_keys=ignore_keys)
 
         # Run model-specific rope validation
         if self.rope_parameters["rope_type"] != "default":

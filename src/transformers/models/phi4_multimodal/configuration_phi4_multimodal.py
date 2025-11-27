@@ -428,11 +428,11 @@ class Phi4MultimodalConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         if rope_parameters_type is not None and rope_parameters_type in ["su", "yarn"]:
             self.rope_parameters["rope_type"] = "longrope"
 
-    def validate(self, ignore_keys: Optional[set] = None):
+    def validate_rope(self, ignore_keys: Optional[set] = None):
         """
         Validate the `rope_parameters` configuration.
         """
-        super().validate(ignore_keys=ignore_keys)
+        super().validate_rope(ignore_keys=ignore_keys)
 
         # Run Phi4Multimodal specific validation
         if not isinstance(self.rope_parameters, dict):

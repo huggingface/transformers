@@ -639,7 +639,7 @@ class RotaryEmbeddingConfigMixin:
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
         self.standardize_rope_params()
-        self.validate(ignore_keys=ignore_keys)
+        self.validate_rope(ignore_keys=ignore_keys)
         return kwargs
 
     def standardize_rope_params(self):
@@ -668,7 +668,7 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate(self: PreTrainedConfig, ignore_keys: Optional[set] = None):
+    def validate_rope(self: PreTrainedConfig, ignore_keys: Optional[set] = None):
         """
         Validate the RoPE config arguments, given a `PreTrainedConfig` object
         """
@@ -683,7 +683,7 @@ class RotaryEmbeddingConfigMixin:
 
         for rope_parameters in rope_parameters_dict.values():
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
-            validation_fn = getattr(self, f"_validate_{rope_type}_parameters")
+            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters")
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
@@ -721,7 +721,7 @@ class RotaryEmbeddingConfigMixin:
         if factor is None or not isinstance(factor, float) or factor < 1.0:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
-    def _validate_yarn_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
         required_keys = {"rope_type", "factor", "rope_theta"}
         optional_keys = {
             "attention_factor",
@@ -784,7 +784,7 @@ class RotaryEmbeddingConfigMixin:
                 "factor) -- we recommend updating both fields for optimal downstream model usage."
             )
 
-    def _validate_longrope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_longrope_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
         required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta"}
         # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
         optional_keys = {"attention_factor", "factor", "original_max_position_embeddings"}
@@ -836,7 +836,7 @@ class RotaryEmbeddingConfigMixin:
                         f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
                     )
 
-    def _validate_llama3_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
+    def _validate_llama3_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
         required_keys = {
             "rope_type",
             "factor",

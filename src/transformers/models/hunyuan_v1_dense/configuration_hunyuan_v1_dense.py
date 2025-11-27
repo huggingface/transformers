@@ -152,11 +152,11 @@ class HunYuanDenseV1Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             **kwargs,
         )
 
-    def validate(self, ignore_keys=None):
+    def validate_rope(self, ignore_keys=None):
         """
         Validate the `rope_parameters` configuration.
         """
-        super().validate(ignore_keys=ignore_keys)
+        super().validate_rope(ignore_keys=ignore_keys)
         if self.rope_parameters is None:
             return
 
