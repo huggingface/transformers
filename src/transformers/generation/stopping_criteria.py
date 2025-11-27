@@ -3,7 +3,6 @@ import warnings
 from abc import ABC
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -68,7 +67,7 @@ class MaxLengthCriteria(StoppingCriteria):
             The maximum model length, as defined by the model's `config.max_position_embeddings` attribute.
     """
 
-    def __init__(self, max_length: int, max_position_embeddings: Optional[int] = None):
+    def __init__(self, max_length: int, max_position_embeddings: int | None = None):
         self.max_length = max_length
         self.max_position_embeddings = max_position_embeddings
 
@@ -98,7 +97,7 @@ class MaxTimeCriteria(StoppingCriteria):
             The start of the generation allowed time.
     """
 
-    def __init__(self, max_time: float, initial_timestamp: Optional[float] = None):
+    def __init__(self, max_time: float, initial_timestamp: float | None = None):
         self.max_time = max_time
         self.initial_timestamp = time.time() if initial_timestamp is None else initial_timestamp
 
@@ -239,7 +238,7 @@ class StopStringCriteria(StoppingCriteria):
     ```
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: str | list[str]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
         self.stop_strings: tuple[str, ...] = tuple(stop_strings)
@@ -459,7 +458,7 @@ class EosTokenCriteria(StoppingCriteria):
             The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_token_id: Union[int, list[int], torch.Tensor]):
+    def __init__(self, eos_token_id: int | list[int] | torch.Tensor):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -503,7 +502,7 @@ class StoppingCriteriaList(list):
         return is_done
 
     @property
-    def max_length(self) -> Optional[int]:
+    def max_length(self) -> int | None:
         for stopping_criterium in self:
             if isinstance(stopping_criterium, MaxLengthCriteria):
                 return stopping_criterium.max_length

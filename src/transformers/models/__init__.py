@@ -142,6 +142,9 @@ if TYPE_CHECKING:
     from .git import *
     from .glm import *
     from .glm4 import *
+    from .glm4v import *
+    from .glm4v_moe import *
+    from .glm46v import *
     from .glpn import *
     from .got_ocr2 import *
     from .gpt2 import *
@@ -308,6 +311,8 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3_tracker import *
+    from .sam3_tracker_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *

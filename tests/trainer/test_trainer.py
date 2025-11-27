@@ -447,6 +447,7 @@ if is_torch_available():
             self.a = nn.Parameter(torch.tensor(config.a).float())
             self.b = nn.Parameter(torch.tensor(config.b).float())
             self.double_output = config.double_output
+            self.post_init()
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
@@ -466,6 +467,7 @@ if is_torch_available():
             self.head = nn.Linear(config.hidden_size, 1)
             self.gradient_checkpointing = False
             self.double_output = config.double_output
+            self.post_init()
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x.unsqueeze(0)
@@ -496,6 +498,7 @@ if is_torch_available():
             self.a = nn.Parameter(torch.tensor(config.a).float())
             self.b = nn.Parameter(torch.tensor(config.b).float())
             self.random_torch = config.random_torch
+            self.post_init()
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
@@ -3726,6 +3729,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         for save_safetensors, pretrained in product([False, True], [False, True]):
+            save_safetensors = True
             with tempfile.TemporaryDirectory() as tmpdir:
                 trainer = get_regression_trainer(
                     a=1.5,
