@@ -328,6 +328,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
+    "use_kernel_func_from_hub",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
