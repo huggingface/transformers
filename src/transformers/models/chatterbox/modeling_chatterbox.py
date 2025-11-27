@@ -27,6 +27,7 @@ from tokenizers import Tokenizer
 from ...modeling_utils import PreTrainedModel
 from ...models.s3gen.modeling_s3gen import S3GenModel
 from ...models.t3.modeling_t3 import T3Cond, T3Model
+from ...utils import auto_docstring
 from .configuration_chatterbox import ChatterboxConfig
 
 
@@ -102,7 +103,7 @@ class Conditionals:
     t3: T3Cond
     gen: dict
 
-
+@auto_docstring
 class ChatterboxModel(ChatterboxPreTrainedModel):
     """
     Complete Chatterbox TTS Pipeline Model.

@@ -20,11 +20,14 @@ from ...configuration_utils import PretrainedConfig
 class ChatterboxConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChatterboxModel`]. It is used to instantiate a
-    Chatterbox model according to the specified arguments, defining the model architecture.
+    Chatterbox model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the
+    [ResembleAI/chatterbox](https://huggingface.co/ResembleAI/chatterbox-hf).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Chatterbox is a complete TTS pipeline that combines T3, S3Gen, and HiFTNet models.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
 
     Args:
         t3_config (`dict` or `T3Config`, *optional*):
@@ -33,10 +36,8 @@ class ChatterboxConfig(PretrainedConfig):
             Dictionary or config object for S3Gen model. If not provided, uses defaults.
         hiftnet_config (`dict` or `HiFTNetConfig`, *optional*):
             Dictionary or config object for HiFTNet model. If not provided, uses defaults.
-        is_multilingual (`bool`, *optional*, defaults to False):
+        is_multilingual (`bool`, *optional*, defaults to `False`):
             Whether to use multilingual configuration.
-
-    Example:
 
     ```python
     >>> from transformers import ChatterboxConfig, ChatterboxModel

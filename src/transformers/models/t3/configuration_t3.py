@@ -67,48 +67,48 @@ class T3Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_tokens_dict_size (`int`, *optional*, defaults to 704):
-            Size of the text token vocabulary. Use 704 for English-only, 2454 for multilingual.
-        speech_tokens_dict_size (`int`, *optional*, defaults to 8194):
-            Size of the speech token vocabulary. Includes special tokens (start: 6561, stop: 6562).
-        start_text_token (`int`, *optional*, defaults to 255):
-            Token ID for start-of-text marker.
-        stop_text_token (`int`, *optional*, defaults to 0):
-            Token ID for end-of-text marker.
-        start_speech_token (`int`, *optional*, defaults to 6561):
-            Token ID for start-of-speech marker.
-        stop_speech_token (`int`, *optional*, defaults to 6562):
-            Token ID for end-of-speech marker.
-        max_text_tokens (`int`, *optional*, defaults to 2048):
-            Maximum number of text tokens in a sequence.
-        max_speech_tokens (`int`, *optional*, defaults to 4096):
-            Maximum number of speech tokens in a sequence.
-        llama_config_name (`str`, *optional*, defaults to "Llama_520M"):
-            Name of the LLaMA configuration to use as backbone.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Hidden size of the transformer backbone (from LLaMA config).
-        input_pos_emb (`str`, *optional*, defaults to "learned"):
-            Type of positional embeddings. Currently only "learned" is supported.
-        speech_cond_prompt_len (`int`, *optional*, defaults to 150):
-            Length of speech conditioning prompt tokens.
-        encoder_type (`str`, *optional*, defaults to "voice_encoder"):
-            Type of speaker encoder to use.
-        speaker_embed_size (`int`, *optional*, defaults to 256):
-            Dimension of speaker embeddings from the voice encoder.
-        use_perceiver_resampler (`bool`, *optional*, defaults to True):
-            Whether to use perceiver resampler for conditioning prompts.
-        perceiver_num_latents (`int`, *optional*, defaults to 32):
-            Number of latent query tokens in the perceiver resampler.
-        perceiver_latent_dim (`int`, *optional*, defaults to 1024):
-            Dimension of latent tokens in the perceiver resampler.
-        perceiver_num_heads (`int`, *optional*, defaults to 4):
-            Number of attention heads in the perceiver resampler.
-        emotion_adv (`bool`, *optional*, defaults to True):
-            Whether to use emotion/exaggeration conditioning.
-        use_alignment_analyzer (`bool`, *optional*, defaults to None):
-            Whether to use alignment stream analyzer for multilingual models. If None, automatically enabled for multilingual.
-        alignment_layer_idx (`int`, *optional*, defaults to 9):
-            Layer index to use for attention-based alignment analysis in multilingual models.
+            text_tokens_dict_size (`int`, *optional*, defaults to 704):
+                Size of the text token vocabulary. Use 704 for English-only, 2454 for multilingual.
+            speech_tokens_dict_size (`int`, *optional*, defaults to 8194):
+                Size of the speech token vocabulary. Includes special tokens (start: 6561, stop: 6562).
+            start_text_token (`int`, *optional*, defaults to 255):
+                Token ID for start-of-text marker.
+            stop_text_token (`int`, *optional*, defaults to 0):
+                Token ID for end-of-text marker.
+            start_speech_token (`int`, *optional*, defaults to 6561):
+                Token ID for start-of-speech marker.
+            stop_speech_token (`int`, *optional*, defaults to 6562):
+                Token ID for end-of-speech marker.
+            max_text_tokens (`int`, *optional*, defaults to 2048):
+                Maximum number of text tokens in a sequence.
+            max_speech_tokens (`int`, *optional*, defaults to 4096):
+                Maximum number of speech tokens in a sequence.
+            llama_config_name (`str`, *optional*, defaults to `"Llama_520M"`):
+                Name of the LLaMA configuration to use as backbone.
+            hidden_size (`int`, *optional*, defaults to 1024):
+                Hidden size of the transformer backbone (from LLaMA config).
+            input_pos_emb (`str`, *optional*, defaults to `"learned"`):
+                Type of positional embeddings. Currently only "learned" is supported.
+            speech_cond_prompt_len (`int`, *optional*, defaults to 150):
+                Length of speech conditioning prompt tokens.
+            encoder_type (`str`, *optional*, defaults to `"voice_encoder"`):
+                Type of speaker encoder to use.
+            speaker_embed_size (`int`, *optional*, defaults to 256):
+                Dimension of speaker embeddings from the voice encoder.
+            use_perceiver_resampler (`bool`, *optional*, defaults to `True`):
+                Whether to use perceiver resampler for conditioning prompts.
+            perceiver_num_latents (`int`, *optional*, defaults to 32):
+                Number of latent query tokens in the perceiver resampler.
+            perceiver_latent_dim (`int`, *optional*, defaults to 1024):
+                Dimension of latent tokens in the perceiver resampler.
+            perceiver_num_heads (`int`, *optional*, defaults to 4):
+                Number of attention heads in the perceiver resampler.
+            emotion_adv (`bool`, *optional*, defaults to `True`):
+                Whether to use emotion/exaggeration conditioning.
+            use_alignment_analyzer (`bool`, *optional*):
+                Whether to use alignment stream analyzer for multilingual models. If None, automatically enabled for multilingual.
+            alignment_layer_idx (`int`, *optional*, defaults to 9):
+                Layer index to use for attention-based alignment analysis in multilingual models.
 
     Example:
 
