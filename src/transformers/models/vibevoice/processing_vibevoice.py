@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-import re
 from typing import Optional, Union
 
 import numpy as np
@@ -48,7 +47,7 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 24000,
             "padding": True,
             "return_attention_mask": True,
-            "pad_to_multiple_of": 3200,     # acoustic_tokenizer.hop_length
+            "pad_to_multiple_of": 3200,  # acoustic_tokenizer.hop_length
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -115,7 +114,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         Returns:
             `BatchFeature`: A BatchFeature with the following fields:
                 - **input_ids** -- Token ID sequences ready for the model
-                - **attention_mask** -- Attention masks for the sequences  
+                - **attention_mask** -- Attention masks for the sequences
                 - **input_features** -- Processed audio tensors (if audio provided)
                 - **input_features_mask** -- Masks for valid speech tokens (if audio provided)
         """
@@ -140,6 +139,12 @@ class VibeVoiceProcessor(ProcessorMixin):
         encoding = self.tokenizer(text, **text_kwargs)
         data.update(encoding)
 
+        # Process audio if provided
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+            audio_inputs = self.feature_extractor(audio, **audio_kwargs)
+            data.update(audio_inputs)
+
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     @property
@@ -149,7 +154,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         """
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features", "input_features_mask"]))
+        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
 
     def save_audio(
         self,
@@ -159,12 +164,12 @@ class VibeVoiceProcessor(ProcessorMixin):
     ) -> list[str]:
         """
         Save audio data to WAV file(s).
-        
+
         Args:
             audio: Audio data to save (tensor, array, or list of them)
             output_path: Output file path or directory for multiple files
             sampling_rate: Sampling rate for the saved audio
-                
+
         Returns:
             List[str]: Paths to the saved audio files.
         """

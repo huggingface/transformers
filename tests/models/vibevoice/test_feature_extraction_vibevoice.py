@@ -169,27 +169,31 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         """Test audio normalization functionality specific to VibeVoice."""
         # Test with normalization enabled (default)
         feature_extractor = VibeVoiceFeatureExtractor(normalize_audio=True, target_dB_FS=-25)
-        
+
         # Test with very low amplitude audio (should increase amplitude)
         low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01
         result = feature_extractor([low_amplitude_audio], return_tensors="pt")
         normalized_audio = result.input_features.squeeze()
-        self.assertGreater(torch.abs(normalized_audio).max().item(), torch.abs(torch.tensor(low_amplitude_audio)).max().item())
-        
+        self.assertGreater(
+            torch.abs(normalized_audio).max().item(), torch.abs(torch.tensor(low_amplitude_audio)).max().item()
+        )
+
         # Test with normalization disabled (should be close to original)
         feature_extractor_no_norm = VibeVoiceFeatureExtractor(normalize_audio=False)
         result_no_norm = feature_extractor_no_norm([low_amplitude_audio], return_tensors="pt")
-        torch.testing.assert_close(result_no_norm.input_features.squeeze(), torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(
+            result_no_norm.input_features.squeeze(), torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5
+        )
 
     def test_sampling_rate_validation(self):
         """Test that sampling rate validation works correctly."""
         feature_extractor = VibeVoiceFeatureExtractor(sampling_rate=24000)
         input_audio = np.random.randn(1000).astype(np.float32)
-        
+
         # Should work with correct sampling rate
         result = feature_extractor([input_audio], sampling_rate=24000, return_tensors="pt")
         self.assertIsInstance(result.input_features, torch.Tensor)
-        
+
         # Should raise error with incorrect sampling rate
         with self.assertRaises(ValueError):
             feature_extractor([input_audio], sampling_rate=16000, return_tensors="pt")
@@ -197,17 +201,17 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
     def test_padding_mask_generation(self):
         """Test that padding masks are generated correctly."""
         feature_extractor = VibeVoiceFeatureExtractor()
-        
+
         # Create audio samples of different lengths
         audio1 = np.random.randn(100).astype(np.float32)
         audio2 = np.random.randn(200).astype(np.float32)
-        
+
         result = feature_extractor([audio1, audio2], padding=True, return_tensors="pt", return_attention_mask=True)
-        
+
         # Should have padding_mask
         self.assertIn("input_features_mask", result)
         self.assertEqual(result.input_features_mask.shape, result.input_features.squeeze(1).shape)
-        
+
         # First sample should have some padding (False values at the end)
         self.assertTrue(torch.any(~result.input_features_mask[0]))
         # Second sample should have no padding (all True values)

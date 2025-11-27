@@ -34,14 +34,15 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
     - Audio format conversion (stereo to mono)
     - Optional audio normalization
     - Streaming support for infinite-length audio
-    
+
     Args:
         sampling_rate (int, optional): Expected sampling rate. Defaults to 24000.
         normalize_audio (bool, optional): Whether to normalize audio. Defaults to True.
         target_dB_FS (float, optional): Target dB FS for normalization. Defaults to -25.
         eps (float, optional): Small value for numerical stability. Defaults to 1e-6.
     """
-    model_input_names = ["input_features"]
+
+    model_input_names = ["input_features", "input_features_mask"]
 
     def __init__(
         self,
@@ -70,7 +71,7 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
     ) -> BatchFeature:
         """
         Process audio for VibeVoice models.
-        
+
         Args:
             audio: Audio input(s) to process. Can be:
                 - np.ndarray: Audio array
@@ -79,7 +80,7 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
                 - List[list[float]]: Batch of audio as lists of floats
             sampling_rate (int, optional): Sampling rate of the input audio
             return_tensors (str, optional): Return format ('pt' for PyTorch, 'np' for NumPy)
-            
+
         Returns:
             dict: Processed audio inputs with keys:
                 - input_features: Audio tensor(s) ready for the model
@@ -131,7 +132,7 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
                 output_values,
                 return_tensors=return_tensors,
                 pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask
+                return_attention_mask=return_attention_mask,
             )
             if return_attention_mask:
                 output_values["input_features_mask"] = output_values.pop("attention_mask")

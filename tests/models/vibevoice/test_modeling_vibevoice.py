@@ -17,24 +17,23 @@ import copy
 import json
 import unittest
 from pathlib import Path
-from transformers.trainer_utils import set_seed
 
 import pytest
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
-    VibeVoiceForConditionalGeneration,
     VibeVoiceConfig,
+    VibeVoiceForConditionalGeneration,
     is_torch_available,
 )
-from transformers.audio_utils import load_audio_librosa
 from transformers.testing_utils import (
     cleanup,
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 from transformers.utils.import_utils import is_datasets_available
-from parameterized import parameterized
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -46,7 +45,7 @@ from ...test_modeling_common import (
 
 if is_datasets_available():
     # NOTE: if voice cloning enabled
-    from huggingface_hub import snapshot_download
+    pass
 
 
 if is_torch_available():
@@ -55,11 +54,11 @@ if is_torch_available():
 
 # TODO (ebezzam) best way to do this?
 # if is_diffusers_available():
-import diffusers
 
 
 class DummyNoiseScheduler:
     """A simple dummy noise scheduler for testing purposes."""
+
     def __init__(self):
         self.num_inference_steps = None
         self.timesteps = None
@@ -70,12 +69,12 @@ class DummyNoiseScheduler:
             step_size = 0.1
         else:
             step_size = 1.0 / self.num_inference_steps
-        
+
         # Return an object with prev_sample attribute like real schedulers
         class StepOutput:
             def __init__(self, prev_sample):
                 self.prev_sample = prev_sample
-        
+
         prev_sample = sample - step_size * eps
         return StepOutput(prev_sample)
 
@@ -107,12 +106,12 @@ class VibeVoiceModelTester:
             "use_mrope": False,
             "vocab_size": 99,
             "pad_token_id": 0,
-            "eos_token_id": 0, # same as pad_token for Vibevoice
+            "eos_token_id": 0,  # same as pad_token for Vibevoice
             "bos_token_id": None,
         },
         acoustic_tokenizer_config={
-            "model_type": "vibevoice_acoustic_tokenizer", 
-            "hidden_size": 16,  
+            "model_type": "vibevoice_acoustic_tokenizer",
+            "hidden_size": 16,
             "kernel_size": 3,
             "n_filters": 4,
             "downsampling_ratios": [2],
@@ -121,7 +120,7 @@ class VibeVoiceModelTester:
         semantic_tokenizer_config={
             "model_type": "vibevoice_semantic_tokenizer",
             "channels": 1,
-            "hidden_size": 32, 
+            "hidden_size": 32,
             "kernel_size": 3,
             "n_filters": 4,
             "downsampling_ratios": [2],
@@ -162,7 +161,7 @@ class VibeVoiceModelTester:
             eos_token_id=self.text_config["eos_token_id"],
             # Use token IDs that exist in our test vocabulary (vocab_size=99)
             speech_start_id=3,  # Instead of default 151652
-            speech_end_id=4,    # Instead of default 151653
+            speech_end_id=4,  # Instead of default 151653
             speech_diffusion_id=5,  # Instead of default 151654
         )
 
@@ -182,16 +181,13 @@ class VibeVoiceModelTester:
         model = VibeVoiceForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         with torch.no_grad():
             result = model(input_ids=input_ids, attention_mask=attention_mask)
-        
+
         # Check that the model returns expected outputs
         self.parent.assertIsNotNone(result.logits)
-        self.parent.assertEqual(
-            result.logits.shape, 
-            (self.batch_size, self.seq_length, self.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -234,7 +230,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         self.skipTest("VibeVoice generation has unique generation")
 
-    @pytest.mark.generate  
+    @pytest.mark.generate
     @unittest.skip(reason="VibeVoice generation has unique generation")
     def test_assisted_decoding_sample(self):
         pass
@@ -356,20 +352,20 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_vibevoice_generate_max_new_tokens(self):
         """
         Test VibeVoice-specific generation to ensure sequences output has correct length.
-        This test verifies that the returned sequences include the original input_ids 
+        This test verifies that the returned sequences include the original input_ids
         plus the newly generated tokens as specified by max_new_tokens.
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config, input_ids, attention_mask, noise_scheduler = config_and_inputs
-        
+
         model = VibeVoiceForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         max_new_tokens = 5
         original_length = input_ids.shape[1]
         expected_length = original_length + max_new_tokens
-        
+
         with torch.no_grad():
             output = model.generate(
                 input_ids=input_ids,
@@ -382,22 +378,22 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 cfg_scale=1.3,
                 n_diffusion_steps=10,
             )
-        
+
         # Check that we get the expected output type
         self.assertIsNotNone(output.sequences)
-        
+
         # Check that sequences have the correct shape
         # Should be [batch_size, original_length + max_new_tokens]
         self.assertEqual(output.sequences.shape[0], self.model_tester.batch_size)
         self.assertEqual(output.sequences.shape[1], expected_length)
-        
+
         # Verify that original input_ids are preserved at the beginning
         torch.testing.assert_close(
-            output.sequences[:, :original_length], 
-            input_ids, 
-            msg="Original input_ids should be preserved at the beginning of sequences"
+            output.sequences[:, :original_length],
+            input_ids,
+            msg="Original input_ids should be preserved at the beginning of sequences",
         )
-        
+
         # Check that we have speech_outputs (audio) as well
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
@@ -410,7 +406,6 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
-
 
     @slow
     def test_1b5_inference_no_voice(self):
@@ -434,32 +429,46 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare input
         conversation = [
-            {"role": "0", "content": [
-                {"type": "text", "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me."},
-            ]},
-            {"role": "1", "content": [
-                {"type": "text", "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings."},
-            ]},
+            {
+                "role": "0",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hello everyone, and welcome to the VibeVoice podcast. I'm your host, Linda, and today we're getting into one of the biggest debates in all of sports: who's the greatest basketball player of all time? I'm so excited to have Thomas here to talk about it with me.",
+                    },
+                ],
+            },
+            {
+                "role": "1",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Thanks so much for having me, Linda. You're absolutely right—this question always brings out some seriously strong feelings.",
+                    },
+                ],
+            },
         ]
-        inputs = processor.apply_chat_template(
-            conversation, 
-            tokenize=True,
-            return_dict=True
-        ).to(torch_device, dtype=next(model.parameters()).dtype)
+        inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(
+            torch_device, dtype=next(model.parameters()).dtype
+        )
 
         # Generate audio
-        generated_speech = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            return_dict_in_generate=False,
-        )[0].cpu().float()
+        generated_speech = (
+            model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                return_dict_in_generate=False,
+            )[0]
+            .cpu()
+            .float()
+        )
 
         # Compare against expected results
         with open(fixtures_path, "r") as f:
             expected_results = json.load(f)
         expected_speech = torch.tensor(expected_results["speech_outputs"])
-        generated_speech = generated_speech[..., :expected_speech.shape[-1]]
+        generated_speech = generated_speech[..., : expected_speech.shape[-1]]
         torch.testing.assert_close(generated_speech, expected_speech, rtol=1e-5, atol=1e-5)
 
     # @slow
@@ -498,7 +507,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     #         ]},
     #     ]
     #     inputs = processor.apply_chat_template(
-    #         conversation, 
+    #         conversation,
     #         tokenize=True,
     #         return_dict=True
     #     ).to(torch_device, dtype=next(model.parameters()).dtype)

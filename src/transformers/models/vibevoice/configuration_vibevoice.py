@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VibeVoice model configuration"""
+"""VibeVoice model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -86,7 +86,7 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         prediction_type="v_prediction",
         ddpm_num_inference_steps=20,
         ddpm_beta_schedule="squaredcos_cap_v2",
-        **kwargs
+        **kwargs,
     ):
         self.hidden_size = hidden_size
         self.num_head_layers = num_head_layers
@@ -189,22 +189,29 @@ class VibeVoiceConfig(PretrainedConfig):
         speech_start_id=151652,
         speech_end_id=151653,
         speech_diffusion_id=151654,
-        **kwargs
+        **kwargs,
     ):
-
         # TODO (ebezzam) check this setting
         kwargs["_attn_implementation_autoset"] = False
 
         if isinstance(acoustic_tokenizer_config, dict):
-            acoustic_tokenizer_config["model_type"] = acoustic_tokenizer_config.get("model_type", "vibevoice_acoustic_tokenizer")
-            acoustic_tokenizer_config = CONFIG_MAPPING[acoustic_tokenizer_config["model_type"]](**acoustic_tokenizer_config)
+            acoustic_tokenizer_config["model_type"] = acoustic_tokenizer_config.get(
+                "model_type", "vibevoice_acoustic_tokenizer"
+            )
+            acoustic_tokenizer_config = CONFIG_MAPPING[acoustic_tokenizer_config["model_type"]](
+                **acoustic_tokenizer_config
+            )
         elif acoustic_tokenizer_config is None:
             acoustic_tokenizer_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
         self.acoustic_tokenizer_config = acoustic_tokenizer_config
 
         if isinstance(semantic_tokenizer_config, dict):
-            semantic_tokenizer_config["model_type"] = semantic_tokenizer_config.get("model_type", "vibevoice_semantic_tokenizer")
-            semantic_tokenizer_config = CONFIG_MAPPING[semantic_tokenizer_config["model_type"]](**semantic_tokenizer_config)
+            semantic_tokenizer_config["model_type"] = semantic_tokenizer_config.get(
+                "model_type", "vibevoice_semantic_tokenizer"
+            )
+            semantic_tokenizer_config = CONFIG_MAPPING[semantic_tokenizer_config["model_type"]](
+                **semantic_tokenizer_config
+            )
         elif semantic_tokenizer_config is None:
             semantic_tokenizer_config = CONFIG_MAPPING["vibevoice_semantic_tokenizer"]()
         self.semantic_tokenizer_config = semantic_tokenizer_config
@@ -249,7 +256,4 @@ class VibeVoiceConfig(PretrainedConfig):
         return self.semantic_tokenizer_config.hidden_size
 
 
-__all__ = [
-    "VibeVoiceDiffusionHeadConfig",
-    "VibeVoiceConfig"
-]
+__all__ = ["VibeVoiceDiffusionHeadConfig", "VibeVoiceConfig"]

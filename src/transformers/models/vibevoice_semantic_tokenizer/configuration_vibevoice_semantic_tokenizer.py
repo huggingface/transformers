@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" VibeVoice Semantic Tokenizer model configuration"""
+"""VibeVoice Semantic Tokenizer model configuration"""
 
 import numpy as np
 
@@ -21,6 +21,7 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
 
 class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
     r"""
@@ -56,6 +57,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
             Expansion factor for feed-forward networks.
 
     """
+
     model_type = "vibevoice_semantic_tokenizer"
 
     def __init__(
@@ -72,7 +74,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         depths=[3, 3, 3, 3, 3, 3, 8],
         hidden_act="gelu",
         ffn_expansion=4,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.channels = channels
@@ -91,5 +93,6 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
     @property
     def hop_length(self) -> int:
         return np.prod(self.downsampling_ratios)
+
 
 __all__ = ["VibeVoiceSemanticTokenizerConfig"]

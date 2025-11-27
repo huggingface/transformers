@@ -269,7 +269,10 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
         for stage_idx in range(len(config.depths)):
             input_channels = int(config.n_filters * (2**stage_idx))
             stage = nn.ModuleList(
-                [VibeVoiceConvNext1dLayer(config, hidden_size=input_channels, layer_idx=layer_idx+depth_idx) for depth_idx in range(config.depths[stage_idx])]
+                [
+                    VibeVoiceConvNext1dLayer(config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx)
+                    for depth_idx in range(config.depths[stage_idx])
+                ]
             )
             self.stages.append(stage)
             layer_idx += config.depths[stage_idx]
@@ -362,9 +365,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         """
-        return self.encode(
-            audio, padding_cache=padding_cache, batch_mask=batch_mask, use_cache=use_cache
-        )
+        return self.encode(audio, padding_cache=padding_cache, batch_mask=batch_mask, use_cache=use_cache)
 
 
 __all__ = ["VibeVoiceSemanticTokenizerModel"]

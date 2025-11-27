@@ -15,18 +15,18 @@
 import shutil
 import tempfile
 import unittest
+
 from parameterized import parameterized
 
-
 from transformers import VibeVoiceProcessor
-from transformers.testing_utils import require_torch, require_librosa
+from transformers.testing_utils import require_librosa, require_torch
 from transformers.utils import is_torch_available
 
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 
 if is_torch_available():
-    import torch
+    pass
 
 
 @require_torch
@@ -54,7 +54,8 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def prepare_processor_dict(self):
-        return {"chat_template": """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
+        return {
+            "chat_template": """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
 {{ system_prompt -}}
 {%- set speech_start_token = speech_start_token | default("<|vision_start|>") %}
 {%- set speech_end_token = speech_end_token | default("<|vision_end|>") %}
@@ -86,8 +87,8 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
  Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
     {%- endfor %}
 {%- endfor %}
- Speech output:{{ "\n" }}{{ speech_start_token }}"""}
-
+ Speech output:{{ "\n" }}{{ speech_start_token }}"""
+        }
 
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa
@@ -98,4 +99,3 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self._test_apply_chat_template(
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
-

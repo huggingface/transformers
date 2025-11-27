@@ -88,7 +88,7 @@ class VibeVoiceAcousticTokenizerConfig(VibeVoiceSemanticTokenizerConfig):
         ffn_expansion=4,
         vae_std=0.5,
         vae_scaling_factor=0.8,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             channels=channels,
@@ -103,7 +103,7 @@ class VibeVoiceAcousticTokenizerConfig(VibeVoiceSemanticTokenizerConfig):
             depths=depths,
             hidden_act=hidden_act,
             ffn_expansion=ffn_expansion,
-            **kwargs
+            **kwargs,
         )
         # NOTE (ebezzam) original hardcodes scaling within sampling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L963
         # scaling moved here in case future implementations modify `vae_std` but keep internal scaling
@@ -283,7 +283,6 @@ class VibeVoiceCausalConvTranspose1d(nn.Module):
         padding_cache: Optional["VibeVoiceConv1dCache"] = None,
         batch_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        
         time_dim = hidden_states.shape[-1]
 
         if padding_cache is not None:
@@ -299,7 +298,7 @@ class VibeVoiceCausalConvTranspose1d(nn.Module):
 
         # Remove extra padding at the right side
         if self.padding_total > 0:
-            hidden_states = hidden_states[..., :-self.padding_total]
+            hidden_states = hidden_states[..., : -self.padding_total]
 
         if padding_cache is not None and layer_padding.shape[2] != 0:
             # For first chunk (layer_padding.shape[2] == 0) return full output
@@ -474,10 +473,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceSemanticTokenizerModel):
         """
         encoder_output = self.encode(audio, sample=sample)
         decoder_output = self.decode(
-            encoder_output.latents,
-            padding_cache=padding_cache,
-            batch_mask=batch_mask,
-            use_cache=use_cache
+            encoder_output.latents, padding_cache=padding_cache, batch_mask=batch_mask, use_cache=use_cache
         )
         return VibeVoiceAcousticTokenizerOutput(
             audio=decoder_output.audio,

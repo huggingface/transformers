@@ -22,6 +22,7 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import (
+    Qwen2TokenizerFast,
     VibeVoiceAcousticTokenizerConfig,
     VibeVoiceAcousticTokenizerModel,
     VibeVoiceConfig,
@@ -30,7 +31,6 @@ from transformers import (
     VibeVoiceProcessor,
     VibeVoiceSemanticTokenizerConfig,
     VibeVoiceSemanticTokenizerModel,
-    Qwen2TokenizerFast,
 )
 
 
@@ -44,8 +44,7 @@ def update_state_dict_for_hf_model(state_dict):
         new_key = key
 
         # Remove 'model.' prefix if present (7B model has this extra prefix)
-        if new_key.startswith("model."):
-            new_key = new_key[6:]  # Remove "model." prefix
+        new_key = new_key.removeprefix("model.")  # Remove "model." prefix
 
         # Handle semantic tokenizer transformations
         if "semantic_tokenizer" in key:
@@ -80,9 +79,13 @@ def update_state_dict_for_hf_model(state_dict):
             new_key = new_key.replace("prediction_head.", "diffusion_head.")
         if "diffusion_head.t_embedder.mlp." in key:
             if "diffusion_head.t_embedder.mlp.0." in key:
-                new_key = new_key.replace("diffusion_head.t_embedder.mlp.0.", "diffusion_head.timestep_embedder.layer_1.")
+                new_key = new_key.replace(
+                    "diffusion_head.t_embedder.mlp.0.", "diffusion_head.timestep_embedder.layer_1."
+                )
             elif "diffusion_head.t_embedder.mlp.2." in key:
-                new_key = new_key.replace("diffusion_head.t_embedder.mlp.2.", "diffusion_head.timestep_embedder.layer_2.")
+                new_key = new_key.replace(
+                    "diffusion_head.t_embedder.mlp.2.", "diffusion_head.timestep_embedder.layer_2."
+                )
         if "diffusion_head.final_layer.linear." in key and "adaLN_modulation" not in key:
             new_key = new_key.replace("diffusion_head.final_layer.linear.", "diffusion_head.final_layer.linear_2.")
         if "diffusion_head.final_layer.adaLN_modulation." in key:
@@ -97,8 +100,9 @@ def update_state_dict_for_hf_model(state_dict):
     return updated_state_dict
 
 
-def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, push_tokenizers=False):
-
+def convert_checkpoint(
+    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, push_tokenizers=False
+):
     if bfloat16:
         dtype = torch.bfloat16
     else:
@@ -108,7 +112,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     original_state_dict = load_file(checkpoint)
     # -- remove "model." prefix
     if list(original_state_dict.keys())[0].startswith("model."):
-        original_state_dict = {k[len("model."):]: v for k, v in original_state_dict.items()}
+        original_state_dict = {k[len("model.") :]: v for k, v in original_state_dict.items()}
 
     # 2) Prepare feature extractor (same for all models)
     audio_config = {}
@@ -138,12 +142,20 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         model_config = json.load(f)
 
     # clean up semantic tokenizer config
-    model_config["semantic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["semantic_tokenizer_config"]["encoder_depths"].split("-")))
+    model_config["semantic_tokenizer_config"]["encoder_depths"] = list(
+        map(int, model_config["semantic_tokenizer_config"]["encoder_depths"].split("-"))
+    )
     # -- reverse order of ratios here instead of in modeling
-    model_config["semantic_tokenizer_config"]["downsampling_ratios"] = list(reversed(model_config["semantic_tokenizer_config"]["encoder_ratios"]))
+    model_config["semantic_tokenizer_config"]["downsampling_ratios"] = list(
+        reversed(model_config["semantic_tokenizer_config"]["encoder_ratios"])
+    )
     del model_config["semantic_tokenizer_config"]["encoder_ratios"]
-    model_config["semantic_tokenizer_config"]["n_filters"] = model_config["semantic_tokenizer_config"].pop("encoder_n_filters")
-    model_config["semantic_tokenizer_config"]["depths"] = model_config["semantic_tokenizer_config"].pop("encoder_depths")
+    model_config["semantic_tokenizer_config"]["n_filters"] = model_config["semantic_tokenizer_config"].pop(
+        "encoder_n_filters"
+    )
+    model_config["semantic_tokenizer_config"]["depths"] = model_config["semantic_tokenizer_config"].pop(
+        "encoder_depths"
+    )
     model_config["semantic_tokenizer_config"]["hidden_size"] = model_config["semantic_tokenizer_config"].pop("vae_dim")
     model_config["semantic_tokenizer_config"]["bias"] = model_config["semantic_tokenizer_config"].pop("conv_bias")
     # -- remove unused / constant parameters that lead to unused code paths removed in HF model
@@ -163,7 +175,9 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if "layernorm_elementwise_affine" in model_config["semantic_tokenizer_config"]:
         del model_config["semantic_tokenizer_config"]["layernorm_elementwise_affine"]
     if "layernorm_eps" in model_config["semantic_tokenizer_config"]:
-        model_config["semantic_tokenizer_config"]["rms_norm_eps"] = model_config["semantic_tokenizer_config"]["layernorm_eps"]
+        model_config["semantic_tokenizer_config"]["rms_norm_eps"] = model_config["semantic_tokenizer_config"][
+            "layernorm_eps"
+        ]
         del model_config["semantic_tokenizer_config"]["layernorm_eps"]
     if "pad_mode" in model_config["semantic_tokenizer_config"]:
         # always "constant"
@@ -176,15 +190,23 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         del model_config["semantic_tokenizer_config"]["causal"]
 
     # clean up acoustic tokenizer config
-    model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-")))
+    model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(
+        map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-"))
+    )
     if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
         # always gaussian
         del model_config["acoustic_tokenizer_config"]["std_dist_type"]
     # -- reverse order of ratios here instead of in modeling
-    model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(reversed(model_config["acoustic_tokenizer_config"]["encoder_ratios"]))
+    model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(
+        reversed(model_config["acoustic_tokenizer_config"]["encoder_ratios"])
+    )
     del model_config["acoustic_tokenizer_config"]["encoder_ratios"]
-    model_config["acoustic_tokenizer_config"]["n_filters"] = model_config["acoustic_tokenizer_config"].pop("encoder_n_filters")
-    model_config["acoustic_tokenizer_config"]["depths"] = model_config["acoustic_tokenizer_config"].pop("encoder_depths")
+    model_config["acoustic_tokenizer_config"]["n_filters"] = model_config["acoustic_tokenizer_config"].pop(
+        "encoder_n_filters"
+    )
+    model_config["acoustic_tokenizer_config"]["depths"] = model_config["acoustic_tokenizer_config"].pop(
+        "encoder_depths"
+    )
     model_config["acoustic_tokenizer_config"]["hidden_size"] = model_config["acoustic_tokenizer_config"].pop("vae_dim")
     model_config["acoustic_tokenizer_config"]["bias"] = model_config["acoustic_tokenizer_config"].pop("conv_bias")
     model_config["acoustic_tokenizer_config"]["vae_std"] = model_config["acoustic_tokenizer_config"].pop("fix_std")
@@ -209,7 +231,9 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     if "layernorm_elementwise_affine" in model_config["acoustic_tokenizer_config"]:
         del model_config["acoustic_tokenizer_config"]["layernorm_elementwise_affine"]
     if "layernorm_eps" in model_config["acoustic_tokenizer_config"]:
-        model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"]["layernorm_eps"]
+        model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"][
+            "layernorm_eps"
+        ]
         del model_config["acoustic_tokenizer_config"]["layernorm_eps"]
     if "pad_mode" in model_config["acoustic_tokenizer_config"]:
         # always "constant"
@@ -219,7 +243,9 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         del model_config["acoustic_tokenizer_config"]["causal"]
 
     # clean up diffusion head config
-    model_config["diffusion_head_config"]["head_ffn_ratio"] = int(model_config["diffusion_head_config"]["head_ffn_ratio"])
+    model_config["diffusion_head_config"]["head_ffn_ratio"] = int(
+        model_config["diffusion_head_config"]["head_ffn_ratio"]
+    )
     model_config["diffusion_head_config"]["num_head_layers"] = model_config["diffusion_head_config"].pop("head_layers")
     if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
         model_config["diffusion_head_config"]["ddpm_beta_schedule"] = "squaredcos_cap_v2"
@@ -255,7 +281,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     # -- filter for semantic tokenizer weights
     prefix = "semantic_tokenizer"
     semantic_state_dict = {
-        k[len(prefix)+1:]: v  # +1 to remove the dot after the prefix
+        k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
         for k, v in updated_state_dict.items()
         if k.startswith(prefix)
     }
@@ -278,7 +304,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     # -- filter for acoustic tokenizer weights
     prefix = "acoustic_tokenizer"
     acoustic_state_dict = {
-        k[len(prefix)+1:]: v  # +1 to remove the dot after the prefix
+        k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
         for k, v in updated_state_dict.items()
         if k.startswith(prefix)
     }
@@ -332,7 +358,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     {%- endfor %}
 {%- endfor %}
  Speech output:{{ "\n" }}{{ speech_start_token }}"""
-        
+
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
     tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
     processor = VibeVoiceProcessor(
@@ -341,14 +367,14 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         chat_template=chat_template,
     )
     processor.save_pretrained(output_dir)
-    
+
     # Ensure tokenizer_config.json has the correct tokenizer_class
     tokenizer_config_path = os.path.join(output_dir, "tokenizer_config.json")
     if os.path.exists(tokenizer_config_path):
         with open(tokenizer_config_path, "r") as f:
             tokenizer_config = json.load(f)
         tokenizer_config["tokenizer_class"] = "Qwen2TokenizerFast"
-        
+
         with open(tokenizer_config_path, "w") as f:
             json.dump(tokenizer_config, f, indent=2)
 
@@ -366,13 +392,19 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     print("Acoustic connector dtype : ", vibevoice_model.acoustic_connector.fc1.weight.dtype)
     print("Semantic connector dtype : ", vibevoice_model.semantic_connector.fc1.weight.dtype)
     print("Language model dtype : ", vibevoice_model.language_model.embed_tokens.weight.dtype)
-    print("Acoustic tokenizer dtype : ", vibevoice_model.acoustic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype)
-    print("Semantic tokenizer dtype : ", vibevoice_model.semantic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype)
+    print(
+        "Acoustic tokenizer dtype : ",
+        vibevoice_model.acoustic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype,
+    )
+    print(
+        "Semantic tokenizer dtype : ",
+        vibevoice_model.semantic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype,
+    )
     print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
 
     # -- load into HF model
     if model_config["text_config"].get("tie_word_embeddings", False):
-    # if model_config["text_config"]["tie_word_embeddings"]:
+        # if model_config["text_config"]["tie_word_embeddings"]:
         # 1.5B ties weights: https://huggingface.co/microsoft/VibeVoice-1.5B/blob/main/config.json#L61
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L123
         updated_state_dict["lm_head.weight"] = updated_state_dict["language_model.embed_tokens.weight"]
@@ -392,7 +424,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     speech_end_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
     speech_diffusion_id = tokenizer.convert_tokens_to_ids("<|vision_pad|>")
 
-    # Set default generation config  
+    # Set default generation config
     vibevoice_model.generation_config._from_model_config = False
     vibevoice_model.generation_config.speech_start_id = speech_start_id
     vibevoice_model.generation_config.speech_end_id = speech_end_id
@@ -483,11 +515,11 @@ Models will be pushed to:
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", required=True, default=None, type=str, help="Original VibeVoice model checkpoint.")
-    parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument(
-        "--config_path", default=None, type=str, help="Path to config.json of model to convert"
+        "--checkpoint", required=True, default=None, type=str, help="Original VibeVoice model checkpoint."
     )
+    parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
+    parser.add_argument("--config_path", default=None, type=str, help="Path to config.json of model to convert")
     parser.add_argument(
         "--processor_config", default=None, type=str, help="Path to preprocessor_config.json of model to convert"
     )
@@ -497,9 +529,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--float32", action="store_true", help="Whether to use float32 precision. Default is bfloat16."
     )
-    parser.add_argument(
-        "--push_tokenizers", action="store_true", help="Whether to push the tokenizers to the hub."
-    )
+    parser.add_argument("--push_tokenizers", action="store_true", help="Whether to push the tokenizers to the hub.")
 
     args = parser.parse_args()
     convert_checkpoint(
@@ -509,5 +539,5 @@ if __name__ == "__main__":
         args.push_to_hub,
         bfloat16=not args.float32,
         processor_config=args.processor_config,
-        push_tokenizers=args.push_tokenizers
+        push_tokenizers=args.push_tokenizers,
     )
