@@ -221,7 +221,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if vocab_size > 100000 and getattr(self._tokenizer, "pre_tokenizer", None) is not None:
             self._tokenizer = self._patch_mistral_regex(
                 self._tokenizer,
-                self.init_kwargs.get("name_or_path", ""),
+                self.init_kwargs.get("name_or_path", None),
                 init_kwargs=self.init_kwargs,
                 fix_mistral_regex=kwargs.get("fix_mistral_regex"),
                 **kwargs,
@@ -1063,7 +1063,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         cache_dir=None,
         local_files_only=False,
         _commit_hash=None,
-        _is_local=False,
+        is_local=False,
         init_kwargs=None,
         fix_mistral_regex=None,
         **kwargs,
@@ -1089,7 +1089,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     return True
             return False
 
-        if _is_local or is_base_mistral(pretrained_model_name_or_path):
+        if pretrained_model_name_or_path is not None and (is_local or is_base_mistral(pretrained_model_name_or_path)):
             _config_file = cached_file(
                 pretrained_model_name_or_path,
                 "config.json",
@@ -1114,7 +1114,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 #   b) fixed version of transformers
                 if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
                     if (
-                        _is_local
+                        is_local
                         and transformers_model_type is not None
                         and transformers_model_type
                         not in [
@@ -1131,7 +1131,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
                 mistral_config_detected = True
 
-            if mistral_config_detected or (not _is_local and is_base_mistral(pretrained_model_name_or_path)):
+            if mistral_config_detected or (not is_local and is_base_mistral(pretrained_model_name_or_path)):
                 # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
                 if init_kwargs and "fix_mistral_regex" in init_kwargs:
                     setattr(tokenizer, "fix_mistral_regex", init_kwargs["fix_mistral_regex"])

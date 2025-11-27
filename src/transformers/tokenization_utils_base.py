@@ -1976,7 +1976,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
-        init_kwargs["_is_local"] = _is_local
+        init_kwargs["is_local"] = _is_local
 
         #### Handle tokenizer serialization of added and special tokens
         added_tokens_decoder: dict[int, AddedToken] = {}
@@ -2197,7 +2197,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                                 vocab=vocab_scores,
                                 **init_kwargs,
                             )
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not extract vocab/merges from the SentencePiece model to initialize a Tokenizers backend: {e}. We are falling back so we are falling back to the standard loading method."
+                        )
                         pass
             # Fallback to vocab.json + merges.txt (BPE) or just vocab.json (WordLevel/WordPiece)
             vocab, merges, files_loaded = load_vocab_and_merges(

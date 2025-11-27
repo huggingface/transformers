@@ -244,7 +244,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
 
         tokenizer_files = tokenizer.save_pretrained(tmpdirname2)
         self.assertSequenceEqual(
-            sorted(tuple(VOCAB_FILES_NAMES.values()) + ("special_tokens_map.json", "added_tokens.json")),
+            sorted(tuple(VOCAB_FILES_NAMES.values())),
             sorted(x.split(os.path.sep)[-1] for x in tokenizer_files),
         )
 
