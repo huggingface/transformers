@@ -110,7 +110,7 @@ class ConversionOps:
     @abstractmethod
     def convert(
         self,
-        value: dict[str, Any],
+        input_dict: dict[str, Any],
         source_patterns: list[str],
         target_patterns: list[str],
         all_target_keys: list[str],
@@ -134,7 +134,7 @@ class Chunk(ConversionOps):
 
     def convert(
         self,
-        value: dict[str, torch.Tensor],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         all_target_keys: list[str],
@@ -142,13 +142,18 @@ class Chunk(ConversionOps):
         missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
-        if len(value) > 1:
-            raise ValueError("Unexpected value in `Chunk`!")
-        tensors = next(iter(value.values()))
+        tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        sizes = len(target_patterns)
+        targets = self.get_target_pattern(input_dict, target_patterns)
+        sizes = len(targets)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
-        return dict(zip(target_patterns, chunks))
+        return dict(zip(targets, chunks))
+
+    def get_target_pattern(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
+        # Here we always return the target patterns
+        if len(input_dict) > 1 or len(target_patterns) == 1:
+            raise ValueError("Undefined Operation encountered!")
+        return target_patterns
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -164,7 +169,7 @@ class Concatenate(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        input_dict: dict[str, list[torch.Tensor]],
         source_patterns: list[str],
         target_patterns: list[str],
         all_target_keys: list[str],
@@ -172,10 +177,14 @@ class Concatenate(ConversionOps):
         missing_keys,
         config,
     ) -> dict[str, torch.Tensor]:
-        if len(all_target_keys) != 1:
-            raise ValueError("Concatenate expects a single target key.")
+        target_pattern = self.get_target_pattern(target_patterns)
+        return {target_pattern: torch.cat(tuple(input_dict.values()), dim=self.dim)}
 
-        return {all_target_keys[0]: torch.cat(tuple(value.values()), dim=self.dim)}
+    def get_target_pattern(self, target_patterns: list[str]) -> str:
+        # Here we always return the target pattern
+        if len(target_patterns) > 1:
+            raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -195,7 +204,7 @@ class MergeModulelist(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
+        input_dict: dict[str, list[torch.Tensor]],
         source_patterns: list[str],
         target_patterns: list[str],
         all_target_keys: list[str],
@@ -204,14 +213,21 @@ class MergeModulelist(ConversionOps):
         config,
     ) -> dict[str, torch.Tensor]:
         merged: dict[str, torch.Tensor] = {}
-        for source_pattern, tensors in value.items():
-            # If only 1 source pattern, use the full target name in the result, otherwise keep the pattern
-            if len(value) == 1:
-                key = all_target_keys[0]
-            else:
-                key = source_pattern
-            merged[key] = torch.stack(tensors, dim=self.dim)
+        for source_pattern, tensors in input_dict.items():
+            target_pattern = self.get_target_pattern(input_dict, source_pattern, target_patterns)
+            merged[target_pattern] = torch.stack(tensors, dim=self.dim)
         return merged
+
+    def get_target_pattern(self, input_dict: dict, source_pattern: str, target_patterns: list[str]) -> str:
+        # Here it's a single operation, so we use the target
+        if len(input_dict) == 1:
+            if len(target_patterns) == 1:
+                return target_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        #  Here it's the first operation in a chain, so we use the source as they were replaced before in the chain
+        else:
+            return source_pattern
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -227,7 +243,7 @@ class SplitModulelist(ConversionOps):
     @torch.no_grad
     def convert(
         self,
-        value: dict[str, torch.Tensor],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         all_target_keys: list[str],
@@ -236,16 +252,28 @@ class SplitModulelist(ConversionOps):
         config,
     ) -> dict[str, torch.Tensor]:
         all_tensors = {}
-        for source_pattern, tensors in value.items():
+        for source_pattern, tensors in input_dict.items():
             tensor = tensors[0] if isinstance(tensors, list) else tensors
-            sizes = len(all_target_keys) // len(value)
+            # We split in the number of tensors present in the given dim
+            sizes = tensor.size(self.dim)
+            targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
-            if len(value) > 1:
-                targets = [target for target in all_target_keys if re.search(source_pattern, target)]
-            else:
-                targets = all_target_keys
+            # We squeeze each chunk here as well to make sure to give them their original shape
             all_tensors.update({target: chunk.squeeze() for target, chunk in zip(targets, chunks)})
         return all_tensors
+
+    def get_target_patterns(
+        self, input_dict: dict, source_pattern: str, target_patterns: list[str], sizes: int
+    ) -> list[str]:
+        # Here it's a single operation, so we use the target
+        if len(input_dict) == 1:
+            if len(target_patterns) == 1:
+                return [target_patterns[0].replace("*", f"{i}") for i in range(sizes)]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        # Here it's the last operation in a chain, so we use the source as they were replaced before in the chain
+        else:
+            return [source_pattern.replace("*", f"{i}") for i in range(sizes)]
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -329,32 +357,6 @@ class WeightTransform:
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-        # For 1 to many operations (Chunk and SplitModuleList), we need to infer here all the tensors that we need
-        # to create from the source as `add_tensor` will only be called once with this given source for many targets
-        if (ops := getattr(self, "operations", None)) is not None:
-            # TODO: Here we assume this only happens during saving if the model was created from __init__, i.e.
-            # the Futures are actually Tensors, and we use heuristics to grab the sizes and the names
-            # This is brittle but works for the default mappings we have now
-            all_created_targets = []
-            if len(ops) == 2 and isinstance(ops[0], Chunk) and isinstance(ops[1], SplitModulelist):
-                all_created_targets = [
-                    re.sub(source_pattern, target_pattern, source_key) for target_pattern in self.target_patterns
-                ]
-                tensor = future
-                size = tensor.size(ops[1].dim)
-                all_created_targets = [
-                    target.replace("*", f"{i}") for i in range(size) for target in all_created_targets
-                ]
-            elif len(ops) == 1 and isinstance(ops[0], SplitModulelist):
-                tensor = future
-                size = tensor.size(ops[0].dim)
-                all_created_targets = [target_key.replace("*", f"{i}") for i in range(size)]
-            # Perform replacement if we took any of the above branches
-            if len(all_created_targets) > 0:
-                self.layer_targets.pop(target_key)
-                for target in all_created_targets:
-                    self.layer_targets[target].add(source_key)
-
     def reset(self) -> None:
         """Clean-up the collected tensors to make sure we don't keep references to past tensors in memory."""
         self.collected_tensors = defaultdict(list)
@@ -418,6 +420,7 @@ class WeightRenaming(WeightTransform):
         target_key = self.target_patterns[0]
         collected_tensors = {target_key: self.collected_tensors[self.source_patterns[0]]}
 
+        # TODO: `all_target_keys` should not be needed, clean it up later in quantization
         all_target_keys = [target_key]
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
@@ -463,7 +466,8 @@ class WeightConverter(WeightTransform):
             )
 
         collected_tensors = self.collected_tensors
-        all_target_keys = sorted(self.layer_targets.keys(), key=dot_natural_key)
+        # TODO: `all_target_keys` should not be needed, clean it up later in quantization
+        all_target_keys = [layer_name]
         for op in self.operations:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
                 collected_tensors = op.convert(
@@ -475,6 +479,15 @@ class WeightConverter(WeightTransform):
                     config=config,
                     missing_keys=missing_keys,
                 )
+
+        # Tensors are returned from ops with the target patterns, we need to expand them to full name.
+        # This means we need to grab the prefix and suffix to add to every target key
+        if ".*." in layer_name:
+            layer_name = layer_name.replace(".*.", ".0.")
+        prefix, _, suffix = next(layer_name.partition(k) for k in collected_tensors.keys() if k in layer_name)
+        # Rename the tensors
+        collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
+
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
