@@ -290,22 +290,20 @@ if is_torch_available():
             return attention_mask
 
     class TestOffline(unittest.TestCase):
-        @patch("huggingface_hub.constants")
-        def test_offline(self, mock_hf_hub_constants):
+        def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
-                mock_hf_hub_constants.HF_HUB_OFFLINE = True
-
                 # First offline load should fail
-                with pytest.raises(OSError):
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                    with pytest.raises(OSError):
+                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
-                # Download model from Hub
-                mock_hf_hub_constants.HF_HUB_OFFLINE = False
-                snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+                # Enable online mode for download
+                with patch("transformers.utils.hub.is_offline_mode", return_value=False):
+                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
                 # Load again in offline mode - should work now
-                mock_hf_hub_constants.HF_HUB_OFFLINE = True
-                AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
             with tempfile.TemporaryDirectory() as tmpdir:
