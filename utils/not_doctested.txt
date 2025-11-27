@@ -726,7 +726,7 @@ src/transformers/quantizers/quantizer_gptq.py
 src/transformers/quantizers/quantizers_utils.py
 src/transformers/testing_utils.py
 src/transformers/time_series_utils.py
-src/transformers/tokenization_utils.py
+src/transformers/tokenization_python.py
 src/transformers/tokenization_utils_base.py
 src/transformers/trainer.py
 src/transformers/trainer_callback.py
