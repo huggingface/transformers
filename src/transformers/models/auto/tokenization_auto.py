@@ -496,6 +496,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("musicgen_melody", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
         ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
         ("myt5", ("MyT5Tokenizer", None)),
+        ("nanochat", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("nemotron", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         (
             "nllb",
