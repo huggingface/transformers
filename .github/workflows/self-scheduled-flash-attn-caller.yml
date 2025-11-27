@@ -56,5 +56,5 @@ jobs:
       runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_flash_attn_ci
       commit_sha: ${{ github.sha }}
-      pytest_marker: "flash_attn_test or flash_attn_3_test"
+      pytest_marker: "flash_attn_test or flash_attn_3_test or flash_attn_4_test"
     secrets: inherit
