@@ -175,13 +175,14 @@ class FlexOlmoConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.norm_topk_prob = norm_topk_prob
+
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
         rope_parameters = rope_scaling or rope_parameters
         self.rope_parameters = rope_parameters if rope_parameters is not None else {}
 
         # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 10000.0))
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 500000.0))
         rope_config_standardize_and_validate(self)
 
         super().__init__(
@@ -191,9 +192,6 @@ class FlexOlmoConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        # Validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", 500000.0))
 
 
 __all__ = ["FlexOlmoConfig"]
