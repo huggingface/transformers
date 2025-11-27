@@ -35,7 +35,7 @@ from huggingface_hub import login
 login()
 ```
 
-Start by loading the [Yelp Reviews](https://hf.co/datasets/yelp_review_full) dataset and [preprocess](./fast_tokenizers#preprocess) (tokenize, pad, and truncate) it for training. Use [`~datasets.Dataset.map`] to preprocess the entire dataset in one step.
+Start by loading the [Yelp Reviews](https://hf.co/datasets/Yelp/yelp_review_full) dataset and [preprocess](./fast_tokenizers#preprocess) (tokenize, pad, and truncate) it for training. Use [`~datasets.Dataset.map`] to preprocess the entire dataset in one step.
 
 ```py
 from datasets import load_dataset
@@ -64,7 +64,7 @@ dataset = dataset.map(tokenize, batched=True)
 
 [Trainer](./trainer) is an optimized training loop for Transformers models, making it easy to start training right away without manually writing your own training code. Pick and choose from a wide range of training features in [`TrainingArguments`] such as gradient accumulation, mixed precision, and options for reporting and logging training metrics.
 
-Load a model and provide the number of expected labels (you can find this information on the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields)).
+Load a model and provide the number of expected labels (you can find this information on the Yelp Review [dataset card](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)).
 
 ```py
 from transformers import AutoModelForSequenceClassification

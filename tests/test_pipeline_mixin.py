@@ -60,6 +60,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, logging
 
+from .pipelines.test_pipelines_any_to_any import AnyToAnyPipelineTests
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
@@ -105,6 +106,7 @@ pipeline_test_mapping = {
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
+    "any-to-any": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},
     "summarization": {"test": SummarizationPipelineTests},
@@ -589,6 +591,18 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_image_text_to_text_fp16(self):
         self.run_task_tests(task="image-text-to-text", dtype="float16")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_any_to_any(self):
+        self.run_task_tests(task="any-to-any")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_any_to_any_fp16(self):
+        self.run_task_tests(task="any-to-any", dtype="float16")
 
     @is_pipeline_test
     @require_vision

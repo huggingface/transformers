@@ -26,10 +26,11 @@ import unittest.mock as mock
 import uuid
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
-from huggingface_hub import HfApi, split_torch_state_dict_into_shards
+from huggingface_hub import HfApi, snapshot_download, split_torch_state_dict_into_shards
 from parameterized import parameterized
 from pytest import mark
 
@@ -183,7 +184,7 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.linear_2.weight = self.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("linear_2.weight")
@@ -257,7 +258,7 @@ if is_torch_available():
         def forward(self, x):
             return self.decoder(self.base(x))
 
-        def tie_weights(self, missing_keys=None):
+        def tie_weights(self, missing_keys=None, **kwargs):
             self.decoder.weight = self.base.linear.weight
             if missing_keys is not None:
                 missing_keys.discard("decoder.weight")
@@ -290,90 +291,35 @@ if is_torch_available():
 
     class TestOffline(unittest.TestCase):
         def test_offline(self):
-            # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
-            from huggingface_hub import constants
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # First offline load should fail
+                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                    with pytest.raises(OSError):
+                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
-            from transformers.utils import hub
+                # Enable online mode for download
+                with patch("transformers.utils.hub.is_offline_mode", return_value=False):
+                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
-            offlfine_env = hub._is_offline_mode
-            hub_cache_env = constants.HF_HUB_CACHE
-            hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
-            default_cache = constants.default_cache_path
-            transformers_cache = hub.TRANSFORMERS_CACHE
-
-            try:
-                hub._is_offline_mode = True
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    LOG.info("Temporary cache dir %s", tmpdir)
-                    constants.HF_HUB_CACHE = tmpdir
-                    constants.HUGGINGFACE_HUB_CACHE = tmpdir
-                    constants.default_cache_path = tmpdir
-                    hub.TRANSFORMERS_CACHE = tmpdir
-                    # First offline load should fail
-                    try:
-                        AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
-                    except OSError:
-                        LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
-                    else:
-                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
-
-                    # Download model -> Huggingface Hub not concerned by our offline mode
-                    LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
-                    hub_api = HfApi()
-                    local_dir = hub_api.snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                    LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
-
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, revision="main")
-            finally:
-                # Tear down: reset env as it was before calling this test
-                hub._is_offline_mode = offlfine_env
-                constants.HF_HUB_CACHE = hub_cache_env
-                constants.HUGGINGFACE_HUB_CACHE = hub_cache_env1
-                constants.default_cache_path = default_cache
-                hub.TRANSFORMERS_CACHE = transformers_cache
+                # Load again in offline mode - should work now
+                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
-            # Ugly setup with monkeypatches, amending env vars here is too late as libs have already been imported
-            from huggingface_hub import constants
-
-            from transformers.utils import hub
-
-            hub_cache_env = constants.HF_HUB_CACHE
-            hub_cache_env1 = constants.HUGGINGFACE_HUB_CACHE
-            default_cache = constants.default_cache_path
-            transformers_cache = hub.TRANSFORMERS_CACHE
-            try:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    LOG.info("Temporary cache dir %s", tmpdir)
-                    constants.HF_HUB_CACHE = tmpdir
-                    constants.HUGGINGFACE_HUB_CACHE = tmpdir
-                    constants.default_cache_path = tmpdir
-                    hub.TRANSFORMERS_CACHE = tmpdir
-                    try:
-                        AutoModelForImageClassification.from_pretrained(
-                            TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
-                        )
-                    except OSError:
-                        LOG.info("Loading model %s in offline mode failed as expected", TINY_IMAGE_CLASSIF)
-                    else:
-                        self.fail(f"Loading model {TINY_IMAGE_CLASSIF} in offline mode should fail")
-
-                    LOG.info("Downloading %s for offline tests", TINY_IMAGE_CLASSIF)
-                    hub_api = HfApi()
-                    local_dir = hub_api.snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                    LOG.info("Model %s downloaded in %s", TINY_IMAGE_CLASSIF, local_dir)
-
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Empty cache => fail to load from cache
+                with pytest.raises(OSError):
                     AutoModelForImageClassification.from_pretrained(
-                        TINY_IMAGE_CLASSIF, revision="main", local_files_only=True
+                        TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
                     )
-            finally:
-                # Tear down: reset env as it was before calling this test
-                constants.HF_HUB_CACHE = hub_cache_env
-                constants.HUGGINGFACE_HUB_CACHE = hub_cache_env1
-                constants.default_cache_path = default_cache
-                hub.TRANSFORMERS_CACHE = transformers_cache
+
+                # Populate cache
+                snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                # Load again from cache => success
+                AutoModelForImageClassification.from_pretrained(
+                    TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
+                )
 
 
 # Need to be serializable, which means they cannot be in a test class method
@@ -1208,7 +1154,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model(self):
         device_map = {
             "transformer.wte": f"{torch_device}:0",
@@ -1246,7 +1191,6 @@ class ModelUtilsTest(TestCasePlus):
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    @unittest.skip("TODO @cyrilvallez when saving")
     def test_save_offloaded_model_with_direct_params(self):
         from accelerate import dispatch_model
 
@@ -2057,7 +2001,6 @@ class ModelUtilsTest(TestCasePlus):
         for k, v in model.state_dict().items():
             self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
@@ -2081,7 +2024,6 @@ class ModelUtilsTest(TestCasePlus):
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
-    @unittest.skip("TODO fix offloaded in another PR @CyrilVallez")
     def test_device_map_works_with_unexpected_keys_sharded(self):
         """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
         present in the checkpoint, it will correctly be removed from the weights we load, especially those
@@ -2885,7 +2827,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 )
 
         self.assertTrue(
-            "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!"
+            "You do not have `flash_attn` installed, using `kernels-community/flash-attn2` from the `kernels` library instead!"
             in cl.out
         )
 
@@ -2897,7 +2839,7 @@ class TestAttentionImplementation(unittest.TestCase):
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
-                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn"
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn2"
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
@@ -3237,7 +3179,7 @@ class TestGetEncoder(unittest.TestCase):
             num_hidden_layers=2,
             num_attention_heads=4,
         )
-        model = MistralModel(cfg)
+        model = MistralForCausalLM(cfg)
         encoder = model.get_encoder()
 
         assert encoder is model, f"Base model get_encoder() should return self, got {type(encoder)}"
