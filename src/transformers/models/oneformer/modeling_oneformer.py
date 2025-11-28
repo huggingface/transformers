@@ -24,6 +24,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -2764,8 +2765,9 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     config: OneFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
@@ -2773,13 +2775,13 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             if module.input_projections is not None:
                 for input_projection in module.input_projections:
                     if not isinstance(input_projection, nn.Sequential):
-                        nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
-                        nn.init.constant_(input_projection.bias, 0)
+                        init.xavier_uniform_(input_projection.weight, gain=xavier_std)
+                        init.constant_(input_projection.bias, 0)
         elif isinstance(module, OneFormerTransformerDecoder):
-            nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
-            nn.init.constant_(module.query_input_projection.bias, 0)
+            init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
+            init.constant_(module.query_input_projection.bias, 0)
         elif isinstance(module, OneFormerPixelDecoderEncoderMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
@@ -2789,56 +2791,57 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, OneFormerPixelDecoder):
-            nn.init.normal_(module.level_embed, std=0)
+            init.normal_(module.level_embed, std=0)
         elif isinstance(module, (OneFormerTransformerDecoderLayer, OneFormerTransformerDecoderQueryTransformer)):
             for p in module.parameters():
                 if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
+                    init.xavier_uniform_(p, gain=xavier_std)
         elif isinstance(module, OneFormerTextTransformer):
             proj_std = (module.width**-0.5) * ((2 * module.num_layers) ** -0.5)
             attn_std = module.width**-0.5
             fc_std = (2 * module.width) ** -0.5
             for layer in module.layers:
-                nn.init.normal_(layer.self_attn.in_proj_weight, std=attn_std)
-                nn.init.normal_(layer.self_attn.out_proj.weight, std=proj_std)
-                nn.init.normal_(layer.mlp.fc1.weight, std=fc_std)
-                nn.init.normal_(layer.mlp.fc2.weight, std=proj_std)
+                init.normal_(layer.self_attn.in_proj_weight, std=attn_std)
+                init.normal_(layer.self_attn.out_proj.weight, std=proj_std)
+                init.normal_(layer.mlp.fc1.weight, std=fc_std)
+                init.normal_(layer.mlp.fc2.weight, std=proj_std)
         elif isinstance(module, OneFormerTextEncoder):
-            nn.init.normal_(module.token_embedding.weight, std=0.02)
-            nn.init.normal_(module.positional_embedding, std=0.01)
+            init.normal_(module.token_embedding.weight, std=0.02)
+            init.normal_(module.positional_embedding, std=0.01)
         if hasattr(module, "reference_points"):
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
         elif isinstance(module, OneFormerMLPPredictionHead):
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
-                    nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
-                    nn.init.constant_(submodule.bias, 0)
+                    init.xavier_uniform_(submodule.weight, gain=xavier_std)
+                    init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.MultiheadAttention):
-            module.in_proj_weight.data.normal_(mean=0.0, std=std)
-            module.in_proj_bias.data.zero_()
+            init.normal_(module.in_proj_weight, mean=0.0, std=std)
+            init.zeros_(module.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, OneFormerLoss):
-            module.logit_scale.data.fill_(np.log(1 / self.config.contrastive_temperature))
+            init.constant_(module.logit_scale, np.log(1 / self.config.contrastive_temperature))
 
 
 @auto_docstring

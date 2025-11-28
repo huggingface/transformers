@@ -134,14 +134,6 @@ class DeepseekVLAligner(nn.Module):
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # Required only for Linear layer in DeepseekVLAligner
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
 
 @auto_docstring
 class DeepseekVLModel(JanusModel):
@@ -165,7 +157,7 @@ class DeepseekVLModel(JanusModel):
 
 
 class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
-    output_modalities = "text"
+    output_modalities = ("text",)
 
     def prepare_embeddings_for_image_generation(self):
         raise AttributeError("Not needed for DeepseekVL")

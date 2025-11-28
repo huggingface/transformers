@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import tempfile
 import time
 import unittest
 from threading import Thread
 from unittest.mock import Mock, patch
 
 import httpx
-from huggingface_hub import ChatCompletionStreamOutput, InferenceClient
+from huggingface_hub import ChatCompletionStreamOutput, InferenceClient, hf_hub_download
 from parameterized import parameterized
 
 from transformers import GenerationConfig
@@ -153,6 +154,33 @@ def test_build_chat_completion_chunk():
     assert expected_choices_content in chunk
 
 
+def test_generative_model_list():
+    with tempfile.TemporaryDirectory() as cache_dir:
+        # "download" a few models, including some non-generative models
+        hf_hub_download("Menlo/Jan-nano", "config.json", cache_dir=cache_dir)
+        hf_hub_download("Menlo/Jan-nano-128k", "config.json", cache_dir=cache_dir)
+        hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
+        hf_hub_download("HuggingFaceTB/SmolVLM-Instruct", "config.json", cache_dir=cache_dir)
+        hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)
+
+        expected_results = {
+            "HuggingFaceTB/SmolVLM-Instruct": ["HuggingFaceTB", "SmolVLM-Instruct"],
+            "Qwen/Qwen2.5-0.5B-Instruct": ["Qwen", "Qwen2.5-0.5B-Instruct"],
+            "Menlo/Jan-nano": ["Menlo", "Jan-nano"],
+            "Menlo/Jan-nano-128k": ["Menlo", "Jan-nano-128k"],
+        }
+
+        # list models
+        result = Serve.get_gen_models(cache_dir)
+        assert len(expected_results) == len(result)
+
+        local_repos = {repo["id"]: repo["owned_by"] for repo in result}
+
+        for key, value in expected_results.items():
+            assert key in local_repos
+            assert local_repos[key] == value
+
+
 @require_openai
 def test_build_response_event():
     """
@@ -263,10 +291,9 @@ class ServeCompletionsMixin:
         # NOTE: the output of our server is wrapped by `InferenceClient`, which sends fields even when they
         # are empty.
 
-        # Finish reason: the last payload should have a finish reason of "stop", all others should be empty
-        # TODO: we may add other finish reasons in the future, and this may need more logic
+        # Finish reason: the last payload should have a finish reason of "length" or "stop", all others should be empty
         finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
-        self.assertEqual(finish_reasons[-1], "stop")
+        self.assertTrue(finish_reasons[-1] in ["length", "stop"])
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
         # Role: the first payload should have a role of "assistant", all others should be empty
@@ -299,6 +326,18 @@ class ServeCompletionsMixin:
         # The generation config sets greedy decoding, so the output is reproducible. By default, `Qwen/Qwen3-0.6B`
         # sets `do_sample=True`
         self.assertEqual(output_text, '<think>\nOkay, the user just asked, "')
+
+    def test_early_return_due_to_length(self):
+        request = {
+            "model": "Qwen/Qwen3-0.6B",
+            "messages": [{"role": "user", "content": "Hello, how are you?"}],
+            "stream": True,
+            "max_tokens": 3,
+        }
+
+        all_payloads = self.run_server(request)
+        last_payload = all_payloads[-1]
+        self.assertTrue(last_payload.choices[0]["finish_reason"] == "length")
 
     # TODO: one test for each request flag, to confirm it is working as expected
     # TODO: speed-based test to confirm that KV cache is working across requests
@@ -521,7 +560,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
         # Finally, the last payload should contain a finish reason
         finish_reasons = [payload.choices[0].finish_reason for payload in all_payloads]
         # TODO: I think the finish reason for a tool call is different? double check this
-        self.assertEqual(finish_reasons[-1], "stop")
+        self.assertTrue(finish_reasons[-1] in ["stop", "length"])
         self.assertTrue(all(reason is None for reason in finish_reasons[:-1]))
 
 

@@ -34,6 +34,7 @@ from transformers.modeling_outputs import (
     Seq2SeqModelOutput,
 )
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -251,65 +252,63 @@ class UdopPatchEmbeddings(nn.Module):
 class UdopPreTrainedModel(PreTrainedModel):
     config: UdopConfig
     base_model_prefix = "transformer"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
     _keep_in_fp32_modules = ["wo"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UdopLayerNorm):
-            module.weight.data.fill_(factor * 1.0)
+            init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=factor)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.Conv2d):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=factor).to(
-                module.weight.dtype
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, RelativePositionBiasBase):
             factor = self.config.initializer_factor
             d_model = self.config.d_model
-            module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+            init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, UdopModel):
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, UdopForConditionalGeneration):
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, UdopDenseActDense):
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, UdopDenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                init.zeros_(module.wi_0.bias)
+            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi_1.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, UdopAttention):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
 
     # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel._shift_right with ProphetNet->Udop
     def _shift_right(self, input_ids):
@@ -1055,13 +1054,12 @@ class UdopStack(UdopPreTrainedModel):
     embeddings.
     """
 
-    def __init__(self, config, embed_tokens=None, embed_patches=None):
+    def __init__(self, config):
         super().__init__(config)
-
-        self.embed_tokens = embed_tokens
-        self.embed_patches = embed_patches
+        # text and image embeddings
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+        self.embed_patches = UdopPatchEmbeddings(config)
         self.is_decoder = config.is_decoder
-        self._max_length = config.max_length
         self.num_layers = config.num_layers
 
         self.block = nn.ModuleList(
@@ -1076,13 +1074,7 @@ class UdopStack(UdopPreTrainedModel):
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
-
-    def _tie_weights(self):
-        for bias in self.relative_bias.biases:
-            if isinstance(bias, RelativePositionBias1D):
-                self._tie_embedding_weights(
-                    bias.relative_attention_bias, self.block[0].layer[0].SelfAttention.relative_attention_bias
-                )
+        self.post_init()
 
     @staticmethod
     def _get_relative_bias(config: UdopConfig) -> RelativePositionBiasAggregated:
@@ -1426,14 +1418,12 @@ class UdopStack(UdopPreTrainedModel):
 
 @auto_docstring
 class UdopModel(UdopPreTrainedModel):
-    _tied_weights_keys = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_patches.proj.weight",
-        "encoder.embed_patches.proj.bias",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
-    ]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",  # TODO tie weights for patch embeddings not working
+        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",  # TODO tie weights for patch embeddings not working
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1445,14 +1435,14 @@ class UdopModel(UdopPreTrainedModel):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
-        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+        encoder_config.tie_word_embeddings = True
+        self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
+        decoder_config.tie_word_embeddings = True
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UdopStack(decoder_config, self.shared)
+        self.decoder = UdopStack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1464,9 +1454,6 @@ class UdopModel(UdopPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
@@ -1602,15 +1589,15 @@ class UdopModel(UdopPreTrainedModel):
     """
 )
 class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_patches.proj.weight",
-        "encoder.embed_patches.proj.bias",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
-        "lm_head.weight",
-    ]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",
+        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+        "lm_head.weight": "shared.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1623,13 +1610,13 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.tie_encoder_decoder = False
-        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+        self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UdopStack(decoder_config, self.shared)
+        self.decoder = UdopStack(decoder_config)
 
         # The weights of the language modeling head are shared with those of the encoder and decoder
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
@@ -1644,9 +1631,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
@@ -1795,12 +1779,12 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class UdopEncoderModel(UdopPreTrainedModel):
-    _tied_weights_keys = [
-        "encoder.embed_tokens.weight",
-        "encoder.embed_patches.proj.weight",
-        "encoder.embed_patches.proj.bias",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
-    ]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_patches.proj.weight": "patch_embed.proj.weight",
+        "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight": "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight",
+    }
 
     def __init__(self, config: UdopConfig):
         super().__init__(config)
@@ -1813,7 +1797,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = UdopStack(encoder_config, self.shared, self.patch_embed)
+        self.encoder = UdopStack(encoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1824,9 +1808,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(

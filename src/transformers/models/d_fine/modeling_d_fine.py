@@ -24,9 +24,9 @@ from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.nn.init as init
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput
@@ -441,9 +441,10 @@ class DFinePreTrainedModel(PreTrainedModel):
     config: DFineConfig
     base_model_prefix = "d_fine"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # initialize linear layer bias value according to a given probability value.
@@ -452,22 +453,22 @@ class DFinePreTrainedModel(PreTrainedModel):
                 for layer in module.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    nn.init.xavier_uniform_(layer.weight)
-                    nn.init.constant_(layer.bias, bias)
+                    init.xavier_uniform_(layer.weight)
+                    init.constant_(layer.bias, bias)
 
             if module.bbox_embed is not None:
                 for layer in module.bbox_embed:
-                    nn.init.constant_(layer.layers[-1].weight, 0)
-                    nn.init.constant_(layer.layers[-1].bias, 0)
+                    init.constant_(layer.layers[-1].weight, 0)
+                    init.constant_(layer.layers[-1].bias, 0)
 
             if hasattr(module, "reg_scale"):
-                module.reg_scale.fill_(self.config.reg_scale)
+                init.constant_(module.reg_scale, self.config.reg_scale)
 
             if hasattr(module, "up"):
-                module.up.fill_(self.config.up)
+                init.constant_(module.up, self.config.up)
 
         if isinstance(module, DFineMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -477,22 +478,21 @@ class DFinePreTrainedModel(PreTrainedModel):
             grid_init = grid_init.reshape(module.n_heads, 1, 2).tile([1, sum(module.num_points_list), 1])
             scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
             grid_init *= scaling
-            with torch.no_grad():
-                module.sampling_offsets.bias.data[...] = grid_init.flatten()
+            init.copy_(module.sampling_offsets.bias, grid_init.flatten())
 
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
 
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.enc_score_head.weight)
-            nn.init.constant_(module.enc_score_head.bias, bias)
+            init.xavier_uniform_(module.enc_score_head.weight)
+            init.constant_(module.enc_score_head.bias, bias)
 
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -504,13 +504,13 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.constant_(module.reg_conf.layers[-1].weight, 0)
 
         if isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            nn.init.xavier_uniform_(module.weight_embedding.weight)
+            init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
-            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+            init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
 class DFineIntegral(nn.Module):
@@ -947,10 +947,10 @@ def replace_batch_norm(model):
             new_module = DFineFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -1197,9 +1197,6 @@ class DFineModel(DFinePreTrainedModel):
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -1547,9 +1544,14 @@ class DFineObjectDetectionOutput(ModelOutput):
 )
 class DFineForObjectDetection(DFinePreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = ["bbox_embed", "class_embed"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"class_embed.(?![0])\d+": "class_embed.0",
+        "model.decoder.class_embed": "class_embed",
+        "model.decoder.bbox_embed": "bbox_embed",
+    }
 
     def __init__(self, config: DFineConfig):
         super().__init__(config)
@@ -1571,10 +1573,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
             ]
         )
 
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
-
         # Initialize weights and apply final processing
         self.post_init()
 

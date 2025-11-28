@@ -132,13 +132,14 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
+    "peft>=0.18.0",
     "phonemizer",
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
     "pydantic>=2",
-    "pytest>=7.2.0",
-    "pytest-asyncio",
+    "pytest>=7.2.0,<9.0.0",
+    "pytest-asyncio>=1.2.0",
     "pytest-rerunfailures<16.0",
     "pytest-timeout",
     "pytest-xdist",
@@ -275,7 +276,7 @@ extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
 
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",

@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -591,49 +592,31 @@ class SegGptPreTrainedModel(PreTrainedModel):
     config: SegGptConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
-                module.weight.dtype
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, SegGptLayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, SegGptAttention):
-            module.rel_pos_h.data = nn.init.trunc_normal_(
-                module.rel_pos_h.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.rel_pos_h.dtype)
-
-            module.rel_pos_w.data = nn.init.trunc_normal_(
-                module.rel_pos_w.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.rel_pos_w.dtype)
-
+            init.trunc_normal_(module.rel_pos_h, mean=0.0, std=std)
+            init.trunc_normal_(module.rel_pos_w, mean=0.0, std=std)
         elif isinstance(module, SegGptEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=std,
-            ).to(module.position_embeddings.dtype)
-
-            torch.nn.init.normal_(module.mask_token, std=std)
-            torch.nn.init.normal_(module.segment_token_input, std=std)
-            torch.nn.init.normal_(module.segment_token_prompt, std=std)
-            torch.nn.init.normal_(module.type_token_semantic, std=std)
-            torch.nn.init.normal_(module.type_token_instance, std=std)
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
+            init.normal_(module.mask_token, std=std)
+            init.normal_(module.segment_token_input, std=std)
+            init.normal_(module.segment_token_prompt, std=std)
+            init.normal_(module.type_token_semantic, std=std)
+            init.normal_(module.type_token_instance, std=std)
 
 
 @auto_docstring

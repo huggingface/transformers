@@ -261,7 +261,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -387,7 +387,7 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
         )
         batch = batch.to(torch_device)
         translated_tokens = self.model.generate(**batch)
-        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
         # self.assertEqual(self.tgt_text[1], decoded[1])
 
@@ -396,7 +396,7 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
         batch = self.tokenizer(self.src_text, return_tensors="pt", padding=True, truncation=True)
         batch = batch.to(torch_device)
         translated_tokens = self.model.generate(**batch)
-        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(translated_tokens, skip_special_tokens=True)
         assert self.tgt_text == decoded
 
     def test_plbart_java_cs_config(self):
@@ -437,6 +437,7 @@ class PLBartJavaCsIntegrationTest(AbstractSeq2SeqIntegrationTest):
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@slow
 class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "uclanlp/plbart-base"
     src_text = ["Is 0 the first Fibonacci number ?", "Find the sum of all prime numbers ."]
@@ -449,19 +450,18 @@ class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
             input_ids=inputs["input_ids"].to(torch_device),
             decoder_start_token_id=self.tokenizer.lang_code_to_id[src_lan],
         )
-        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
 
-    @slow
     def test_fill_mask(self):
         inputs = self.tokenizer(["Is 0 the <mask> Fibonacci <mask> ?"], return_tensors="pt").to(torch_device)
         src_lan = self.tokenizer._convert_lang_code_special_format("en_XX")
         outputs = self.model.generate(
             inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id[src_lan], num_beams=1
         )
-        prediction: str = self.tokenizer.batch_decode(
-            outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )[0]
+        prediction: str = self.tokenizer.decode(outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True)[
+            0
+        ]
         self.assertEqual(prediction, "0 0 the 0 the 0 the 0 the 0 the 0 the 0 the 0 the")
 
 

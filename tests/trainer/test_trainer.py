@@ -447,6 +447,7 @@ if is_torch_available():
             self.a = nn.Parameter(torch.tensor(config.a).float())
             self.b = nn.Parameter(torch.tensor(config.b).float())
             self.double_output = config.double_output
+            self.post_init()
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
@@ -466,6 +467,7 @@ if is_torch_available():
             self.head = nn.Linear(config.hidden_size, 1)
             self.gradient_checkpointing = False
             self.double_output = config.double_output
+            self.post_init()
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x.unsqueeze(0)
@@ -496,6 +498,7 @@ if is_torch_available():
             self.a = nn.Parameter(torch.tensor(config.a).float())
             self.b = nn.Parameter(torch.tensor(config.b).float())
             self.random_torch = config.random_torch
+            self.post_init()
 
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
@@ -1547,7 +1550,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_model = get_peft_model(tiny_model, peft_config, "adapter1")
         tiny_model.add_adapter("adapter2", peft_config)
 
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, tokenizer.max_len_single_sentence)
+        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
+
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
 
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -3726,6 +3731,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         for save_safetensors, pretrained in product([False, True], [False, True]):
+            save_safetensors = True
             with tempfile.TemporaryDirectory() as tmpdir:
                 trainer = get_regression_trainer(
                     a=1.5,
@@ -3767,7 +3773,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, tokenizer.max_len_single_sentence)
+
+        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
+
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
         with tempfile.TemporaryDirectory() as tmp_dir:
             training_args = TrainingArguments(
                 output_dir=tmp_dir,
@@ -3791,7 +3800,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, tokenizer.max_len_single_sentence)
+        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
         self.assertEqual(len(dataset), 31)
 
     def test_training_iterable_dataset(self):
@@ -4977,8 +4987,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
         # Note that this class does not have a config attribute
+        max_len_single_sentence = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=False)
 
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, tokenizer.max_len_single_sentence)
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(

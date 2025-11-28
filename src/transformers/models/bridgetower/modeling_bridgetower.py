@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, QuickGELUActivation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
@@ -914,11 +915,12 @@ class BridgeTowerTextEmbeddings(nn.Module):
 class BridgeTowerPreTrainedModel(PreTrainedModel):
     config: BridgeTowerConfig
     base_model_prefix = "bridgetower"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = "past_key_values"
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_factor
         if isinstance(module, BridgeTowerVisionTransformer):
@@ -926,29 +928,29 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             attn_std = self.config.hidden_size**-0.5
             fc_std = (2 * self.config.hidden_size) ** -0.5
             for block in module.transformer.resblocks:
-                nn.init.normal_(block.attn.in_proj_weight, std=attn_std * std)
-                block.attn.in_proj_bias.data.zero_()
-                nn.init.normal_(block.attn.out_proj.weight, std=proj_std * std)
-                nn.init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
-                nn.init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
+                init.normal_(block.attn.in_proj_weight, std=attn_std * std)
+                init.zeros_(block.attn.in_proj_bias)
+                init.normal_(block.attn.out_proj.weight, std=proj_std * std)
+                init.normal_(block.mlp.c_fc.weight, std=fc_std * std)
+                init.normal_(block.mlp.c_proj.weight, std=proj_std * std)
 
-            nn.init.normal_(module.embeddings.class_embedding, std=attn_std * std)
-            nn.init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
+            init.normal_(module.embeddings.class_embedding, std=attn_std * std)
+            init.normal_(module.embeddings.position_embedding.weight, std=attn_std * std)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=0.05 * std)
+            init.normal_(module.weight, mean=0.0, std=0.05 * std)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, BridgeTowerForContrastiveLearning):
-            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
         if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
-            module.bias.data.zero_()
+            init.zeros_(module.bias)
 
 
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerVisionConfig
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config):
         super().__init__(config)
@@ -978,7 +980,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
 )
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1497,7 +1499,7 @@ class BridgeTowerITMHead(nn.Module):
     """
 )
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
-    _tied_weights_keys = ["mlm_score.decoder.weight"]
+    _tied_weights_keys = {"mlm_score.decoder.weight": "bridgetower.text_model.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)

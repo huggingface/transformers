@@ -1848,7 +1848,7 @@ class GenerationTesterMixin:
 
     @pytest.mark.flash_attn_test
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_eager_matches_fa2_generate(self):
         """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
@@ -1863,7 +1863,7 @@ class GenerationTesterMixin:
         self._test_attention_implementation("flash_attention_3")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         """
@@ -2065,14 +2065,14 @@ class GenerationTesterMixin:
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_2")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
@@ -2718,7 +2718,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         question = tokenizer.apply_chat_template(
             question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
         )
-        inputs = tokenizer(question, return_tensors="pt", padding=True).to("cuda")
+        inputs = tokenizer(question, return_tensors="pt", padding=True).to(torch_device)
         outputs = model.generate(**inputs, generation_config=generation_config)
         responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         self.assertEqual(responses[0], EXPECTED_OUTPUT)
@@ -2737,7 +2737,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         cot_question = tokenizer.apply_chat_template(
             cot_question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
         )
-        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to("cuda")
+        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to(torch_device)
 
         outputs = model.generate(**inputs, generation_config=generation_config)
         responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -4779,6 +4779,7 @@ class TokenHealingTestCase(unittest.TestCase):
 
         healed_ids = completion_model.heal_tokens(input_ids, tokenizer=tokenizer)
         predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+        predicted = predicted.lstrip()
 
         self.assertEqual(predicted, expected)
 

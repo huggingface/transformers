@@ -408,7 +408,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
         # Attend to all tokens in masked rows from the causal_mask, for example the relevant first rows when
         # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
         # Details: https://github.com/pytorch/pytorch/issues/110213
-        if not is_tracing_ and expanded_4d_mask.device.type == "cuda":
+        if not is_tracing_ and expanded_4d_mask.device.type in ["cuda", "xpu"]:
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
                 expanded_4d_mask, min_dtype=torch.finfo(inputs_embeds.dtype).min
             )

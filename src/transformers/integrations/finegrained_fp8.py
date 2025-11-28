@@ -13,8 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+import re
+from collections.abc import Sequence
+from typing import Any
 
+from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
 
@@ -30,6 +33,18 @@ if is_accelerate_available():
 
 
 logger = logging.get_logger(__name__)
+try:
+    _FP8_DTYPE = torch.float8_e4m3fn
+    _FP8_MIN = torch.finfo(_FP8_DTYPE).min
+    _FP8_MAX = torch.finfo(_FP8_DTYPE).max
+    _FP8_IS_INT = False
+except AttributeError:
+    _FP8_DTYPE = torch.int8
+    _FP8_MIN, _FP8_MAX = -127, 127
+    _FP8_IS_INT = True
+    logger.warning_once(
+        "torch.float8_e4m3fn not available; falling back to int8 emulation for Fp8Quantize operations."
+    )
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
@@ -231,7 +246,7 @@ def w8a8_block_fp8_matmul_compile(
     weight_q: torch.Tensor,  # [out_features, hidden_dim]
     input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
     weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
-    block_size: Optional[tuple[int, int]] = None,  # (M=128, N=128) for weights for example
+    block_size: tuple[int, int] | None = None,  # (M=128, N=128) for weights for example
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """
@@ -300,7 +315,7 @@ class FP8Linear(nn.Linear):
         out_features: int,
         bias: bool = False,
         dtype=None,
-        block_size: Optional[tuple[int, int]] = None,
+        block_size: tuple[int, int] | None = None,
         device=None,
         activation_scheme="dynamic",
     ):
@@ -332,6 +347,12 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
         else:
+            if isinstance(self.weight, torch.distributed.tensor.DTensor):
+                weight = self.weight._local_tensor.contiguous()
+                scale_inv = self.weight_scale_inv._local_tensor.contiguous()
+            else:
+                weight = self.weight.contiguous()
+                scale_inv = self.weight_scale_inv.contiguous()
             # Context manager used to switch among the available accelerators
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
@@ -339,9 +360,9 @@ class FP8Linear(nn.Linear):
                 qinput, scale = act_quant(input, self.block_size[1])
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
-                    self.weight,
+                    weight,
                     scale,
-                    self.weight_scale_inv,
+                    scale_inv,
                     self.block_size,
                     output_dtype=input.dtype,
                 )
@@ -350,9 +371,124 @@ class FP8Linear(nn.Linear):
             torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
+            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 
+def _ceil_div(a, b):
+    return (a + b - 1) // b
+
+
+class FP8Expert(nn.Module):
+    dtype = torch.float8_e4m3fn
+
+    def __init__(self, config, block_size, device):
+        super().__init__()
+
+        from ..activations import ACT2FN
+
+        self.block_size = block_size
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+
+        Wg_out, Wg_in = 2 * self.intermediate_dim, self.hidden_dim
+        Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
+
+        self.gate_up_proj = nn.Parameter(
+            torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=FP8Expert.dtype, device=device)
+        )
+        self.down_proj = nn.Parameter(
+            torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=FP8Expert.dtype, device=device)
+        )
+
+        # Create inverse scale tiles only when using 1-byte types (fp8)
+        if self.gate_up_proj.element_size() == 1:
+            bo, bi = self.block_size
+
+            # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
+            gu_scale_o = _ceil_div(Wg_out, bo)
+            gu_scale_i = _ceil_div(Wg_in, bi)
+            self.gate_up_proj_scale_inv = nn.Parameter(
+                torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32, device=device)
+            )
+
+            # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
+            dp_scale_o = _ceil_div(Wd_out, bo)
+            dp_scale_i = _ceil_div(Wd_in, bi)
+            self.down_proj_scale_inv = nn.Parameter(
+                torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32, device=device)
+            )
+        else:
+            # Match FP8Linear behavior when not using 1-byte weights
+            self.register_parameter("gate_up_proj_scale_inv", None)
+            self.register_parameter("down_proj_scale_inv", None)
+
+        # (Optional) bias per projection — many MoEs omit bias; keep None to match your FP8Linear default
+        self.register_parameter("gate_up_bias", None)
+        self.register_parameter("down_bias", None)
+
+        # Activation used in the MLP (same as your config / ACT2FN)
+        # Keep a handle here; actual usage happens in forward of your MoE block
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        num_experts = top_k_weights.shape[1]
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == num_experts:
+                continue
+            _, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states.index_select(0, token_idx)
+            gate, up = self.linear(
+                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
+            ).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self.linear(
+                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
+            )
+
+            routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
+            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+    def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
+        if weight.element_size() > 1:
+            return F.linear(input, weight, None)
+        else:
+            # Context manager used to switch among the available accelerators
+            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
+            with torch_accelerator_module.device(input.device):
+                qinput, scale = act_quant(input, self.block_size[1])
+                output = w8a8_block_fp8_matmul_triton(
+                    qinput,
+                    weight,
+                    scale,
+                    weight_scale_inv,
+                    self.block_size,
+                    output_dtype=input.dtype,
+                )
+            # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
+            # preceding operations are ready before proceeding
+            torch_accelerator_module.synchronize()
+            return output.to(dtype=input.dtype)
+
+
+# TODO: we do need this.... but not recursive...
 def _replace_with_fp8_linear(
     model,
     tp_plan=None,
@@ -361,40 +497,48 @@ def _replace_with_fp8_linear(
     quantization_config=None,
     has_been_replaced=False,
 ):
-    """Replace Linear layers with FP8Linear."""
-    if current_key_name is None:
-        current_key_name = []
+    iterator = list(model.named_parameters()).copy()
+    for name, empty_tensor in iterator:
+        current_key_name = name
+        name = name.rsplit(".", 1)[0] if "." in name else name
+        module = model.get_submodule(name)
 
-    for name, module in model.named_children():
-        current_key_name.append(name)
-
-        if isinstance(module, nn.Linear) and name not in (modules_to_not_convert or []):
-            current_key_name_str = ".".join(current_key_name)
-            if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
-                with init_empty_weights():
-                    model._modules[name] = FP8Linear(
-                        in_features=module.in_features,
-                        out_features=module.out_features,
-                        bias=module.bias is not None,
-                        device=module.weight.device,
-                        dtype=module.weight.dtype,
-                        activation_scheme=quantization_config.activation_scheme,
-                        block_size=quantization_config.weight_block_size,
+        current_key_name_str = re.sub(r"\d+", "*", current_key_name)
+        if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
+            with init_empty_weights():
+                if (
+                    "gate_up_proj" in current_key_name
+                    or "down_proj" in current_key_name
+                    and "experts" in current_key_name
+                ):  # Experts!
+                    in_features = empty_tensor.size(-2)
+                    out_features = empty_tensor.size(-1)
+                    model.set_submodule(
+                        name,
+                        FP8Expert(
+                            config=model.config,
+                            block_size=quantization_config.weight_block_size,
+                            device=empty_tensor.device,
+                        ),
                     )
-                    has_been_replaced = True
-            # when changing a layer the TP PLAN for that layer should be updated. TODO
 
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_fp8_linear(
-                module,
-                tp_plan,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-            )
-
-        current_key_name.pop(-1)
+                elif isinstance(module, nn.Linear):
+                    in_features = module.in_features
+                    out_features = module.out_features
+                    model.set_submodule(
+                        name,
+                        FP8Linear(
+                            in_features=in_features,
+                            out_features=out_features,
+                            bias=module.bias is not None,
+                            device=module.weight.device,
+                            dtype=module.weight.dtype,
+                            activation_scheme=quantization_config.activation_scheme,
+                            block_size=quantization_config.weight_block_size,
+                        ),
+                    )
+                has_been_replaced = True
+        # when changing a layer the TP PLAN for that layer should be updated. TODO
 
     return model, has_been_replaced
 
@@ -405,7 +549,9 @@ def replace_with_fp8_linear(
     quantization_config=None,
 ):
     """Helper function to replace model layers with FP8 versions."""
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    if modules_to_not_convert is None:
+        modules_to_not_convert = []
+    modules_to_not_convert += ["lm_head"]
 
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
@@ -424,3 +570,125 @@ def replace_with_fp8_linear(
         )
 
     return model
+
+
+class Fp8Quantize(ConversionOps):
+    """
+    A quantization operation that creates two tensors, weight and scale out of a weight.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+        self.reverse_op = Fp8Dequantize
+
+    def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
+        # Unpack single key/value (value may be wrapped in a list)
+        target_keys, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        # Resolve block size (support dict-like or attr-like quant_config)
+        block_size = None
+        if self.hf_quantizer.quantization_config is not None:
+            if isinstance(self.hf_quantizer.quantization_config, dict):
+                block_size = self.hf_quantizer.quantization_config.get("weight_block_size")
+            else:
+                block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
+        if block_size is None:
+            block_size = (value.shape[-2], value.shape[-1])
+
+        block_m, block_n = block_size
+        rows, cols = value.shape[-2], value.shape[-1]
+
+        # Enforce exact tiling like your original
+        if rows % block_m != 0 or cols % block_n != 0:
+            raise ValueError(
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n}). for {target_keys}"
+            )
+
+        # Leading dims can be empty (2D) or include num_experts/... (3D+)
+        leading_shape = value.shape[:-2]
+        rows_tiles = rows // block_m
+        cols_tiles = cols // block_n
+
+        original_shape = value.shape
+        value_fp32 = value.to(torch.float32)
+
+        # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
+        reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
+
+        # Per-tile max-abs over the block dims
+        # dims: block_m is at -3, block_n is at -1 after the reshape
+        max_abs = reshaped.abs().amax(dim=(-3, -1))
+        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
+
+        # Tile scale (we store inverse scale like your Linear: weight_scale_inv)
+        scales = _FP8_MAX / safe_max_abs
+        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
+
+        # Broadcast scales back over the block dims and quantize
+        # max_abs/scales shape: (..., rows_tiles, cols_tiles)
+        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
+        scaled = reshaped * scales_broadcast
+
+        if _FP8_IS_INT:
+            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        else:
+            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+
+        quantized = quantized.reshape(original_shape)
+
+        inv_scales = (1.0 / scales).to(torch.float32)  # shape: (*leading, rows_tiles, cols_tiles)
+        if target_keys.endswith("weight"):
+            scale_key = target_keys.rsplit(".", 1)[0] + ".weight_scale_inv"
+        else:
+            scale_key = target_keys + "_scale_inv"
+
+        # Return both quantized weights and per-tile inverse scales (keeps leading dims, e.g., num_experts)
+        return {
+            target_keys: quantized,
+            scale_key: inv_scales,
+        }
+
+
+class Fp8Dequantize(ConversionOps):
+    """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
+
+    def __init__(self, block_size: tuple[int, int] | None = None):
+        self.block_size = block_size
+        self.reverse_op = Fp8Quantize
+
+    def convert(
+        self,
+        value: Sequence[torch.Tensor] | dict[str, torch.Tensor],
+        *,
+        context: dict[str, Any],
+    ) -> torch.Tensor:
+        if isinstance(value, dict):
+            tensors = list(value.values())
+        else:
+            tensors = list(value) if isinstance(value, Sequence) else [value]
+        if len(tensors) != 2:
+            raise ValueError("Fp8Dequantize expects exactly two tensors: quantized weights and scales.")
+        quantized, scales = tensors
+        if not isinstance(quantized, torch.Tensor) or not isinstance(scales, torch.Tensor):
+            raise TypeError("Fp8Dequantize expects tensors as inputs.")
+
+        quantized_fp32 = quantized.to(torch.float32)
+        rows, cols = quantized_fp32.shape[-2:]
+        block_size = self.block_size
+        if block_size is None:
+            quant_config = context.get("quantization_config")
+            block_size = getattr(quant_config, "weight_block_size", None)
+        if block_size is None:
+            block_size = (rows, cols)
+        block_m, block_n = block_size
+        if rows % block_m != 0 or cols % block_n != 0:
+            raise ValueError(
+                f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
+            )
+
+        reshaped = quantized_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
+        expanded_scales = scales.to(torch.float32).reshape(-1, rows // block_m, cols // block_n)
+        expanded_scales = expanded_scales.unsqueeze(-1).unsqueeze(2)
+        dequantized = reshaped * expanded_scales
+        return dequantized.reshape(quantized_fp32.shape)

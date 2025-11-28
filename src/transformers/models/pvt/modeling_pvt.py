@@ -25,6 +25,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -418,33 +419,24 @@ class PvtPreTrainedModel(PreTrainedModel):
     config: PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = []
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, PvtPatchEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data,
-                mean=0.0,
-                std=std,
-            )
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
             if module.cls_token is not None:
-                module.cls_token.data = nn.init.trunc_normal_(
-                    module.cls_token.data,
-                    mean=0.0,
-                    std=std,
-                )
+                init.trunc_normal_(module.cls_token, mean=0.0, std=std)
 
 
 @auto_docstring

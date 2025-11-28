@@ -27,6 +27,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -817,7 +818,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 class IdeficsPreTrainedModel(PreTrainedModel):
     config: IdeficsConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
@@ -831,38 +832,26 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(IdeficsAttention, index=1, layer_name="self_attn"),
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
         # base should be used for training from scratch and it contains the correct code.
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, IdeficsRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, IdeficsVisionEmbeddings):
-            module.class_embedding.data.normal_()
+        super()._init_weights(module)
+        if isinstance(module, IdeficsVisionEmbeddings):
+            init.normal_(module.class_embedding)
         elif isinstance(module, IdeficsGatedCrossAttentionLayer):
             if self.config.alpha_initializer == "zeros":
-                module.alpha_cross_attn.data.zero_()
-                module.alpha_dense.data.zero_()
+                init.zeros_(module.alpha_cross_attn)
+                init.zeros_(module.alpha_dense)
             elif self.config.alpha_initializer == "ones":
-                module.alpha_cross_attn.data.fill_(1.0)
-                module.alpha_dense.data.fill_(1.0)
+                init.ones_(module.alpha_cross_attn)
+                init.ones_(module.alpha_dense)
             elif self.config.alpha_initializer in {"normal", "gaussian", "random"}:
-                module.alpha_cross_attn.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
-                module.alpha_dense.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
+                init.normal_(module.alpha_cross_attn, mean=0.0, std=self.config.alphas_initializer_range)
+                init.normal_(module.alpha_dense, mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
-            module.latents.data.normal_()
+            init.normal_(module.latents)
 
 
 @auto_docstring
@@ -1105,7 +1094,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
 
 class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config, vision_model=None):
         super().__init__(config)
@@ -1122,7 +1111,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def tie_weights(self):
+    def tie_weights(self, **kwargs):
         """
         Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of
         IdeficsDecoupledLinear and IdeficsDecoupledEmbedding.

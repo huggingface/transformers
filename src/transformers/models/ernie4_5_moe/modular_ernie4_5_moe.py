@@ -19,6 +19,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -96,26 +98,80 @@ class Ernie4_5_MoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_MoeExperts(nn.ModuleList):
+class Ernie4_5_MoeExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.moe_num_experts
-        for _ in range(self.num_experts):
-            self.append(Ernie4_5_MoeMLP(config, config.moe_intermediate_size))
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.moe_intermediate_size
+        self.use_bias = config.use_bias
+        self.act_fn = ACT2FN[config.hidden_act]
+
+        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        if self.use_bias:
+            self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim))
+            self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        else:
+            self.gate_up_proj_bias = None
+            self.down_proj_bias = None
 
     def forward(
         self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
+        if selected_experts.numel() == 0:
+            return final_hidden_states
+
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
+            expert_idx = int(expert_idx.item())
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
             current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            gate_inputs = F.linear(
+                current_state,
+                self.gate_up_proj[expert_idx],
+                None if self.gate_up_proj_bias is None else self.gate_up_proj_bias[expert_idx],
+            )
+            gate, up = gate_inputs.chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = F.linear(
+                current_hidden_states,
+                self.down_proj[expert_idx],
+                None if self.down_proj_bias is None else self.down_proj_bias[expert_idx],
+            )
+            current_hidden_states = current_hidden_states * routing_weights[top_x, idx, None]
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         return final_hidden_states
+
+
+class Ernie4_5_MoeTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(config.moe_num_experts, config.hidden_size, dtype=torch.float32))
+        self.moe_statics = Ernie4_5_MoeStatics(config)
+        self.top_k = config.moe_k
+        self.norm_min = config.moe_norm_min
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
+
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            router_logits = F.linear(hidden_states.float(), self.weight)
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
+            )
+        routing_weights = routing_weights.to(router_logits.dtype)
+        return routing_weights, selected_experts
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
@@ -124,33 +180,12 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         self.hidden_dim = config.hidden_size
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
-        self.norm_min = config.moe_norm_min
-
-        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
-        self.moe_statics = Ernie4_5_MoeStatics(config)
+        self.gate = Ernie4_5_MoeTopKRouter(config)
         self.experts = Ernie4_5_MoeExperts(config)
 
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
             self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
-
-    def route_tokens_to_experts(self, hidden_states):
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            router_logits = self.gate(hidden_states.float())
-            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
-            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
-            routing_weights = routing_weights / torch.clamp(
-                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
-            )
-        routing_weights = routing_weights.to(router_logits.dtype)
-        return selected_experts, routing_weights
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, _ = hidden_states.shape
@@ -159,14 +194,14 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states)
+        routing_weights, selected_experts = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
 
         if self.shared_experts is not None:
             final_hidden_states = final_hidden_states + shared_output
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, self.hidden_dim)
-        return final_hidden_states
+        return final_hidden_states.to(hidden_states.dtype)
 
 
 class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
@@ -193,19 +228,26 @@ class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
 class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     config: Ernie4_5_MoeConfig
     _no_split_modules = ["Ernie4_5_MoeDecoderLayer"]
-    _keep_in_fp32_modules_strict = ["gate", "moe_statics"]
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Ernie4_5_MoeTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
+    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ernie4_5_MoeStatics):
-            module.e_score_correction_bias.data.zero_()
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, Ernie4_5_MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+            if module.gate_up_proj_bias is not None:
+                init.zeros_(module.gate_up_proj_bias)
+                init.zeros_(module.down_proj_bias)
 
 
 @auto_docstring
