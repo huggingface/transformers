@@ -631,8 +631,8 @@ def repl(m, repl_map: dict[str, str]) -> str:
     if r"\1" in replacement:
         # If we find a capturing group, the parenthesized group corresponding is the one right after the named
         # group we matched, as it's part of that named group
-        group_idx_to_capture = m.re.groupindex[name] + 1
-        replacement = replacement.replace(r"\1", m.group(group_idx_to_capture))
+        group_idx_to_replace = m.re.groupindex[name] + 1
+        replacement = replacement.replace(r"\1", m.group(group_idx_to_replace))
 
     return replacement
 
