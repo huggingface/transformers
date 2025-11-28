@@ -135,7 +135,6 @@ class Lfm2MoeConfig(PreTrainedConfig):
         norm_topk_prob: bool = True,
         layer_types: Optional[list[str]] = None,
         hidden_act: str = "silu",
-        initializer_range: float = 0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
