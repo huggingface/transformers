@@ -306,7 +306,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             return [
                 WeightConverter(
-                    source_keys=[
+                    source_patterns=[
                         "weight.nested_absmax",
                         "weight.nested_quant_map",
                         "weight.quant_map",
@@ -315,7 +315,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                         "weight.quant_state.bitsandbytes__fp4",
                         "weight",
                     ],
-                    target_keys="weight",
+                    target_patterns="weight",
                     operations=[Bnb4bitDeserialize(self)],
                 )
             ]
