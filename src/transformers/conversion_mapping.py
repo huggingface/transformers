@@ -168,10 +168,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
-    mapping["jamba"] = mapping["qwen2_moe"].copy()
-    mapping["lfm2_moe"] = mapping["mixtral"].copy()
-    mapping["long_cat_flash"] = mapping["qwen2_moe"].copy()
-    mapping["olmoe"] = mapping["qwen2_moe"].copy()
+    mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
@@ -179,6 +176,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
     mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
+    mapping["olmoe"] = mapping["qwen2_moe"].copy()
 
     return mapping
 
