@@ -243,6 +243,7 @@ class HeliumAttention(nn.Module):
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
