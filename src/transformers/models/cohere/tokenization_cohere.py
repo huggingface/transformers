@@ -279,7 +279,7 @@ class CohereTokenizer(TokenizersBackend):
 
         Examples:
 
-        ```python
+        ````python
         >> tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
         >> tools = [
             {
@@ -318,7 +318,7 @@ class CohereTokenizer(TokenizersBackend):
             }
         ]
         ```
-        ```
+        ````
         """
         return self.apply_chat_template(
             conversation,
