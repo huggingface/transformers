@@ -27,6 +27,7 @@ from transformers.integrations.hub_kernels import (
     lazy_load_kernel,
     load_and_register_attn_kernel,
 )
+from transformers.utils.kernel_config import add_to_mapping
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import (
@@ -312,6 +313,63 @@ class TestKernelUtilities(TestCasePlus):
             else:
                 HUB[name] = original_entry
             _KERNEL_MODULE_MAPPING.pop(name, None)
+
+    def test_add_to_mapping_multiple_devices(self):
+        """Test that add_to_mapping preserves multiple devices for the same layer_name."""
+        compatible_mapping = {}
+        
+        # Add cuda device
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping)
+        
+        # Add rocm device - should NOT overwrite cuda
+        add_to_mapping("RMSNorm", "rocm", "repo:layer", Mode.INFERENCE, compatible_mapping)
+        
+        # Verify both devices exist
+        self.assertIn("cuda", compatible_mapping["RMSNorm"])
+        self.assertIn("rocm", compatible_mapping["RMSNorm"])
+        
+        # Verify the structure is correct
+        self.assertIn(Mode.INFERENCE, compatible_mapping["RMSNorm"]["cuda"])
+        self.assertIn(Mode.INFERENCE, compatible_mapping["RMSNorm"]["rocm"])
+        
+        # Verify LayerRepository objects are created correctly
+        cuda_repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        rocm_repo = compatible_mapping["RMSNorm"]["rocm"][Mode.INFERENCE]
+        self.assertEqual(cuda_repo.repo_id, "repo")
+        self.assertEqual(cuda_repo.layer_name, "layer")
+        self.assertEqual(rocm_repo.repo_id, "repo")
+        self.assertEqual(rocm_repo.layer_name, "layer")
+
+    def test_add_to_mapping_single_device(self):
+        """Test that add_to_mapping works correctly with a single device."""
+        compatible_mapping = {}
+        
+        # Add single device
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping)
+        
+        # Verify structure
+        self.assertIn("RMSNorm", compatible_mapping)
+        self.assertIn("cuda", compatible_mapping["RMSNorm"])
+        self.assertIn(Mode.INFERENCE, compatible_mapping["RMSNorm"]["cuda"])
+        
+        # Verify LayerRepository object
+        repo = compatible_mapping["RMSNorm"]["cuda"][Mode.INFERENCE]
+        self.assertEqual(repo.repo_id, "repo")
+        self.assertEqual(repo.layer_name, "layer")
+
+    def test_add_to_mapping_multiple_modes(self):
+        """Test that add_to_mapping can handle multiple modes for the same device."""
+        compatible_mapping = {}
+        
+        # Add inference mode
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping)
+        
+        # Add training mode - should NOT overwrite inference
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.TRAINING, compatible_mapping)
+        
+        # Verify both modes exist
+        self.assertIn(Mode.INFERENCE, compatible_mapping["RMSNorm"]["cuda"])
+        self.assertIn(Mode.TRAINING, compatible_mapping["RMSNorm"]["cuda"])
 
 
 @require_kernels
