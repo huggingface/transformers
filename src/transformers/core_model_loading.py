@@ -105,7 +105,10 @@ class ConversionOps:
     """Base class for weight conversion operations."""
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(dim={self.dim})"
+        if hasattr(self, "dim"):
+            return f"{self.__class__.__name__}(dim={self.dim})"
+        else:
+            return f"{self.__class__.__name__}"
 
     @abstractmethod
     def convert(
@@ -435,6 +438,7 @@ class WeightConverter(WeightTransform):
                     source_patterns=self.source_patterns,
                     target_patterns=self.target_patterns,
                     # Additional kwargs, ususally not used
+                    full_layer_name=layer_name,
                     model=model,
                     config=config,
                     missing_keys=missing_keys,
@@ -448,7 +452,6 @@ class WeightConverter(WeightTransform):
         prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
         # Rename the tensors
         collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
-
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
