@@ -54,6 +54,8 @@ class Lfm2MoeConfig(PreTrainedConfig):
             with longer `max_position_embeddings`.
         max_position_embeddings (`int`, *optional*, defaults to 128000):
             The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -117,6 +119,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
         tie_word_embeddings: bool = True,
         rope_parameters: RopeParameters = None,
         max_position_embeddings: int = 128_000,
+        initializer_range: float = 0.02,
         use_cache: bool = True,
         norm_eps: float = 0.00001,
         num_attention_heads: int = 32,
@@ -140,6 +143,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or rope_parameters
         self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.norm_eps = norm_eps
 
