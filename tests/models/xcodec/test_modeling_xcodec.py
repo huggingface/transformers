@@ -28,6 +28,7 @@ from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tens
 from transformers import AutoFeatureExtractor, XcodecConfig
 from transformers.testing_utils import (
     is_torch_available,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -303,6 +304,7 @@ EXPECTED_OUTPUTS_JSON = [
 @require_torch
 class XcodecIntegrationTest(unittest.TestCase):
     @parameterized.expand(EXPECTED_OUTPUTS_JSON)
+    @require_deterministic_for_xpu
     def test_integration(
         self, test_name, repo_id, bandwidth, exp_codes, exp_decoded, exp_codec_err, codec_tol, dec_tol
     ):
