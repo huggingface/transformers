@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 class XLNetConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`XLNetModel`] or a [`TFXLNetModel`]. It is used to
+    This is the configuration class to store the configuration of a [`XLNetModel`]. It is used to
     instantiate a XLNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [xlnet/xlnet-large-cased](https://huggingface.co/xlnet/xlnet-large-cased) architecture.
@@ -37,7 +37,7 @@ class XLNetConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the XLNet model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`XLNetModel`] or [`TFXLNetModel`].
+            `inputs_ids` passed when calling [`XLNetModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         n_layer (`int`, *optional*, defaults to 24):
