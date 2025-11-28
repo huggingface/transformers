@@ -29,7 +29,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
-from ...generation.configuration_utils import GenerationConfig
+from ...generation.configuration_utils import CompileConfig, GenerationConfig
 from ...generation.logits_process import LogitsProcessor
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
@@ -222,6 +222,16 @@ class ContinuousBatchProcessor:
         self.requests_in_batch: list[RequestState] = []
         # Cuda graphs for the generation step
         self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = {} if use_cuda_graph else None
+
+        # Compile-related arguments
+        self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
+
+        if self.compile_config is not None and not self.compile_config.fullgraph:
+            logger.warning(
+                f"Compilation is not supported for {self.compile_config.fullgraph = }. Setting fullgraph to True."
+            )
+            self.compile_config.fullgraph = True
+        self._forward_process_and_sample_is_compiled = False
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -627,6 +637,18 @@ class ContinuousBatchProcessor:
     def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
         """Perform a single generation step."""
 
+        # If a compile config is specified, we compile the forward pass once in a wrapper
+        if self.compile_config is not None and not self._forward_process_and_sample_is_compiled:
+            self._forward_process_and_sample = torch.compile(
+                self._forward_process_and_sample,
+                fullgraph=self.compile_config.fullgraph,
+                mode=self.compile_config.mode,
+                dynamic=self.compile_config.dynamic,
+                backend=self.compile_config.backend,
+                options=self.compile_config.options,
+            )
+            self._forward_process_and_sample_is_compiled = True
+
         # If cuda graphs are disabled, we just use the actual size
         if self._graphs is None:
             batch_data = self.get_model_kwargs()
@@ -642,13 +664,10 @@ class ContinuousBatchProcessor:
             self.cache.num_blocks * self.cache.block_size,
             NUM_KV_CUDA_GRAPHS,
         )
-
-        # Get the batch data and the associated graph
         batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
 
-        graph = self._graphs.get((padded_q, padded_read_index_size))
-
         # If we have a graph that fits, we replay it
+        graph = self._graphs.get((padded_q, padded_read_index_size))
         if graph is not None:
             graph.replay()
             return None
@@ -673,7 +692,6 @@ class ContinuousBatchProcessor:
     ) -> None:
         """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
         function to be easier to trace with OpenTelemetry."""
-        # with torch.no_grad():
         logits = self._model_forward(model, batch_data)
         # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
         probs = self._process_logit(batch_data, logits, logit_processor)
@@ -765,6 +783,7 @@ class ContinuousBatchingManager:
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
         use_cuda_graph: bool | None = getattr(generation_config, "use_cuda_graph", None)
+        compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: ContinuousBatchProcessor | None = None
@@ -773,6 +792,9 @@ class ContinuousBatchingManager:
 
         # If a number of cuda graphs was specified for either Q or KV, we activate cuda graphs
         if num_q_cuda_graphs > 0 or num_kv_cuda_graphs > 0:
+            self.use_cuda_graph = True
+        # If a compile config was found and dynamic shapes are not enabled, we use cuda graphs
+        elif compile_config is not None and not compile_config.dynamic:
             self.use_cuda_graph = True
         # If use_cuda_graph is specified, we follow the user's choice
         elif use_cuda_graph is not None:
@@ -1024,12 +1046,13 @@ class ContinuousBatchingManager:
         # Debug logging of the current memory usage
         if logger.level <= logging.DEBUG:
             device, total, reserved, allocated = get_device_and_memory_breakdown()
-            logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
+            available_memory = total - max(allocated, reserved)
+            logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}")
 
         self._generation_step()
 
         if torch.cuda.is_available():
-            torch.cuda.synchronize()
+            torch.cuda.synchronize() # FIXME: why is this needed?
         # Processor updates the batch after generation step is truly over
         batch_processor.update_batch()
 
@@ -1106,11 +1129,12 @@ class ContinuousMixin:
         """Initialize a manager for continuous batching inference.
 
         Args:
-            generation_config: Custom generation configuration
+            generation_config: An optional generation configuration, which may contain a CompileConfig object
             manual_eviction: Whether to manually evict requests from the cache
             max_queue_size: Maximum size of the input request queue
             num_q_cuda_graphs: Number of CUDA graphs to use for the query dimension
             num_kv_cuda_graphs: Number of CUDA graphs to use for the keys/values dimension
+            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
 
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -1144,11 +1168,11 @@ class ContinuousMixin:
         self,
         inputs: list[list[int]],
         generation_config: GenerationConfig | None = None,
-        progress_bar: bool = True,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
         allow_prefix_sharing: bool = True,
         record_timestamps: bool = False,
+        progress_bar: bool = True,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1158,12 +1182,13 @@ class ContinuousMixin:
             generation_config: Optional generation configuration
             num_q_cuda_graphs: Number of CUDA graphs to use for the query dimension
             num_kv_cuda_graphs: Number of CUDA graphs to use for the keys/values dimension
+            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
+            record_timestamps: If set to true, the requests will have a timestamp for each token generated
+            progress_bar: If set to true, a progress bar will be displayed
             **kwargs: Additional generation parameters
 
         Returns:
-            `list[list[int]]`: A list containing the generated sequences (including prompt tokens
-                                if not handled otherwise) for each input prompt, in the same order.
-                                Returns an empty list `[]` for requests that failed.
+            `dict[str, GenerationOutput]`: a dictionary of request ids to GenerationOutput objects
         """
         if not inputs:
             return {}
