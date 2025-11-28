@@ -18,7 +18,6 @@ from tqdm import trange
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    CompileConfig,
     GenerationConfig,
     GenerationMixin,
 )
@@ -179,20 +178,25 @@ class BenchmarkRunner:
         self.inputs["use_cache"] = True
 
         # Prepare generation config
-        gen_config = GenerationConfig(
-            do_sample=False, top_p=1.0, temperature=1.0, max_new_tokens=config.num_tokens_to_generate
-        )
+        generation_config_kwargs = {
+            "do_sample": False,
+            "max_new_tokens": config.num_tokens_to_generate,
+        }
 
-        # Prepare compile config
-        if config.compile_mode is not None:
-            gen_config.compile_config = CompileConfig(mode=config.compile_mode, options=config.compile_options)
-            gen_config.cache_implementation = "static"
+        # Add compile config if found
+        if config.compile_config is not None:
+            generation_config_kwargs.update(compile_config=config.compile_config)
+            # To trigger compile in generate, we need to set the cache to static
+            if not config.continuous_batching:
+                generation_config_kwargs.update(cache_implementation="static")
+
+        generation_config = GenerationConfig(**generation_config_kwargs)
 
         # Load model
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")
         dtype = getattr(torch, config.dtype.removeprefix("torch."))
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=dtype, attn_implementation=config.attn_implementation, generation_config=gen_config
+            model_id, dtype=dtype, attn_implementation=config.attn_implementation, generation_config=generation_config
         )
         self.model = self.model.eval().to(config.device)
 
@@ -200,20 +204,14 @@ class BenchmarkRunner:
         if config.kernelize and kernelize is not None and Mode is not None:
             self.model = kernelize(self.model, mode=Mode.INFERENCE)
 
-    def run_benchmark(
-        self, model_id: str, config: BenchmarkConfig, num_tokens_to_profile: int = 0
-    ) -> dict[str, Any] | None:
+    def run_benchmark(self, config: BenchmarkConfig, num_tokens_to_profile: int = 0) -> BenchmarkResult | None:
         """Run a single benchmark with the given model ID and config."""
         with torch.no_grad():
             self.logger.info(f"Running benchmark scenario: {config.name}")
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
-                max_new_tokens=config.num_tokens_to_generate,
-                use_continuous_batching=config.continuous_batching,
-                gpu_monitor=None,
-            )
+            e2e_latency, _, _, _ = self.time_generate(config, warmup=True)
             if e2e_latency < 0:
                 self.logger.warning(f"Skipping config {config.name}: {e2e_latency = } (no GPU monitoring)")
                 return None
@@ -221,11 +219,7 @@ class BenchmarkRunner:
             # Warmup runs
             self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
             for _ in trange(config.warmup_iterations, desc="Warmup"):
-                _ = self.time_generate(
-                    max_new_tokens=config.num_tokens_to_generate,
-                    use_continuous_batching=config.continuous_batching,
-                    gpu_monitor=None,
-                )
+                _ = self.time_generate(config, warmup=True)
             self.logger.info("Warmup over.")
 
             # Measurement runs
@@ -233,9 +227,7 @@ class BenchmarkRunner:
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
             for _ in trange(config.measurement_iterations, desc="Benchmarking"):
                 e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
-                    max_new_tokens=config.num_tokens_to_generate,
-                    use_continuous_batching=config.continuous_batching,
-                    gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
+                    config, warmup=False
                 )
                 result.accumulate(e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
@@ -244,29 +236,20 @@ class BenchmarkRunner:
             if num_tokens_to_profile > 0:
                 self.profile_generate(num_tokens_to_profile, config.name)
 
-            return {
-                "metadata": BenchmarkMetadata(
-                    model_id=model_id,
-                    branch_name=self.branch_name,
-                    commit_id=self.commit_id,
-                    commit_message=self.commit_message,
-                ),
-                "measurements": result,
-                "config": config,
-            }
+            return result
 
     def time_generate(
-        self,
-        max_new_tokens: int,
-        use_continuous_batching: bool = False,
-        gpu_monitor: GPUMonitor | None = None,
+        self, config: BenchmarkConfig, warmup: bool
     ) -> tuple[float, list[float], str, GPURawMetrics | None]:
         # Prepare gpu monitoring if needed
-        if gpu_monitor is not None:
+        if config.gpu_monitoring is not None and not warmup:
+            gpu_monitor = GPUMonitor(logger=self.logger)
             gpu_monitor.start()
+        else:
+            gpu_monitor = None
 
         # Generate and time
-        if use_continuous_batching:
+        if config.continuous_batching:
             inputs = self.inputs["input_ids"].tolist()
             wall_time_0 = time.perf_counter()
             results = self.model.generate_batch(inputs, allow_prefix_sharing=False, record_timestamps=True)
@@ -280,7 +263,7 @@ class BenchmarkRunner:
 
         # Retrieve timestamps and results in a way that allows similar post-processing
         input_tokens = self.inputs["input_ids"].size(-1)
-        if use_continuous_batching:
+        if config.continuous_batching:
             timestamps = [result.timestamps for result in results.values()]
             results = torch.tensor([result.generated_tokens for result in results.values()])
         else:
@@ -288,8 +271,8 @@ class BenchmarkRunner:
             results = results[:, input_tokens:]
 
         # Check if generation had the right number of tokens
-        if results.size(-1) != max_new_tokens:
-            raise RuntimeError(f"Generated {results.size(-1)} tokens, expected {max_new_tokens}")
+        if results.size(-1) != config.num_tokens_to_generate:
+            raise RuntimeError(f"Generated {results.size(-1)} tokens, expected {config.num_tokens_to_generate}")
 
         # Decode outputs
         decoded_output = self.tokenizer.decode(results[0], skip_special_tokens=True)
@@ -343,12 +326,24 @@ class BenchmarkRunner:
 
             # Launch benchmark in a try/except block to avoid stopping the whole run if one benchmark fails
             try:
-                results = self.run_benchmark(model_id, config, num_tokens_to_profile)
-                if results is not None:
-                    all_results[config.hash] = results
-
+                result = self.run_benchmark(config, num_tokens_to_profile)
             except Exception as e:
                 self.logger.error(f"Error running with scenario: {config.name}:\n{repr(e)}")
+                result = None
+
+            # Memoize
+            all_results[config.hash] = {
+                "metadata": BenchmarkMetadata(
+                    model_id=model_id,
+                    branch_name=self.branch_name,
+                    commit_id=self.commit_id,
+                    commit_message=self.commit_message,
+                    success=result is not None,
+                ),
+                "measurements": result if result is not None else BenchmarkResult(),
+                "config": config,
+            }
+
             # Cleanup model and save results
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp)
