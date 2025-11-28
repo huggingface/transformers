@@ -35,6 +35,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
+    SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -1711,6 +1712,99 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
         )
 
 
+@auto_docstring
+class MT5EncoderForSequenceClassification(MT5PreTrainedModel):
+    keys_to_ignore_on_load_unexpected = [r"decoder"]
+
+    # Copied from transformers.models.t5.modeling_t5.T5EncoderForSequenceClassification.__init__ with T5->MT5
+    def __init__(self, config: MT5Config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+
+        self.transformer = MT5EncoderModel(config)
+        self.dropout = nn.Dropout(config.classifier_dropout)
+        self.classifier = MT5ClassificationHead(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+        self.model_parallel = False
+
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for detail.
+
+            [What are input IDs?](../glossary#input-ids)
+
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Mask to avoid performing attention on padding token indices.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]  #  outputs.last_hidden_state
+        hidden_states = self.dropout(hidden_states)
+
+        sentence_representation = (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1)
+        sentence_representation /= attention_mask.sum(dim=1).unsqueeze(-1)
+
+        logits = self.classifier(sentence_representation)
+
+        loss = None
+        if labels is not None:
+            if self.config.num_labels > 0 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                self.config.problem_type = "single_label_classification"
+            else:
+                self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                batch_size, _ = input_ids.shape
+                loss = loss_fct(logits.view(batch_size, self.num_labels), labels.view(batch_size, self.num_labels))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
 __all__ = [
     "MT5EncoderModel",
     "MT5ForConditionalGeneration",
@@ -1719,4 +1813,5 @@ __all__ = [
     "MT5ForTokenClassification",
     "MT5Model",
     "MT5PreTrainedModel",
+    "MT5EncoderForSequenceClassification",
 ]

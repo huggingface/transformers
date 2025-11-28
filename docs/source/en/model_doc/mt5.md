@@ -150,3 +150,8 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## MT5ForQuestionAnswering
 
 [[autodoc]] MT5ForQuestionAnswering
+
+## MT5EncoderForSequenceClassification
+
+[[autodoc]] MT5EncoderForSequenceClassification
+    - forward
