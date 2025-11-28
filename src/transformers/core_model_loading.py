@@ -279,6 +279,7 @@ class PermuteForRope(ConversionOps):
 class WeightTransform:
     source_patterns: Union[str, list[str]] = field(init=True)
     target_patterns: Union[str, list[str]] = field(init=True)
+    compiled_sources: re.Pattern = field(init=False)
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
@@ -315,7 +316,7 @@ class WeightTransform:
         # Construct the regex we will use to rename keys from the sources to the targets
         branches = []
         for i, source_pattern in enumerate(self.source_patterns):
-            group_name = f"{i}"
+            group_name = f"g{i}"
             pattern = source_pattern.replace(".*.", r"\..*\.")
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
@@ -341,7 +342,9 @@ class WeightTransform:
             return source_key, None
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         renamed_key = source_key.replace(match_object.group(0), self.target_patterns[0])
-        source_pattern_that_matched = self.source_patterns[int(match_object.lastgroup)]
+        # Find the source that produced the match
+        matching_source_idx = int(match_object.lastgroup[1:])
+        source_pattern_that_matched = self.source_patterns[matching_source_idx]
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -407,7 +410,7 @@ class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     def __post_init__(self):
-        super().__post_init__()
+        WeightTransform.__post_init__(self)
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             raise ValueError(
                 f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
@@ -659,6 +662,7 @@ def rename_source_key(
 
     # 2. apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
     # the first match, as we assume only 1 converter can match any source key)
+    source_pattern = None
     for converter in weight_converters:
         renamed_key, source_pattern = converter.rename_source_key(renamed_key)
         if source_pattern is not None:
