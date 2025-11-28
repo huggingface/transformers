@@ -258,7 +258,6 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     def convert_rope_params_to_dict(self, default_theta=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
         # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
