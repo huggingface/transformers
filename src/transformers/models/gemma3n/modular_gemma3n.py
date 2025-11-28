@@ -28,7 +28,7 @@ from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -168,6 +168,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
     """
 
     model_type = "gemma3n_text"
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -203,13 +204,6 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-
         if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
             raise ValueError(
                 "intermediate_size must have an explicit intermediate size for every layer or one for all layers. "
@@ -236,9 +230,6 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if layer_types is None:
             self.layer_types = [
@@ -248,14 +239,6 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             self.layer_types = layer_types
 
         layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        rope_local_base_freq = kwargs.get("rope_local_base_freq", 100000.0)
-        standardize_rope_params(
-            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
-        )
-        rope_config_validation(self)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers
@@ -277,6 +260,37 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
                 f"Expected {num_hidden_layers} values but got {len_asp}."
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
+        self.rope_parameters = rope_parameters
+        PreTrainedConfig.__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+        if rope_scaling is not None:
+            self.rope_parameters["full_attention"].update(rope_scaling)
+        self.rope_parameters["full_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
+        )
+        self.rope_parameters["sliding_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
+        )
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
 class Gemma3nAudioConfig(PreTrainedConfig):

@@ -23,7 +23,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class MiniMaxConfig(PreTrainedConfig):
@@ -132,6 +132,7 @@ class MiniMaxConfig(PreTrainedConfig):
 
     model_type = "minimax"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -221,9 +222,6 @@ class MiniMaxConfig(PreTrainedConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.layer_types is None:
             self.layer_types = [
@@ -231,10 +229,7 @@ class MiniMaxConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

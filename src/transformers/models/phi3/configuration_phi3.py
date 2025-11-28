@@ -18,7 +18,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -81,8 +81,6 @@ class Phi3Config(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to 1.0):
-            Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 32000):
@@ -140,7 +138,6 @@ class Phi3Config(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        partial_rotary_factor: Optional[float] = 1.0,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 32000,
         pad_token_id: Optional[int] = 32000,
@@ -166,17 +163,8 @@ class Phi3Config(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-        self._rope_parameters_adjustment()
-        self._rope_parameters_validation()
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 1.0)  # assign default for BC
         self.sliding_window = sliding_window
 
         super().__init__(
@@ -187,26 +175,40 @@ class Phi3Config(PreTrainedConfig):
             **kwargs,
         )
 
-    def _rope_parameters_adjustment(self):
-        """
-        Adjust the `type` of the `rope_parameters` configuration for backward compatibility.
-        """
-        rope_parameters_type = self.rope_parameters.get("rope_type", None)
+    def convert_rope_params_to_dict(
+        self, default_theta: int | float = 10_000.0, ignore_keys: Optional[set] = None, **kwargs
+    ):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
+        self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
+        self.standardize_rope_params()
 
         # For backward compatibility if previous version used "su" or "yarn"
+        rope_parameters_type = self.rope_parameters.get("rope_type", None)
         if rope_parameters_type is not None and rope_parameters_type in ["su", "yarn"]:
             self.rope_parameters["rope_type"] = "longrope"
+        self.validate_rope(ignore_keys=ignore_keys)
+        return kwargs
 
-    def _rope_parameters_validation(self):
+    def validate_rope(self, ignore_keys: Optional[set] = None):
         """
         Validate the `rope_parameters` configuration.
         """
+        super().validate_rope(ignore_keys=ignore_keys)
+
+        # Run Phi3 specific validation
         if not isinstance(self.rope_parameters, dict):
             raise ValueError(f"`rope_parameters` must be a dictionary but got {self.rope_parameters}")
         rope_parameters_type = self.rope_parameters.get("rope_type", None)
         rope_parameters_short_factor = self.rope_parameters.get("short_factor", None)
         rope_parameters_long_factor = self.rope_parameters.get("long_factor", None)
-        rotary_ndims = int(self.hidden_size // self.num_attention_heads * self.partial_rotary_factor)
+        rotary_ndims = int(
+            self.hidden_size // self.num_attention_heads * self.rope_parameters["partial_rotary_factor"]
+        )
         if rope_parameters_type not in ["default", "longrope"]:
             raise ValueError(f"`rope_parameters`'s type field must be one of ['longrope'], got {rope_parameters_type}")
 
