@@ -3909,7 +3909,7 @@ class Trainer:
 
     def _deepspeed_sp_compute_loss(self, model, inputs, return_outputs, pc):
         """
-        How the loss is computed by Trainer under sequence parallelism with sp_backend=="deepspeed" and sp_size>1.
+        How the loss is computed by the Trainer under sequence parallelism with sp_backend=="deepspeed" and sp_size>1.
         Performs weighted loss aggregation across SP ranks, accounting for varying numbers of valid tokens per rank
         (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
 
@@ -3927,23 +3927,20 @@ class Trainer:
             The loss of the model along with its output if return_outputs was set to True
         """
 
-        unwrapped_model = self.accelerator.unwrap_model(model)
-
+        # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
+        # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
+        # Both standard transformer models and Liger-patched models handle shift_labels correctly,
+        # so we can directly use the computed loss from the model output.
+        # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
         outputs = model(**inputs)
-        shift_labels = inputs["shift_labels"]
-        loss = unwrapped_model.loss_function(
-            logits=outputs.logits,
-            labels=None,
-            shift_labels=shift_labels,
-            vocab_size=unwrapped_model.config.vocab_size,
-        )
+        loss = outputs.loss
 
         sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
         sp_world_size = pc.sp_size
         # differentiable weighted per-shard-loss aggregation across ranks
         losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
         # special dealing with SFT that has prompt tokens that aren't used in loss computation
-        good_tokens = (shift_labels != -100).view(-1).sum()
+        good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
         good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
         # Skip ranks with zero valid tokens
         total_loss = sum(
