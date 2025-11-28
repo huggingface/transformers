@@ -299,9 +299,8 @@ class WeightTransform:
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
-            # This is ugly but needed for reverse mapping of Qwen2.5!
-            if r"(?!\.(language_model|visual))" in pattern:
-                pattern = pattern.replace(r"(?!\.(language_model|visual))", "")
+            # Remove negative lookahead if any. This is ugly but needed for reverse mapping of Qwen2.5 and Sam3!
+            pattern = re.sub(r"\(\?!.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
             if r"(.+)" in pattern:
                 pattern = pattern.replace(r"(.+)", r"\1")
@@ -341,10 +340,16 @@ class WeightTransform:
         if match_object is None:
             return source_key, None
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
-        renamed_key = source_key.replace(match_object.group(0), self.target_patterns[0])
-        # Find the source that produced the match
-        matching_source_idx = int(match_object.lastgroup[1:])
-        source_pattern_that_matched = self.source_patterns[matching_source_idx]
+        replacement = self.target_patterns[0]
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
+        if r"\1" in replacement:
+            # We can use lastindex here, as we are guaranteed that the subgroup inside the named group matched is the last one
+            replacement = replacement.replace(r"\1", match_object.group(match_object.lastindex))
+        renamed_key = source_key.replace(match_object.group(0), replacement)
+        # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
+        matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
+        source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
+
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -614,33 +619,6 @@ class SkipLayer(Exception):
     """Control-flow sentinel: abort processing of the current layer only."""
 
     pass
-
-
-def repl(m, repl_map: dict[str, str]) -> str:
-    # Collect all groups that matched
-    matched_groups = [name for name, val in m.groupdict().items() if val]
-
-    if len(matched_groups) == 0:
-        # Should never happen
-        return m.group(0)
-
-    if len(matched_groups) > 1:
-        raise ValueError(
-            "only a single match should happen, your regex patterns are tangled: "
-            f"groups matched = {matched_groups} for the patternsL {repl_map.keys()}"
-        )
-
-    # Exactly one match => return replacement
-    name = matched_groups[0]
-    replacement = repl_map[name]
-    # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
-    if r"\1" in replacement:
-        # If we find a capturing group, the parenthesized group corresponding is the one right after the named
-        # group we matched, as it's part of that named group
-        group_idx_to_replace = m.re.groupindex[name] + 1
-        replacement = replacement.replace(r"\1", m.group(group_idx_to_replace))
-
-    return replacement
 
 
 def rename_source_key(
