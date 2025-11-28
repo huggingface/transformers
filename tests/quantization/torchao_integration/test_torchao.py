@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torchao,
     require_torchao_version_greater_or_equal,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_torchao_available
@@ -139,6 +140,7 @@ class TorchAoConfigTest(unittest.TestCase):
 
 @require_torchao
 @require_torchao_version_greater_or_equal("0.8.0")
+@slow
 class TorchAoTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
@@ -674,6 +676,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
 
 @require_torchao_version_greater_or_equal("0.11.0")
+@slow
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
