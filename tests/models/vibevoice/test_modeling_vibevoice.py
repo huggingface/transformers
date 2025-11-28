@@ -194,7 +194,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     all_model_classes = (VibeVoiceForConditionalGeneration,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_resize_embeddings_untied = False
 
     def setUp(self):
         self.model_tester = VibeVoiceModelTester(self)
@@ -401,7 +400,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-1.5B"
+        self.model_checkpoint = "bezzam/VibeVoice-1.5Bv2"
         self.sampling_rate = 24000
 
     def tearDown(self):

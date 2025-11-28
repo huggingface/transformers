@@ -50,7 +50,6 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 class VibeVoiceFeatureExtractionTester:
-    # Copied from tests.models.dac.test_feature_extraction_dac.DacFeatureExtractionTester.__init__
     def __init__(
         self,
         parent,
@@ -143,7 +142,6 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
 
-    # Copied from tests.models.dac.test_feature_extraction_dac.DacFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_audio_inputs = np.random.rand(100).astype(np.float64)
@@ -155,7 +153,6 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
-    # Copied from tests.models.dac.test_feature_extraction_dac.DacFeatureExtractionTest._load_datasamples
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 

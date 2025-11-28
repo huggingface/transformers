@@ -27,31 +27,34 @@ logger = logging.get_logger(__name__)
 
 
 class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
-    """
-    Feature extractor for VibeVoice acoustic tokenizer models.
-
-    This feature extractor handles audio preprocessing for VibeVoice models, including:
-    - Audio format conversion (stereo to mono)
-    - Optional audio normalization
-    - Streaming support for infinite-length audio
+    r"""
+    Constructs a VibeVoice feature extractor.
 
     Args:
-        sampling_rate (int, optional): Expected sampling rate. Defaults to 24000.
-        normalize_audio (bool, optional): Whether to normalize audio. Defaults to True.
-        target_dB_FS (float, optional): Target dB FS for normalization. Defaults to -25.
-        eps (float, optional): Small value for numerical stability. Defaults to 1e-6.
+        feature_size (`int`, *optional*, defaults to 1):
+            The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
+        sampling_rate (`int`, *optional*, defaults to 24000):
+            The sampling rate at which the audio waveform should be digitalized, expressed in hertz (Hz).
+        padding_value (`float`, *optional*, defaults to 0.0):
+            The value that is used for padding.
+        normalize_audio (`bool`, *optional*, defaults to `True`):
+            Whether to normalize audio to a target dB FS.
+        target_dB_FS (`float`, *optional*, defaults to -25):
+            Target dB FS for normalization.
+        eps (`float`, *optional*, defaults to 1e-06):
+
     """
 
     model_input_names = ["input_features", "input_features_mask"]
 
     def __init__(
         self,
-        sampling_rate: int = 24000,
-        normalize_audio: bool = True,
-        target_dB_FS: float = -25,
-        eps: float = 1e-6,
-        feature_size: int = 1,
-        padding_value: float = 0.0,
+        feature_size=1,
+        sampling_rate=24000,
+        padding_value=0.0,
+        normalize_audio=True,
+        target_dB_FS=-25,
+        eps=1e-6,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)

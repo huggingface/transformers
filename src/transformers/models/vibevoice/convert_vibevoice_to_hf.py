@@ -43,9 +43,6 @@ def update_state_dict_for_hf_model(state_dict):
     for key, value in state_dict.items():
         new_key = key
 
-        # Remove 'model.' prefix if present (7B model has this extra prefix)
-        new_key = new_key.removeprefix("model.")  # Remove "model." prefix
-
         # Handle semantic tokenizer transformations
         if "semantic_tokenizer" in key:
             if "downsample_layers." in key and ".0.conv." in key:
@@ -110,9 +107,6 @@ def convert_checkpoint(
 
     # 1) Load state dict from safetensors checkpoint
     original_state_dict = load_file(checkpoint)
-    # -- remove "model." prefix
-    if list(original_state_dict.keys())[0].startswith("model."):
-        original_state_dict = {k[len("model.") :]: v for k, v in original_state_dict.items()}
 
     # 2) Prepare feature extractor (same for all models)
     audio_config = {}
@@ -279,7 +273,7 @@ def convert_checkpoint(
     semantic_config = VibeVoiceSemanticTokenizerConfig(**model_config["semantic_tokenizer_config"])
     semantic_model = VibeVoiceSemanticTokenizerModel(semantic_config).to(dtype)
     # -- filter for semantic tokenizer weights
-    prefix = "semantic_tokenizer"
+    prefix = "model.semantic_tokenizer"
     semantic_state_dict = {
         k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
         for k, v in updated_state_dict.items()
@@ -302,7 +296,7 @@ def convert_checkpoint(
     acoustic_config = VibeVoiceAcousticTokenizerConfig(**model_config["acoustic_tokenizer_config"])
     acoustic_model = VibeVoiceAcousticTokenizerModel(acoustic_config).to(dtype)
     # -- filter for acoustic tokenizer weights
-    prefix = "acoustic_tokenizer"
+    prefix = "model.acoustic_tokenizer"
     acoustic_state_dict = {
         k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
         for k, v in updated_state_dict.items()
@@ -404,13 +398,10 @@ def convert_checkpoint(
 
     # -- load into HF model
     if model_config["text_config"].get("tie_word_embeddings", False):
-        # if model_config["text_config"]["tie_word_embeddings"]:
         # 1.5B ties weights: https://huggingface.co/microsoft/VibeVoice-1.5B/blob/main/config.json#L61
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L123
-        updated_state_dict["lm_head.weight"] = updated_state_dict["language_model.embed_tokens.weight"]
-    else:
-        # 7B does not tie weights: https://huggingface.co/vibevoice/VibeVoice-7B/blob/main/config.json#L113
-        pass
+        updated_state_dict["lm_head.weight"] = updated_state_dict["model.language_model.embed_tokens.weight"]
+    # 7B does not tie weights: https://huggingface.co/vibevoice/VibeVoice-7B/blob/main/config.json#L113
 
     missing, unexpected = vibevoice_model.load_state_dict(updated_state_dict, strict=False)
     if len(unexpected) != 0:

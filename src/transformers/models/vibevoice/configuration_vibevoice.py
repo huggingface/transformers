@@ -168,13 +168,13 @@ class VibeVoiceConfig(PretrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen2`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "language_model.layers.*.self_attn.q_proj": "colwise",
+        "language_model.layers.*.self_attn.k_proj": "colwise",
+        "language_model.layers.*.self_attn.v_proj": "colwise",
+        "language_model.layers.*.self_attn.o_proj": "rowwise",
+        "language_model.layers.*.mlp.gate_proj": "colwise",
+        "language_model.layers.*.mlp.up_proj": "colwise",
+        "language_model.layers.*.mlp.down_proj": "rowwise",
     }
 
     def __init__(
