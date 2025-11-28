@@ -279,7 +279,7 @@ class CohereTokenizer(TokenizersBackend):
 
         Examples:
 
-        ````python
+        ```python
         >> tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
         >> tools = [
             {
@@ -308,7 +308,6 @@ class CohereTokenizer(TokenizersBackend):
         >> inputs = tokenizer.encode(grounded_generation_prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
-        ```json
         [
             {
                 "tool_name": "internet_search",
@@ -318,7 +317,6 @@ class CohereTokenizer(TokenizersBackend):
             }
         ]
         ```
-        ````
         """
         return self.apply_chat_template(
             conversation,
