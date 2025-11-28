@@ -150,8 +150,8 @@ class AwqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model has been converted properly
         """
-        from gptqmodel.nn_modules.qlinear.awq_gemm import AwqGEMMQuantLinear
-        from gptqmodel.nn_modules.qlinear.awq_gemv import AwqGEMVQuantLinear
+        from gptqmodel.nn_modules.qlinear.gemm_awq import AwqGEMMQuantLinear
+        from gptqmodel.nn_modules.qlinear.gemv_awq import AwqGEMVQuantLinear
         from transformers.integrations.awq import replace_with_awq_linear
 
         model_id = "facebook/opt-350m"
