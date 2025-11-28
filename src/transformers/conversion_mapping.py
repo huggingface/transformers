@@ -78,6 +78,21 @@ def _build_checkpoint_conversion_mapping():
         "lfm2_moe": [
             WeightConverter(
                 source_patterns=[
+                    "feed_forward.experts.*.w1.weight",
+                    "feed_forward.experts.*.w3.weight",
+                ],
+                target_patterns="feed_forward.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="feed_forward.experts.*.w2.weight",
+                target_patterns="feed_forward.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "jamba": [
+            WeightConverter(
+                source_patterns=[
                     "feed_forward.experts.*.gate_proj.weight",
                     "feed_forward.experts.*.up_proj.weight",
                 ],
@@ -139,7 +154,6 @@ def _build_checkpoint_conversion_mapping():
     mapping["ernie_4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
-    mapping["jamba"] = mapping["lfm2_moe"].copy()
     mapping["long_cat_flash"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
