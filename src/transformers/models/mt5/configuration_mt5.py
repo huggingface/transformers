@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class MT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MT5Model`] or a [`TFMT5Model`]. It is used to
+    This is the configuration class to store the configuration of a [`MT5Model`]. It is used to
     instantiate a mT5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the mT5
     [google/mt5-small](https://huggingface.co/google/mt5-small) architecture.
@@ -34,7 +34,7 @@ class MT5Config(PreTrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 250112):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+            `inputs_ids` passed when calling [`T5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):

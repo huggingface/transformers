@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class XLMConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`XLMModel`] or a [`TFXLMModel`]. It is used to
+    This is the configuration class to store the configuration of a [`XLMModel`]. It is used to
     instantiate a XLM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [FacebookAI/xlm-mlm-en-2048](https://huggingface.co/FacebookAI/xlm-mlm-en-2048) architecture.
@@ -34,7 +34,7 @@ class XLMConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30145):
             Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`XLMModel`] or [`TFXLMModel`].
+            `inputs_ids` passed when calling [`XLMModel`].
         emb_dim (`int`, *optional*, defaults to 2048):
             Dimensionality of the encoder layers and the pooler layer.
         n_layer (`int`, *optional*, defaults to 12):

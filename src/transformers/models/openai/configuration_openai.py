@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class OpenAIGPTConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
+    This is the configuration class to store the configuration of a [`OpenAIGPTModel`]. It is
     used to instantiate a GPT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT
     [openai-community/openai-gpt](https://huggingface.co/openai-community/openai-gpt) architecture from OpenAI.
@@ -35,7 +35,7 @@ class OpenAIGPTConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 40478):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OpenAIGPTModel`] or [`TFOpenAIGPTModel`].
+            `inputs_ids` passed when calling [`OpenAIGPTModel`].
         n_positions (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).

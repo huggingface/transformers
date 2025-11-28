@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class FunnelConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FunnelModel`] or a [`TFBertModel`]. It is used to
+    This is the configuration class to store the configuration of a [`FunnelModel`]. It is used to
     instantiate a Funnel Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Funnel
     Transformer [funnel-transformer/small](https://huggingface.co/funnel-transformer/small) architecture.
@@ -34,7 +34,7 @@ class FunnelConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Funnel transformer. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
+            by the `inputs_ids` passed when calling [`FunnelModel`].
         block_sizes (`list[int]`, *optional*, defaults to `[4, 4, 4]`):
             The sizes of the blocks used in the model.
         block_repeats (`list[int]`, *optional*):

@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class LxmertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LxmertModel`] or a [`TFLxmertModel`]. It is used
+    This is the configuration class to store the configuration of a [`LxmertModel`]. It is used
     to instantiate a LXMERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the Lxmert
     [unc-nlp/lxmert-base-uncased](https://huggingface.co/unc-nlp/lxmert-base-uncased) architecture.
@@ -35,7 +35,7 @@ class LxmertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the LXMERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LxmertModel`] or [`TFLxmertModel`].
+            `inputs_ids` passed when calling [`LxmertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_attention_heads (`int`, *optional*, defaults to 12):

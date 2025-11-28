@@ -110,8 +110,6 @@ class TextGenerationPipeline(Pipeline):
             if prefix is None and self.model.__class__.__name__ in [
                 "XLNetLMHeadModel",
                 "TransfoXLLMHeadModel",
-                "TFXLNetLMHeadModel",
-                "TFTransfoXLLMHeadModel",
             ]:
                 # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
                 prefix = self.XL_PREFIX
