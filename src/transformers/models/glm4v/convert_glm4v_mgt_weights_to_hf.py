@@ -702,9 +702,13 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "dtype": text_config.get("torch_dtype", "bfloat16"),
         "use_cache": text_config.get("use_cache", True),
         "vocab_size": text_config.get("vocab_size", 151552),
-        "partial_rotary_factor": 0.5,
         "tie_word_embeddings": False,
-        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000.0,
+            "mrope_section": [8, 12, 12],
+            "partial_rotary_factor": 0.5,
+        },
     }
     hf_config["text_config"] = txt_config
 

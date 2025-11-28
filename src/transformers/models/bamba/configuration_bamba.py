@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -171,16 +171,6 @@ class BambaConfig(PreTrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
         self.attn_layer_indices = attn_layer_indices
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        self.partial_rotary_factor = 0.5
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
         mamba_intermediate = mamba_expand * hidden_size
 
         if mamba_intermediate % mamba_n_heads != 0:
@@ -203,6 +193,8 @@ class BambaConfig(PreTrainedConfig):
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
         self.z_loss_coefficient = z_loss_coefficient
+        self.rope_parameters = rope_parameters
+        kwargs["partial_rotary_factor"] = 0.5  # hardcode for BC
 
         super().__init__(
             pad_token_id=pad_token_id,

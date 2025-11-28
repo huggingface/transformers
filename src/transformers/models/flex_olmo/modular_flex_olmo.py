@@ -19,15 +19,15 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
-from ..olmoe.configuration_olmoe import OlmoeConfig
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
     OlmoeForCausalLM,
@@ -36,7 +36,7 @@ from ..olmoe.modeling_olmoe import (
 )
 
 
-class FlexOlmoConfig(OlmoeConfig):
+class FlexOlmoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlexOlmoModel`]. It is used to instantiate an FlexOlmo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -120,6 +120,8 @@ class FlexOlmoConfig(OlmoeConfig):
 
     model_type = "flex_olmo"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "num_experts"}
+    default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
@@ -162,39 +164,38 @@ class FlexOlmoConfig(OlmoeConfig):
         norm_topk_prob: Optional[bool] = False,
         **kwargs,
     ):
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_experts = num_experts
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.norm_topk_prob = norm_topk_prob
+        self.rope_parameters = rope_parameters
+
         super().__init__(
-            vocab_size=vocab_size,
-            max_position_embeddings=max_position_embeddings,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            num_experts_per_tok=num_experts_per_tok,
-            num_experts=num_experts,
-            output_router_logits=output_router_logits,
-            router_aux_loss_coef=router_aux_loss_coef,
-            norm_topk_prob=norm_topk_prob,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        del self.clip_qkv
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
 
 
 # FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original Olmoe.

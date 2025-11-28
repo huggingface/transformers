@@ -14,7 +14,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Lfm2MoeConfig(PreTrainedConfig):
@@ -103,6 +103,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
 
     model_type = "lfm2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -136,9 +137,6 @@ class Lfm2MoeConfig(PreTrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
         self.norm_eps = norm_eps
@@ -161,11 +159,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.layer_types = layer_types
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
+        self.rope_parameters = rope_parameters
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(
             pad_token_id=pad_token_id,

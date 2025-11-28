@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -261,6 +261,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
     base_model_tp_plan = {
@@ -324,14 +325,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -345,9 +339,9 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
+            ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
             **kwargs,
         )
-        rope_config_validation(self, ignore_keys={"mrope_section", "interleaved", "mrope_interleaved"})
 
 
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
@@ -589,9 +583,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -603,10 +594,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
@@ -768,14 +756,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -1018,7 +999,6 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         attention_dropout=0.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.codebook_size = codebook_size
         self.hidden_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
@@ -1036,15 +1016,9 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         self.upsampling_ratios = upsampling_ratios
         self.decoder_dim = decoder_dim
         self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        super().__init__(**kwargs)
 
     @property
     def layer_types(self):

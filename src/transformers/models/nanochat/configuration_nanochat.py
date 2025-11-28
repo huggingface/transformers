@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class NanoChatConfig(PretrainedConfig):
@@ -144,6 +144,7 @@ class NanoChatConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.final_logit_softcapping = final_logit_softcapping
         self.attention_bias = attention_bias
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             bos_token_id=bos_token_id,
@@ -152,13 +153,6 @@ class NanoChatConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        # Validate the correctness of rotary position embeddings parameters
-        # Must be done after super().__init__() to avoid being overridden by kwargs
-        self.rope_parameters = rope_parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
 
 
 __all__ = ["NanoChatConfig"]
