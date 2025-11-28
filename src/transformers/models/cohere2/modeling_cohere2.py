@@ -225,7 +225,6 @@ class Cohere2Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -245,7 +244,7 @@ class Cohere2Attention(nn.Module):
 
         cos, sin = position_embeddings
         if self.sliding_window is not None:
-            query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}

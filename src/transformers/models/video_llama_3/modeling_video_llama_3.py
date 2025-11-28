@@ -200,7 +200,6 @@ class VideoLlama3VisionAttention(nn.Module):
         self.num_key_value_groups = 1
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.rotary_fn = apply_rotary_pos_emb_vision
 
     def forward(
         self,
@@ -224,7 +223,7 @@ class VideoLlama3VisionAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)

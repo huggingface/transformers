@@ -416,7 +416,6 @@ class Zamba2Attention(nn.Module):
                 self.linear_v_adapter_list.append(linear_v_adapter)
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -446,7 +445,7 @@ class Zamba2Attention(nn.Module):
 
         if self.config.use_mem_rope:
             cos, sin = position_embeddings
-            query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, layer_idx)

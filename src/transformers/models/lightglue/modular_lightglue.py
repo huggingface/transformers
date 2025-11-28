@@ -29,6 +29,7 @@ from ...utils.generic import can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
+from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..superglue.image_processing_superglue import (
     SuperGlueImageProcessor,
@@ -283,7 +284,7 @@ class LightGlueAttention(LlamaAttention):
 
         if position_embeddings is not None:
             cos, sin = position_embeddings
-            query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

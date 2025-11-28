@@ -144,7 +144,6 @@ class CohereAttention(LlamaAttention):
             self.k_norm = CohereLayerNorm(
                 hidden_size=(config.num_key_value_heads, self.head_dim), eps=config.layer_norm_eps
             )
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -171,7 +170,7 @@ class CohereAttention(LlamaAttention):
         value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache

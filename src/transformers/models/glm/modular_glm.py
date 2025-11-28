@@ -126,7 +126,6 @@ class GlmAttention(LlamaAttention):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.rotary_fn = apply_rotary_pos_emb
 
 
 class GlmForCausalLM(LlamaForCausalLM):

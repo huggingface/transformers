@@ -908,7 +908,6 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         self.config = config
         self.attention_dropout = 0.0
         self.is_causal = False
-        self.rotary_fn = apply_rotary_pos_emb_vision
 
     def forward(
         self,
@@ -921,8 +920,8 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         query_states = self.q(hidden_states).reshape(seq_length, self.num_heads, -1)
         key_states = self.k(hidden_states).reshape(seq_length, self.num_heads, -1)
         value_states = self.v(hidden_states).reshape(seq_length, self.num_heads, -1)
-        query_states = self.rotary_fn(query_states.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        key_states = self.rotary_fn(key_states.unsqueeze(0), rotary_pos_emb).squeeze(0)
+        query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), rotary_pos_emb).squeeze(0)
+        key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
@@ -3034,7 +3033,6 @@ class DiTAttention(nn.Module):
         self.to_v = nn.Linear(config.hidden_size, self.inner_dim)
 
         self.to_out = nn.ModuleList([nn.Linear(self.inner_dim, config.hidden_size), nn.Dropout(config.dropout)])
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -3059,7 +3057,7 @@ class DiTAttention(nn.Module):
         # apply rotary position embedding
         # Due to training process, only first head is applied with RoPE, will be fixed at next release
         cos, sin = position_embeddings
-        query[:, :1], key[:, :1] = self.rotary_fn(query[:, :1], key[:, :1], cos, sin)
+        query[:, :1], key[:, :1] = apply_rotary_pos_emb(query[:, :1], key[:, :1], cos, sin)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
         attention_weights, _ = attention_interface(

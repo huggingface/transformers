@@ -153,7 +153,6 @@ class GPTNeoXAttention(nn.Module):
 
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -171,7 +170,7 @@ class GPTNeoXAttention(nn.Module):
         query_states, key_states, value_states = qkv.chunk(3, dim=-1)
 
         cos, sin = position_embeddings
-        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # Cache QKV values
         if layer_past is not None:

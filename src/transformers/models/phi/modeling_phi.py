@@ -231,7 +231,7 @@ class PhiAttention(nn.Module):
             key_states[..., self.rotary_ndims :],
         )
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-        query_rot, key_rot = self.rotary_fn(query_rot, key_rot, cos, sin)
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
 
         # [batch_size, seq_length, num_heads, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)

@@ -1720,7 +1720,6 @@ class Gemma3nTextAttention(Gemma3Attention):
             self.store_full_length_kv = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(
                 config.layer_types[layer_idx]
             )
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -1737,7 +1736,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         cos, sin = position_embeddings
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         query_states = self.q_norm(query_states)
-        query_states = self.rotary_fn(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
         # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
@@ -1749,7 +1748,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
-            key_states = self.rotary_fn(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
             key_states = key_states.transpose(1, 2)
 
             value_states = self.v_proj(hidden_states).view(hidden_shape)
