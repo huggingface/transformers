@@ -1291,7 +1291,7 @@ class Gemma3nTextAttention(nn.Module):
         cos, sin = position_embeddings
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = self.rotary_fn(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
         # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
@@ -1303,7 +1303,7 @@ class Gemma3nTextAttention(nn.Module):
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             key_states = self.k_norm(key_states)
-            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = self.rotary_fn(key_states, cos, sin, unsqueeze_dim=2)
             key_states = key_states.transpose(1, 2)
 
             value_states = self.v_proj(hidden_states).view(hidden_shape)
@@ -1497,7 +1497,7 @@ class Gemma3nAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

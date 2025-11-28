@@ -254,6 +254,7 @@ class MLCDAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.num_key_value_groups = config.num_key_value_groups
+        self.rotary_fn = apply_rotary_pos_emb_vision
 
     def forward(
         self,
@@ -273,7 +274,7 @@ class MLCDAttention(nn.Module):
         # Apply positional embeddings
         cos = position_embeddings[0].unsqueeze(0).float()
         sin = position_embeddings[1].unsqueeze(0).float()
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         # Each of shape: [batch_size, num_heads, seq_length, head_dim]
         query_states = query_states.permute(0, 2, 1, 3).contiguous()

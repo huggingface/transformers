@@ -27,6 +27,7 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2FN
+from ...integrations import use_kernel_func_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -99,13 +100,13 @@ class LightGluePositionalEncoder(nn.Module):
 
 
 def rotate_half(x):
-    # Split and rotate. Note that this function is different from e.g. Llama.
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
-    return rot_x
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -126,14 +127,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    dtype = q.dtype
-    q = q.float()
-    k = k.float()
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -224,7 +222,7 @@ class LightGlueAttention(nn.Module):
 
         if position_embeddings is not None:
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

@@ -214,6 +214,7 @@ class Olmo3Attention(Olmo2Attention):
         assert config.layer_types is not None
         self.attention_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -236,7 +237,7 @@ class Olmo3Attention(Olmo2Attention):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

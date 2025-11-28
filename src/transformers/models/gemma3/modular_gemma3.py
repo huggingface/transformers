@@ -450,6 +450,7 @@ class Gemma3Attention(Gemma2Attention):
 
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -471,7 +472,7 @@ class Gemma3Attention(Gemma2Attention):
         key_states = self.k_norm(key_states)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

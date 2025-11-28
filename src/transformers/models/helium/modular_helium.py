@@ -99,6 +99,7 @@ class HeliumAttention(GraniteAttention):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)
+        self.rotary_fn = apply_rotary_pos_emb
 
 
 class HeliumDecoderLayer(LlamaDecoderLayer):

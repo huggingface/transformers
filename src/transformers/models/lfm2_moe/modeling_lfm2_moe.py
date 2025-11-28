@@ -466,7 +466,7 @@ class Lfm2MoeAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}

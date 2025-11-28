@@ -556,7 +556,7 @@ def eager_attention_forward(
     cos, sin = position_embeddings
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
-    query, key = apply_rotary_pos_emb(query, key, cos, sin)
+    query, key = module.rotary_fn(query, key, cos, sin)
 
     scale = module.head_dim**-0.5
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
@@ -636,7 +636,7 @@ def sdpa_attention_forward(
     cos, sin = position_embeddings
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
-    query, key = apply_rotary_pos_emb(query, key, cos, sin)
+    query, key = module.rotary_fn(query, key, cos, sin)
 
     if local_attention != (-1, -1):
         attention_mask = sliding_window_mask
@@ -711,6 +711,7 @@ class ModernBertAttention(nn.Module):
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,

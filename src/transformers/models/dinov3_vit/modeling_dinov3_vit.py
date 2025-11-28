@@ -274,6 +274,7 @@ class DINOv3ViTAttention(nn.Module):
 
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
         self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -295,7 +296,7 @@ class DINOv3ViTAttention(nn.Module):
         value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

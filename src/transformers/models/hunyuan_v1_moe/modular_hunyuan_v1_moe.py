@@ -36,7 +36,6 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from ..mixtral.modeling_mixtral import MixtralExperts
@@ -81,7 +80,7 @@ class HunYuanMoEV1Attention(LlamaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
 

@@ -278,6 +278,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
         self.attention_dropout = config.attention_dropout
         del self.scale
         del self.dropout
+        self.rotary_fn = apply_rotary_pos_emb_vision
 
     def forward(
         self,
@@ -301,7 +302,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
         value_states = self.v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)

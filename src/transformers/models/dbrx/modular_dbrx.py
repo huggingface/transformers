@@ -77,6 +77,7 @@ class DbrxAttention(nn.Module):
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
         )
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -108,7 +109,7 @@ class DbrxAttention(nn.Module):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

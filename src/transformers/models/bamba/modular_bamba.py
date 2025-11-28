@@ -198,7 +198,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class BambaAttention(LlamaAttention):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.rotary_fn = apply_rotary_pos_emb
 
 
 class BambaRMSNormGated(MambaRMSNormGated):

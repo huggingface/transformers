@@ -66,6 +66,7 @@ class HunYuanDenseV1Attention(LlamaAttention):
         super().__init__(config, layer_idx)
         self.query_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.key_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -84,7 +85,7 @@ class HunYuanDenseV1Attention(LlamaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
 

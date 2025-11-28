@@ -208,6 +208,7 @@ class DeepseekV3Attention(nn.Module):
             config.hidden_size,
             bias=config.attention_bias,
         )
+        self.rotary_fn = apply_rotary_pos_emb
 
         self.scaling = self.qk_head_dim ** (-0.5)
         if self.config.rope_parameters.get("rope_type", "default") != "default":
@@ -249,7 +250,7 @@ class DeepseekV3Attention(nn.Module):
         if self.config.rope_interleave:  # support using interleaved weights for efficiency
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+            q_rot, k_rot = self.rotary_fn(q_rot, k_rot, cos, sin)
         k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)

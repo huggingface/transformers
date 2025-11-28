@@ -114,6 +114,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class OlmoAttention(LlamaAttention):
+    def __init__(self, config: OlmoConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.rotary_fn = apply_rotary_pos_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -141,7 +145,7 @@ class OlmoAttention(LlamaAttention):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache

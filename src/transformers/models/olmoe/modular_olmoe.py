@@ -63,6 +63,7 @@ class OlmoeAttention(LlamaAttention):
         self.k_norm = OlmoeRMSNorm(
             (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
         )
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -89,7 +90,7 @@ class OlmoeAttention(LlamaAttention):
         key_states = key_states.view(*hidden_shape).transpose(1, 2)
         value_states = value_states.view(*hidden_shape).transpose(1, 2)
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = self.rotary_fn(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
