@@ -72,7 +72,7 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        routing_weights, selected_experts = self.router(hidden_states_reshaped)
+        _, routing_weights, selected_experts = self.router(hidden_states_reshaped)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 

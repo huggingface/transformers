@@ -83,7 +83,6 @@ class MixtralExperts(nn.Module):
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)

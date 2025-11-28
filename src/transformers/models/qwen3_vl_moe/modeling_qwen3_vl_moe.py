@@ -384,7 +384,7 @@ class Qwen3VLMoeTextTopKRouter(nn.Module):
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
         router_scores = router_top_value
-        return router_scores, router_indices
+        return router_logits, router_scores, router_indices
 
 
 @auto_docstring
