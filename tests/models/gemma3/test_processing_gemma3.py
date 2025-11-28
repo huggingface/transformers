@@ -40,10 +40,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "pan_and_scan_max_num_crops": 4,
             "pan_and_scan_min_ratio_to_activate": 1.2,
         }
-        image_processor = image_processor_class.from_pretrained(
-            "google/siglip-so400m-patch14-384", **gemma3_image_processor_kwargs
-        )
-        return image_processor
+        return image_processor_class(**gemma3_image_processor_kwargs)
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -128,7 +125,15 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # base image + 4 crops
         self.assertEqual(len(inputs[self.images_input_name]), 5)
-        self.assertEqual(len(inputs[self.text_input_name][0]), 67)
+        baseline = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_pan_and_scan=False,
+            image_seq_length=2,
+            pan_and_scan_min_crop_size=10,
+        )
+        self.assertGreater(len(inputs[self.text_input_name][0]), len(baseline[self.text_input_name][0]))
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""

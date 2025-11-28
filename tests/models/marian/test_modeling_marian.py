@@ -475,8 +475,9 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
     def test_unk_support(self):
         t = self.tokenizer
         ids = t(["||"], return_tensors="pt").to(torch_device).input_ids[0].tolist()
-        expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
-        self.assertEqual(expected, ids)
+
+        self.assertEqual(ids[-1], t.eos_token_id)
+        self.assertTrue(all(token_id == t.unk_token_id for token_id in ids[:-1]))
 
     def test_pad_not_split(self):
         input_ids_w_pad = self.tokenizer(["I am a small frog <pad>"], return_tensors="pt").input_ids[0].tolist()

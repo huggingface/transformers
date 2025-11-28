@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Microsoft Research Asia LayoutLM Team Authors.
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization class for model LayoutLM."""
+"""Tokenization classes for Bert."""
 
 import collections
 import os
 import unicodedata
 from typing import Optional
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_python import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
 
 
@@ -28,7 +28,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 
-# Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
@@ -40,7 +39,6 @@ def load_vocab(vocab_file):
     return vocab
 
 
-# Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
@@ -50,10 +48,9 @@ def whitespace_tokenize(text):
     return tokens
 
 
-# Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->LayoutLM,BERT->LayoutLM
-class LayoutLMTokenizer(PreTrainedTokenizer):
+class BertTokenizerLegacy(PreTrainedTokenizer):
     r"""
-    Construct a LayoutLM tokenizer. Based on WordPiece.
+    Construct a BERT tokenizer. Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -90,7 +87,7 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original LayoutLM).
+            value for `lowercase` (as in the original BERT).
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
@@ -117,7 +114,7 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = LayoutLMTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -191,7 +188,7 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A LayoutLM sequence has the following format:
+        adding special tokens. A BERT sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -260,7 +257,6 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -422,7 +418,6 @@ class BasicTokenizer:
         return "".join(output)
 
 
-# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
@@ -480,4 +475,4 @@ class WordpieceTokenizer:
         return output_tokens
 
 
-__all__ = ["LayoutLMTokenizer"]
+__all__ = ["BasicTokenizer", "BertTokenizerLegacy", "WordpieceTokenizer"]
