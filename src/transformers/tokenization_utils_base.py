@@ -19,6 +19,8 @@ fronting encoding methods) Special token mixing (host the special tokens logic) 
 of output with special method for the Fast tokenizers)
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import os
@@ -757,7 +759,7 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"], *, non_blocking: bool = False) -> "BatchEncoding":
+    def to(self, device: Union[str, torch.device], *, non_blocking: bool = False) -> BatchEncoding:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
@@ -3046,7 +3048,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        token_ids: Union[int, list[int], list[list[int]], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         **kwargs,
     ) -> Union[str, list[str]]:
@@ -3094,7 +3096,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
