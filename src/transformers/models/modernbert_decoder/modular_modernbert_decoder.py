@@ -28,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -46,7 +46,7 @@ from ..modernbert.modeling_modernbert import (
 logger = logging.get_logger(__name__)
 
 
-class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -141,8 +141,8 @@ class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     ```"""
 
     model_type = "modernbert-decoder"
-    attribute_map = {"rope_theta": "global_rope_theta"}
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -217,8 +217,6 @@ class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta={"global": 160_000.0, "local": 10_000.0}, **kwargs)
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -228,7 +226,7 @@ class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, default_theta=None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -242,15 +240,15 @@ class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
         self.rope_parameters["full_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_theta", default_theta["global"])
+            "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
         )
         self.rope_parameters["sliding_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_local_base_freq", default_theta["local"])
+            "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 

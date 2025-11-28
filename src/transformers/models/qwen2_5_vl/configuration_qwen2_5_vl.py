@@ -28,7 +28,7 @@ import inspect
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 class Qwen2_5_VLVisionConfig(PreTrainedConfig):
@@ -71,7 +71,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Qwen2_5_VLTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen2_5_VLTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5_VLTextModel`]. It is used to instantiate a
     Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -151,6 +151,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "qwen2_5_vl_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
     # Default tensor parallel plan for base model `Qwen2_5_VL`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -224,8 +225,6 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=1000000, ignore_keys={"mrope_section"}, **kwargs)
-
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             bos_token_id=bos_token_id,

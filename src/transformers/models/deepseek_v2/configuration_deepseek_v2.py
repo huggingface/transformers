@@ -22,10 +22,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class DeepseekV2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DeepseekV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV2Model`]. It is used to instantiate a DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -215,7 +215,6 @@ class DeepseekV2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
         self.head_dim = qk_rope_head_dim
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

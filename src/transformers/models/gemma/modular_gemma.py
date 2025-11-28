@@ -23,7 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
@@ -50,7 +50,7 @@ SPIECE_UNDERLINE = "▁"
 logger = logging.get_logger(__name__)
 
 
-class GemmaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -178,7 +178,6 @@ class GemmaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_dropout = attention_dropout
         self.use_bidirectional_attention = use_bidirectional_attention
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

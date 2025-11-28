@@ -16,7 +16,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -24,7 +24,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class CsmDepthDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmDepthDecoderModel`]. It is used to instantiate an CSM depth decoder
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -103,6 +103,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "csm_depth_decoder_model"
     base_config_key = "depth_decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -155,7 +156,6 @@ class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -166,7 +166,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         )
 
 
-class CsmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class CsmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmForConditionalGeneration`]. It is used to instantiate an CSM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -259,6 +259,7 @@ class CsmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "csm"
     base_config_key = "csm_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     sub_configs = {
         "codec_config": AutoConfig,
         "depth_decoder_config": CsmDepthDecoderConfig,
@@ -344,7 +345,6 @@ class CsmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

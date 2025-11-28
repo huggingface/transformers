@@ -168,6 +168,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
     """
 
     model_type = "gemma3n_text"
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -260,8 +261,6 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta={"global": 1_000_000.0, "local": 10_000.0}, **kwargs)
-
         PreTrainedConfig.__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -269,7 +268,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, default_theta=None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -282,15 +281,15 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
         self.rope_parameters["full_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_theta", default_theta["global"])
+            "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
         self.rope_parameters["sliding_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_local_base_freq", default_theta["local"])
+            "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 

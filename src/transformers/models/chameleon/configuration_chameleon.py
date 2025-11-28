@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -98,7 +98,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class ChameleonConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class ChameleonConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChameleonModel`]. It is used to instantiate a
     chameleon model according to the specified arguments, defining the model architecture. Instantiating a
@@ -231,7 +231,6 @@ class ChameleonConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.model_parallel_size = model_parallel_size
         self.swin_norm = swin_norm
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000.0, **kwargs)
 
         if vq_config is None:
             vq_config = {}

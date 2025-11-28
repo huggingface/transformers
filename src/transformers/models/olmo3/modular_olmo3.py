@@ -25,7 +25,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
@@ -41,7 +41,7 @@ from ..olmo2.modeling_olmo2 import (
 )
 
 
-class Olmo3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Olmo3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Olmo3Model`]. It is used to instantiate an OLMo3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -186,7 +186,7 @@ class Olmo3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

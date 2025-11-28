@@ -22,10 +22,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class ApertusConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class ApertusConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ApertusModel`]. It is used to instantiate a Apertus
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -99,6 +99,7 @@ class ApertusConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "apertus"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 12000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
@@ -162,7 +163,6 @@ class ApertusConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        kwargs = self.convert_rope_params_to_dict(default_theta=12000000.0, **kwargs)
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

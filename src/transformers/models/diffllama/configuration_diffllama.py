@@ -20,10 +20,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class DiffLlamaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DiffLlamaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiffLlamaModel`]. It is used to instantiate an DiffLlama
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults
@@ -146,7 +146,6 @@ class DiffLlamaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.lambda_std_dev = lambda_std_dev
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

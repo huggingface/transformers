@@ -14,10 +14,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Lfm2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Lfm2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Lfm2Model`]. It is used to instantiate a LFM2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -100,6 +100,7 @@ class Lfm2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "lfm2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -155,7 +156,6 @@ class Lfm2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=1000000, **kwargs)
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(
             pad_token_id=pad_token_id,

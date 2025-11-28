@@ -22,7 +22,7 @@
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -30,7 +30,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class Gemma3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Gemma3TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3TextModel`]. It is used to instantiate an Gemma3Text
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -116,6 +116,7 @@ class Gemma3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "gemma3_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -195,8 +196,6 @@ class Gemma3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta={"global": 1_000_000.0, "local": 10_000.0}, **kwargs)
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -205,7 +204,7 @@ class Gemma3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, default_theta=None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -218,15 +217,15 @@ class Gemma3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
         self.rope_parameters["full_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_theta", default_theta["global"])
+            "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
         )
         self.rope_parameters["sliding_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_local_base_freq", default_theta["local"])
+            "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
         )
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 

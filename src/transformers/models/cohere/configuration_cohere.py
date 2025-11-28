@@ -22,14 +22,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class CohereConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class CohereConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CohereModel`]. It is used to instantiate an Cohere
     model according to the specified arguments, defining the model architecture.
@@ -106,6 +106,7 @@ class CohereConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "cohere"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -166,7 +167,6 @@ class CohereConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_dropout = attention_dropout
         self.use_qk_norm = use_qk_norm
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

@@ -17,10 +17,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class GptOssConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GptOssConfig(PreTrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
@@ -28,6 +28,7 @@ class GptOssConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """
 
     model_type = "gpt_oss"
+    default_theta = 150000.0
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -110,7 +111,6 @@ class GptOssConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=150000, **kwargs)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

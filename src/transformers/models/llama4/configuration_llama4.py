@@ -17,14 +17,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Llama4VisionConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Llama4VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4VisionModel`]. It is used to instantiate a
     Llama4 vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -126,11 +126,11 @@ class Llama4VisionConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
+
         super().__init__(**kwargs)
 
 
-class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Llama4TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4TextModel`]. It is used to instantiate a
     Llama4 text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -213,6 +213,7 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "llama4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -337,7 +338,6 @@ class Llama4TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000, **kwargs)
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

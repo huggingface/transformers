@@ -22,10 +22,10 @@
 from typing import Literal, Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class ModernBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertModel`]. It is used to instantiate an ModernBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -130,8 +130,8 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     ```"""
 
     model_type = "modernbert"
-    attribute_map = {"rope_theta": "global_rope_theta"}
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -217,8 +217,6 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta={"global": 160_000.0, "local": 10_000.0}, **kwargs)
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -228,7 +226,7 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, default_theta=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -242,10 +240,10 @@ class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
         self.rope_parameters["full_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_theta", default_theta["global"])
+            "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
         )
         self.rope_parameters["sliding_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_local_base_freq", default_theta["local"])
+            "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )
 
         # Standardize and validate the correctness of rotary position embeddings parameters

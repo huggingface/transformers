@@ -213,8 +213,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000, ignore_keys={"mrope_section"}, **kwargs)
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 0.5)
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         # MoE arguments
         self.moe_intermediate_size = moe_intermediate_size
@@ -227,7 +226,9 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.router_aux_loss_coef = router_aux_loss_coef
-        PreTrainedConfig.__init__(self, tie_word_embeddings=tie_word_embeddings, **kwargs)
+        PreTrainedConfig.__init__(
+            self, tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope"}, **kwargs
+        )
 
 
 class Glm4vMoeConfig(Glm4vConfig):

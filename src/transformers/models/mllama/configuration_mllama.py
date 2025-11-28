@@ -16,7 +16,6 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
@@ -138,7 +137,7 @@ class MllamaVisionConfig(PreTrainedConfig):
         return len(self.supported_aspect_ratios)
 
 
-class MllamaTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MllamaTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
     Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -208,6 +207,7 @@ class MllamaTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "mllama_text_model"
     base_config_key = "text_config"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -248,7 +248,6 @@ class MllamaTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

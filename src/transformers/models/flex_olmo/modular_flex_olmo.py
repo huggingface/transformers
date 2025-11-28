@@ -22,7 +22,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -36,7 +36,7 @@ from ..olmoe.modeling_olmoe import (
 )
 
 
-class FlexOlmoConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class FlexOlmoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlexOlmoModel`]. It is used to instantiate an FlexOlmo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -121,6 +121,7 @@ class FlexOlmoConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "flex_olmo"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_local_experts": "num_experts"}
+    default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
@@ -187,7 +188,6 @@ class FlexOlmoConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.norm_topk_prob = norm_topk_prob
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

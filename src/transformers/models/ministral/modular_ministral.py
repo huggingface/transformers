@@ -158,7 +158,7 @@ class MinistralConfig(MistralConfig, PreTrainedConfig):
             ] * num_hidden_layers
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
+
         PreTrainedConfig.__init__(
             self,
             pad_token_id=pad_token_id,

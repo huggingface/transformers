@@ -17,14 +17,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoXConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GPTNeoXConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -148,9 +148,6 @@ class GPTNeoXConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_bias = attention_bias
         self.rope_parameters = rope_parameters
 
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000, **kwargs)
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
-
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
@@ -159,15 +156,17 @@ class GPTNeoXConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
         )
 
-    def convert_rope_params_to_dict(self, default_theta=10_000.0, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
         # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", default_theta))
+        # Model uses non-standard naming for rope params, overwrite!
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
         self.standardize_rope_params()
-        self.validate_rope()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 

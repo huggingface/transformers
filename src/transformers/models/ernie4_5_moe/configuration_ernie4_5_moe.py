@@ -16,14 +16,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Ernie4_5_MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Ernie4_5_MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5_MoeModel`]. It is used to instantiate a
     Ernie 4.5 MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -115,6 +115,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "ernie4_5_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
+    default_theta = 500000.0
 
     # Default tensor parallel plan for base model `Ernie4_5_MoE`
     base_model_tp_plan = {
@@ -193,9 +194,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
-
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

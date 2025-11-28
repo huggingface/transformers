@@ -23,10 +23,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Zamba2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Zamba2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Zamba2Model`]. It is used to instantiate a
     Zamba2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -190,7 +190,6 @@ class Zamba2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.use_mem_rope = use_mem_rope
         self.use_long_context = use_long_context
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv

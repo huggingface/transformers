@@ -17,14 +17,14 @@
 from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class HunYuanMoEV1Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class HunYuanMoEV1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HunYuanMoEV1Model`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -158,7 +158,6 @@ class HunYuanMoEV1Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

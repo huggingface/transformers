@@ -20,14 +20,14 @@ from typing import Optional
 import numpy as np
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MimiConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MimiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -222,7 +222,6 @@ class MimiConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         # Handle backward compatibility for frame_rate:
         # If frame_rate is explicitly provided, use it (backward compatibility)

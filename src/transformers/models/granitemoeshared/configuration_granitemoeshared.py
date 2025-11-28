@@ -22,14 +22,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeSharedConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GraniteMoeSharedConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeSharedModel`]. It is used to instantiate an GraniteMoeShared
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -179,7 +179,6 @@ class GraniteMoeSharedConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         # this model has rope embedding type, hardcoded for BC
         self.position_embedding_type = "rope"
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

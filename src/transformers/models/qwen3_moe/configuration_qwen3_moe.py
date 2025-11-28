@@ -17,14 +17,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen3MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3MoeModel`]. It is used to instantiate a
     Qwen3MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -180,7 +180,6 @@ class Qwen3MoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step

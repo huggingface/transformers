@@ -22,10 +22,9 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
-class CwmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class CwmConfig(PreTrainedConfig):
     """
     Configuration for Code World Model (CWM).
     This is an inherited Llama3-compatible configuration with layer-interleaved
@@ -92,6 +91,7 @@ class CwmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "cwm"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1_000_000.0
     # Default tensor parallel plan for base model `CwmModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -178,7 +178,6 @@ class CwmConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=1_000_000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

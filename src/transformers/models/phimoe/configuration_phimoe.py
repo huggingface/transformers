@@ -18,14 +18,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PhimoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class PhimoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PhimoeModel`]. It is used to instantiate a Phi-moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -110,6 +110,7 @@ class PhimoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -168,7 +169,6 @@ class PhimoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.router_jitter_noise = router_jitter_noise
         self.input_jitter_noise = input_jitter_noise
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=1000000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

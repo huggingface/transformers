@@ -17,7 +17,7 @@
 from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 class Emu3VQVAEConfig(PreTrainedConfig):
@@ -110,7 +110,7 @@ class Emu3VQVAEConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Emu3TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Emu3TextModel`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a
@@ -188,6 +188,7 @@ class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "emu3_text_model"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -227,7 +228,6 @@ class Emu3TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=1000000.0, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

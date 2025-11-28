@@ -18,14 +18,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeHybridConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GraniteMoeHybridConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeHybridConfig`]. It is used to
     instantiate an GraniteMoeHybrid model according to the specified arguments, defining the model architecture.
@@ -199,7 +199,6 @@ class GraniteMoeHybridConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.shared_intermediate_size = shared_intermediate_size
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         mamba_intermediate = mamba_expand * hidden_size
 

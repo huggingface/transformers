@@ -102,6 +102,7 @@ class CwmConfig(LlamaConfig):
     """
 
     model_type = "cwm"
+    default_theta = 1_000_000.0
 
     def __init__(
         self,
@@ -180,7 +181,6 @@ class CwmConfig(LlamaConfig):
 
         # CWM models don't use attention bias, remove it from config
         del self.attention_bias
-        kwargs = self.convert_rope_params_to_dict(default_theta=1_000_000.0, **kwargs)
 
 
 class CwmRotaryEmbedding(Qwen2RotaryEmbedding):

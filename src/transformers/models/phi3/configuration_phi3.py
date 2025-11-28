@@ -18,14 +18,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Phi3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Phi3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi3Model`]. It is used to instantiate a Phi-3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -164,7 +164,7 @@ class Phi3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
+        kwargs.setdefault("partial_rotary_factor", 1.0)  # assign default for BC
         self.sliding_window = sliding_window
 
         super().__init__(
@@ -184,8 +184,8 @@ class Phi3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
+        self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
         self.standardize_rope_params()
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 1.0)
 
         # For backward compatibility if previous version used "su" or "yarn"
         rope_parameters_type = self.rope_parameters.get("rope_type", None)

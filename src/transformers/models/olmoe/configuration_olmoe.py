@@ -14,10 +14,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class OlmoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class OlmoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OlmoeModel`]. It is used to instantiate an OLMoE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -159,7 +159,6 @@ class OlmoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.norm_topk_prob = norm_topk_prob
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

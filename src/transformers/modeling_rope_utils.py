@@ -14,9 +14,8 @@
 
 import math
 from functools import wraps
-from typing import Optional, TypedDict
+from typing import TYPE_CHECKING, Optional, TypedDict
 
-from .configuration_utils import ALLOWED_LAYER_TYPES, PreTrainedConfig
 from .utils import is_torch_available, logging
 
 
@@ -25,6 +24,9 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+
+if TYPE_CHECKING:
+    from .configuration_utils import PreTrainedConfig
 
 
 def dynamic_rope_update(rope_forward):
@@ -125,7 +127,7 @@ def dynamic_rope_update(rope_forward):
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: Optional[PreTrainedConfig] = None,
+    config: Optional["PreTrainedConfig"] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -133,7 +135,7 @@ def _compute_linear_scaling_rope_parameters(
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
     Args:
-        config ([`~transformers.PreTrainedConfig`]):
+        config ([`~transformers."PreTrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -179,7 +181,7 @@ def _compute_linear_scaling_rope_parameters(
 
 
 def _compute_dynamic_ntk_parameters(
-    config: Optional[PreTrainedConfig] = None,
+    config: Optional["PreTrainedConfig"] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -188,7 +190,7 @@ def _compute_dynamic_ntk_parameters(
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
 
     Args:
-        config ([`~transformers.PreTrainedConfig`]):
+        config ([`~transformers."PreTrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -251,7 +253,7 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: PreTrainedConfig,
+    config: "PreTrainedConfig",
     device: "torch.device",
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -261,7 +263,7 @@ def _compute_yarn_parameters(
     [original paper](https://huggingface.co/papers/2309.00071)
 
     Args:
-        config ([`~transformers.PreTrainedConfig`]):
+        config ([`~transformers."PreTrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -389,7 +391,7 @@ def _compute_yarn_parameters(
 
 
 def _compute_longrope_parameters(
-    config: PreTrainedConfig,
+    config: "PreTrainedConfig",
     device: "torch.device",
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -399,7 +401,7 @@ def _compute_longrope_parameters(
     [original implementation](https://github.com/microsoft/LongRoPE)
 
     Args:
-        config ([`~transformers.PreTrainedConfig`]):
+        config ([`~transformers."PreTrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -479,7 +481,7 @@ def _compute_longrope_parameters(
 
 
 def _compute_llama3_parameters(
-    config: PreTrainedConfig,
+    config: "PreTrainedConfig",
     device: "torch.device",
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -488,7 +490,7 @@ def _compute_llama3_parameters(
     Computes the inverse frequencies for llama 3.1.
 
     Args:
-        config ([`~transformers.PreTrainedConfig`]):
+        config ([`~transformers."PreTrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -629,17 +631,20 @@ class RotaryEmbeddingConfigMixin:
     A Mixin containing the functionality to standardize and validate RoPE parameters.
     """
 
-    def convert_rope_params_to_dict(
-        self, default_theta: int | float = 10_000.0, ignore_keys: Optional[set] = None, **kwargs
-    ):
+    default_theta = 10_000.0
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
         # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        if "partial_rotary_factor" in kwargs:
+            self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
+
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys)
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
     def standardize_rope_params(self):
@@ -653,7 +658,7 @@ class RotaryEmbeddingConfigMixin:
         rope_parameters = self.rope_parameters
 
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        if not set(rope_parameters.keys()).issubset(ALLOWED_LAYER_TYPES):
+        if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
@@ -668,15 +673,17 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: PreTrainedConfig, ignore_keys: Optional[set] = None):
+    def validate_rope(self: "PreTrainedConfig", ignore_keys: Optional[set] = None):
         """
-        Validate the RoPE config arguments, given a `PreTrainedConfig` object
+        Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
         rope_parameters_dict = self.rope_parameters
         if rope_parameters_dict is None:
             return
 
-        if set(rope_parameters_dict.keys()).issubset(ALLOWED_LAYER_TYPES):
+        if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
+            self.layer_types
+        ):
             pass
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}

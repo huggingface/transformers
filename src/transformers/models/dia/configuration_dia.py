@@ -17,14 +17,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DiaEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DiaEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaEncoder`]. It is used to instantiate a Dia
     encoder according to the specified arguments, defining the encoder architecture.
@@ -93,12 +93,11 @@ class DiaEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000.0, **kwargs)
 
         super().__init__(**kwargs)
 
 
-class DiaDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DiaDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
     decoder according to the specified arguments, defining the decoder architecture.
@@ -194,7 +193,7 @@ class DiaDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000.0, **kwargs)
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -25,7 +25,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class FuyuConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class FuyuConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
     Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -98,6 +98,7 @@ class FuyuConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     model_type = "fuyu"
     sub_configs = {"text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 25000.0
 
     def __init__(
         self,
@@ -169,10 +170,7 @@ class FuyuConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_dropout = attention_dropout
         self.image_token_id = image_token_id
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=25000.0, **kwargs)
-
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 0.5)
-        self.text_config.rope_parameters["partial_rotary_factor"] = self.rope_parameters["partial_rotary_factor"]
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         super().__init__(
             pad_token_id=pad_token_id,

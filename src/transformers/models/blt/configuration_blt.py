@@ -17,19 +17,20 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BltLocalEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltLocalEncoderConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Local Encoder component.
     """
 
     model_type = "blt_local_encoder"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -66,19 +67,19 @@ class BltLocalEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltLocalDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltLocalDecoderConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Local Decoder component.
     """
 
     model_type = "blt_local_decoder"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -115,19 +116,19 @@ class BltLocalDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltGlobalTransformerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltGlobalTransformerConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Global Transformer component.
     """
 
     model_type = "blt_global_transformer"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -156,14 +157,13 @@ class BltGlobalTransformerConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltPatcherConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltPatcherConfig(PreTrainedConfig):
     r"""
     Configuration class for the Blt Patcher/Entropy model component.
 
@@ -231,14 +231,13 @@ class BltPatcherConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000.0, **kwargs)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BltConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BltModel`]. It is used to instantiate a
     Blt model according to the specified arguments, defining the model architecture.
@@ -307,6 +306,7 @@ class BltConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "blt"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     sub_configs = {
         "patcher_config": BltPatcherConfig,
         "encoder_config": BltLocalEncoderConfig,
@@ -406,7 +406,6 @@ class BltConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         )
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)

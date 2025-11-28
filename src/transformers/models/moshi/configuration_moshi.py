@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -149,7 +149,7 @@ class MoshiDepthConfig(PreTrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class MoshiConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MoshiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
     Moshi model according to the specified arguments, defining the audio encoder, Moshi depth decoder and Moshi decoder
@@ -283,7 +283,6 @@ class MoshiConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.rms_norm_eps = rms_norm_eps
         self.num_codebooks = num_codebooks
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         audio_encoder_config = kwargs.pop("audio_encoder_config", {})
         audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")

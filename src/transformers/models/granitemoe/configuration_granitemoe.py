@@ -22,14 +22,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class GraniteMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeModel`]. It is used to instantiate an GraniteMoe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -173,7 +173,6 @@ class GraniteMoeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.router_aux_loss_coef = router_aux_loss_coef
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

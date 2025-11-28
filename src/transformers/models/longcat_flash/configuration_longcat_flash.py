@@ -18,10 +18,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class LongcatFlashConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class LongcatFlashConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongcatFlashModel`]. It is used to instantiate
     a LongCat Flash model according to the specified arguments, defining the model architecture. Instantiating a
@@ -122,6 +122,7 @@ class LongcatFlashConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "longcat_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 10000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.*.q_b_proj": "colwise",
         "layers.*.self_attn.*.kv_b_proj": "colwise",
@@ -211,10 +212,6 @@ class LongcatFlashConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.routed_scaling_factor = routed_scaling_factor
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000000, **kwargs)
-        for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_parameters:
-                self.rope_parameters[key] = float(self.rope_parameters[key])
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -223,6 +220,22 @@ class LongcatFlashConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+
+        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
+        for key in ["beta_fast", "beta_slow", "factor"]:
+            if key in self.rope_parameters:
+                self.rope_parameters[key] = float(self.rope_parameters[key])
+        return kwargs
 
 
 __all__ = ["LongcatFlashConfig"]

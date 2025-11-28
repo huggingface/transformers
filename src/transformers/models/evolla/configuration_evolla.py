@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -99,7 +99,7 @@ class SaProtConfig(PreTrainedConfig):
         self.token_dropout = token_dropout
 
 
-class EvollaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class EvollaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
     Evolla model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -190,6 +190,7 @@ class EvollaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
 
     model_type = "EvollaModel"
     sub_configs = {"protein_encoder_config": SaProtConfig}
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -250,7 +251,6 @@ class EvollaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.resampler_num_latents = resampler_num_latents
         self.resampler_ff_mult = resampler_ff_mult
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=500000.0, **kwargs)
 
         # Subconfig
         if protein_encoder_config is None:

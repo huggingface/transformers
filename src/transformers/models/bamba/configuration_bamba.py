@@ -17,14 +17,14 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BambaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class BambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
     BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -194,9 +194,7 @@ class BambaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.mamba_proj_bias = mamba_proj_bias
         self.z_loss_coefficient = z_loss_coefficient
         self.rope_parameters = rope_parameters
-
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000.0, **kwargs)
-        self.rope_parameters["partial_rotary_factor"] = 0.5
+        kwargs["partial_rotary_factor"] = 0.5  # hardcode for BC
 
         super().__init__(
             pad_token_id=pad_token_id,

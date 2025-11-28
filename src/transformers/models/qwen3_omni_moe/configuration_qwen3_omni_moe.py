@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -171,7 +171,7 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-class Qwen3OmniMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTextModel`]. It is used to instantiate a
     Qwen3OmniMoeText model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -446,7 +446,7 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
 
 
-class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalkerCodePredictorModel`]. It is used to instantiate a
     Qwen3OmniMoeTalkerCodePredictor model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -596,7 +596,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig, RotaryEmbeddingCon
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
@@ -605,7 +604,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig, RotaryEmbeddingCon
         self.num_code_groups = num_code_groups
 
 
-class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalkerTextModel`]. It is used to instantiate a
     Qwen3OmniMoeTalkerText model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -759,7 +758,6 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin)
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -913,7 +911,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeCode2WavConfig`]. It is used to instantiate a
     Qwen3-Omni code-to-waveform decoder, responsible for converting discrete audio codes into high-fidelity waveforms.
@@ -1020,7 +1018,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.decoder_dim = decoder_dim
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
+
         super().__init__(**kwargs)
 
     @property

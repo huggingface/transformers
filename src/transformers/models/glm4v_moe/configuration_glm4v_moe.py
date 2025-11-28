@@ -21,7 +21,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
 class Glm4vMoeVisionConfig(PreTrainedConfig):
@@ -117,7 +117,7 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Glm4vMoeTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
@@ -267,8 +267,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000, ignore_keys={"mrope_section"}, **kwargs)
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 0.5)
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         # MoE arguments
         self.moe_intermediate_size = moe_intermediate_size

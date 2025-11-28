@@ -27,10 +27,10 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters
 
 
-class Olmo2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Olmo2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Olmo2Model`]. It is used to instantiate an OLMo2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -159,7 +159,6 @@ class Olmo2Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10000, **kwargs)
 
         super().__init__(
             pad_token_id=pad_token_id,

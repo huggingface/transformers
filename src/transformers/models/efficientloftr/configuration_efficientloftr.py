@@ -14,10 +14,9 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 
 
-class EfficientLoFTRConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class EfficientLoFTRConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EfficientLoFTRFromKeypointMatching`].
     It is used to instantiate a EfficientLoFTR model according to the specified arguments, defining the model
@@ -174,8 +173,7 @@ class EfficientLoFTRConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.num_key_value_heads = num_attention_heads
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(default_theta=10_000.0, **kwargs)
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor", 4.0)
+        kwargs.setdefault("partial_rotary_factor", 4.0)  # assign default for BC
 
         super().__init__(**kwargs)
 
