@@ -87,6 +87,8 @@ class Lfm2MoeConfig(PreTrainedConfig):
             Whether to normalize the topk probabilities.
         layer_types (`Optional`, *optional*):
             Type of each layers.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function used in the MoE experts.
 
     ```python
     >>> from transformers import Lfm2MoeModel, Lfm2MoeConfig
@@ -130,6 +132,8 @@ class Lfm2MoeConfig(PreTrainedConfig):
         routed_scaling_factor: float = 1.0,
         norm_topk_prob: bool = True,
         layer_types: Optional[list[str]] = None,
+        hidden_act: str = "silu",
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -160,6 +164,8 @@ class Lfm2MoeConfig(PreTrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
         self.layer_types = layer_types
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
