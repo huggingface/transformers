@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class GPT2Config(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to
+    This is the configuration class to store the configuration of a [`GPT2Model`]. It is used to
     instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPT-2
     [openai-community/gpt2](https://huggingface.co/openai-community/gpt2) architecture.
@@ -36,7 +36,7 @@ class GPT2Config(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GPT2Model`] or [`TFGPT2Model`].
+            `inputs_ids` passed when calling [`GPT2Model`].
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -61,8 +61,7 @@ class GPT2Config(PreTrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`].
 
             Has to be one of the following options:
 
@@ -72,8 +71,7 @@ class GPT2Config(PreTrainedConfig):
                 - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
                 - `"attn"`: Not implemented now, use multi-head attention.
         summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`].
 
             Whether or not to add a projection after the vector extraction.
         summary_activation (`str`, *optional*):
@@ -82,13 +80,11 @@ class GPT2Config(PreTrainedConfig):
 
             Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
         summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`].
 
             Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
         summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`].
 
             The dropout ratio to be used after the projection and activation.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
