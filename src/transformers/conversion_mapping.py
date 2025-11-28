@@ -95,7 +95,7 @@ def _build_checkpoint_conversion_mapping():
             # TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
             WeightRenaming(
                 source_patterns=r"(.+)",
-                target_patterns=r"timm_model\.\1",
+                target_patterns=r"timm_model.\1",
             )
         ],
         "legacy": [

@@ -459,7 +459,7 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
         # This one needs to be last so that in reverse mode, the other can match before
-        r"tracker_model\.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
+        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
     }
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _tied_weights_keys = {}
