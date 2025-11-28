@@ -61,15 +61,15 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
         raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_id = repo_name.split(":")[0]
-    
+
     # Initialise layer_name entry if it doesn't exist
     if layer_name not in compatible_mapping:
         compatible_mapping[layer_name] = {}
-    
+
     # Initialise device entry if it doesn't exist
     if device not in compatible_mapping[layer_name]:
         compatible_mapping[layer_name][device] = {}
-    
+
     # Add the mode entry (this can overwrite if mode already exists, which is fine)
     compatible_mapping[layer_name][device][mode] = LayerRepository(
         repo_id=repo_id,
