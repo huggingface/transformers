@@ -628,9 +628,11 @@ def repl(m, repl_map: dict[str, str]) -> str:
     name = matched_groups[0]
     replacement = repl_map[name]
     # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
-    if r"\1" in replacement and len(m.groups()) > 1:
-        # The 2nd captured group, apart from the full match, which is itself a captured group from the alternation
-        replacement = replacement.replace(r"\1", m.group(2))
+    if r"\1" in replacement:
+        # If we find a capturing group, the parenthesized group corresponding is the one right after the named
+        # group we matched, as it's part of that named group
+        group_idx_to_capture = m.re.groupindex[name] + 1
+        replacement = replacement.replace(r"\1", m.group(group_idx_to_capture))
 
     return replacement
 
@@ -648,17 +650,16 @@ def rename_source_key(
     Rename a source key given all the renaming and weight conversion patterns we have. Also takes care of adding/removing
     the base model prefix during loading if necesary.
     """
-    # 1. apply all renamings
-    renamed_key = rename_alternation.sub(lambda m: repl(m, rename_by_group), source_key).replace("\\", "")
+    # 1. apply all renamings (we need to replace only the first match of the alternation if multiple matches, so count=1)
+    renamed_key = rename_alternation.sub(lambda m: repl(m, rename_by_group), source_key, count=1)
 
     # 2. apply renaming through weight conversions on the key if we have any WeightConverter
     matched_converter_pattern = (
         weight_pattern_alternation.search(renamed_key) if weight_pattern_alternation is not None else None
     )
     if matched_converter_pattern is not None:
-        renamed_key = weight_pattern_alternation.sub(lambda m: repl(m, weight_pattern_by_group), renamed_key).replace(
-            "\\", ""
-        )
+        # we need to replace only the first match of the alternation if multiple matches, so count=1
+        renamed_key = weight_pattern_alternation.sub(lambda m: repl(m, weight_pattern_by_group), renamed_key, count=1)
 
     # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
     if prefix is not None and meta_state_dict is not None:
