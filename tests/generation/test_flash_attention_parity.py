@@ -159,8 +159,8 @@ class FlashAttentionParityTest(unittest.TestCase):
         # 4. Performance check
         times = []
         with torch.no_grad():
-            for version in range(len(flash_attn_versions)):
-                model.set_attn_implementation(f"flash_attention_{flash_attn_versions[version]}")
+            for version in flash_attn_versions:
+                model.set_attn_implementation(f"flash_attention_{version}")
                 times.append(self._benchmark_generation(model, inputs))
 
         # Summary
