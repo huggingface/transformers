@@ -333,16 +333,25 @@ class StaticLayer(CacheLayerMixin):
         cache_position = (
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
-
+        k_out = self.keys
+        v_out = self.values
+        batch_size = key_states.shape[0]
+        if k_out.shape[0] != batch_size:
+            k_out = k_out[:batch_size]
+            v_out = v_out[:batch_size]
+        if key_states.dtype != k_out.dtype:
+            key_states = key_states.to(k_out.dtype)
+        if value_states.dtype != v_out.dtype:
+            value_states = value_states.to(v_out.dtype)
         # Update the cache
         try:
-            self.keys.index_copy_(2, cache_position, key_states)
-            self.values.index_copy_(2, cache_position, value_states)
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
         except NotImplementedError:
             # Fallback for devices like MPS where index_copy_ might not be supported.
-            self.keys[:, :, cache_position] = key_states
-            self.values[:, :, cache_position] = value_states
-        return self.keys, self.values
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
+        return k_out, v_out
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
