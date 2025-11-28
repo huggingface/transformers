@@ -91,7 +91,6 @@ class CwmConfig(PreTrainedConfig):
 
     model_type = "cwm"
     keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = 1_000_000.0
     # Default tensor parallel plan for base model `CwmModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -107,6 +106,7 @@ class CwmConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    default_theta = 1_000_000.0
 
     def __init__(
         self,

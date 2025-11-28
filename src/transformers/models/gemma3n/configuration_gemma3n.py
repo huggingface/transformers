@@ -143,7 +143,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
 
     model_type = "gemma3n_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -158,6 +157,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -250,7 +250,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
         self.rope_parameters = rope_parameters
-
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -258,7 +257,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -279,7 +278,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 

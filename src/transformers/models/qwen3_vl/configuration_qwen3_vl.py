@@ -130,6 +130,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_text"
     base_config_key = "text_config"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -171,11 +172,12 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(
-            default_theta=500000, ignore_keys={"mrope_section", "mrope_interleaved"}, **kwargs
-        )
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
+            **kwargs,
+        )
 
 
 class Qwen3VLConfig(PreTrainedConfig):

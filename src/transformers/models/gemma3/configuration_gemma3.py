@@ -116,7 +116,6 @@ class Gemma3TextConfig(PreTrainedConfig):
 
     model_type = "gemma3_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -131,6 +130,7 @@ class Gemma3TextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -204,7 +204,7 @@ class Gemma3TextConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`

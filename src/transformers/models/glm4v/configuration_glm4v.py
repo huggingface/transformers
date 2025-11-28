@@ -234,11 +234,7 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            ignore_keys_at_rope_validation={"mrope"},
-            **kwargs,
-        )
+        super().__init__(tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope"}, **kwargs)
 
 
 class Glm4vConfig(PreTrainedConfig):

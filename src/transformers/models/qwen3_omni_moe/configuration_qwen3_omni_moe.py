@@ -261,6 +261,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
     base_model_tp_plan = {
@@ -325,9 +326,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-        kwargs = self.convert_rope_params_to_dict(
-            default_theta=1000000, ignore_keys={"mrope_section", "interleaved", "mrope_interleaved"}, **kwargs
-        )
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -341,6 +339,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
+            ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
             **kwargs,
         )
 
