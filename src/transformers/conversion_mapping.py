@@ -75,6 +75,22 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "lfm2_moe": [
+            WeightRenaming(".block_sparse_moe.gate", ".feed_forward.gate"),
+            WeightConverter(
+                source_patterns=[
+                    "block_sparse_moe.experts.*.w1.weight",
+                    "block_sparse_moe.experts.*.w3.weight",
+                ],
+                target_patterns="feed_forward.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="block_sparse_moe.experts.*.w2.weight",
+                target_patterns="feed_forward.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "timm_wrapper": [
             # Simply add the prefix `timm_model`
             # TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
