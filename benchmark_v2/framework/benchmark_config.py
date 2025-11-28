@@ -79,7 +79,14 @@ class BenchmarkConfig:
         # Generation parameters
         self.attn_implementation = attn_implementation
         # Optimization parameters
-        self.compile_config = CompileConfig(**compile_kwargs) if compile_kwargs is not None else None
+        if compile_kwargs is None:
+            self.compile_config = None
+        else:
+            default_compile_kwargs = {
+                "mode": "max-autotune-no-cudagraphs" if continuous_batching else "default",
+                "fullgraph": True,
+            }
+            self.compile_config = CompileConfig(**default_compile_kwargs.update(compile_kwargs))
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"

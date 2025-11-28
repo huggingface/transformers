@@ -188,6 +188,8 @@ class ContinuousBatchProcessor:
         scheduler: Scheduler,
         manual_eviction: bool,
         use_cuda_graph: bool,
+        q_padding_intervals: int,
+        kv_padding_intervals: int,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -221,17 +223,14 @@ class ContinuousBatchProcessor:
         # Accumulator for batch scheduling
         self.requests_in_batch: list[RequestState] = []
         # Cuda graphs for the generation step
+        self.q_padding_intervals = q_padding_intervals
+        self.kv_padding_intervals = kv_padding_intervals
         self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = {} if use_cuda_graph else None
-
         # Compile-related arguments
         self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
-
-        if self.compile_config is not None and not self.compile_config.fullgraph:
-            logger.warning(
-                f"Compilation is not supported for {self.compile_config.fullgraph = }. Setting fullgraph to True."
-            )
-            self.compile_config.fullgraph = True
         self._forward_process_and_sample_is_compiled = False
+
+        self._pad_inputs = use_cuda_graph or (self.compile_config is not None and not self.compile_config.dynamic)
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -649,20 +648,20 @@ class ContinuousBatchProcessor:
             )
             self._forward_process_and_sample_is_compiled = True
 
-        # If cuda graphs are disabled, we just use the actual size
-        if self._graphs is None:
+        # If inputs are not static sized, we just use the actual size
+        if not self._pad_inputs:
             batch_data = self.get_model_kwargs()
             self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
             return None
 
         # Determine the padded size of the queries and keys/values
-        padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, NUM_Q_CUDA_GRAPHS)
+        padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, self.q_padding_intervals)
 
         max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
         padded_read_index_size = pad_by_intervals(
             max_read_index_size - self.max_batch_tokens,
             self.cache.num_blocks * self.cache.block_size,
-            NUM_KV_CUDA_GRAPHS,
+            self.kv_padding_intervals,
         )
         batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
 
@@ -1021,6 +1020,8 @@ class ContinuousBatchingManager:
                 scheduler=scheduler(paged_attention_cache, self.manual_eviction),
                 manual_eviction=self.manual_eviction,
                 use_cuda_graph=self.use_cuda_graph,
+                q_padding_intervals=self.num_q_cuda_graphs,
+                kv_padding_intervals=self.num_kv_cuda_graphs,
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
