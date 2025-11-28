@@ -25,6 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -32,23 +33,23 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
 from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM
 from .configuration_jamba import JambaConfig
 
 
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+causal_conv1d = lazy_load_kernel("causal-conv1d")
+causal_conv1d_update = causal_conv1d.causal_conv1d_update if causal_conv1d is not None else None
+causal_conv1d_fn = causal_conv1d.causal_conv1d_fn if causal_conv1d is not None else None
 
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
+mamba_ssm = lazy_load_kernel("mamba-ssm")
+selective_state_update = (
+    mamba_ssm.ops.triton.selective_state_update.selective_state_update if mamba_ssm is not None else None
+)
+mamba_inner_fn = mamba_ssm.ops.selective_scan_interface.mamba_inner_fn if mamba_ssm is not None else None
+selective_scan_fn = mamba_ssm.ops.selective_scan_interface.selective_scan_fn if mamba_ssm is not None else None
+
 
 is_fast_path_available = all(
     (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)

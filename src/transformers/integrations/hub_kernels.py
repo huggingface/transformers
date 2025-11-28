@@ -202,6 +202,7 @@ except ImportError:
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "clean-mamba-ssm"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -285,8 +286,9 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
+            revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
-            kernel = get_kernel(repo_id, version=version)
+            kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
         except FileNotFoundError:
             mapping[kernel_name] = None
@@ -307,7 +309,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         if callable(is_kernel_available) and is_kernel_available():
             # Try to import the module "{kernel_name}" from parent package level
             try:
-                module = importlib.import_module(f"{kernel_name}")
+                module = importlib.import_module(f"{new_kernel_name}")
                 mapping[kernel_name] = module
                 return module
             except Exception:
