@@ -4072,7 +4072,7 @@ class ModelTesterMixin:
 
         #  Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have at
         # lest one MoE layer here to check the mapping
-        config_to_set = config.get_text_config()
+        config_to_set = config.get_text_config(decoder=True)
         config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
         config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
         config_to_set.mlp_only_layers = [0]  # same but for qwens

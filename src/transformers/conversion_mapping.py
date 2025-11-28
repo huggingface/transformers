@@ -70,23 +70,22 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns=["mlp.experts.*.down_proj.weight"],
+                source_patterns="mlp.experts.*.down_proj.weight",
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
         "lfm2_moe": [
-            WeightRenaming(".block_sparse_moe.gate", ".feed_forward.gate"),
             WeightConverter(
                 source_patterns=[
-                    "block_sparse_moe.experts.*.w1.weight",
-                    "block_sparse_moe.experts.*.w3.weight",
+                    "feed_forward.experts.*.gate_proj.weight",
+                    "feed_forward.experts.*.up_proj.weight",
                 ],
                 target_patterns="feed_forward.experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="block_sparse_moe.experts.*.w2.weight",
+                source_patterns="feed_forward.experts.*.down_proj.weight",
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
@@ -133,14 +132,14 @@ def _build_checkpoint_conversion_mapping():
             ),
         ]
 
-    mapping["phimoe"] = mapping["mixtral"].copy()
+    mapping["phimoe"] = mapping["qwen2_moe"].copy()
     mapping["deepseek_v2"] = mapping["qwen2_moe"].copy()
     mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
     mapping["dot1"] = mapping["qwen2_moe"].copy()
     mapping["ernie_4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
-    mapping["jamba"] = mapping["qwen2_moe"].copy()
+    mapping["jamba"] = mapping["lfm2_moe"].copy()
     mapping["long_cat_flash"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
