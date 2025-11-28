@@ -17,7 +17,6 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -103,6 +102,9 @@ class AfmoeConfig(PreTrainedConfig):
             `global_attn_every_n_layers`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        mup_enabled (`bool`, *optional*, defaults to `False`):
+            Whether to enable muP (Maximal Update Parametrization) input scaling. When enabled, input embeddings
+            are scaled by `sqrt(hidden_size)`.
 
     Example:
     ```python
@@ -157,6 +159,7 @@ class AfmoeConfig(PreTrainedConfig):
         sliding_window: Optional[int] = 1024,
         layer_types: Optional[list] = None,
         attention_dropout: Optional[float] = 0.0,
+        mup_enabled: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -187,6 +190,7 @@ class AfmoeConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.sliding_window = sliding_window
+        self.mup_enabled = mup_enabled
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
@@ -199,13 +203,6 @@ class AfmoeConfig(PreTrainedConfig):
             num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
-
-        # Setup and validate rope configs
-        self.rope_parameters = rope_scaling
-        standardize_rope_params(self, rope_theta=rope_theta)
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

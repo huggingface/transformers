@@ -132,18 +132,16 @@ class AfmoeTokenChoiceRouter(nn.Module):
         self.route_scale = config.route_scale
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor, expert_bias: torch.Tensor | None = None):
+    def forward(self, hidden_states: torch.Tensor, expert_bias: torch.Tensor):
         _, _, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
         scores = torch.sigmoid(self.gate(hidden_states).to(torch.float32))
 
-        if expert_bias is not None:
-            _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
-            top_scores = scores.gather(dim=1, index=selected_experts)
-        else:
-            top_scores, selected_experts = torch.topk(scores, k=self.top_k, dim=1)
+        _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
+        top_scores = scores.gather(dim=1, index=selected_experts)
 
+        # Normalize routing weights (default: True for sigmoid scoring)
         if self.route_norm:
             denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
             top_scores = top_scores / denominator
@@ -158,8 +156,6 @@ class AfmoeExperts(nn.ModuleList):
 
     This mirrors the Experts pattern used across other MoE models to ease checkpoint conversion.
     """
-
-    _checkpoint_conversion_mapping = {"experts": "experts"}
 
     def __init__(self, config: AfmoeConfig):
         super().__init__()
@@ -421,15 +417,15 @@ class AfmoePreTrainedModel(LlamaPreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+                nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, AfmoeRMSNorm):
-            module.weight.fill_(1.0)
+            nn.init.ones_(module.weight)
 
 
 @auto_docstring
@@ -507,7 +503,11 @@ class AfmoeModel(AfmoePreTrainedModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        hidden_states = inputs_embeds * (self.config.hidden_size**0.5)
+        hidden_states = inputs_embeds
+
+        # Apply muP input scaling if enabled
+        if self.config.mup_enabled:
+            hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
