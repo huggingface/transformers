@@ -339,16 +339,18 @@ class WeightTransform:
         match_object = self.compiled_sources.search(source_key)
         if match_object is None:
             return source_key, None
-        # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
-        replacement = self.target_patterns[0]
-        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
-        if r"\1" in replacement:
-            # We can use lastindex here, as we are guaranteed that the subgroup inside the named group matched is the last one
-            replacement = replacement.replace(r"\1", match_object.group(match_object.lastindex))
-        renamed_key = source_key.replace(match_object.group(0), replacement)
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
+        # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
+        replacement = self.target_patterns[0]
+        # # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
+        if r"\1" in replacement:
+            # The index of the internal group we need to replace is the index of the matched named group as it comes
+            # inside that matched named group
+            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
+            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
+        renamed_key = source_key.replace(match_object.group(0), replacement)
 
         return renamed_key, source_pattern_that_matched
 
