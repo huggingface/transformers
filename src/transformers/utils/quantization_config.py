@@ -709,6 +709,10 @@ class GPTQConfig(QuantizationConfigMixin):
         self.sym = sym
         self.true_sequential = true_sequential
         self.format = format.lower()
+        # Compatible with legacy field: checkpoint_format
+        if kwargs.get("checkpoint_format") is not None:
+            self.format = kwargs.pop("checkpoint_format").lower()
+        print("self.format", self.format)
         self.meta = meta
         self.backend = backend.lower() if isinstance(backend, str) else backend
         self.model_seqlen = model_seqlen
@@ -825,8 +829,9 @@ class AwqConfig(GPTQConfig):
         **kwargs,
     ):
         format = AwqFormat.GEMM
+        # Compatible with legacy field: version
         if kwargs.get("version") is not None:
-            format = kwargs.pop("version")
+            format = kwargs.pop("version").lower()
         self.zero_point = zero_point
         self.modules_to_not_convert = modules_to_not_convert
 

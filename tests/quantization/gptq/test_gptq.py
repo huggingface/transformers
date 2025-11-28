@@ -94,6 +94,8 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a member of the N")
     EXPECTED_OUTPUTS.add("Hello my name is Nellie and I am a student at the")
     EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a new member of the")
+    EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student of the University")
+    EXPECTED_OUTPUTS.add("Hello my name is John and I am a very friendly and caring")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
@@ -235,11 +237,10 @@ class GPTQTest(unittest.TestCase):
             if not is_gptqmodel_available():
                 self.skipTest("gptqmodel not available")
             if self.device_map == "cpu":
-                quant_type = "ipex" if is_ipex_available() else "torch"
+                quant_type = "ipex" if is_ipex_available() else "torch_fused"
             else:
-                # We expect tritonv2 to be used here, because exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
-                # TODO: Remove this once GPTQModel exllama kernels supports packing
-                quant_type = "tritonv2"
+                quant_type = "exllamav2"
+            # if self.quantized_model.config["quantization_config"]["format"] == ""
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
@@ -275,7 +276,7 @@ class GPTQTestCUDA(GPTQTest):
                 device_map=self.device_map,
             )
             self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
-            quant_type = "tritonv2" if self.device_map != "cpu" else ("ipex" if is_ipex_available() else "torch")
+            quant_type = "exllamav2" if self.device_map != "cpu" else ("ipex" if is_ipex_available() else "torch")
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
 
