@@ -75,6 +75,21 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "phimoe": [
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.w1.weight",
+                    "mlp.experts.*.w3.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.w2.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "lfm2_moe": [
             WeightConverter(
                 source_patterns=[
@@ -147,14 +162,13 @@ def _build_checkpoint_conversion_mapping():
             ),
         ]
 
-    mapping["phimoe"] = mapping["qwen2_moe"].copy()
     mapping["deepseek_v2"] = mapping["qwen2_moe"].copy()
     mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
-    mapping["dot1"] = mapping["qwen2_moe"].copy()
-    mapping["ernie_4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["dots1"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
-    mapping["long_cat_flash"] = mapping["qwen2_moe"].copy()
+    mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
