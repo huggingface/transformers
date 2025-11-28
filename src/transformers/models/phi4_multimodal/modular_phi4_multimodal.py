@@ -330,7 +330,7 @@ class Phi4MultimodalConfig(Phi3Config):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
@@ -534,7 +534,7 @@ class Phi4MultimodalVisionEncoder(SiglipEncoder):
 class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
@@ -1458,7 +1458,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
 
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
-    input_modalities = ["image", "audio", "text"]
+    input_modalities = ("image", "audio", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):

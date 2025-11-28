@@ -28,6 +28,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -53,9 +54,7 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
-    download_url,
     is_offline_mode,
-    is_remote_url,
     is_torch_available,
     list_repo_templates,
     logging,
@@ -125,7 +124,7 @@ MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
 MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": "DacModel",
     "audio_processor": "FeatureExtractionMixin",
-    "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonTokenizer"),
+    "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
     "feature_extractor": "FeatureExtractionMixin",
     "image_processor": "ImageProcessingMixin",
     "video_processor": "BaseVideoProcessor",
@@ -810,7 +809,7 @@ class ProcessorMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -940,13 +939,6 @@ class ProcessorMixin(PushToHubMixin):
             resolved_raw_chat_template_file = None
             resolved_audio_tokenizer_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            processor_file = pretrained_model_name_or_path
-            resolved_processor_file = download_url(pretrained_model_name_or_path)
-            # can't load chat-template and audio tokenizer when given a file url as pretrained_model_name_or_path
-            resolved_chat_template_file = None
-            resolved_raw_chat_template_file = None
-            resolved_audio_tokenizer_file = None
         else:
             if is_local:
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
@@ -1420,6 +1412,21 @@ class ProcessorMixin(PushToHubMixin):
                 continue
             if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING or "tokenizer" in sub_processor_type:
                 attributes.append(sub_processor_type)
+
+        # Legacy processors may not override `__init__` and instead expose modality
+        # attributes via `<attribute>_class`. In that case, `args_in_init` only exposes
+        # `*args`/`**kwargs`, so we need to infer the attributes from those class-level
+        # hints to keep backward compatibility (e.g. dynamic processors stored on the Hub).
+        if not attributes:
+            for attribute_name, value in cls.__dict__.items():
+                if value is None or attribute_name == "audio_tokenizer_class" or not attribute_name.endswith("_class"):
+                    continue
+                inferred_attribute = attribute_name[: -len("_class")]
+                if inferred_attribute == "audio_tokenizer":
+                    continue
+                if inferred_attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING or "tokenizer" in inferred_attribute:
+                    attributes.append(inferred_attribute)
+
         return attributes
 
     @classmethod
@@ -1592,7 +1599,14 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 pass
 
-        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
+        # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
+        is_tokenizers_fast = False
+        if hasattr(self, "tokenizer"):
+            if hasattr(self.tokenizer, "backend"):
+                is_tokenizers_fast = self.tokenizer.backend == "tokenizers"
+            else:
+                # Fallback to class name check
+                is_tokenizers_fast = self.tokenizer.__class__.__name__.endswith("Fast")
 
         if kwargs.get("continue_final_message", False):
             if kwargs.get("add_generation_prompt", False):
@@ -1682,11 +1696,19 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images.append(images)
                 batch_videos.append(videos)
 
+        special_tokens_map = {}
+        if hasattr(self, "tokenizer") and hasattr(self.tokenizer, "special_tokens_map"):
+            special_tokens = self.tokenizer.special_tokens_map
+            # Filter out tokens that conflict with template kwargs
+            special_tokens_map = {
+                k: v for k, v in special_tokens.items() if k not in processed_kwargs["template_kwargs"]
+            }
+
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             chat_template=chat_template,
             **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
-            **self.tokenizer.special_tokens_map,  # tokenizer special tokens are used by some templates
+            **special_tokens_map,  # tokenizer special tokens are used by some templates
         )
 
         if not is_batched:
@@ -1735,10 +1757,14 @@ class ProcessorMixin(PushToHubMixin):
 
                             if not (
                                 start_pos >= 0
+                                and start_pos < len(offsets)
                                 and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
                             ):
                                 # start_token is out of bounds maybe due to truncation.
                                 continue
+                            # Ensure end_pos is also within bounds
+                            if end_pos > len(input_ids[i]):
+                                end_pos = len(input_ids[i])
                             for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
@@ -1749,6 +1775,35 @@ class ProcessorMixin(PushToHubMixin):
                 return out["input_ids"]
         return prompt
 
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        if generation_mode is not None and generation_mode != "text":
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only [`text`]"
+            )
+        return self.post_process_image_text_to_text(
+            generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+        )
+
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of a vlm to decode the text.
@@ -1758,14 +1813,14 @@ class ProcessorMixin(PushToHubMixin):
                 The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 or `(sequence_length,)`.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `decode` method.
             **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+                Additional arguments to be passed to the tokenizer's `decode` method.
 
         Returns:
             `list[str]`: The decoded text.
         """
-        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+        return self.tokenizer.decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """

@@ -518,5 +518,10 @@ class Sam2Processor(ProcessorMixin):
             **kwargs,
         )
 
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(image_processor_input_names + ["original_sizes"])
+
 
 __all__ = ["Sam2Processor"]

@@ -584,7 +584,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 8000):
             Maximum sequence length that the autoregressive decoder can handle. Determines positional embedding size.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         num_attention_heads (`int`, *optional*, defaults to 16):
@@ -2300,7 +2300,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     config_class = Qwen3OmniMoeConfig
-    output_modalities = ["text", "audio"]
+    output_modalities = ("text", "audio")
 
     def __init__(self, config: Qwen3OmniMoeConfig):
         super().__init__(config)

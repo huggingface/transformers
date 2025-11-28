@@ -1445,7 +1445,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class Sam2VideoModel(Sam2Model):
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
     _tied_weights_keys = {
         "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
     }

@@ -38,7 +38,7 @@ class Wav2Vec2Config(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 32):
             Vocabulary size of the Wav2Vec2 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Wav2Vec2Model`] or [`TFWav2Vec2Model`]. Vocabulary size of the
+            the `inputs_ids` passed when calling [`Wav2Vec2Model`]. Vocabulary size of the
             model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
             method of [`Wav2Vec2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
