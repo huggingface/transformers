@@ -112,6 +112,7 @@ class FlashAttentionParityTest(unittest.TestCase):
         logprobs = {}
         outputs = defaultdict(list)
         with torch.no_grad():
+
             def generate(model, version, outputs, logits, logprobs):
                 model.set_attn_implementation(f"flash_attention_{version}")
                 output = model.generate(
@@ -131,14 +132,14 @@ class FlashAttentionParityTest(unittest.TestCase):
         # 3. Correctness check
         # 3a. Logits
         # FA2 as base to compare against
-        logits_1 = logits[2]
+        # logits_1 = logits[2]
         logprobs_1 = logprobs[2]
         max_logprob_diffs = []
         for version in range(1, len(flash_attn_versions)):
-            logits_x = logits[flash_attn_versions[version]]
-            logprobs_x = logprobs[flash_attn_versions[version]]
             # TODO: logits significantly differ between FA2 and FA4
-            #torch.testing.assert_close(logits_1, logits_x, atol=1e-3, rtol=1e-3)
+            # logits_x = logits[flash_attn_versions[version]]
+            # torch.testing.assert_close(logits_1, logits_x, atol=1e-3, rtol=1e-3)
+            logprobs_x = logprobs[flash_attn_versions[version]]
             max_logprob_diffs.append(torch.max(torch.abs(logprobs_1 - logprobs_x)).item())
 
         # 3b. Generated text
@@ -150,7 +151,9 @@ class FlashAttentionParityTest(unittest.TestCase):
             texts_x = outputs[fa_version]
             rouge_score = self._calculate_rouge_l(texts_1, texts_x)
             for idx, score in enumerate(rouge_score):
-                assert score > 0.99, f"Generated texts at prompt {idx} do not match (ROUGE-L: {score}) comparing FA2 vs FA{fa_version}"
+                assert score > 0.99, (
+                    f"Generated texts at prompt {idx} do not match (ROUGE-L: {score}) comparing FA2 vs FA{fa_version}"
+                )
             rouge_scores.append(self._calculate_rouge_l(texts_1, texts_x))
 
         # 4. Performance check
