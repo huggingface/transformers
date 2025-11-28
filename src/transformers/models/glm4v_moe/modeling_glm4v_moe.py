@@ -129,7 +129,7 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -552,13 +552,16 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         "attentions": Glm4vMoeTextAttention,
         "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
     }
-    input_modalities = ["text", "image", "video"]
+    input_modalities = ("text", "image", "video")
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm4vMoeTextTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm4vMoeTextNaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @dataclass
@@ -870,7 +873,7 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
 @auto_docstring
 class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeVisionConfig
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     _no_split_modules = ["Glm4vMoeVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -982,7 +985,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
@@ -1627,8 +1630,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
 
         Example:
 

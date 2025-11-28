@@ -171,7 +171,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_value: float = 1 / 255,
+        rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, Iterable[float]]] = None,
         image_std: Optional[Union[float, Iterable[float]]] = None,
@@ -188,7 +188,9 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self.size = size
         self.resample = resample
         self.do_rescale = do_rescale
-        self.rescale_factor = rescale_value
+        # The standard name is rescale_factor, but this processor accepted rescale_value for a long time,
+        # so allow it as a kwarg for backward compatibility
+        self.rescale_factor = kwargs.get("rescale_value", rescale_factor)
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD

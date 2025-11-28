@@ -21,14 +21,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.cache_utils import Cache
-from transformers.utils import (
-    logging,
-)
-
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ... import initialization as init
+from ...cache_utils import Cache
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, logging
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -181,6 +178,13 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, HunYuanMoEV1Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
