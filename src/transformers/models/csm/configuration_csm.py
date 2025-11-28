@@ -16,7 +16,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -103,6 +103,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
     model_type = "csm_depth_decoder_model"
     base_config_key = "depth_decoder_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -132,13 +133,6 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmDepthDecoderConfig")
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=False,
-            **kwargs,
-        )
         self.num_codebooks = num_codebooks
         self.vocab_size = vocab_size
         self.backbone_hidden_size = backbone_hidden_size
@@ -161,14 +155,15 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=False,
+            **kwargs,
+        )
 
 
 class CsmConfig(PreTrainedConfig):
@@ -264,6 +259,7 @@ class CsmConfig(PreTrainedConfig):
     model_type = "csm"
     base_config_key = "csm_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     sub_configs = {
         "codec_config": AutoConfig,
         "depth_decoder_config": CsmDepthDecoderConfig,
@@ -348,14 +344,7 @@ class CsmConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             pad_token_id=pad_token_id,

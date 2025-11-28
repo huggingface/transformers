@@ -16,7 +16,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -115,6 +115,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
     model_type = "ernie4_5_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
+    default_theta = 500000.0
 
     # Default tensor parallel plan for base model `Ernie4_5_MoE`
     base_model_tp_plan = {
@@ -181,14 +182,6 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.use_bias = use_bias
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
 
         # MoE arguments
         self.moe_intermediate_size = moe_intermediate_size
@@ -201,6 +194,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             pad_token_id=pad_token_id,
