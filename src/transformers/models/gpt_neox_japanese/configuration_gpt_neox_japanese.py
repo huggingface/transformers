@@ -117,7 +117,7 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.rope_parameters = rope_parameters
 
         kwargs = self.convert_rope_params_to_dict(default_theta=10_000, **kwargs)
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
     def convert_rope_params_to_dict(self, default_theta=10_000.0, **kwargs):
