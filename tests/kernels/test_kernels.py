@@ -27,7 +27,6 @@ from transformers.integrations.hub_kernels import (
     lazy_load_kernel,
     load_and_register_attn_kernel,
 )
-from transformers.utils.kernel_config import add_to_mapping
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.testing_utils import (
@@ -39,6 +38,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.import_utils import is_kernels_available
+from transformers.utils.kernel_config import add_to_mapping
 
 
 if is_kernels_available():
@@ -319,14 +319,10 @@ class TestKernelUtilities(TestCasePlus):
         compatible_mapping = {}
 
         # Add cuda device
-        add_to_mapping(
-            "RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping
-        )
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping)
 
         # Add rocm device - should NOT overwrite cuda
-        add_to_mapping(
-            "RMSNorm", "rocm", "repo:layer", Mode.INFERENCE, compatible_mapping
-        )
+        add_to_mapping("RMSNorm", "rocm", "repo:layer", Mode.INFERENCE, compatible_mapping)
 
         # Verify both devices exist
         self.assertIn("cuda", compatible_mapping["RMSNorm"])
@@ -349,9 +345,7 @@ class TestKernelUtilities(TestCasePlus):
         compatible_mapping = {}
 
         # Add single device
-        add_to_mapping(
-            "RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping
-        )
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping)
 
         # Verify structure
         self.assertIn("RMSNorm", compatible_mapping)
@@ -368,14 +362,10 @@ class TestKernelUtilities(TestCasePlus):
         compatible_mapping = {}
 
         # Add inference mode
-        add_to_mapping(
-            "RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping
-        )
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.INFERENCE, compatible_mapping)
 
         # Add training mode - should NOT overwrite inference
-        add_to_mapping(
-            "RMSNorm", "cuda", "repo:layer", Mode.TRAINING, compatible_mapping
-        )
+        add_to_mapping("RMSNorm", "cuda", "repo:layer", Mode.TRAINING, compatible_mapping)
 
         # Verify both modes exist
         self.assertIn(Mode.INFERENCE, compatible_mapping["RMSNorm"]["cuda"])
