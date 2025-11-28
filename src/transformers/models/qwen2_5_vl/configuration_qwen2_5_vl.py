@@ -234,19 +234,17 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(
-        self, default_theta: int | float = 10_000.0, ignore_keys: Optional[set] = None, **kwargs
-    ):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
         # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
         if self.rope_parameters.get("rope_type", self.rope_parameters.get("type")) == "mrope":
             self.rope_parameters["rope_type"] = "default"
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys)
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 
