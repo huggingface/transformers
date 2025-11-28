@@ -905,10 +905,9 @@ def convert_and_load_state_dict_in_model(
                             mapping.distributed_operation,
                             hf_quantizer,
                         )
-
-                # Cleanup the tensors
-                mapping.reset()
-            except SkipLayer:
+            except SkipLayer as e:
+                print(e)
+                raise e
                 continue
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
