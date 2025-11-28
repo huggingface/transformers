@@ -29,8 +29,8 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torchao,
     require_torchao_version_greater_or_equal,
-    torch_device,
     slow,
+    torch_device,
 )
 from transformers.utils import is_torch_available, is_torchao_available
 
