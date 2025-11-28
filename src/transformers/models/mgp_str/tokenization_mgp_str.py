@@ -18,7 +18,7 @@ import json
 import os
 from typing import Optional
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -60,6 +60,7 @@ class MgpstrTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
