@@ -507,11 +507,8 @@ class Fp8Quantize(ConversionOps):
     A quantization operation that creates two tensors, weight and scale out of a weight.
     """
 
-    reverse_op: type[ConversionOps]
-
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
-        self.reverse_op = Fp8Dequantize
 
     def convert(self, input_dict: torch.Tensor, **kwargs) -> dict[str, torch.Tensor]:
         # Unpack single key/value (value may be wrapped in a list)
@@ -587,7 +584,6 @@ class Fp8Dequantize(ConversionOps):
 
     def __init__(self, block_size: tuple[int, int] | None = None):
         self.block_size = block_size
-        self.reverse_op = Fp8Quantize
 
     def convert(
         self,

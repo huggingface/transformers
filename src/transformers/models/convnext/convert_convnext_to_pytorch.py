@@ -214,11 +214,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if "22k" in checkpoint_url and "1k" in checkpoint_url:
         model_name += "-22k-1k"
 
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
-        commit_message="Add model",
-    )
+    model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

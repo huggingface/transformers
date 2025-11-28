@@ -17,7 +17,7 @@ import os
 import unittest
 
 from transformers import BatchEncoding
-from transformers.models.bert.tokenization_bert import (
+from transformers.models.bert.tokenization_bert_legacy import (
     BasicTokenizer,
     WordpieceTokenizer,
     _is_control,

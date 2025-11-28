@@ -42,7 +42,7 @@ from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
@@ -51,8 +51,13 @@ import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
-from transformers import Trainer
 from transformers import logging as transformers_logging
+
+
+if TYPE_CHECKING:
+    from .trainer import Trainer
+else:
+    Trainer = Any  # type: ignore
 
 from .integrations import (
     is_clearml_available,

@@ -314,6 +314,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GemmaConfig": ["tie_word_embeddings"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "LayoutXLMConfig": True,
+    "DeepseekV2Config": ["norm_topk_prob"],
 }
 
 
