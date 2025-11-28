@@ -82,7 +82,7 @@ class Bnb4bitDeserialize(ConversionOps):
                 input_dict[key] = value[0]
 
         key_weight = "weight"
-        weight = input_dict.pop("weight")
+        weight = input_dict.pop(key_weight)
         module, _ = get_module_from_name(model, full_layer_name)
         new_value = bnb.nn.Params4bit.from_prequantized(
             data=weight,
