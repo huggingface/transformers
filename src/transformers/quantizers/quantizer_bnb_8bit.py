@@ -254,8 +254,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             return [
                 WeightConverter(
-                    source_keys=["SCB", "weight_format", "weight"],
-                    target_keys="weight",
+                    source_patterns=["SCB", "weight_format", "weight"],
+                    target_patterns="weight",
                     operations=[Bnb8bitDeserialize(self)],
                 )
             ]
