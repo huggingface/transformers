@@ -32,6 +32,23 @@ try:
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
     )
+    from kernels import (
+        use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
+    )
+
+    # Try to import FuncRepository, fallback if not available
+    try:
+        from kernels import FuncRepository
+    except ImportError:
+        FuncRepository = None
+
+    # Try to import use_kernel_func_from_hub, fallback if not available
+    try:
+        from kernels import use_kernel_func_from_hub as _kernels_use_kernel_func_from_hub
+
+        _has_use_kernel_func_from_hub = True
+    except ImportError:
+        _has_use_kernel_func_from_hub = False
 
     _TRANSFORMERS_USE_HUB_KERNELS = os.environ.get("USE_HUB_KERNELS", "YES").upper()
     _kernels_available = True
@@ -39,14 +56,27 @@ try:
 
     def use_kernel_forward_from_hub(layer_name: str):
         if _kernels_enabled:
-            from kernels import use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub
-
             return _kernels_use_kernel_forward_from_hub(layer_name)
         else:
             logger.warning_once(
                 f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
             )
             return lambda cls: cls
+
+    def use_kernel_func_from_hub(func_name: str):
+        if _kernels_enabled and _has_use_kernel_func_from_hub:
+            return _kernels_use_kernel_func_from_hub(func_name)
+        else:
+            if not _has_use_kernel_func_from_hub:
+                logger.warning_once(
+                    "use_kernel_func_from_hub is not available in the installed kernels version. "
+                    "Please upgrade kernels to use this feature."
+                )
+            else:
+                logger.warning_once(
+                    f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"
+                )
+            return lambda func: func
 
     _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository]] = {
         "MultiScaleDeformableAttention": {
@@ -162,6 +192,16 @@ try:
         },
     }
 
+    # Add function kernel mappings if FuncRepository is available
+    if FuncRepository is not None:
+        _KERNEL_MAPPING["rotary_pos_emb"] = {
+            "xpu": {
+                Mode.INFERENCE: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                )
+            }
+        }
+
     def has_key(d, key):
         return key in d or any(isinstance(v, dict) and has_key(v, key) for v in d.values())
 
@@ -187,6 +227,12 @@ except ImportError:
 
         return decorator
 
+    def use_kernel_func_from_hub(*args, **kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
+
     class LayerRepository:
         def __init__(self, *args, **kwargs):
             raise RuntimeError("LayerRepository requires `kernels` to be installed. Run `pip install kernels`.")
@@ -198,6 +244,11 @@ except ImportError:
 
     def register_kernel_mapping(*args, **kwargs):
         raise RuntimeError("register_kernel_mapping requires `kernels` to be installed. Run `pip install kernels`.")
+
+    def register_kernel_mapping_transformers(*args, **kwargs):
+        raise RuntimeError(
+            "register_kernel_mapping_transformers requires `kernels` to be installed. Run `pip install kernels`."
+        )
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
@@ -321,6 +372,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
+    "use_kernel_func_from_hub",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",

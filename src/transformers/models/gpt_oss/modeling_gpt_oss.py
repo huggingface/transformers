@@ -325,6 +325,7 @@ class GptOssAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
