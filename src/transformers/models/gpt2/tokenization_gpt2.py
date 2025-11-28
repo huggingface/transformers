@@ -101,7 +101,7 @@ class GPT2Tokenizer(TokenizersBackend):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         pad_token=None,
-        add_prefix_space=True,
+        add_prefix_space=False,
         add_bos_token=False,
         vocab: Optional[dict] = None,
         merges: Optional[list] = None,
