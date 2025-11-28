@@ -77,15 +77,6 @@ class LlamaTokenizer(TokenizersBackend):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used
-            A simple example:
-            ```python
-    >>> from transformers import LlamaTokenizer
-
-            >>> tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
-            >>> tokenizer.encode("Hello <s>.") # 869 is '▁.'
-            [1, 15043, 29871, 1, 869]
-            ```
-            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
         add_prefix_space (`bool`, *optional*):
             Whether or not the tokenizer should automatically add a prefix space
     """
