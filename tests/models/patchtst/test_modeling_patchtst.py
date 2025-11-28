@@ -371,8 +371,9 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(mean_prediction[0, -1:], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_regression_generation(self):
-        model = PatchTSTForRegression.from_pretrained("ibm/patchtst-etth1-regression-distribution").to(torch_device)
-        model.config.attn_implementation = "sdpa"
+        model = PatchTSTForRegression.from_pretrained(
+            "ibm/patchtst-etth1-regression-distribution", attn_implementation="sdpa"
+        ).to(torch_device)
         batch = prepare_batch(repo_id="ibm/patchtst-etth1-test-data", file="regression_distribution_batch.pt")
 
         torch.manual_seed(0)
