@@ -21,7 +21,13 @@ from datasets import Audio, load_dataset
 from parameterized import parameterized
 
 from transformers import AutoProcessor, DacConfig, DacModel
-from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_torch_available,
+    require_deterministic_for_xpu,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -658,6 +664,7 @@ EXPECTED_CODEC_ERROR_BATCH = {
 @require_torch
 class DacIntegrationTest(unittest.TestCase):
     @parameterized.expand([(model_name,) for model_name in EXPECTED_PREPROC_SHAPE.keys()])
+    @require_deterministic_for_xpu
     def test_integration(self, model_name):
         # load model and processor
         model_id = f"descript/{model_name}"
