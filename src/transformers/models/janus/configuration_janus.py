@@ -20,7 +20,6 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -123,7 +122,7 @@ class JanusVisionConfig(PreTrainedConfig):
         self.num_image_tokens = num_image_tokens
 
 
-class JanusVQVAEConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class JanusVQVAEConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JanusVQVAEModel`]. It is used to instantiate a
     `JanusVQVAEModel` according to the specified arguments, defining the model architecture.
