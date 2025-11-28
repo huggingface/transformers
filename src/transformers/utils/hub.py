@@ -84,7 +84,10 @@ class DownloadKwargs(TypedDict, total=False):
 
 
 def is_offline_mode():
-    return constants.HF_HUB_OFFLINE
+    # Import inside the function so test patches on `huggingface_hub.constants` are picked up.
+    from huggingface_hub import constants as hf_hub_constants
+
+    return hf_hub_constants.HF_HUB_OFFLINE
 
 
 # Determine default cache directory.

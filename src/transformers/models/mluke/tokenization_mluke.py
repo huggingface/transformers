@@ -18,13 +18,12 @@ import itertools
 import json
 import os
 from collections.abc import Mapping
-from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
-import sentencepiece as spm
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers.models import Unigram
 
-from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     AddedToken,
@@ -37,8 +36,8 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
     to_py_obj,
 )
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, is_torch_tensor, logging
-from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -129,8 +128,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 """
 
 
-@requires(backends=("sentencepiece",))
-class MLukeTokenizer(PreTrainedTokenizer):
+class MLukeTokenizer(TokenizersBackend):
     """
     Adapted from [`XLMRobertaTokenizer`] and [`LukeTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
@@ -220,8 +218,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file,
-        entity_vocab_file,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -238,14 +234,14 @@ class MLukeTokenizer(PreTrainedTokenizer):
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
         entity_mask2_token="[MASK2]",
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        vocab: Optional[list] = None,
+        entity_vocab: Optional[dict] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         # we add 2 special tokens for downstream tasks
-        # for more information about lstrip and rstrip, see https://github.com/huggingface/transformers/pull/2778
         entity_token_1 = (
             AddedToken(entity_token_1, lstrip=False, rstrip=False)
             if isinstance(entity_token_1, str)
@@ -256,14 +252,38 @@ class MLukeTokenizer(PreTrainedTokenizer):
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
-        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
-        additional_special_tokens += [entity_token_1, entity_token_2]
 
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        # Handle entity vocab file for backward compatibility
+        entity_vocab_file = kwargs.pop("entity_vocab_file", None)
 
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
-        self.vocab_file = vocab_file
+        # Check if vocab/entity_vocab are in kwargs
+        if vocab is None and "vocab" in kwargs:
+            vocab = kwargs.pop("vocab")
+        if entity_vocab is None and "entity_vocab" in kwargs:
+            entity_vocab = kwargs.pop("entity_vocab")
+
+        # Build vocab from data (list of (token, score) tuples)
+        if vocab is not None:
+            # vocab is list of (token, score) tuples from SentencePieceExtractor
+            self._vocab = [(token, float(score)) for token, score in vocab]
+            self._vocab_size = len(self._vocab)
+        else:
+            # Create minimal vocab with <unk> to satisfy Unigram requirements
+            self._vocab = [("<unk>", 0.0)]
+            self._vocab_size = 0  # Will be updated when real vocab is loaded
+
+        # Build Unigram tokenizer
+        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=0))
+
+        # Add SentencePiece-style normalization and pre-tokenization
+        self._tokenizer.normalizer = normalizers.Sequence(
+            [
+                normalizers.Replace("``", '"'),
+                normalizers.Replace("''", '"'),
+            ]
+        )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")
 
         # Original fairseq vocab and spm vocab must be "aligned":
         # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
@@ -271,22 +291,34 @@ class MLukeTokenizer(PreTrainedTokenizer):
         # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
         # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
 
-        # Mimic fairseq token-to-id alignment for the first 4 token
+        # Mimic fairseq token-to-id alignment for the first 4 tokens
         self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
 
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
 
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
+        self.fairseq_tokens_to_ids["<mask>"] = self._vocab_size + self.fairseq_offset
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
-        with open(entity_vocab_file, encoding="utf-8") as entity_vocab_handle:
-            self.entity_vocab = json.load(entity_vocab_handle)
+        # Load entity vocab
+        if entity_vocab is not None:
+            self.entity_vocab = entity_vocab
+        elif entity_vocab_file is not None:
+            with open(entity_vocab_file, encoding="utf-8") as entity_vocab_handle:
+                self.entity_vocab = json.load(entity_vocab_handle)
+        else:
+            # Create minimal entity vocab with required special tokens
+            self.entity_vocab = {
+                entity_unk_token: 0,
+                entity_pad_token: 1,
+                entity_mask_token: 2,
+                entity_mask2_token: 3,
+            }
+
         for entity_special_token in [entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token]:
             if entity_special_token not in self.entity_vocab:
                 raise ValueError(
-                    f"Specified entity special token ``{entity_special_token}`` is not found in entity_vocab. "
-                    f"Probably an incorrect entity vocab file is loaded: {entity_vocab_file}."
+                    f"Specified entity special token ``{entity_special_token}`` is not found in entity_vocab."
                 )
         self.entity_unk_token_id = self.entity_vocab[entity_unk_token]
         self.entity_pad_token_id = self.entity_vocab[entity_pad_token]
@@ -308,7 +340,35 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         self.max_mention_length = max_mention_length
 
+        # Handle extra/legacy special tokens (v4 compat). The fallback load path can pass
+        # `additional_special_tokens` and/or `extra_special_tokens`, with entries serialized as dicts.
+        extra_tokens: list[AddedToken | str] = []
+        for key in ("extra_special_tokens", "additional_special_tokens"):
+            tokens = kwargs.pop(key, None)
+            if isinstance(tokens, (list, tuple)):
+                for token in tokens:
+                    extra_tokens.append(AddedToken(**token) if isinstance(token, dict) else token)
+
+        # Ensure MLuke entity tokens are present exactly once.
+        seen = {str(token) for token in extra_tokens}
+        for token in (entity_token_1, entity_token_2):
+            token_str = str(token)
+            if token_str not in seen:
+                extra_tokens.append(token)
+                seen.add(token_str)
+
+        # Also register entity masking/padding tokens so they survive save/load cycles.
+        for token in (entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token):
+            if token not in seen:
+                extra_tokens.append(AddedToken(token, lstrip=False, rstrip=False, normalized=False, special=True))
+                seen.add(token)
+
+        kwargs["extra_special_tokens"] = extra_tokens
+
+        tokenizer_object = self._tokenizer
+
         super().__init__(
+            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -316,75 +376,93 @@ class MLukeTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
             task=task,
             max_entity_length=max_entity_length,
             max_mention_length=max_mention_length,
-            entity_token_1=entity_token_1,
-            entity_token_2=entity_token_2,
+            entity_token_1=str(entity_token_1),
+            entity_token_2=str(entity_token_2),
             entity_unk_token=entity_unk_token,
             entity_pad_token=entity_pad_token,
             entity_mask_token=entity_mask_token,
             entity_mask2_token=entity_mask2_token,
-            additional_special_tokens=additional_special_tokens,
+            entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if passed as data
             **kwargs,
         )
 
-    @property
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.vocab_size
-    def vocab_size(self):
-        return len(self.sp_model) + self.fairseq_offset + 1  # Add the <mask> token
+        # Call _post_init for tokenizers created directly (not from_pretrained)
+        self._post_init()
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.get_vocab
+    def _post_init(self):
+        """
+        Post-initialization to configure the post-processor for MLuke's special token format.
+        """
+        super()._post_init()
+        # Ensure the Python-side vocab metadata matches the fast tokenizer backend after loading
+        self._vocab_size = self._tokenizer.get_vocab_size(with_added_tokens=False)
+        self.fairseq_tokens_to_ids["<mask>"] = self._vocab_size + self.fairseq_offset
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+
+        # Configure post processor for XLM-R/MLuke format:
+        # single: <s> X </s>
+        # pair: <s> A </s></s> B </s>
+        from tokenizers import processors
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{self.cls_token}:0 $A:0 {self.sep_token}:0",
+            pair=f"{self.cls_token}:0 $A:0 {self.sep_token}:0 {self.sep_token}:0 $B:1 {self.sep_token}:1",
+            special_tokens=[
+                (self.cls_token, self.cls_token_id),
+                (self.sep_token, self.sep_token_id),
+            ],
+        )
+
+    @property
+    def vocab_size(self):
+        return self._vocab_size + self.fairseq_offset + 1  # Add the <mask> token
+
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._tokenize
-    def _tokenize(self, text: str) -> list[str]:
-        # TODO check if the t5/llama PR also applies here
-        return self.sp_model.encode(text, out_type=str)
-
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
-        spm_id = self.sp_model.PieceToId(token)
 
-        # Need to return unknown token if the SP model returned 0
-        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
+        # Look up token in vocab
+        token_id = self._tokenizer.token_to_id(token)
+
+        # Need to return unknown token if not found (token_to_id returns None)
+        return token_id + self.fairseq_offset if token_id is not None else self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
-        return self.sp_model.IdToPiece(index - self.fairseq_offset)
+        token = self._tokenizer.id_to_token(index - self.fairseq_offset)
+        return token if token is not None else self.unk_token
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
-        return state
+    def num_special_tokens_to_add(self, pair: bool = False) -> int:
+        """
+        Returns the number of added tokens when encoding a sequence with special tokens.
 
-    def __setstate__(self, d):
-        self.__dict__ = d
+        Args:
+            pair (`bool`, *optional*, defaults to `False`):
+                Whether the number of added tokens should be computed in the case of a sequence pair or a single
+                sequence.
 
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
+        Returns:
+            `int`: Number of special tokens added to sequences.
+        """
+        return 4 if pair else 2
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer.__call__
     def __call__(
         self,
         text: Union[TextInput, list[TextInput]],
@@ -412,6 +490,36 @@ class MLukeTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        # Check for seq2seq parameters that are not supported with entity-aware encoding
+        if kwargs.get("text_target") is not None or kwargs.get("text_pair_target") is not None:
+            if entity_spans is not None or entities is not None or self.task is not None:
+                raise NotImplementedError(
+                    "text_target and text_pair_target are not supported when using entity-aware encoding. "
+                    "Please use the tokenizer without entities for seq2seq tasks."
+                )
+            # Delegate to parent for seq2seq encoding
+            return super().__call__(
+                text=text,
+                text_pair=text_pair,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
         sequences, depending on the task you want to prepare them for.
@@ -453,7 +561,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
         """
         # Input type checking for clearer error
         is_valid_single_text = isinstance(text, str)
-        is_valid_batch_text = isinstance(text, (list, tuple)) and (len(text) == 0 or (isinstance(text[0], str)))
+        is_valid_batch_text = isinstance(text, (list, tuple)) and (
+            len(text) == 0 or isinstance(text[0], (str, list, tuple))
+        )
         if not (is_valid_single_text or is_valid_batch_text):
             raise ValueError("text input must be of type `str` (single example) or `list[str]` (batch).")
 
@@ -465,6 +575,16 @@ class MLukeTokenizer(PreTrainedTokenizer):
             raise ValueError("text_pair input must be of type `str` (single example) or `list[str]` (batch).")
 
         is_batched = bool(isinstance(text, (list, tuple)))
+
+        # Get proper padding and truncation strategies
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
 
         if is_batched:
             batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
@@ -482,13 +602,13 @@ class MLukeTokenizer(PreTrainedTokenizer):
                     list(zip(entity_spans, entity_spans_pair)) if entity_spans_pair is not None else entity_spans
                 )
 
-            return self.batch_encode_plus(
+            return self._batch_encode_plus(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
                 batch_entity_spans_or_entity_spans_pairs=batch_entity_spans_or_entity_spans_pairs,
                 batch_entities_or_entities_pairs=batch_entities_or_entities_pairs,
                 add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 max_entity_length=max_entity_length,
                 stride=stride,
@@ -506,7 +626,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
         else:
-            return self.encode_plus(
+            return self._encode_plus(
                 text=text,
                 text_pair=text_pair,
                 entity_spans=entity_spans,
@@ -514,8 +634,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 entities=entities,
                 entities_pair=entities_pair,
                 add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 max_entity_length=max_entity_length,
                 stride=stride,
@@ -533,7 +653,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 **kwargs,
             )
 
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._encode_plus
     def _encode_plus(
         self,
         text: Union[TextInput],
@@ -561,6 +680,35 @@ class MLukeTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        if (
+            entity_spans is None
+            and entity_spans_pair is None
+            and entities is None
+            and entities_pair is None
+            and self.task is None
+        ):
+            return super()._encode_plus(
+                text=text,
+                text_pair=text_pair,
+                add_special_tokens=add_special_tokens,
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
+                max_length=max_length,
+                stride=stride,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -616,7 +764,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._batch_encode_plus
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[list[TextInput], list[TextInputPair]],
@@ -645,6 +792,41 @@ class MLukeTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        if (
+            batch_entity_spans_or_entity_spans_pairs is None
+            and batch_entities_or_entities_pairs is None
+            and self.task is None
+        ):
+            if batch_text_or_text_pairs and isinstance(batch_text_or_text_pairs[0], (tuple, list)):
+                texts, text_pairs = zip(*batch_text_or_text_pairs)
+                texts = list(texts)
+                text_pairs = list(text_pairs)
+            else:
+                texts = batch_text_or_text_pairs
+                text_pairs = None
+
+            return super()._encode_plus(
+                text=texts,
+                text_pair=text_pairs,
+                add_special_tokens=add_special_tokens,
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
+                max_length=max_length,
+                stride=stride,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+                **kwargs,
+            )
+
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -727,7 +909,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs)
 
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._check_entity_input_format
     def _check_entity_input_format(self, entities: Optional[EntityInput], entity_spans: Optional[EntitySpanInput]):
         if not isinstance(entity_spans, list):
             raise TypeError("entity_spans should be given as a list")
@@ -746,7 +927,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
             if len(entities) != len(entity_spans):
                 raise ValueError("If you specify entities, entities and entity_spans must be the same length")
 
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._create_input_sequence
     def _create_input_sequence(
         self,
         text: Union[TextInput],
@@ -758,7 +938,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
-            tokens = self.tokenize(text, **kwargs)
+            # Use the underlying tokenizer directly to avoid infinite recursion
+            # Then convert to fairseq-aligned IDs
+            tokens = self._tokenizer.encode(text, add_special_tokens=False).tokens
             return self.convert_tokens_to_ids(tokens)
 
         def get_input_ids_and_entity_token_spans(text, entity_spans):
@@ -900,7 +1082,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
         )
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._batch_prepare_for_model
     def _batch_prepare_for_model(
         self,
         batch_ids_pairs: list[tuple[list[int], None]],
@@ -986,7 +1167,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
         return batch_outputs
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer.prepare_for_model
     def prepare_for_model(
         self,
         ids: list[int],
@@ -1218,7 +1398,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         return batch_outputs
 
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer.pad
     def pad(
         self,
         encoded_inputs: Union[
@@ -1383,7 +1562,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
-    # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._pad
     def _pad(
         self,
         encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
@@ -1528,21 +1706,13 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+        """
+        Save only the entity vocabulary file. The tokenizer.json is saved by the parent TokenizersBackend.
+        """
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            with open(out_vocab_file, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
+            return ()
 
         entity_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["entity_vocab_file"]
@@ -1551,9 +1721,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
         with open(entity_vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.entity_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-        return out_vocab_file, entity_vocab_file
+        return (entity_vocab_file,)
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
     ) -> list[int]:
@@ -1580,7 +1749,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
     ) -> list[int]:
@@ -1609,7 +1777,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
     ) -> list[int]:

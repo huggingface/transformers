@@ -142,7 +142,7 @@ class ModelInfos:
 
         # Get tokenizer class
         if self.lowercase_name in TOKENIZER_MAPPING_NAMES:
-            self.tokenizer_class, self.fast_tokenizer_class = TOKENIZER_MAPPING_NAMES[self.lowercase_name]
+            self.fast_tokenizer_class = TOKENIZER_MAPPING_NAMES[self.lowercase_name]
             self.fast_tokenizer_class = (
                 None if self.fast_tokenizer_class == "PreTrainedTokenizerFast" else self.fast_tokenizer_class
             )
