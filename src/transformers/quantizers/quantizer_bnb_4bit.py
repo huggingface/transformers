@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -37,6 +37,7 @@ from ..utils import (
 if is_torch_available():
     import torch
 
+    from ..core_model_loading import WeightConverter
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
@@ -199,7 +200,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = new_value
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -242,7 +243,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear
@@ -298,3 +299,24 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         from ..integrations.bitsandbytes import Bnb4bitQuantize
 
         return Bnb4bitQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.bitsandbytes import Bnb4bitDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_patterns=[
+                        "weight.nested_absmax",
+                        "weight.nested_quant_map",
+                        "weight.quant_map",
+                        "weight.absmax",
+                        "weight.quant_state.bitsandbytes__nf4",
+                        "weight.quant_state.bitsandbytes__fp4",
+                        "weight",
+                    ],
+                    target_patterns="weight",
+                    operations=[Bnb4bitDeserialize(self)],
+                )
+            ]
+        return []

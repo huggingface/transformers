@@ -22,7 +22,6 @@ from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
-from typing import Optional
 
 import torch
 from torch import nn
@@ -51,7 +50,7 @@ number of queries tokens is 1000, and NUM_Q_CUDA_GRAPHS is 4, we will slice the 
 
 Smaller slices means more granularity and thus less padding. But since each graph takes up space on the GPU and time to
 create, we don't want to many graphs. And since the size of the KV dimension is the number of queries tokens plus the
-number of tokens cached, dimension of KV is usually much larger than the the dimension of Q. So we have more granularity
+number of tokens cached, dimension of KV is usually much larger than the dimension of Q. So we have more granularity
 for the KV dimension than the query dimension.
 """
 NUM_Q_CUDA_GRAPHS = 4
@@ -159,7 +158,7 @@ def build_attention_mask(
 @dataclass
 class PagedAttentionArgs:
     input_ids: torch.Tensor
-    attention_mask: Optional[torch.Tensor]
+    attention_mask: torch.Tensor | None
     position_ids: torch.Tensor
     cumulative_seqlens_q: torch.Tensor
     cumulative_seqlens_k: torch.Tensor
@@ -221,7 +220,7 @@ class ContinuousBatchProcessor:
         # Accumulator for batch scheduling
         self.requests_in_batch: list[RequestState] = []
         # Cuda graphs for the generation step
-        self._graphs: Optional[dict[tuple[int, int], torch.cuda.CUDAGraph]] = {} if use_cuda_graph else None
+        self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = {} if use_cuda_graph else None
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -409,9 +408,9 @@ class ContinuousBatchProcessor:
 
         # Include any generated tokens if this is an active request
         if isinstance(state.request_id, str):
-            state.static_outputs = self.scheduler.get_active_request_static_outputs(state.request_id)
+            state.generated_tokens = self.scheduler.get_active_request_static_outputs(state.request_id)
         else:
-            state.static_outputs = []
+            state.generated_tokens = []
 
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
@@ -456,7 +455,7 @@ class ContinuousBatchProcessor:
         for state in self.requests_in_batch:
             # First we retrieve the lengths related to the request
             past_length = state.position_offset
-            query_length = len(state.prompt_ids)
+            query_length = len(state.tokens_to_process)
             seqlens_k = self.cache.get_seqlens_k(state.request_id, past_length, query_length)
 
             # Then we update the total lengths that are used for slicing
@@ -468,12 +467,12 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
             # Then we accumulate for the object used in the kwargs
-            input_ids.extend(state.prompt_ids)
+            input_ids.extend(state.tokens_to_process)
             position_ids.extend(range(past_length, past_length + query_length))
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             self.max_seqlen_q = max(self.max_seqlen_q, query_length)
 
-            if not state.remaining_prompt_ids:
+            if not state.remaining_prefill_tokens:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
 
             for layer_type, layer_type_seqlen_k in seqlens_k.items():
@@ -565,11 +564,11 @@ class ContinuousBatchProcessor:
         out_tokens = self._sync()
         for i, state in enumerate(self.requests_in_batch):
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
-            if len(state.remaining_prompt_ids) == 0:
+            if len(state.remaining_prefill_tokens) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
                 token = out_tokens[self.logits_indices[i]]
-                state.prompt_ids = [token]
+                state.tokens_to_process = [token]
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
                 # We mark the completed blocks as such
@@ -743,17 +742,14 @@ class ContinuousBatchingManager:
         """
         if "paged|" not in model.config._attn_implementation:
             attn_implementation = f"paged|{model.config._attn_implementation}"
-
-            from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-
-            if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
-                # load_and_register_attn_kernel is imported here to avoid CUDA init
-                from ...integrations.flash_paged import paged_attention_forward
-                from ...integrations.hub_kernels import load_and_register_attn_kernel
-
-                load_and_register_attn_kernel(attn_implementation, paged_attention_forward)
-
             model.config._attn_implementation = attn_implementation
+
+            # lazy loading flash attention including kernel variations
+            if "flash" in attn_implementation:
+                from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
+
+                lazy_import_paged_flash_attention(attn_implementation)
+
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
@@ -767,10 +763,10 @@ class ContinuousBatchingManager:
         self.model.generation_config.top_p = None
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
-        use_cuda_graph: Optional[bool] = getattr(generation_config, "use_cuda_graph", None)
+        use_cuda_graph: bool | None = getattr(generation_config, "use_cuda_graph", None)
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
-        self.batch_processor: Optional[ContinuousBatchProcessor] = None
+        self.batch_processor: ContinuousBatchProcessor | None = None
 
         self._allow_prefix_sharing = allow_prefix_sharing
 
@@ -813,7 +809,7 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def stop(self, block: bool = True, timeout: Optional[float] = None) -> None:
+    def stop(self, block: bool = True, timeout: float | None = None) -> None:
         """Signal the background thread to stop.
 
         Args:
@@ -827,8 +823,6 @@ class ContinuousBatchingManager:
                 logger.warning(
                     f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
                 )
-            else:
-                logger.warning("\nPrefix sharing was off.")
 
         if self._generation_thread is None:
             logger.warning("Manager not started.")
@@ -844,7 +838,7 @@ class ContinuousBatchingManager:
 
         self.batch_processor = None
 
-    def join(self, stop_trigger_time: float, timeout: Optional[float] = None) -> None:
+    def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
         """Wait for the background thread to finish.
 
         Args:
@@ -862,9 +856,10 @@ class ContinuousBatchingManager:
     def add_request(
         self,
         input_ids: list[int],
-        request_id: Optional[str] = None,
-        max_new_tokens: Optional[int] = None,
+        request_id: str | None = None,
+        max_new_tokens: int | None = None,
         streaming: bool = False,
+        record_timestamps: bool = False,
     ) -> str:
         """Add a new generation request to the queue.
 
@@ -886,8 +881,9 @@ class ContinuousBatchingManager:
         # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
-            prompt_ids=list(input_ids),
-            full_prompt_ids=list(input_ids),
+            initial_tokens=list(input_ids),
+            record_timestamps=record_timestamps,
+            tokens_to_process=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
             streaming=streaming,
@@ -898,10 +894,16 @@ class ContinuousBatchingManager:
         return request_id
 
     def add_requests(
-        self, inputs: list[list[int]], max_new_tokens: Optional[int] = None, streaming: bool = False
+        self,
+        inputs: list[list[int]],
+        max_new_tokens: int | None = None,
+        streaming: bool = False,
+        record_timestamps: bool = False,
     ) -> None:
         for input_ids in inputs:
-            self.add_request(input_ids, max_new_tokens=max_new_tokens, streaming=streaming)
+            self.add_request(
+                input_ids, max_new_tokens=max_new_tokens, streaming=streaming, record_timestamps=record_timestamps
+            )
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a request by its ID.
@@ -913,9 +915,7 @@ class ContinuousBatchingManager:
             self.batch_processor.scheduler.set_request_cancellation(request_id)
 
     # TODO:handle benchmarking properly when updating / fixing the requeue logic
-    def get_result(
-        self, request_id: Optional[str] = None, timeout: Optional[float] = None
-    ) -> Optional[GenerationOutput]:
+    def get_result(self, request_id: str | None = None, timeout: float | None = None) -> GenerationOutput | None:
         """Retrieve one result from the output queue.
 
         Args:
@@ -961,7 +961,7 @@ class ContinuousBatchingManager:
 
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
-        batch_processor: Optional[ContinuousBatchProcessor] = None
+        batch_processor: ContinuousBatchProcessor | None = None
         try:
             t0 = perf_counter()
             paged_attention_cache = PagedAttentionCache(
@@ -1032,7 +1032,7 @@ class ContinuousBatchingManager:
         batch_processor.update_batch()
 
     @traced
-    def _handle_critical_error(self, error: Exception, batch_processor: Optional[ContinuousBatchProcessor]) -> None:
+    def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
         # Signal stop
         self.stop_event.set()
@@ -1073,7 +1073,7 @@ class ContinuousMixin:
 
     def init_continuous_batching(
         self,
-        generation_config: Optional[GenerationConfig] = None,
+        generation_config: GenerationConfig | None = None,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
         num_q_cuda_graphs: int = 0,
@@ -1120,10 +1120,12 @@ class ContinuousMixin:
     def generate_batch(
         self,
         inputs: list[list[int]],
-        generation_config: Optional[GenerationConfig] = None,
+        generation_config: GenerationConfig | None = None,
         progress_bar: bool = True,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
+        allow_prefix_sharing: bool = True,
+        record_timestamps: bool = False,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1151,6 +1153,7 @@ class ContinuousMixin:
             generation_config=generation_config,
             num_q_cuda_graphs=num_q_cuda_graphs,
             num_kv_cuda_graphs=num_kv_cuda_graphs,
+            allow_prefix_sharing=allow_prefix_sharing,
         )
         manager.start()
         results = {}
@@ -1165,7 +1168,9 @@ class ContinuousMixin:
                     desc=f"Solving {num_requests} requests",
                     unit="request",
                 ) as pbar:
-                    manager.add_requests(inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"))
+                    manager.add_requests(
+                        inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"), record_timestamps=record_timestamps
+                    )
                     finished_count = 0
                     while finished_count < num_requests:
                         result = manager.get_result(timeout=1)

@@ -25,7 +25,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -56,7 +56,7 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Ernie4_5_MoeModelTester
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @is_flaky()
     @slow
