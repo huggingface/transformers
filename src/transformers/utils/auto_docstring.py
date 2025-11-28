@@ -1288,7 +1288,7 @@ def _process_parameter_type(param, param_name, func):
         param_name (`str`): The name of the parameter
         func (`function`): The function the parameter belongs to
     """
-    # a parameter for a function might have three basic elements: name, type
+    # a parameter for a function might have three basic elements: name, type hint, default value
     # for example, it would be like (there are some whitespaces)
     # age: int = 18 (if a param has no type hint, it would be like age=18)
     parameter_str: str = str(param)
