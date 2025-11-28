@@ -1570,7 +1570,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     _tied_weights_keys = {}
     _keys_to_ignore_on_load_missing = []
     _checkpoint_conversion_mapping = {
-        "tracker_model.": "",
+        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }
