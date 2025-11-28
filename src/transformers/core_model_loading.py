@@ -322,15 +322,15 @@ class WeightTransform:
             # This is ugly but needed for reverse mapping of Qwen2.5!
             if r"(?!\.(language_model|visual))" in pattern:
                 pattern = pattern.replace(r"(?!\.(language_model|visual))", "")
-            # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
+            # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
             if r"(.+)" in pattern:
-                pattern = pattern.replace(r"(.+)", "")
+                pattern = pattern.replace(r"(.+)", r"\1")
             self.target_patterns[i] = pattern
 
-        # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper)
+        # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
         for i, pattern in enumerate(self.source_patterns):
             if r"\1" in pattern:
-                pattern = pattern.replace(r"\1", "")
+                pattern = pattern.replace(r"\1", r"(.+)")
             self.source_patterns[i] = pattern
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
@@ -629,7 +629,8 @@ def repl(m, repl_map: dict[str, str]) -> str:
     replacement = repl_map[name]
     # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper)
     if r"\1" in replacement and len(m.groups()) > 1:
-        replacement = replacement.replace(r"\1", m.group(1))
+        # The 2nd captured group, apart from the full match, which is itself a captured group from the alternation
+        replacement = replacement.replace(r"\1", m.group(2))
 
     return replacement
 
