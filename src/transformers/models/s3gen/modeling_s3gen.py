@@ -24,7 +24,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio.compliance.kaldi as Kaldi
-from diffusers.models.attention import BasicTransformerBlock
 from librosa.filters import mel as librosa_mel_fn
 
 from scipy.signal import get_window
@@ -942,6 +941,469 @@ class HiFTGenerator(nn.Module):
 
 
 # ============================================================================
+# Transformer Components (replacing diffusers dependency)
+# ============================================================================
+
+
+# Decorator replacement
+def maybe_allow_in_graph(cls):
+    """Decorator to allow class in graph (simplified version)."""
+    return cls
+
+
+# Linear layer replacement
+class LoRACompatibleLinear(nn.Linear):
+    """
+    A Linear layer that can be used as a drop-in replacement for `torch.nn.Linear`.
+    Simplified version without LoRA support.
+    """
+
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__(in_features, out_features, bias=bias)
+
+
+# Activation functions
+class GELU(nn.Module):
+    """GELU activation function."""
+
+    def __init__(self, dim_in: int, dim_out: int, approximate: str = "none", bias: bool = True):
+        super().__init__()
+        self.proj = nn.Linear(dim_in, dim_out, bias=bias)
+        self.approximate = approximate
+
+    def forward(self, hidden_states):
+        hidden_states = self.proj(hidden_states)
+        if self.approximate == "tanh":
+            return F.gelu(hidden_states, approximate="tanh")
+        return F.gelu(hidden_states)
+
+
+class GEGLU(nn.Module):
+    """GEGLU activation function."""
+
+    def __init__(self, dim_in: int, dim_out: int, bias: bool = True):
+        super().__init__()
+        self.proj = nn.Linear(dim_in, dim_out * 2, bias=bias)
+
+    def forward(self, hidden_states):
+        hidden_states, gate = self.proj(hidden_states).chunk(2, dim=-1)
+        return hidden_states * F.gelu(gate)
+
+
+class ApproximateGELU(nn.Module):
+    """Approximate GEGLU activation function."""
+
+    def __init__(self, dim_in: int, dim_out: int, bias: bool = True):
+        super().__init__()
+        self.proj = nn.Linear(dim_in, dim_out * 2, bias=bias)
+
+    def forward(self, hidden_states):
+        hidden_states, gate = self.proj(hidden_states).chunk(2, dim=-1)
+        return hidden_states * F.gelu(gate, approximate="tanh")
+
+
+class SnakeBeta(nn.Module):
+    """
+    A modified Snake function which uses separate parameters for the magnitude of the periodic components.
+
+    Shape:
+        - Input: (B, C, T) or (B, T, C)
+        - Output: same shape as input
+
+    Parameters:
+        - alpha - trainable parameter that controls frequency
+        - beta - trainable parameter that controls magnitude
+    """
+
+    def __init__(self, in_features, out_features, alpha=1.0, alpha_trainable=True, alpha_logscale=True):
+        super().__init__()
+        self.in_features = out_features if isinstance(out_features, list) else [out_features]
+        self.proj = LoRACompatibleLinear(in_features, out_features)
+
+        # initialize alpha and beta
+        self.alpha_logscale = alpha_logscale
+        if self.alpha_logscale:  # log scale alphas initialized to zeros
+            self.alpha = nn.Parameter(torch.zeros(self.in_features) * alpha)
+            self.beta = nn.Parameter(torch.zeros(self.in_features) * alpha)
+        else:  # linear scale alphas initialized to ones
+            self.alpha = nn.Parameter(torch.ones(self.in_features) * alpha)
+            self.beta = nn.Parameter(torch.ones(self.in_features) * alpha)
+
+        self.alpha.requires_grad = alpha_trainable
+        self.beta.requires_grad = alpha_trainable
+        self.no_div_by_zero = 0.000000001
+
+    def forward(self, x):
+        """
+        Forward pass of the function.
+        Applies the function to the input elementwise.
+        SnakeBeta ∶= x + 1/b * sin^2 (xa)
+        """
+        x = self.proj(x)
+        if self.alpha_logscale:
+            alpha = torch.exp(self.alpha)
+            beta = torch.exp(self.beta)
+        else:
+            alpha = self.alpha
+            beta = self.beta
+
+        x = x + (1.0 / (beta + self.no_div_by_zero)) * torch.pow(torch.sin(x * alpha), 2)
+        return x
+
+
+# Normalization layers
+class AdaLayerNorm(nn.Module):
+    """Adaptive Layer Normalization."""
+
+    def __init__(self, embedding_dim: int, num_embeddings: int):
+        super().__init__()
+        self.emb = nn.Embedding(num_embeddings, embedding_dim * 2)
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(embedding_dim, embedding_dim * 2)
+        self.norm = nn.LayerNorm(embedding_dim, elementwise_affine=False)
+
+    def forward(self, x, timestep):
+        emb = self.linear(self.silu(self.emb(timestep)))
+        scale, shift = torch.chunk(emb, 2, dim=-1)
+        x = self.norm(x) * (1 + scale)[:, None, :] + shift[:, None, :]
+        return x
+
+
+class AdaLayerNormZero(nn.Module):
+    """Adaptive Layer Normalization Zero."""
+
+    def __init__(self, embedding_dim: int, num_embeddings: int):
+        super().__init__()
+        self.emb = nn.Embedding(num_embeddings, embedding_dim * 6)
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(embedding_dim, embedding_dim * 6)
+        self.norm = nn.LayerNorm(embedding_dim, elementwise_affine=False, eps=1e-6)
+
+    def forward(self, x, timestep, class_labels=None, hidden_dtype=None):
+        emb = self.linear(self.silu(self.emb(timestep)))
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = emb.chunk(6, dim=-1)
+        x = self.norm(x) * (1 + scale_msa)[:, None, :] + shift_msa[:, None, :]
+        return x, gate_msa, shift_mlp, scale_mlp, gate_mlp
+
+
+# Attention processor
+class Attention(nn.Module):
+    """Multi-head attention module."""
+
+    def __init__(
+        self,
+        query_dim: int,
+        cross_attention_dim: Optional[int] = None,
+        heads: int = 8,
+        dim_head: int = 64,
+        dropout: float = 0.0,
+        bias: bool = False,
+        upcast_attention: bool = False,
+        out_bias: bool = True,
+    ):
+        super().__init__()
+        inner_dim = dim_head * heads
+        cross_attention_dim = cross_attention_dim if cross_attention_dim is not None else query_dim
+        self.scale = dim_head**-0.5
+        self.heads = heads
+        self.upcast_attention = upcast_attention
+
+        self.to_q = LoRACompatibleLinear(query_dim, inner_dim, bias=bias)
+        self.to_k = LoRACompatibleLinear(cross_attention_dim, inner_dim, bias=bias)
+        self.to_v = LoRACompatibleLinear(cross_attention_dim, inner_dim, bias=bias)
+
+        self.to_out = nn.ModuleList([])
+        self.to_out.append(LoRACompatibleLinear(inner_dim, query_dim, bias=out_bias))
+        self.to_out.append(nn.Dropout(dropout))
+
+    def forward(
+        self,
+        hidden_states,
+        encoder_hidden_states=None,
+        attention_mask=None,
+        **cross_attention_kwargs,
+    ):
+        batch_size, sequence_length, _ = hidden_states.shape
+
+        encoder_hidden_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
+
+        query = self.to_q(hidden_states)
+        key = self.to_k(encoder_hidden_states)
+        value = self.to_v(encoder_hidden_states)
+
+        inner_dim = key.shape[-1]
+        head_dim = inner_dim // self.heads
+
+        query = query.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+        key = key.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+        value = value.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
+
+        # Compute attention
+        if self.upcast_attention:
+            query = query.float()
+            key = key.float()
+
+        attention_scores = torch.matmul(query, key.transpose(-1, -2)) * self.scale
+
+        if attention_mask is not None:
+            attention_scores = attention_scores + attention_mask
+
+        attention_probs = F.softmax(attention_scores, dim=-1)
+
+        if self.upcast_attention:
+            attention_probs = attention_probs.to(value.dtype)
+
+        hidden_states = torch.matmul(attention_probs, value)
+        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.heads * head_dim)
+
+        # Linear projection
+        for layer in self.to_out:
+            hidden_states = layer(hidden_states)
+
+        return hidden_states
+
+
+# Feed-forward layer
+class FeedForward(nn.Module):
+    """
+    A feed-forward layer.
+
+    Parameters:
+        dim (`int`): The number of channels in the input.
+        dim_out (`int`, *optional*): The number of channels in the output. If not given, defaults to `dim`.
+        mult (`int`, *optional*, defaults to 4): The multiplier to use for the hidden dimension.
+        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
+        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
+        final_dropout (`bool` *optional*, defaults to False): Apply a final dropout.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        dim_out: Optional[int] = None,
+        mult: int = 4,
+        dropout: float = 0.0,
+        activation_fn: str = "geglu",
+        final_dropout: bool = False,
+    ):
+        super().__init__()
+        inner_dim = int(dim * mult)
+        dim_out = dim_out if dim_out is not None else dim
+
+        if activation_fn == "gelu":
+            act_fn = GELU(dim, inner_dim, bias=True)
+        elif activation_fn == "gelu-approximate":
+            act_fn = GELU(dim, inner_dim, approximate="tanh", bias=True)
+        elif activation_fn == "geglu":
+            act_fn = GEGLU(dim, inner_dim, bias=True)
+        elif activation_fn == "geglu-approximate":
+            act_fn = ApproximateGELU(dim, inner_dim, bias=True)
+        elif activation_fn == "snakebeta":
+            act_fn = SnakeBeta(dim, inner_dim)
+        else:
+            act_fn = GEGLU(dim, inner_dim, bias=True)
+
+        self.net = nn.ModuleList([])
+        # project in
+        self.net.append(act_fn)
+        # project dropout
+        self.net.append(nn.Dropout(dropout))
+        # project out
+        self.net.append(nn.Linear(inner_dim, dim_out, bias=True))
+        # FF as used in Vision Transformer, MLP-Mixer, etc. have a final dropout
+        if final_dropout:
+            self.net.append(nn.Dropout(dropout))
+
+    def forward(self, hidden_states):
+        for module in self.net:
+            hidden_states = module(hidden_states)
+        return hidden_states
+
+
+# BasicTransformerBlock
+@maybe_allow_in_graph
+class BasicTransformerBlock(nn.Module):
+    """
+    A basic Transformer block.
+
+    Parameters:
+        dim (`int`): The number of channels in the input and output.
+        num_attention_heads (`int`): The number of heads to use for multi-head attention.
+        attention_head_dim (`int`): The number of channels in each head.
+        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
+        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
+        only_cross_attention (`bool`, *optional*):
+            Whether to use only cross-attention layers. In this case two cross attention layers are used.
+        double_self_attention (`bool`, *optional*):
+            Whether to use two self-attention layers. In this case no cross attention layers are used.
+        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
+        num_embeds_ada_norm (:
+            obj: `int`, *optional*): The number of diffusion steps used during training. See `Transformer2DModel`.
+        attention_bias (:
+            obj: `bool`, *optional*, defaults to `False`): Configure if the attentions should contain a bias parameter.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
+        dropout=0.0,
+        cross_attention_dim: Optional[int] = None,
+        activation_fn: str = "geglu",
+        num_embeds_ada_norm: Optional[int] = None,
+        attention_bias: bool = False,
+        only_cross_attention: bool = False,
+        double_self_attention: bool = False,
+        upcast_attention: bool = False,
+        norm_elementwise_affine: bool = True,
+        norm_type: str = "layer_norm",
+        final_dropout: bool = False,
+    ):
+        super().__init__()
+        self.only_cross_attention = only_cross_attention
+
+        self.use_ada_layer_norm_zero = (num_embeds_ada_norm is not None) and norm_type == "ada_norm_zero"
+        self.use_ada_layer_norm = (num_embeds_ada_norm is not None) and norm_type == "ada_norm"
+
+        if norm_type in ("ada_norm", "ada_norm_zero") and num_embeds_ada_norm is None:
+            raise ValueError(
+                f"`norm_type` is set to {norm_type}, but `num_embeds_ada_norm` is not defined. Please make sure to"
+                f" define `num_embeds_ada_norm` if setting `norm_type` to {norm_type}."
+            )
+
+        # Define 3 blocks. Each block has its own normalization layer.
+        # 1. Self-Attn
+        if self.use_ada_layer_norm:
+            self.norm1 = AdaLayerNorm(dim, num_embeds_ada_norm)
+        elif self.use_ada_layer_norm_zero:
+            self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
+        else:
+            self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
+
+        self.attn1 = Attention(
+            query_dim=dim,
+            heads=num_attention_heads,
+            dim_head=attention_head_dim,
+            dropout=dropout,
+            bias=attention_bias,
+            cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+            upcast_attention=upcast_attention,
+        )
+
+        # 2. Cross-Attn
+        if cross_attention_dim is not None or double_self_attention:
+            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
+            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
+            # the second cross attention block.
+            self.norm2 = (
+                AdaLayerNorm(dim, num_embeds_ada_norm)
+                if self.use_ada_layer_norm
+                else nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
+            )
+            self.attn2 = Attention(
+                query_dim=dim,
+                cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                upcast_attention=upcast_attention,
+            )
+        else:
+            self.norm2 = None
+            self.attn2 = None
+
+        # 3. Feed-forward
+        self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
+        self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn, final_dropout=final_dropout)
+
+        # let chunk size default to None
+        self._chunk_size = None
+        self._chunk_dim = 0
+
+    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int):
+        # Sets chunk feed-forward
+        self._chunk_size = chunk_size
+        self._chunk_dim = dim
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        timestep: Optional[torch.LongTensor] = None,
+        cross_attention_kwargs: Optional[dict] = None,
+        class_labels: Optional[torch.LongTensor] = None,
+    ):
+        # Notice that normalization is always applied before the real computation in the following blocks.
+        # 1. Self-Attention
+        if self.use_ada_layer_norm:
+            norm_hidden_states = self.norm1(hidden_states, timestep)
+        elif self.use_ada_layer_norm_zero:
+            norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(
+                hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
+            )
+        else:
+            norm_hidden_states = self.norm1(hidden_states)
+
+        cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}
+
+        attn_output = self.attn1(
+            norm_hidden_states,
+            encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
+            attention_mask=encoder_attention_mask if self.only_cross_attention else attention_mask,
+            **cross_attention_kwargs,
+        )
+        if self.use_ada_layer_norm_zero:
+            attn_output = gate_msa.unsqueeze(1) * attn_output
+        hidden_states = attn_output + hidden_states
+
+        # 2. Cross-Attention
+        if self.attn2 is not None:
+            norm_hidden_states = (
+                self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
+            )
+
+            attn_output = self.attn2(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                **cross_attention_kwargs,
+            )
+            hidden_states = attn_output + hidden_states
+
+        # 3. Feed-forward
+        norm_hidden_states = self.norm3(hidden_states)
+
+        if self.use_ada_layer_norm_zero:
+            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+
+        if self._chunk_size is not None:
+            # "feed_forward_chunk_size" can be used to save memory
+            if norm_hidden_states.shape[self._chunk_dim] % self._chunk_size != 0:
+                raise ValueError(
+                    f"`hidden_states` dimension to be chunked: {norm_hidden_states.shape[self._chunk_dim]} has to be divisible by chunk size: {self._chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
+                )
+
+            num_chunks = norm_hidden_states.shape[self._chunk_dim] // self._chunk_size
+            ff_output = torch.cat(
+                [self.ff(hid_slice) for hid_slice in norm_hidden_states.chunk(num_chunks, dim=self._chunk_dim)],
+                dim=self._chunk_dim,
+            )
+        else:
+            ff_output = self.ff(norm_hidden_states)
+
+        if self.use_ada_layer_norm_zero:
+            ff_output = gate_mlp.unsqueeze(1) * ff_output
+
+        hidden_states = ff_output + hidden_states
+
+        return hidden_states
+
+
+# ============================================================================
 # S3Gen Components
 # ============================================================================
 
@@ -1649,8 +2111,7 @@ class CausalResnetBlock1D(nn.Module):
         return output
 
 
-# Minimal BasicTransformerBlock and ConditionalDecoder imports from dependencies
-# We'll use a simplified version for HuggingFace
+# ConditionalDecoder implementation for S3Gen
 
 
 class ConditionalDecoder(nn.Module):
