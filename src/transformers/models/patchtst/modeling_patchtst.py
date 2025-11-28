@@ -24,6 +24,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -573,7 +574,15 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
                 init.normal_(module.cls_token, std=0.02)
                 num_patches += 1
             # initialize positional encoding
-            init.copy_(module.position_enc, module._init_pe(self.config, num_patches))
+            position_enc = module._init_pe(self.config, num_patches)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(module.position_enc, modifier_rank=None):
+                    if module.position_enc.numel() > 0:
+                        init.copy_(module.position_enc, position_enc)
+            else:
+                init.copy_(module.position_enc, position_enc)
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
