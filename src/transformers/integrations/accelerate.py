@@ -502,7 +502,7 @@ def accelerate_disk_offload(
             weight_map = {k: os.path.join(folder, v) for k, v in sharded_metadata["weight_map"].items()}
 
         # Update the weight names according to the `weight_mapping`
-        weight_renaming_map = {rename_source_key(k, renamings, []): k for k in weight_map}
+        weight_renaming_map = {rename_source_key(k, renamings, [])[0]: k for k in weight_map}
 
         # Prepare the index using existing safetensors files
         disk_offload_index = {
