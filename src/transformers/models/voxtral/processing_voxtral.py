@@ -64,13 +64,13 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
 class VoxtralProcessor(ProcessorMixin):
     r"""
     Constructs a Voxtral processor which wraps [`WhisperFeatureExtractor`] and
-    [`MistralCommonTokenizer`] into a single processor that inherits both the audio feature extraction and
+    [`MistralCommonBackend`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities.
 
     Args:
         feature_extractor ([`WhisperFeatureExtractor`]):
             The feature extractor is a required input.
-        tokenizer ([`MistralCommonTokenizer`]):
+        tokenizer ([`MistralCommonBackend`]):
             The tokenizer is a required input.
     """
 
@@ -107,8 +107,8 @@ class VoxtralProcessor(ProcessorMixin):
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
-        This method applies the model's chat completion template given a conversation. It relies on MistralCommonTokenizer's
-        [`~MistralCommonTokenizer.apply_chat_template`] to prepare input ids to the model and on WhisperFeatureExtractor's
+        This method applies the model's chat completion template given a conversation. It relies on MistralCommonBackend's
+        [`~MistralCommonBackend.apply_chat_template`] to prepare input ids to the model and on WhisperFeatureExtractor's
         [`~WhisperFeatureExtractor.__call__`] to prepare input features to the model.
 
         Note that audio is padded to the nearest 30-second multiple prior to mel feature extraction.
@@ -233,7 +233,7 @@ class VoxtralProcessor(ProcessorMixin):
     ):
         r"""
         Method to prepare text to be fed as input to the model. This method forwards the `text`
-        arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.__call__`] to encode
+        arguments to MistralCommonBackend's [`~MistralCommonBackend.__call__`] to encode
         the text. Please refer to the docstring of the above methods for more information.
         This methods does not support audio. To prepare the audio, please use:
         1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
@@ -282,7 +282,7 @@ class VoxtralProcessor(ProcessorMixin):
     ):
         """
         This method applies the model's transcription request template given a language and audio.
-        It relies on MistralCommonTokenizer and WhisperFeatureExtractor to prepare input ids and input features to the model.
+        It relies on MistralCommonBackend and WhisperFeatureExtractor to prepare input ids and input features to the model.
 
         ```python
         from transformers import VoxtralProcessor
