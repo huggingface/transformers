@@ -127,6 +127,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["jamba"] = mapping["qwen2_moe"].copy()
     mapping["lfm2_moe"] = mapping["mixtral"].copy()
     mapping["long_cat_flash"] = mapping["qwen2_moe"].copy()
+    mapping["olmoe"] = mapping["qwen2_moe"].copy()  # Add this line
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
