@@ -1904,7 +1904,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     config_tokenizer_class = TOKENIZER_MAPPING_NAMES.get(model_type)
 
         if config_tokenizer_class is not None:
-            if config_tokenizer_class == "PreTrainedTokenizerFast" and cls.__name__== "TokenizersBackend":
+            if config_tokenizer_class == "PreTrainedTokenizerFast" and cls.__name__ == "TokenizersBackend":
                 # those two class are the same since we created an alias but the naming didn't change
                 pass
             elif cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
