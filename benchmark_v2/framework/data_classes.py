@@ -9,12 +9,12 @@ from .hardware_metrics import GPURawMetrics, HardwareInfo
 
 def compute_basic_statistics(measurements: list[float]) -> dict[str, float]:
     return {
-        "avg": np.mean(measurements),
-        "std": np.std(measurements),
-        "min": np.min(measurements),
-        "med": np.median(measurements),
-        "max": np.max(measurements),
-        "p95": np.percentile(measurements, 95),
+        "avg": np.mean(measurements) if measurements else 0,
+        "std": np.std(measurements) if measurements else 0,
+        "min": np.min(measurements) if measurements else 0,
+        "med": np.median(measurements) if measurements else 0,
+        "max": np.max(measurements) if measurements else 0,
+        "p95": np.percentile(measurements, 95) if measurements else 0,
     }
 
 
