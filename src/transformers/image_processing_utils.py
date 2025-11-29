@@ -41,6 +41,12 @@ class BaseImageProcessor(ImageProcessingMixin):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        if not self.is_fast:
+            logger.warning_once(
+                f"Using a slow image processor (`{self.__class__.__name__}`). "
+                "As we are transitioning to fast (PyTorch-native) processors, consider using `AutoImageProcessor` "
+                "or the model-specific fast image processor class to instantiate a fast image processor."
+            )
 
     @property
     def is_fast(self) -> bool:
