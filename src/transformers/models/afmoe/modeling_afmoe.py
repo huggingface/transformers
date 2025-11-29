@@ -571,7 +571,7 @@ class AfmoeModel(AfmoePreTrainedModel):
     @check_model_inputs()
     def forward(
         self,
-        input_ids: torch.LongTensor,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
