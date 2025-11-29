@@ -223,7 +223,11 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    sinks = module.sinks
+    if type(sinks).__name__ == "DTensor":
+        sinks = sinks.to_local()
+
+    sinks = sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)
 
     # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
@@ -327,7 +331,7 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
         hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
+            hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
