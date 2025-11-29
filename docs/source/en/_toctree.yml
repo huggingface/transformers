@@ -384,6 +384,8 @@
     title: Main Classes
   - sections:
     - sections:
+      - local: model_doc/afmoe
+        title: AFMoE
       - local: model_doc/albert
         title: ALBERT
       - local: model_doc/apertus
