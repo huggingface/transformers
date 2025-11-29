@@ -37,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_afmoe import AfmoeConfig
 
 
@@ -585,6 +586,7 @@ class AfmoeModel(AfmoePreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
+    @check_model_inputs()
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -702,6 +704,8 @@ class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

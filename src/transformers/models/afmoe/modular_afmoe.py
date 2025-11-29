@@ -31,7 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..llama.modeling_llama import LlamaAttention, LlamaMLP, LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
 from .configuration_afmoe import AfmoeConfig
-
+from ...utils.generic import check_model_inputs, can_return_tuple
 
 logger = logging.get_logger(__name__)
 
@@ -468,6 +468,7 @@ class AfmoeModel(AfmoePreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
+    @check_model_inputs()
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -585,6 +586,8 @@ class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
