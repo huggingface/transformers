@@ -25,18 +25,9 @@ from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
-from ..models.auto.feature_extraction_auto import (
-    FEATURE_EXTRACTOR_MAPPING,
-    AutoFeatureExtractor,
-)
-from ..models.auto.image_processing_auto import (
-    IMAGE_PROCESSOR_MAPPING,
-    AutoImageProcessor,
-)
-from ..models.auto.modeling_auto import (
-    AutoModelForDepthEstimation,
-    AutoModelForImageToImage,
-)
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..processing_utils import ProcessorMixin
@@ -68,11 +59,7 @@ from .base import (
     get_default_model_and_revision,
     load_model,
 )
-from .deprecated import (
-    SummarizationPipeline,
-    Text2TextGenerationPipeline,
-    TranslationPipeline,
-)
+from .deprecated import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -86,14 +73,8 @@ from .image_to_text import ImageToTextPipeline
 from .keypoint_matching import KeypointMatchingPipeline
 from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
-from .question_answering import (
-    QuestionAnsweringArgumentHandler,
-    QuestionAnsweringPipeline,
-)
-from .table_question_answering import (
-    TableQuestionAnsweringArgumentHandler,
-    TableQuestionAnsweringPipeline,
-)
+from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
+from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
 from .text_to_audio import TextToAudioPipeline
@@ -106,10 +87,7 @@ from .token_classification import (
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
-from .zero_shot_classification import (
-    ZeroShotClassificationArgumentHandler,
-    ZeroShotClassificationPipeline,
-)
+from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
@@ -170,13 +148,13 @@ SUPPORTED_TASKS = {
     },
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
-        "pt": ((AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else ()),
+        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": ("facebook/wav2vec2-base-960h", "22aad52")},
         "type": "multimodal",
     },
     "text-to-audio": {
         "impl": TextToAudioPipeline,
-        "pt": ((AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else ()),
+        "pt": (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else (),
         "default": {"model": ("suno/bark-small", "1dbd7a1")},
         "type": "text",
     },
@@ -189,12 +167,7 @@ SUPPORTED_TASKS = {
     "text-classification": {
         "impl": TextClassificationPipeline,
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
-        "default": {
-            "model": (
-                "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
-                "714eb0f",
-            )
-        },
+        "default": {"model": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "714eb0f")},
         "type": "text",
     },
     "token-classification": {
@@ -273,7 +246,7 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
-        "pt": ((AutoModelForZeroShotImageClassification,) if is_torch_available() else ()),
+        "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {"model": ("openai/clip-vit-base-patch32", "3d74acf")},
         "type": "multimodal",
     },
@@ -297,7 +270,7 @@ SUPPORTED_TASKS = {
     },
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
-        "pt": ((AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else ()),
+        "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": ("facebook/detr-resnet-50-panoptic", "d53b52a")},
         "type": "multimodal",
     },
@@ -721,7 +694,7 @@ def pipeline(
         "token": token,
         "trust_remote_code": trust_remote_code,
         "_commit_hash": commit_hash,
-        "local_files_only": local_files_only,
+        "local_files_only": local_files_only
     }
 
     if task is None and model is None:
@@ -773,11 +746,7 @@ def pipeline(
     adapter_path = None
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(
-            config,
-            _from_pipeline=task,
-            code_revision=code_revision,
-            **hub_kwargs,
-            **model_kwargs,
+            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
         hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
@@ -799,11 +768,7 @@ def pipeline(
                     model = adapter_config["base_model_name_or_path"]
 
         config = AutoConfig.from_pretrained(
-            model,
-            _from_pipeline=task,
-            code_revision=code_revision,
-            **hub_kwargs,
-            **model_kwargs,
+            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
         hub_kwargs["_commit_hash"] = config._commit_hash
 
@@ -951,11 +916,7 @@ def pipeline(
                     tokenizer_kwargs.pop("torch_dtype", None), tokenizer_kwargs.pop("dtype", None)
 
                 tokenizer = AutoTokenizer.from_pretrained(
-                    tokenizer_identifier,
-                    use_fast=use_fast,
-                    _from_pipeline=task,
-                    **hub_kwargs,
-                    **tokenizer_kwargs,
+                    tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
                 )
         except Exception as e:
             if load_tokenizer:
@@ -1029,8 +990,7 @@ def pipeline(
                             decoder = BeamSearchDecoderCTC.load_from_dir(model_name)
                         else:
                             language_model_glob = os.path.join(
-                                BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY,
-                                "*",
+                                BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
                             )
                             alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
                             allow_patterns = [language_model_glob, alphabet_filename]
