@@ -294,11 +294,13 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
-    model = None
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
 
     @classmethod
     def get_model(cls):
-        if cls.model is None:
+        if not hasattr(cls, "model") or cls.model is None:
             cls.model = Glm4vMoeForConditionalGeneration.from_pretrained(
                 "zai-org/GLM-4.5V", dtype="auto", device_map="auto"
             )
