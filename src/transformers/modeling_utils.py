@@ -2875,7 +2875,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # When using PEFT via `get_peft_model`, `_hf_peft_config_loaded` is False.
             # We check if input embeddings are frozen. If they are, we must enable input grads
             # for gradient checkpointing to work.
-            input_embeddings = self.get_input_embeddings()
+            try:
+                input_embeddings = self.get_input_embeddings()
+            except (NotImplementedError, AttributeError):
+                input_embeddings = None
             if input_embeddings is not None:
                 for param in input_embeddings.parameters():
                     if not param.requires_grad:
