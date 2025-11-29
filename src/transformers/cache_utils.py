@@ -339,10 +339,6 @@ class StaticLayer(CacheLayerMixin):
         if k_out.shape[0] != batch_size:
             k_out = k_out[:batch_size]
             v_out = v_out[:batch_size]
-        if key_states.dtype != k_out.dtype:
-            key_states = key_states.to(k_out.dtype)
-        if value_states.dtype != v_out.dtype:
-            value_states = value_states.to(v_out.dtype)
         # Update the cache
         try:
             k_out.index_copy_(2, cache_position, key_states)
