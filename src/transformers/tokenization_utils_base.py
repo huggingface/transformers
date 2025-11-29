@@ -1827,8 +1827,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
-            # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
-            config_tokenizer_class = init_kwargs.get("tokenizer_class")
+            # used in the past to check if the tokenizer class matches the class in the repo
             init_kwargs.pop("tokenizer_class", None)
             if not has_tokenizer_file:
                 init_kwargs.get("tokenizer_file", None)
@@ -1836,7 +1835,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
-            config_tokenizer_class = None
             init_kwargs = init_configuration
 
         # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
@@ -1863,54 +1861,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 # For backward compatibility with odl format.
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
-
-        if config_tokenizer_class is None:
-            # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
-            #       If not, it raises a warning, but otherwise continues. Since we mostly load tokenizers with
-            #       AutoTokenizer these days, it seems like a lot of work (and a source of bugs) for little gain.
-            #       Maybe we can just remove this entirely?
-            from .models.auto.configuration_auto import AutoConfig  # tests_ignore
-
-            # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
-            try:
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    token=token,
-                    cache_dir=cache_dir,
-                    local_files_only=local_files_only,
-                    trust_remote_code=trust_remote_code,
-                    _commit_hash=_commit_hash,
-                )
-                config_tokenizer_class = config.tokenizer_class
-            except (OSError, ValueError, KeyError):
-                # skip if an error occurred.
-                config = None
-            if config_tokenizer_class is None:
-                # Third attempt. If we have not yet found the original type of the tokenizer,
-                # we are loading we see if we can infer it from the type of the configuration file
-                from .models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES  # tests_ignore
-
-                if hasattr(config, "model_type"):
-                    model_type = config.model_type
-                else:
-                    # Fallback: use pattern matching on the string.
-                    model_type = None
-                    for pattern in TOKENIZER_MAPPING_NAMES:
-                        if pattern in str(pretrained_model_name_or_path):
-                            model_type = pattern
-                            break
-
-                if model_type is not None:
-                    config_tokenizer_class = TOKENIZER_MAPPING_NAMES.get(model_type)
-
-        if config_tokenizer_class is not None:
-            if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
-                logger.warning(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this"
-                    " function is called from. It may result in unexpected tokenization. \nThe tokenizer class you"
-                    f" load from this checkpoint is '{config_tokenizer_class}'. \nThe class this function is called"
-                    f" from is '{cls.__name__}'."
-                )
 
         # Preserve extra_special_tokens from tokenizer_config.json before updating with kwargs
         # extra_special_tokens should be a list (user-defined extra tokens)
