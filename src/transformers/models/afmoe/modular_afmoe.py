@@ -97,9 +97,17 @@ class AfmoeRotaryEmbedding(LlamaRotaryEmbedding):
 class AfmoeRMSNorm(LlamaRMSNorm):
     """
     AFMoE shares the same RMSNorm definition as Llama.
+
+    Overrides forward to ensure output dtype matches input dtype even when
+    weights are kept in fp32 via _keep_in_fp32_modules.
     """
 
-    pass
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 class AfmoeMLP(LlamaMLP):
