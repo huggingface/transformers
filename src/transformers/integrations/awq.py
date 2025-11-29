@@ -190,9 +190,18 @@ def replace_with_awq_linear(
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         if quantization_config.version == AWQLinearVersion.GEMM:
-            from awq.modules.linear.gemm import WQLinear_GEMM
+try:
+                                    from awq.modules.linear.gemm import WQLinear_GEMM
 
             target_cls = WQLinear_GEMM
+                    except (ImportError, ModuleNotFoundError, AttributeError) as e:
+                        raise ImportError(
+                            
+                    f"Failed to import AWQ modules required for version "
+                    f"{quantization_config.version}. Error: {str(e)}. "
+                    f"Please ensure 'autoawq' is properly installed and compatible. "
+                    f"See https://github.com/mit-han-lab/llm-awq for installation instructions."
+                ) from e
         elif quantization_config.version == AWQLinearVersion.GEMV:
             from awq.modules.linear.gemv import WQLinear_GEMV
 
