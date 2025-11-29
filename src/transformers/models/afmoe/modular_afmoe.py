@@ -14,9 +14,8 @@
 # limitations under the License.
 """PyTorch AFMoE model."""
 
-import copy
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
@@ -25,103 +24,36 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ..llama.modeling_llama import LlamaAttention, LlamaMLP, LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
+from ...utils.generic import check_model_inputs
+from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaForCausalLM,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_afmoe import AfmoeConfig
-from ...utils.generic import check_model_inputs, can_return_tuple
+
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "AfmoeConfig"
-
-
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids: Optional[torch.Tensor] = None, unsqueeze_dim: int = 1):
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
 
 class AfmoeRotaryEmbedding(LlamaRotaryEmbedding):
-    """
-    AFMoE reuses the standard Llama rotary embedding implementation.
-    """
-
     pass
 
 
-class AfmoeRMSNorm(LlamaRMSNorm):
-    """
-    AFMoE shares the same RMSNorm definition as Llama.
-
-    Overrides forward to ensure output dtype matches input dtype even when
-    weights are kept in fp32 via _keep_in_fp32_modules.
-    """
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+class AfmoeRMSNorm(GptOssRMSNorm):
+    pass
 
 
-class AfmoeMLP(LlamaMLP):
-    """
-    Wrapper around `LlamaMLP` that allows overriding the intermediate size per layer.
-    """
-
-    def __init__(self, config, intermediate_size: Optional[int] = None):
-        if intermediate_size is not None:
-            config = copy.copy(config)
-            config.intermediate_size = intermediate_size
-        if not hasattr(config, "mlp_bias"):
-            config.mlp_bias = False
-        super().__init__(config)
+class AfmoeMLP(Qwen2MoeMLP):
+    pass
 
 
 class AfmoeTokenChoiceRouter(nn.Module):
@@ -136,7 +68,6 @@ class AfmoeTokenChoiceRouter(nn.Module):
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
-        self.route_norm = config.route_norm
         self.route_scale = config.route_scale
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
 
@@ -148,12 +79,8 @@ class AfmoeTokenChoiceRouter(nn.Module):
 
         _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
         top_scores = scores.gather(dim=1, index=selected_experts)
-
-        # Normalize routing weights (default: True for sigmoid scoring)
-        if self.route_norm:
-            denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
-            top_scores = top_scores / denominator
-
+        denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
+        top_scores = top_scores / denominator
         top_scores = top_scores * self.route_scale
         return top_scores, selected_experts
 
@@ -232,10 +159,7 @@ class AfmoeMoE(nn.Module):
         super().__init__()
         self.config = config
         self.router = AfmoeTokenChoiceRouter(config)
-
-        self.shared_experts = None
-        if config.num_shared_experts > 0:
-            self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
+        self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
         self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
@@ -249,11 +173,7 @@ class AfmoeMoE(nn.Module):
         selected_experts = selected_experts.view(batch_size, seq_len, self.config.num_experts_per_tok)
 
         # Process through shared experts
-        if self.shared_experts is not None:
-            shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
-        else:
-            shared_output = hidden_states.new_zeros(batch_size, seq_len, hidden_dim)
-
+        shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
         routed_output = self.experts(hidden_states, selected_experts, top_scores)
         return shared_output + routed_output
 
@@ -398,16 +318,20 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class AfmoePreTrainedModel(LlamaPreTrainedModel):
+class AfmoePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = AfmoeConfig
+    config: AfmoeConfig
     base_model_prefix = "model"
     _no_split_modules = ["AfmoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _can_record_outputs = {
+        "hidden_states": AfmoeDecoderLayer,
+        "attentions": AfmoeAttention,
+    }
     _keep_in_fp32_modules = [
         "input_layernorm",
         "post_attention_layernorm",
@@ -416,6 +340,7 @@ class AfmoePreTrainedModel(LlamaPreTrainedModel):
         "q_norm",
         "k_norm",
         "norm",
+        "expert_bias",
     ]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
@@ -461,23 +386,17 @@ class AfmoeModel(AfmoePreTrainedModel):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
     @auto_docstring
     @check_model_inputs()
     def forward(
         self,
         input_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -540,118 +459,13 @@ class AfmoeModel(AfmoePreTrainedModel):
         )
 
 
-class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
-    """
-    AFMoE Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Args:
-        config ([`AfmoeConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-    """
-
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
+class AfmoeForCausalLM(LlamaForCausalLM, AfmoePreTrainedModel, GenerationMixin):
     def __init__(self, config):
-        super().__init__(config)
+        AfmoePreTrainedModel.__init__(self, config)
         self.model = AfmoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, MoeCausalLMOutputWithPast]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AfmoeForCausalLM
-
-        >>> model = AfmoeForCausalLM.from_pretrained("arcee-ai/Trinity-Mini")
-        >>> tokenizer = AutoTokenizer.from_pretrained("arcee-ai/Trinity-Mini")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```
-        """
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
 
 
 __all__ = [

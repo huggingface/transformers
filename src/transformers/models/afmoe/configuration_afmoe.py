@@ -87,8 +87,6 @@ class AfmoeConfig(PreTrainedConfig):
             Number of experts to route each token to. This is the top-k value for the token-choice routing.
         num_shared_experts (`int`, *optional*, defaults to 2):
             Number of shared experts that are always activated for all tokens.
-        route_norm (`bool`, *optional*, defaults to `True`):
-            Whether to normalize routing weights.
         route_scale (`float`, *optional*, defaults to 1.0):
             Scaling factor applied to routing weights.
         global_attn_every_n_layers (`int`, *optional*, defaults to 4):
