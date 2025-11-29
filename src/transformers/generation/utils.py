@@ -1854,6 +1854,39 @@ class GenerationMixin(ContinuousMixin):
 
         # Finally, apply any passed kwargs
         model_kwargs = generation_config.update(**kwargs)
+
+        # Safety: if the model is sharded across multiple devices (hf_device_map/device_map) and we are
+        # doing sampling, enable `remove_invalid_values` by default to avoid NaN/Inf logits causing CUDA
+        # asserts during multinomial sampling. Users can still override this by passing the flag explicitly.
+        try:
+            is_sharded_map = False
+            hf_map = getattr(self, "hf_device_map", None)
+            if hf_map is not None and isinstance(hf_map, dict) and len(set(hf_map.values())) > 1:
+                # consider sharded if more than one device (excluding "cpu"/"disk")
+                devices = set(hf_map.values())
+                gpu_devices = {d for d in devices if d not in {"cpu", "disk"}}
+                if len(gpu_devices) > 1:
+                    is_sharded_map = True
+
+            # also accept legacy `device_map` attribute or accelerate hooks
+            device_map_attr = getattr(self, "device_map", None)
+            if not is_sharded_map and device_map_attr is not None:
+                # device_map can be a dict mapping module->device or other structures; if it's a dict and maps
+                # to multiple cuda devices, consider it sharded
+                if isinstance(device_map_attr, dict) and len(set(device_map_attr.values())) > 1:
+                    devices = set(device_map_attr.values())
+                    gpu_devices = {d for d in devices if d not in {"cpu", "disk"}}
+                    if len(gpu_devices) > 1:
+                        is_sharded_map = True
+
+            if is_sharded_map and generation_config.do_sample and generation_config.remove_invalid_values is False:
+                generation_config.remove_invalid_values = True
+                logger.info(
+                    "Enabling `remove_invalid_values=True` for sharded sampling to avoid NaN/Inf logits during sampling."
+                )
+        except Exception:
+            # never fail generation config preparation due to best-effort safety check
+            pass
         # And keep in model_kwargs variable output controls
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
