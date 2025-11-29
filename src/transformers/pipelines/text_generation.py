@@ -394,6 +394,11 @@ class TextGenerationPipeline(Pipeline):
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
+        # If safety_config is provided, attach tokenizer to model for safety processor creation
+        # GenerationMixin._create_safety_processor() expects self.tokenizer on the model
+        if "safety_config" in generate_kwargs and hasattr(self, "tokenizer") and self.tokenizer is not None:
+            self.model.tokenizer = self.tokenizer
+
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
 
         if isinstance(output, ModelOutput):
