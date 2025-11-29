@@ -2240,7 +2240,7 @@ class GenerationMixin(ContinuousMixin):
         logger.warning_once(
             f"{generation_mode.name.replace('_', ' ').title()} was moved to a `custom_generate` repo: https://hf.co/{repo}. "
             f"To prevent loss of backward compatibility, add `custom_generate='{repo}'` "
-            "to your `generate` call before v4.62.0."
+            "to your `generate` call before v5.2.0."
         )
         if not trust_remote_code:
             raise ValueError(
@@ -2499,9 +2499,11 @@ class GenerationMixin(ContinuousMixin):
             generation_config, use_model_defaults, **kwargs
         )
         generation_mode = generation_config.get_generation_mode(assistant_model)
+        deprecated_mode_repo = self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate)
+
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
-        else:
+        elif deprecated_mode_repo is None:
             # type() required to access the unbound class-level method
             decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
 
@@ -2511,8 +2513,8 @@ class GenerationMixin(ContinuousMixin):
         # Deprecation-related step: set Hub repo for deprecated strategies.
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
-        # TODO joao, manuel: remove this in v4.62.0
-        if deprecated_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
+        # TODO joao, manuel: remove this in v5.2.0
+        if deprecated_mode_repo is not None:
             return GenerationMixin.generate(
                 self,
                 inputs=inputs,
