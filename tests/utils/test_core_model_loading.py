@@ -27,7 +27,7 @@ from transformers.core_model_loading import (
     WeightRenaming,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
-    repl,
+    rename_source_key,
     revert_weight_conversion,
 )
 from transformers.utils.import_utils import is_triton_available
@@ -138,23 +138,24 @@ class TestWeightGlobMatching(unittest.TestCase):
             WeightRenaming("block_sparse_moe.experts.*.w2.weight", "mlp.experts.down_proj"),
             WeightRenaming("model.language_model.*", "language_model"),
         ]
-        rename_alt, _, rename_by_group = build_glob_alternation(renamings)
 
-        def rename(original_key: str) -> str:
-            return rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
-
-        self.assertEqual(rename("foo.block_sparse_moe.experts.3.w1.weight"), "foo.mlp.experts.gate_up_proj")
-        self.assertEqual(rename("foo.block_sparse_moe.experts.3.w2.weight"), "foo.mlp.experts.down_proj")
-        self.assertEqual(rename("model.language_model.lm_head.weight"), "language_model")
+        self.assertEqual(
+            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings, [])[0],
+            "foo.mlp.experts.gate_up_proj",
+        )
+        self.assertEqual(
+            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings, [])[0],
+            "foo.mlp.experts.down_proj",
+        )
+        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings, [])[0], "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
             WeightRenaming("block_sparse_moe.experts.*.w1.weight", "*.mlp.experts.gate_up_proj"),
         ]
-        rename_alt, _, rename_by_group = build_glob_alternation(renamings)
 
         key = "unrelated.key"
-        renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), key).replace("\\", "")
+        renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
 
 
