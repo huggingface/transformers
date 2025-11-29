@@ -78,7 +78,10 @@ class AfmoeConfig(PreTrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_parameters (`Union`, *optional*): <fill_docstring>
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         num_experts (`int`, *optional*, defaults to 64):
             Number of routed experts in MoE layers.
         num_experts_per_tok (`int`, *optional*, defaults to 6):
