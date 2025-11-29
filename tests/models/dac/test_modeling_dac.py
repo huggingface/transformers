@@ -308,12 +308,17 @@ Code for reproducing expected outputs can be found here:
 - test_integration: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-test_dac-py
 - test_batch: https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-test_dac_batch-py
 
-See https://github.com/huggingface/transformers/pull/39313 for reason behind large tolerance between for encoder
-and decoder outputs (1e-3). In summary, original model uses weight normalization, while Transformers does not. This
-leads to accumulating error. However, this does not affect the quantizer codes, thanks to discretization being
-robust to precision errors. Moreover, codec error is similar between Transformers and original.
+Higher tolerances for encoder and decoder outputs are expected due to:
+1. Transformer model does not use weight norm for speed-up. And during model conversion, weight norm was removed on
+CPU. This leads to slightly different weight (1e-8) and the error accumulates. Removing weight norm on GPU would produce
+equivalent weights.
+2. Original version uses Snake1D activation with JIT: https://github.com/descriptinc/descript-audio-codec/blob/c7cfc5d2647e26471dc394f95846a0830e7bec34/dac/nn/layers.py#L18
+Transformer version does not use JIT, so outputs are slightly different.
 
-Moreover, here is a script to debug outputs and weights layer-by-layer:
+Nevertheless, quantizer codes are less affected, thanks to discretization being robust to precision errors and it does
+not use Snake1D activations. Moreover, codec error is similar between Transformers and original.
+
+Here is a script to debug outputs and weights layer-by-layer:
 https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_layer_by_layer_debugging-py
 """
 
