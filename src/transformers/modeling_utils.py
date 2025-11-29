@@ -2871,6 +2871,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
+        else:
+            # When using PEFT via `get_peft_model`, `_hf_peft_config_loaded` is False.
+            # We check if input embeddings are frozen. If they are, we must enable input grads
+            # for gradient checkpointing to work.
+            input_embeddings = self.get_input_embeddings()
+            if input_embeddings is not None:
+                for param in input_embeddings.parameters():
+                    if not param.requires_grad:
+                        self.enable_input_require_grads()
+                        break
+
     def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
         is_gradient_checkpointing_set = False
 
