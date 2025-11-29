@@ -13,9 +13,11 @@
 # limitations under the License.
 
 import os
+import warnings
 
 import pytest
 
+from transformers import AutoConfig
 from transformers.dynamic_module_utils import get_imports
 
 
@@ -127,3 +129,24 @@ def test_import_parsing(tmp_path, case):
 
     parsed_imports = get_imports(tmp_file_path)
     assert parsed_imports == ["os"]
+
+
+def test_local_path_with_and_without_trailing_slash(tmp_path):
+    model_dir = tmp_path / "my_model"
+    model_dir.mkdir()
+    config_path = model_dir / "config.json"
+    config_path.write_text('{"model_type": "bert"}')
+    path_no_slash = str(model_dir)
+    path_with_slash = str(model_dir) + os.sep
+
+    with warnings.catch_warnings(record=True) as w1:
+        warnings.simplefilter("always")
+        cfg1 = AutoConfig.from_pretrained(path_no_slash)
+
+    with warnings.catch_warnings(record=True) as w2:
+        warnings.simplefilter("always")
+        cfg2 = AutoConfig.from_pretrained(path_with_slash)
+
+    assert isinstance(cfg1, type(cfg2))
+    assert len(w1) == 0
+    assert len(w2) == 0
