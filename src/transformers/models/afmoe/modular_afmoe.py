@@ -286,7 +286,7 @@ class AfmoeAttention(LlamaAttention):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -311,7 +311,7 @@ class AfmoeAttention(LlamaAttention):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        output, _ = attention_interface(
+        output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
@@ -325,7 +325,8 @@ class AfmoeAttention(LlamaAttention):
 
         output = output.view(*input_shape, -1).contiguous()
         output = output * torch.sigmoid(gate_states)
-        return self.o_proj(output)
+        attn_output = self.o_proj(output)
+        return attn_output, attn_weights
 
 
 class AfmoeDecoderLayer(GradientCheckpointingLayer):
@@ -374,7 +375,7 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
 
         # Self Attention with dual normalization
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
