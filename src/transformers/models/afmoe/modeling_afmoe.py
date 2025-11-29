@@ -541,6 +541,10 @@ class AfmoePreTrainedModel(PreTrainedModel):
                 nn.init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, AfmoeRMSNorm):
             nn.init.ones_(module.weight)
+        elif isinstance(module, AfmoeTokenChoiceRouter):
+            nn.init.zeros_(module.gate.weight)
+        elif isinstance(module, AfmoeMoE):
+            nn.init.zeros_(module.expert_bias)
 
 
 @auto_docstring
