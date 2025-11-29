@@ -1,20 +1,16 @@
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Union, Any
 from torch import nn
 
-from ..auto import AutoModel, AutoModelForMaskedLM
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
-from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
-from ..modernvbert import ModernVBertProcessor, ModernVBertConfig
+from ..modernvbert import ModernVBertProcessor, ModernVBertConfig, ModernVBertModel
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 
 if is_torch_available():
     import torch
@@ -28,7 +24,7 @@ class ColModernVBertConfig(PreTrainedConfig):
     from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
 
     Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
-    ColModernVBert-v1.0 model, e.g. TODO: [vidore/ColModernVBert-v1.0-hf](https://huggingface.co/vidore/ColModernVBert-v1.0-hf).
+    ColModernVBert model, e.g. TODO: [ModernVBERT/colmodernvbert-merged](https://huggingface.co/vidore/ColModernVBert-v1.0-hf).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -60,20 +56,13 @@ class ColModernVBertConfig(PreTrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if vlm_config is None:
             vlm_config = self.sub_configs["vlm_config"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
             )
         elif isinstance(vlm_config, dict):
-            vlm_config = deepcopy(vlm_config)
-            if "model_type" not in vlm_config:
-                raise KeyError(
-                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
-                )
-            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
+            vlm_config = self.sub_configs["vlm_config"](**vlm_config)
         elif not isinstance(vlm_config, PreTrainedConfig):
             raise TypeError(
                 f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
@@ -82,6 +71,11 @@ class ColModernVBertConfig(PreTrainedConfig):
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range
+
+        super().__init__(**kwargs)
+
+    def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
+        return self.vlm_config.get_text_config(*args, **kwargs)
 
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -125,7 +119,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
     ):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer, image_seq_len=image_seq_len, chat_template=chat_template, **kwargs)
         self.visual_prompt_prefix = visual_prompt_prefix or "<|begin_of_text|>User:<image>Describe the image.<end_of_utterance>\nAssistant:"
-        self.query_prefix = query_prefix or "Query: "
+        self.query_prefix = query_prefix or ""
 
     def __call__(
         self,
@@ -195,7 +189,8 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             batch_doc = super().__call__(
                 text=[self.visual_prompt_prefix] * len(images),
                 images=images,
-                **output_kwargs["images_kwargs"],
+                images_kwargs=output_kwargs["images_kwargs"],
+                text_kwargs=output_kwargs["text_kwargs"],
             )
 
             if return_token_type_ids:
@@ -217,12 +212,12 @@ class ColModernVBertProcessor(ModernVBertProcessor):
 
             for query in text:
                 augmented_query = self.query_prefix + query + suffix
-                texts_query.append(augmented_query)
+                texts_query.append(augmented_query) 
 
             batch_query = super().__call__(
                 text=texts_query,
                 return_token_type_ids=False,
-                **output_kwargs["text_kwargs"],
+                text_kwargs=output_kwargs["text_kwargs"],
             )
 
             return batch_query
@@ -234,7 +229,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
 
         Query augmentation buffers are used as reasoning buffers during inference.
         """
-        return self.tokenizer.pad_token
+        return self.end_of_utterance_token
         
     def process_images(
         self,
@@ -378,7 +373,7 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.vlm_config.text_config.initializer_range
+            else self.config.get_text_config().initializer_range
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -435,23 +430,19 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "custom_text_proj": "embedding_proj_layer",
-    }
+    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.config = config
-        self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        self.model = AutoModel.from_config(config.vlm_config)
-        self._tied_weights_keys = [f"model.text_model.{k}" for k in (self.model._tied_weights_keys or [])]
-
-        self.embedding_dim = self.config.embedding_dim
+        self.model = ModernVBertModel(config.vlm_config)
         self.embedding_proj_layer = nn.Linear(
-            self.config.vlm_config.text_config.hidden_size,
-            self.embedding_dim,
+            self.config.get_text_config().hidden_size,
+            self.config.embedding_dim
         )
+
+        self._tied_weights_keys = [f"model.{k}" for k in (self.model._tied_weights_keys or [])]
 
         self.post_init()
 

@@ -68,7 +68,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         self.visual_prompt_prefix = (
             visual_prompt_prefix or "<|begin_of_text|>User:<image>Describe the image.<end_of_utterance>\nAssistant:"
         )
-        self.query_prefix = query_prefix or "Query: "
+        self.query_prefix = query_prefix or ""
 
     def __call__(
         self,
@@ -138,7 +138,8 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             batch_doc = super().__call__(
                 text=[self.visual_prompt_prefix] * len(images),
                 images=images,
-                **output_kwargs["images_kwargs"],
+                images_kwargs=output_kwargs["images_kwargs"],
+                text_kwargs=output_kwargs["text_kwargs"],
             )
 
             if return_token_type_ids:
@@ -165,7 +166,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             batch_query = super().__call__(
                 text=texts_query,
                 return_token_type_ids=False,
-                **output_kwargs["text_kwargs"],
+                text_kwargs=output_kwargs["text_kwargs"],
             )
 
             return batch_query
@@ -177,7 +178,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
 
         Query augmentation buffers are used as reasoning buffers during inference.
         """
-        return self.tokenizer.pad_token
+        return self.end_of_utterance_token
 
     def process_images(
         self,

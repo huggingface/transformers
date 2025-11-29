@@ -14,8 +14,9 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndCr
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ..modernbert import ModernBertConfig, ModernBertForMaskedLM, ModernBertModel
-from ..siglip import SiglipConfig, SiglipVisionConfig, SiglipVisionModel
+from ..modernbert import ModernBertConfig, ModernBertModel
+from ..modernbert.modeling_modernbert import ModernBertPredictionHead
+from ..siglip import SiglipVisionConfig, SiglipVisionModel
 from ..idefics3 import Idefics3ImageProcessor, Idefics3ImageProcessorFast, Idefics3Processor
 
 logger = logging.get_logger(__name__)
@@ -26,7 +27,7 @@ class ModernVBertImageProcessor(Idefics3ImageProcessor):
 class ModernVBertImageProcessorFast(Idefics3ImageProcessorFast):
     pass
 
-DEFAULT_CHAT_TEMPLATE = "<|begin_of_text|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
+DEFAULT_CHAT_TEMPLATE = "{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}{% if add_generation_prompt %}<end_of_utterance>\n{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
 class ModernVBertProcessor(Idefics3Processor):
     image_processor_class = "ModernVBertImageProcessor"
 
@@ -34,116 +35,6 @@ class ModernVBertProcessor(Idefics3Processor):
         if chat_template is None:
             chat_template = DEFAULT_CHAT_TEMPLATE
         return super().apply_chat_template(conversation, chat_template, **kwargs)
-
-class ModernVBertTextConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`ModernBERT`]. It is used to instantiate an ModernBERT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [jhu-clsp/ettin-encoder-150m](https://huggingface.co/jhu-clsp/ettin-encoder-150m) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    """
-
-    model_type = "modernvbert_text"
-
-    def __init__(
-        self,
-        text_model_name="jhu-clsp/ettin-encoder-150m",
-        hidden_size=768,
-        num_hidden_layers=22,
-        intermediate_size=1152,
-        mlp_bias=False,
-        vocab_size=50368,
-        **kwargs,
-    ):
-        super().__init__(
-            text_model_name=text_model_name,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
-            mlp_bias=mlp_bias,
-            vocab_size=vocab_size,
-            **kwargs,
-        )
-
-    @classmethod
-    def from_base_model(
-        cls,
-        text_model_name,
-        **kwargs,
-    ):
-        text_config = ModernBertConfig.from_pretrained(text_model_name)
-        if hasattr(text_config, "text_config"):
-            text_config = text_config.text_config
-
-        return cls(
-            text_model_name=text_model_name,
-            hidden_size=text_config.hidden_size,
-            num_hidden_layers=text_config.num_hidden_layers,
-            intermediate_size=text_config.intermediate_size,
-            mlp_bias=text_config.mlp_bias,
-            vocab_size=text_config.vocab_size,
-            **kwargs,
-        )
-
-
-class ModernVBertVisionConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`SigLIP`]. It is used to instantiate the vision encoder part of the ModernVBERT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the SigLIP.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    """
-
-    model_type = "modernvbert_vision"
-
-    attribute_map = {
-        "hidden_size": "embed_dim",
-    }
-
-    def __init__(
-        self,
-        vision_model_name="google/siglip2-base-patch16-512",
-        embed_dim=768,
-        image_size=512,
-        patch_size=16,
-        num_hidden_layers=12,
-        intermediate_size=3072,
-        **kwargs,
-    ):
-        super().__init__(
-            vision_model_name=vision_model_name,
-            embed_dim=embed_dim,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
-            **kwargs,
-        )
-
-    @classmethod
-    def from_base_model(
-        cls,
-        vision_model_name,
-        **kwargs,
-    ):
-        vision_config = SiglipConfig.from_pretrained(vision_model_name)
-        if hasattr(vision_config, "vision_config"):
-            vision_config = vision_config.vision_config
-
-        return cls(
-            vision_model_name=vision_model_name,
-            embed_dim=vision_config.hidden_size,
-            image_size=vision_config.image_size,
-            patch_size=vision_config.patch_size,
-            num_hidden_layers=vision_config.num_hidden_layers,
-            intermediate_size=vision_config.intermediate_size,
-            **kwargs,
-        )
-
 
 class ModernVBertConfig(PretrainedConfig):
     r"""
@@ -193,51 +84,56 @@ class ModernVBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernvbert"
-    sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
+    sub_configs: dict[str, Any] = {"text_config": ModernBertConfig, "vision_config": SiglipVisionConfig}
 
     def __init__(
         self,
         text_config=None,
         vision_config=None,
-        image_token_id: int = 50407,
-        initializer_range=0.02,
-        vocab_size=50368,
-        pad_token_id=None,
-        pixel_shuffle_factor=4,
-        additional_vocab_size=0,
+        image_token_id: Optional[int] = 50407,
+        pixel_shuffle_factor: Optional[int] = 4,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = self.sub_configs["text_config"].from_base_model("jhu-clsp/ettin-encoder-150m")
+            text_config = self.sub_configs["text_config"]()
         elif isinstance(text_config, dict):
-            text_config = self.sub_configs["text_config"].from_dict(text_config)
+            text_config = self.sub_configs["text_config"](**text_config)
         self.text_config = text_config
 
         if vision_config is None:
-            vision_config = self.sub_configs["vision_config"].from_base_model("google/siglip2-base-patch16-512")
+            vision_config = self.sub_configs["vision_config"]()
         elif isinstance(vision_config, dict):
-            vision_config = self.sub_configs["vision_config"].from_dict(vision_config)
+            vision_config = self.sub_configs["vision_config"](**vision_config)
         self.vision_config = vision_config
 
         self.initializer_range = initializer_range
-        self.image_token_id = image_token_id
-        self.pad_token_id = pad_token_id
         self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.vocab_size = vocab_size
-        self.additional_vocab_size = additional_vocab_size
-        self.hidden_size = kwargs.pop("hidden_size", self.text_config.hidden_size)
 
+        # aliases for easier access
+        self.hidden_size = self.text_config.hidden_size
+        self.vocab_size = self.text_config.vocab_size
+
+        super().__init__(
+            image_token_id=image_token_id,
+            **kwargs
+        )
     @classmethod
     def from_pretrained_models(
         cls,
-        text_model_name: Union[str, os.PathLike],
-        vision_model_name: Union[str, os.PathLike],
+        text_model_name: str,
+        vision_model_name: str,
+        vocab_size: int = None,
         **kwargs,
     ) -> "PretrainedConfig":
-        text_model_config = ModernVBertTextConfig.from_base_model(text_model_name)
-        vision_model_config = ModernVBertVisionConfig.from_base_model(vision_model_name)
+        text_model_config = cls.sub_configs["text_config"].from_pretrained(text_model_name)
+        vision_model_config = cls.sub_configs["vision_config"].from_pretrained(vision_model_name)
+
+        if vocab_size is not None:
+            # Update the text model config with the new vocab size
+            text_model_config.tie_word_embeddings = False
+            text_model_config.vocab_size = vocab_size
+
         return cls(
             text_config=text_model_config,
             vision_config=vision_model_config,
@@ -437,8 +333,10 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     config_class = ModernVBertConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = False
+    input_modalities = ["image", "text"]
 
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", 0.02)
@@ -451,53 +349,18 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-
 @auto_docstring
-class ModernVBertModel(ModernVBertPreTrainedModel):
+class ModernVBertModel(ModernVBertPreTrainedModel): 
     def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
 
         # init components
-        self.vision_model = ModernVBertModel.init_vision_model(config)
         self.connector = ModernVBertConnector(config)
-        self.text_model = ModernVBertModel.init_language_model(config)
+        self.text_model = ModernBertModel(config.text_config)
+        self.vision_model = SiglipVisionModel(config.vision_config)
 
-        # set the correct dtype for vision and text models
-        self.vision_model.to(self.dtype)
-        self.text_model.to(self.dtype)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        
-        self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.pixel_shuffle_factor**2)
-        )
-
+        # initialize weights and apply final processing
         self.post_init()
-
-    @staticmethod
-    def init_vision_model(config: ModernVBertConfig):
-        vision_model_config = SiglipVisionConfig.from_pretrained(
-            config.vision_config.vision_model_name,
-            _attn_implementation=config._attn_implementation,
-        )
-        vision_model = SiglipVisionModel(vision_model_config).vision_model
-        return vision_model
-
-    @staticmethod
-    def init_language_model(config: ModernVBertConfig):
-        text_model_config = ModernBertConfig.from_pretrained(
-            config.text_config.text_model_name,
-            _attn_implementation=config._attn_implementation,
-        )
-        text_model = ModernBertModel(text_model_config)
-        embed_layer = DecoupledEmbedding(
-            num_embeddings=text_model_config.vocab_size,
-            num_additional_embeddings=config.additional_vocab_size,
-            embedding_dim=config.hidden_size,
-            partially_freeze=getattr(config, "freeze_config", {"freeze_text_layers": False})["freeze_text_layers"],
-            padding_idx=config.pad_token_id,
-        )
-        text_model.set_input_embeddings(embed_layer)
-        return text_model
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.enable_input_require_grads
     def enable_input_require_grads(self):
@@ -526,7 +389,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             make_inputs_require_grads
         )
 
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.disable_input_require_grads
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.disable_input_require_grads
     def disable_input_require_grads(self):
         self._text_require_grads_hook.remove()
         self._vision_require_grads_hook.remove()
@@ -562,6 +425,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             real_images_inds[0] = True
 
         pixel_values = pixel_values[real_images_inds].contiguous()
+        
         # Handle the vision attention mask
         if pixel_attention_mask is None:
             pixel_attention_mask = torch.ones(
@@ -706,39 +570,31 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             image_hidden_states=image_hidden_states,
         )
 
-
-class ModernVBertLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        pretrained_config = ModernBertConfig.from_pretrained(config.text_config.text_model_name)
-        pretrained_model = ModernBertForMaskedLM(pretrained_config)
-        self.head = pretrained_model.head
-        self.decoder = pretrained_model.decoder
-
-    def forward(self, hidden_states):
-        return self.decoder(self.head(hidden_states))
-
-
 @auto_docstring
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "model.text_model.embeddings.word_embeddings.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.in_features = config.hidden_size
-        self.out_additional_features = config.additional_vocab_size
+
         self.vocab_size = config.vocab_size
+
         self.model = ModernVBertModel(config)
-        self.lm_head = ModernVBertLMHead(config)
-        if self.out_additional_features > 0:
-            self.additional_fc = nn.Linear(self.in_features, self.out_additional_features, bias=False)
-        self.lm_head.to(self.dtype)
+        self.projection_head = ModernBertPredictionHead(config.text_config)
+        self.lm_head = nn.Linear(config.hidden_size, self.vocab_size, bias=config.text_config.decoder_bias)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.disable_input_require_grads
-    def disable_input_require_grads(self):
-        self._text_require_grads_hook.remove()
-        self._vision_require_grads_hook.remove()
+    def get_output_embeddings(self):
+        return self.lm_head
+    
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    @torch.compile(dynamic=True)
+    def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
+        return self.lm_head(self.projection_head(output))
 
     @can_return_tuple
     @auto_docstring(
@@ -800,16 +656,12 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         )
         hidden_states = outputs[0]
 
-        logits = self.lm_head(hidden_states)
-
-        if self.out_additional_features > 0:
-            proj_states = self.lm_head.head(hidden_states)
-            additional_features = self.additional_fc(proj_states)
-            logits = torch.cat((logits, additional_features), -1)
+        logits = self.compiled_head(hidden_states)
 
         loss = None
         if labels is not None:
-            loss = CrossEntropyLoss()(logits.view(-1, self.vocab_size + self.out_additional_features), labels.view(-1))
+            criterion = CrossEntropyLoss()
+            loss = criterion(logits.view(-1, self.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]
