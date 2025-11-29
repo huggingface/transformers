@@ -18,6 +18,7 @@ from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...utils import logging
+from ...modeling_rope_utils import RopeParameters
 
 
 logger = logging.get_logger(__name__)
@@ -147,7 +148,7 @@ class AfmoeConfig(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         rope_theta: Optional[float] = 10000.0,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         num_experts: Optional[int] = 64,
         num_experts_per_tok: Optional[int] = 6,
         num_shared_experts: Optional[int] = 2,
@@ -173,7 +174,7 @@ class AfmoeConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # MoE specific
         self.moe_intermediate_size = moe_intermediate_size

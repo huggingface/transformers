@@ -38,9 +38,9 @@ class AfmoeModelTester(CausalLMModelTester):
         use_token_type_ids=False,
         use_labels=True,
         vocab_size=64,
-        hidden_size=64,
-        intermediate_size=32,
-        moe_intermediate_size=32,
+        hidden_size=32,
+        intermediate_size=16,
+        moe_intermediate_size=16,
         num_hidden_layers=2,
         num_dense_layers=1,
         num_attention_heads=16,
@@ -52,7 +52,7 @@ class AfmoeModelTester(CausalLMModelTester):
         rms_norm_eps=1e-5,
         use_cache=False,
         rope_theta=10000.0,
-        rope_scaling=None,
+        rope_parameters=None,
         num_experts=4,
         num_experts_per_tok=2,
         num_shared_experts=2,
@@ -84,7 +84,6 @@ class AfmoeModelTester(CausalLMModelTester):
         self.head_dim = head_dim
         self.rms_norm_eps = rms_norm_eps
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.moe_intermediate_size = moe_intermediate_size
         self.num_dense_layers = num_dense_layers
         self.num_experts = num_experts
@@ -96,6 +95,13 @@ class AfmoeModelTester(CausalLMModelTester):
         self.sliding_window = sliding_window
         self.attention_dropout = attention_dropout
 
+    @unittest.skip("Afmoe applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Afmoe  applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
 
 @require_torch
 class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
