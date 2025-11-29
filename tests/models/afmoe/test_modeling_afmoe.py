@@ -95,13 +95,6 @@ class AfmoeModelTester(CausalLMModelTester):
         self.sliding_window = sliding_window
         self.attention_dropout = attention_dropout
 
-    @unittest.skip("Afmoe applies key/query norm which doesn't work with packing")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("Afmoe  applies key/query norm which doesn't work with packing")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
 
 @require_torch
 class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
@@ -110,6 +103,14 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": AfmoeModel, "text-generation": AfmoeForCausalLM} if is_torch_available() else {}
     )
+
+    @unittest.skip("Afmoe applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Afmoe  applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
 
     def test_model_outputs_equivalence(self, **kwargs):
         # AFMoE uses MoE outputs, skip this test

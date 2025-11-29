@@ -17,8 +17,8 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...utils import logging
 from ...modeling_rope_utils import RopeParameters
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -152,7 +152,6 @@ class AfmoeConfig(PreTrainedConfig):
         num_experts: Optional[int] = 64,
         num_experts_per_tok: Optional[int] = 6,
         num_shared_experts: Optional[int] = 2,
-        route_norm: Optional[bool] = True,
         route_scale: Optional[float] = 1.0,
         global_attn_every_n_layers: Optional[int] = 4,
         sliding_window: Optional[int] = 1024,
@@ -181,7 +180,6 @@ class AfmoeConfig(PreTrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.num_shared_experts = num_shared_experts
-        self.route_norm = route_norm
         self.route_scale = route_scale
         self.attention_bias = False
 
