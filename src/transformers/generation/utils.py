@@ -84,6 +84,7 @@ from .logits_process import (
     InfNanRemoveLogitsProcessor,
     LogitNormalization,
     LogitsProcessorList,
+    MaxThinkingTokensLogitsProcessor,
     MinLengthLogitsProcessor,
     MinNewTokensLengthLogitsProcessor,
     MinPLogitsWarper,
@@ -1240,6 +1241,21 @@ class GenerationMixin(ContinuousMixin):
                     device=device,
                 )
             )
+        if generation_config.max_thinking_tokens is not None:
+            if generation_config.begin_thinking_token_id is None or generation_config.end_thinking_token_id is None:
+                raise ValueError(
+                    "Using `max_thinking_tokens` requires both `begin_thinking_token_id` and "
+                    "`end_thinking_token_id` to be set on the generation config."
+                )
+            processors.append(
+                MaxThinkingTokensLogitsProcessor(
+                    generation_config.max_thinking_tokens,
+                    generation_config.begin_thinking_token_id,
+                    generation_config.end_thinking_token_id,
+                    prompt_length=input_ids_seq_length,
+                    prompt_prefilled_suffix_length=generation_config.prompt_prefilled_suffix_length,
+                )
+            )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
                 PrefixConstrainedLogitsProcessor(
@@ -1699,6 +1715,18 @@ class GenerationMixin(ContinuousMixin):
                     f"added to the prompt length ({input_ids_length}), is larger than"
                     f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
                     UserWarning,
+                )
+        if generation_config.max_thinking_tokens is not None:
+            if generation_config.max_new_tokens is None:
+                raise ValueError(
+                    "`max_thinking_tokens` is set, but `max_new_tokens` is undefined. "
+                    "Please set `max_new_tokens` so there is budget for the final response."
+                )
+            if generation_config.max_thinking_tokens > generation_config.max_new_tokens - 2:
+                raise ValueError(
+                    "`max_thinking_tokens` must be at most `max_new_tokens - 2` so there is room for the closing "
+                    f"token and at least one response token (got {generation_config.max_thinking_tokens} vs "
+                    f"{generation_config.max_new_tokens})."
                 )
 
     def _prepare_generated_length(

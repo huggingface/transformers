@@ -126,6 +126,41 @@ print(tokenizer.decode(output[0]))
 > [!IMPORTANT]
 > The model generation with reasoning mode can be affected sensitively by sampling parameters, so please refer to the [Usage Guideline](https://github.com/LG-AI-EXAONE/EXAONE-4.0#usage-guideline) on official GitHub page for better quality.
 
+To keep latency predictable you can cap how many tokens the model spends inside the `<think>...</think>` block by
+passing `max_thinking_tokens` to `generate`. Make sure `max_new_tokens` exceeds `max_thinking_tokens` by at least 2 so
+there is room for the closing `</think>` token and the final response:
+
+```python
+output = model.generate(
+    input_ids.to(model.device),
+    max_new_tokens=512,
+    max_thinking_tokens=256,
+    do_sample=True,
+    temperature=0.6,
+    top_p=0.95,
+)
+```
+
+If your model configuration does not set the thinking token ids automatically yet, you can wire them manually before
+calling `generate`:
+
+```python
+think_start = tokenizer.convert_tokens_to_ids("<think>")
+think_end = tokenizer.convert_tokens_to_ids("</think>")
+
+model.generation_config.begin_thinking_token_id = think_start
+model.generation_config.end_thinking_token_id = think_end
+
+output = model.generate(
+    input_ids.to(model.device),
+    max_new_tokens=512,
+    max_thinking_tokens=256,
+)
+```
+
+This advanced setup step will no longer be necessary once the underlying generation configs expose those ids by default,
+but it ensures `max_thinking_tokens` works today.
+
 ### Agentic tool use
 
 The EXAONE 4.0 models can be used as agents with their tool calling capabilities. You can provide tool schemas to the model for effective tool calling.
