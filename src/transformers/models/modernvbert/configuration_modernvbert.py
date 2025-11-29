@@ -4,122 +4,11 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import os
-from typing import Any, Union
+from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ..modernbert import ModernBertConfig
-from ..siglip import SiglipConfig
-
-
-class ModernVBertTextConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`ModernBERT`]. It is used to instantiate an ModernBERT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [jhu-clsp/ettin-encoder-150m](https://huggingface.co/jhu-clsp/ettin-encoder-150m) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    """
-
-    model_type = "modernvbert_text"
-
-    def __init__(
-        self,
-        text_model_name="jhu-clsp/ettin-encoder-150m",
-        hidden_size=768,
-        num_hidden_layers=22,
-        intermediate_size=1152,
-        mlp_bias=False,
-        vocab_size=50368,
-        **kwargs,
-    ):
-        super().__init__(
-            text_model_name=text_model_name,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
-            mlp_bias=mlp_bias,
-            vocab_size=vocab_size,
-            **kwargs,
-        )
-
-    @classmethod
-    def from_base_model(
-        cls,
-        text_model_name,
-        **kwargs,
-    ):
-        text_config = ModernBertConfig.from_pretrained(text_model_name)
-        if hasattr(text_config, "text_config"):
-            text_config = text_config.text_config
-
-        return cls(
-            text_model_name=text_model_name,
-            hidden_size=text_config.hidden_size,
-            num_hidden_layers=text_config.num_hidden_layers,
-            intermediate_size=text_config.intermediate_size,
-            mlp_bias=text_config.mlp_bias,
-            vocab_size=text_config.vocab_size,
-            **kwargs,
-        )
-
-
-class ModernVBertVisionConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`SigLIP`]. It is used to instantiate the vision encoder part of the ModernVBERT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the SigLIP.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    """
-
-    model_type = "modernvbert_vision"
-
-    attribute_map = {
-        "hidden_size": "embed_dim",
-    }
-
-    def __init__(
-        self,
-        vision_model_name="google/siglip2-base-patch16-512",
-        embed_dim=768,
-        image_size=512,
-        patch_size=16,
-        num_hidden_layers=12,
-        intermediate_size=3072,
-        **kwargs,
-    ):
-        super().__init__(
-            vision_model_name=vision_model_name,
-            embed_dim=embed_dim,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_hidden_layers=num_hidden_layers,
-            intermediate_size=intermediate_size,
-            **kwargs,
-        )
-
-    @classmethod
-    def from_base_model(
-        cls,
-        vision_model_name,
-        **kwargs,
-    ):
-        vision_config = SiglipConfig.from_pretrained(vision_model_name)
-        if hasattr(vision_config, "vision_config"):
-            vision_config = vision_config.vision_config
-
-        return cls(
-            vision_model_name=vision_model_name,
-            embed_dim=vision_config.hidden_size,
-            image_size=vision_config.image_size,
-            patch_size=vision_config.patch_size,
-            num_hidden_layers=vision_config.num_hidden_layers,
-            intermediate_size=vision_config.intermediate_size,
-            **kwargs,
-        )
+from ..siglip import SiglipVisionConfig
 
 
 class ModernVBertConfig(PretrainedConfig):
@@ -170,51 +59,54 @@ class ModernVBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernvbert"
-    sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
+    sub_configs: dict[str, Any] = {"text_config": ModernBertConfig, "vision_config": SiglipVisionConfig}
 
     def __init__(
         self,
         text_config=None,
         vision_config=None,
-        image_token_id: int = 50407,
-        initializer_range=0.02,
-        vocab_size=50368,
-        pad_token_id=None,
-        pixel_shuffle_factor=4,
-        additional_vocab_size=0,
+        image_token_id: Optional[int] = 50407,
+        pixel_shuffle_factor: Optional[int] = 4,
+        initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = self.sub_configs["text_config"].from_base_model("jhu-clsp/ettin-encoder-150m")
+            text_config = self.sub_configs["text_config"]()
         elif isinstance(text_config, dict):
-            text_config = self.sub_configs["text_config"].from_dict(text_config)
+            text_config = self.sub_configs["text_config"](**text_config)
         self.text_config = text_config
 
         if vision_config is None:
-            vision_config = self.sub_configs["vision_config"].from_base_model("google/siglip2-base-patch16-512")
+            vision_config = self.sub_configs["vision_config"]()
         elif isinstance(vision_config, dict):
-            vision_config = self.sub_configs["vision_config"].from_dict(vision_config)
+            vision_config = self.sub_configs["vision_config"](**vision_config)
         self.vision_config = vision_config
 
         self.initializer_range = initializer_range
-        self.image_token_id = image_token_id
-        self.pad_token_id = pad_token_id
         self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.vocab_size = vocab_size
-        self.additional_vocab_size = additional_vocab_size
-        self.hidden_size = kwargs.pop("hidden_size", self.text_config.hidden_size)
+
+        # aliases for easier access
+        self.hidden_size = self.text_config.hidden_size
+        self.vocab_size = self.text_config.vocab_size
+
+        super().__init__(image_token_id=image_token_id, **kwargs)
 
     @classmethod
     def from_pretrained_models(
         cls,
-        text_model_name: Union[str, os.PathLike],
-        vision_model_name: Union[str, os.PathLike],
+        text_model_name: str,
+        vision_model_name: str,
+        vocab_size: int = None,
         **kwargs,
     ) -> "PretrainedConfig":
-        text_model_config = ModernVBertTextConfig.from_base_model(text_model_name)
-        vision_model_config = ModernVBertVisionConfig.from_base_model(vision_model_name)
+        text_model_config = cls.sub_configs["text_config"].from_pretrained(text_model_name)
+        vision_model_config = cls.sub_configs["vision_config"].from_pretrained(vision_model_name)
+
+        if vocab_size is not None:
+            # Update the text model config with the new vocab size
+            text_model_config.tie_word_embeddings = False
+            text_model_config.vocab_size = vocab_size
+
         return cls(
             text_config=text_model_config,
             vision_config=vision_model_config,

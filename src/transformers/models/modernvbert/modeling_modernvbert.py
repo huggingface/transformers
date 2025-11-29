@@ -17,8 +17,9 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndCr
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
-from ..modernbert import ModernBertConfig, ModernBertForMaskedLM, ModernBertModel
-from ..siglip import SiglipVisionConfig, SiglipVisionModel
+from ..modernbert import ModernBertModel
+from ..modernbert.modeling_modernbert import ModernBertPredictionHead
+from ..siglip import SiglipVisionModel
 from .configuration_modernvbert import ModernVBertConfig
 
 
@@ -219,8 +220,10 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     config_class = ModernVBertConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = False
+    input_modalities = ["image", "text"]
 
     def _init_weights(self, module):
         std = getattr(self.config, "initializer_range", 0.02)
@@ -240,47 +243,12 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         super().__init__(config)
 
         # init components
-        self.vision_model = ModernVBertModel.init_vision_model(config)
         self.connector = ModernVBertConnector(config)
-        self.text_model = ModernVBertModel.init_language_model(config)
+        self.text_model = ModernBertModel(config.text_config)
+        self.vision_model = SiglipVisionModel(config.vision_config)
 
-        # set the correct dtype for vision and text models
-        self.vision_model.to(self.dtype)
-        self.text_model.to(self.dtype)
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-
-        self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2)
-            / (config.pixel_shuffle_factor**2)
-        )
-
+        # initialize weights and apply final processing
         self.post_init()
-
-    @staticmethod
-    def init_vision_model(config: ModernVBertConfig):
-        vision_model_config = SiglipVisionConfig.from_pretrained(
-            config.vision_config.vision_model_name,
-            _attn_implementation=config._attn_implementation,
-        )
-        vision_model = SiglipVisionModel(vision_model_config).vision_model
-        return vision_model
-
-    @staticmethod
-    def init_language_model(config: ModernVBertConfig):
-        text_model_config = ModernBertConfig.from_pretrained(
-            config.text_config.text_model_name,
-            _attn_implementation=config._attn_implementation,
-        )
-        text_model = ModernBertModel(text_model_config)
-        embed_layer = DecoupledEmbedding(
-            num_embeddings=text_model_config.vocab_size,
-            num_additional_embeddings=config.additional_vocab_size,
-            embedding_dim=config.hidden_size,
-            partially_freeze=getattr(config, "freeze_config", {"freeze_text_layers": False})["freeze_text_layers"],
-            padding_idx=config.pad_token_id,
-        )
-        text_model.set_input_embeddings(embed_layer)
-        return text_model
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.enable_input_require_grads
     def enable_input_require_grads(self):
@@ -309,7 +277,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             make_inputs_require_grads
         )
 
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2Model.disable_input_require_grads
+    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.disable_input_require_grads
     def disable_input_require_grads(self):
         self._text_require_grads_hook.remove()
         self._vision_require_grads_hook.remove()
@@ -345,6 +313,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             real_images_inds[0] = True
 
         pixel_values = pixel_values[real_images_inds].contiguous()
+
         # Handle the vision attention mask
         if pixel_attention_mask is None:
             pixel_attention_mask = torch.ones(
@@ -490,38 +459,31 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         )
 
 
-class ModernVBertLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        pretrained_config = ModernBertConfig.from_pretrained(config.text_config.text_model_name)
-        pretrained_model = ModernBertForMaskedLM(pretrained_config)
-        self.head = pretrained_model.head
-        self.decoder = pretrained_model.decoder
-
-    def forward(self, hidden_states):
-        return self.decoder(self.head(hidden_states))
-
-
 @auto_docstring
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "model.text_model.embeddings.word_embeddings.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.in_features = config.hidden_size
-        self.out_additional_features = config.additional_vocab_size
+
         self.vocab_size = config.vocab_size
+
         self.model = ModernVBertModel(config)
-        self.lm_head = ModernVBertLMHead(config)
-        if self.out_additional_features > 0:
-            self.additional_fc = nn.Linear(self.in_features, self.out_additional_features, bias=False)
-        self.lm_head.to(self.dtype)
+        self.projection_head = ModernBertPredictionHead(config.text_config)
+        self.lm_head = nn.Linear(config.hidden_size, self.vocab_size, bias=config.text_config.decoder_bias)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.disable_input_require_grads
-    def disable_input_require_grads(self):
-        self._text_require_grads_hook.remove()
-        self._vision_require_grads_hook.remove()
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    @torch.compile(dynamic=True)
+    def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
+        return self.lm_head(self.projection_head(output))
 
     @can_return_tuple
     @auto_docstring(
@@ -583,16 +545,12 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         )
         hidden_states = outputs[0]
 
-        logits = self.lm_head(hidden_states)
-
-        if self.out_additional_features > 0:
-            proj_states = self.lm_head.head(hidden_states)
-            additional_features = self.additional_fc(proj_states)
-            logits = torch.cat((logits, additional_features), -1)
+        logits = self.compiled_head(hidden_states)
 
         loss = None
         if labels is not None:
-            loss = CrossEntropyLoss()(logits.view(-1, self.vocab_size + self.out_additional_features), labels.view(-1))
+            criterion = CrossEntropyLoss()
+            loss = criterion(logits.view(-1, self.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]

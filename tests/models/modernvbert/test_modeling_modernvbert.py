@@ -13,11 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch ModernVBERT model."""
 
+import tempfile
 import unittest
 
 import requests
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from typing import ClassVar
 
 from transformers import (
     AutoProcessor,
@@ -54,61 +56,74 @@ class ModernVBertModelTester:
     def __init__(
         self,
         parent,
-        seq_length=7,
+        batch_size=2,
+        num_images=2,
         text_config={
-            "dtype": "float32",
-            "hidden_size": 768,
-            "intermediate_size": 1152,
-            "mlp_bias": False,
-            "model_type": "modernvbert_text",
-            "num_hidden_layers": 22,
-            "num_attention_heads": 12,
-            "text_model_name": "jhu-clsp/ettin-encoder-150m",
-            "vocab_size": 50368
+            "vocab_size": 99,
+            "pad_token_id": 0,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 64,
+            "hidden_activation": "gelu",
+            "mlp_dropout": 0.1,
+            "attention_dropout": 0.1,
+            "embedding_dropout": 0.1,
+            "classifier_dropout": 0.1,
+            "max_position_embeddings": 512,
+            "type_vocab_size": 2,
+            "is_decoder": False,
+            "initializer_range": 0.02,
+            "tie_word_embeddings": False,
         },
         is_training=True,
         vision_config={
-            "dtype": "float32",
-            "embed_dim": 768,
-            "image_size": 512,
-            "intermediate_size": 3072,
-            "model_type": "modernvbert_vision",
-            "num_hidden_layers": 12,
-            "patch_size": 16,
-            "vision_model_name": "google/siglip2-base-patch16-512"
+            "image_size": 16,
+            "patch_size": 4,
+            "hidden_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 32,
+            "dropout": 0.1,
+            "attention_dropout": 0.1,
+            "initializer_range": 0.02,
         },
+        pixel_shuffle_factor=2,
     ):
         self.parent = parent
+        self.batch_size = batch_size
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
+        self.num_images = num_images
+        self.image_token_id = self.text_config["vocab_size"] - 1
+        self.image_size = vision_config["image_size"]
+        self.pixel_shuffle_factor = pixel_shuffle_factor
+        self.seq_length = (
+            int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (pixel_shuffle_factor**2))
+            * self.num_images
+        )
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 30
 
     def get_config(self):
         return ModernVBertConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
+            image_token_id=self.image_token_id,
+            pixel_shuffle_factor=self.pixel_shuffle_factor,
         )
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                1,
-                3,
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
-            ]
-        )
+        pixel_values = floats_tensor([
+            self.batch_size, 
+            self.num_images, 
+            3, 
+            self.image_size, 
+            self.image_size
+        ])
         config = self.get_config()
 
         return config, pixel_values
@@ -119,6 +134,10 @@ class ModernVBertModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
+        # For simplicity just set the last n tokens to the image token
+        n_image_tokens_per_batch = self.seq_length
+        input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
+        attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -150,28 +169,108 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ModernVBertModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ModernVBertConfig, has_text_modality=False
+            self, 
+            config_class=ModernVBertConfig, 
+            has_text_modality=True, 
+            has_vision_modality=True
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are called "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
+
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        model_class = self.all_model_classes[0] # only ModernVBertModel is composite
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = model_class(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_sdpa = model_class.from_pretrained(tmpdirname)
+            model_sdpa = model_sdpa.eval().to(torch_device)
+
+            vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
+            language_model_names = {"language_model", "model", "text_model"}
+            vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
+            language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
+
+            vision_model_sdpa = getattr(model_sdpa, vision_model_name)
+            language_model_sdpa = getattr(model_sdpa, language_model_name)
+            text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
+            vision_attn = "sdpa" if vision_model_sdpa._supports_sdpa else "eager"
+
+            # `None` as it is the requested one which will be assigned to each sub-config
+            # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+            self.assertTrue(language_model_sdpa.config._attn_implementation == text_attn)
+            self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
+
+            model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+            model_eager = model_eager.eval().to(torch_device)
+            self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
+            self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if (
+                    class_name.endswith("Attention")
+                    and getattr(submodule, "config", None)
+                    and submodule.config._attn_implementation == "sdpa"
+                ):
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
+    # skip test_training_gradient_checkpointing
+    @unittest.skip(
+        reason="ModernVBertModel does not implement gradient checkpointing."
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    # skip test_training_gradient_checkpointing_use_reentrant
+    @unittest.skip(
+        reason="ModernVBertModel does not implement gradient checkpointing."
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="ModernVBertModel does not implement gradient checkpointing."
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
 
 @require_torch
 class ModernVBertForMaskedLMIntegrationTest(unittest.TestCase):
+    model_name: ClassVar[str] = "ModernVBERT/modernvbert"
+
     def setUp(self):
-        self.model_id = "ModernVBERT/modernvbert"
-        self.processor = AutoProcessor.from_pretrained(self.model_id)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        self.processor = AutoProcessor.from_pretrained(self.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.image = Image.open(hf_hub_download("HuggingFaceTB/SmolVLM", "example_images/rococo.jpg", repo_type="space"))
         self.text = "This [MASK] is on the wall."
 
     @slow
     def test_masked_lm_inference(self):
         model = ModernVBertForMaskedLM.from_pretrained(
-            self.model_id,
+            self.model_name,
             torch_dtype=torch.float32,
-        ).to(torch_device)
+            device_map=torch_device
+        )
 
         messages = [
             {
@@ -190,15 +289,12 @@ class ModernVBertForMaskedLMIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         masked_index = inputs["input_ids"][0].tolist().index(self.tokenizer.mask_token_id)
-        predicted_token_id = outputs.logits[0, masked_index].argmax(axis=-1)
-        
-        self.assertEqual(predicted_token_id.item(), 13497)
+        masked_token_logits = outputs.logits[0, masked_index, :]
+        masked_token_probs = torch.softmax(masked_token_logits, dim=-1)
+        top_5_probs, top_5_indices = torch.topk(masked_token_probs, k=5, dim=-1)
 
-        top_5 = outputs.logits[0, masked_index].topk(5)
-        EXPECTED_TOP_5_INDICES = torch.tensor([13497, 5406, 2460, 7512, 3665], device=torch_device)
-        
-        self.assertTrue(torch.allclose(top_5.indices, EXPECTED_TOP_5_INDICES))
-        
-        # Loosen the tolerance for the values
-        EXPECTED_TOP_5_VALUES = torch.tensor([21.2242, 21.1116, 19.1809, 18.4607, 17.9964], device=torch_device)
-        self.assertTrue(torch.allclose(top_5.values, EXPECTED_TOP_5_VALUES, atol=1e-4, rtol=1e-4))
+        EXPECTED_TOP_5_INDICES = torch.tensor([13497, 5406, 2460, 22946, 3665], device=torch_device)
+        EXPECTED_TOP_5_VALUES = torch.tensor([0.4986, 0.3550, 0.0415, 0.0235, 0.0199], device=torch_device)
+
+        self.assertTrue(torch.allclose(top_5_indices, EXPECTED_TOP_5_INDICES))
+        self.assertTrue(torch.allclose(top_5_probs, EXPECTED_TOP_5_VALUES, atol=1e-4, rtol=1e-4))

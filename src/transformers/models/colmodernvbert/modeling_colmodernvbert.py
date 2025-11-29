@@ -11,7 +11,7 @@ from torch import nn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
-from ..auto import AutoModel
+from ..modernvbert import ModernVBertModel
 from .configuration_colmodernvbert import ColModernVBertConfig
 
 
@@ -33,7 +33,7 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.vlm_config.text_config.initializer_range
+            else self.config.get_text_config().initializer_range
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -90,23 +90,16 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "custom_text_proj": "embedding_proj_layer",
-    }
+    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.config = config
-        self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        self.model = AutoModel.from_config(config.vlm_config)
-        self._tied_weights_keys = [f"model.text_model.{k}" for k in (self.model._tied_weights_keys or [])]
+        self.model = ModernVBertModel(config.vlm_config)
+        self.embedding_proj_layer = nn.Linear(self.config.get_text_config().hidden_size, self.config.embedding_dim)
 
-        self.embedding_dim = self.config.embedding_dim
-        self.embedding_proj_layer = nn.Linear(
-            self.config.vlm_config.text_config.hidden_size,
-            self.embedding_dim,
-        )
+        self._tied_weights_keys = [f"model.{k}" for k in (self.model._tied_weights_keys or [])]
 
         self.post_init()
 

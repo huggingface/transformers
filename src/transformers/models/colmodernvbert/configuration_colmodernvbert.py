@@ -4,12 +4,10 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colmodernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from copy import deepcopy
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 from ..modernvbert import ModernVBertConfig
 
 
@@ -23,7 +21,7 @@ class ColModernVBertConfig(PreTrainedConfig):
     from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
 
     Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
-    ColModernVBert-v1.0 model, e.g. TODO: [vidore/ColModernVBert-v1.0-hf](https://huggingface.co/vidore/ColModernVBert-v1.0-hf).
+    ColModernVBert model, e.g. TODO: [ModernVBERT/colmodernvbert-merged](https://huggingface.co/vidore/ColModernVBert-v1.0-hf).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -55,20 +53,13 @@ class ColModernVBertConfig(PreTrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if vlm_config is None:
             vlm_config = self.sub_configs["vlm_config"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
             )
         elif isinstance(vlm_config, dict):
-            vlm_config = deepcopy(vlm_config)
-            if "model_type" not in vlm_config:
-                raise KeyError(
-                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
-                )
-            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
+            vlm_config = self.sub_configs["vlm_config"](**vlm_config)
         elif not isinstance(vlm_config, PreTrainedConfig):
             raise TypeError(
                 f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
@@ -77,6 +68,11 @@ class ColModernVBertConfig(PreTrainedConfig):
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range
+
+        super().__init__(**kwargs)
+
+    def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
+        return self.vlm_config.get_text_config(*args, **kwargs)
 
 
 __all__ = ["ColModernVBertConfig"]
