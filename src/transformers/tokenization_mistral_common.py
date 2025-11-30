@@ -498,7 +498,7 @@ class MistralCommonBackend(PushToHubMixin):
         token_ids = to_py_obj(token_ids)
 
         if isinstance(token_ids, (list, tuple)) and len(token_ids) > 0 and isinstance(token_ids[0], (list, tuple)):
-            return self.batch_decode(
+            return self._batch_decode(
                 sequences=token_ids,
                 skip_special_tokens=skip_special_tokens,
                 clean_up_tokenization_spaces=clean_up_tokenization_spaces,
@@ -541,14 +541,11 @@ class MistralCommonBackend(PushToHubMixin):
         if kwargs:
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.batch_decode`.")
 
-        return [
-            self._decode(
-                seq,
-                skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            )
-            for seq in sequences
-        ]
+        return self._batch_decode(
+            sequences=sequences,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+        )
 
     def _decode(
         self,
@@ -577,6 +574,21 @@ class MistralCommonBackend(PushToHubMixin):
             decoded_string = re.sub(r"^lang:[a-z]{2}", "", decoded_string)
 
         return decoded_string
+
+    def _batch_decode(
+        self,
+        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool | None = None,
+    ) -> list[str]:
+        return [
+            self._decode(
+                seq,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            )
+            for seq in sequences
+        ]
 
     def _is_control_token(self, token_id: int) -> bool:
         if self._tokenizer_type == MistralTokenizerType.spm:
