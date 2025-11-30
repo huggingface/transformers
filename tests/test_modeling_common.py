@@ -4058,7 +4058,6 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    @unittest.skip("Some models have wrong mappings....")
     def test_reverse_loading_mapping(self):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
@@ -4073,7 +4072,7 @@ class ModelTesterMixin:
 
         #  Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have at
         # lest one MoE layer here to check the mapping
-        config_to_set = config.get_text_config()
+        config_to_set = config.get_text_config(decoder=True)
         config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
         config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
         config_to_set.mlp_only_layers = [0]  # same but for qwens
@@ -4137,7 +4136,6 @@ class ModelTesterMixin:
                     # Make sure both saved state_dict are identical
                     self.assertTrue(compare_state_dicts(state_dict_saved_from_init, state_dict_saved_from_pretrained))
 
-    @unittest.skip("Some models have wrong mappings....")
     def test_can_load_from_already_mapped_keys(self):
         """Test that we can correctly reload a model if we chose `save_original_format=False` in `save_pretrained`,
         i.e. we do not reapply weight conversions when reloading if it was saved correctly already.
