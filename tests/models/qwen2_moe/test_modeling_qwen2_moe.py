@@ -77,6 +77,7 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
+        torch.manual_seed(0)
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.num_experts = 8
