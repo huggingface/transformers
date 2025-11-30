@@ -71,7 +71,7 @@ print(tokenizer.decode(outputs[0]))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "The capital of France is <extra_id_0>." | transformers run --task text2text-generation --model google/switch-base-8 --device 0
+echo -e "The capital of France is <extra_id_0>." | transformers run text2text-generation --model google/switch-base-8 --device 0
 # [{'generated_text': 'Paris.'}]
 ```
 
