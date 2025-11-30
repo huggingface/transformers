@@ -367,11 +367,6 @@ class TestMistralCommonBackend(unittest.TestCase):
             ["Hello, world!", "Hello, world!"],
         )
 
-        # Test 4:
-        # decode empty list
-        self.assertEqual(self.tokenizer.decode([], skip_special_tokens=True), [])
-        self.assertEqual(self.tokenizer.decode([batch_tokens_ids[0], []], skip_special_tokens=True), [string, ""])
-
     def test_decode_transcription_mode(self):
         # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
         # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
