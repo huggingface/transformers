@@ -1259,7 +1259,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         self._no_split_modules = self._no_split_modules or []
         _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
-        
+
     def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
