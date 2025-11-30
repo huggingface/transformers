@@ -2072,8 +2072,8 @@ class TestMistralCommonBackend(unittest.TestCase):
             ("finetuning", ValidationMode.finetuning),
             (ValidationMode.finetuning, ValidationMode.finetuning),
         ]:
-            self.assertEqual(MistralCommonTokenizer._get_validation_mode(mode), expected)
+            self.assertEqual(MistralCommonBackend._get_validation_mode(mode), expected)
 
         for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
             with self.assertRaises(ValueError):
-                MistralCommonTokenizer._get_validation_mode(invalid_mode)
+                MistralCommonBackend._get_validation_mode(invalid_mode)
