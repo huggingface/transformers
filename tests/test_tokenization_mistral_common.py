@@ -334,6 +334,44 @@ class TestMistralCommonBackend(unittest.TestCase):
         ):
             self.tokenizer.decode(tokens_ids, skip_special_tokens=False, unk_args="")
 
+    def test_decode_on_batch(self):
+        string = "Hello, world!"
+        string_with_space = "Hello, world !"
+
+        batch_tokens_ids = [
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string, bos=True, eos=True),
+            self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string_with_space, bos=True, eos=True),
+        ]
+
+        # Test 1:
+        # batch_decode with and without skip_special_tokens
+        self.assertEqual(
+            self.tokenizer.decode(batch_tokens_ids, skip_special_tokens=True),
+            [string, string_with_space],
+        )
+        self.assertEqual(
+            self.tokenizer.decode(batch_tokens_ids, skip_special_tokens=False),
+            ["<s>" + string + "</s>", "<s>" + string_with_space + "</s>"],
+        )
+        self.assertEqual(
+            self.tokenizer.decode(batch_tokens_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True),
+            ["Hello, world!", "Hello, world!"],
+        )
+
+        # Test 3:
+        # decode numpy
+        self.assertEqual(
+            self.tokenizer.decode(
+                np.array(batch_tokens_ids), skip_special_tokens=True, clean_up_tokenization_spaces=True
+            ),
+            ["Hello, world!", "Hello, world!"],
+        )
+
+        # Test 4:
+        # decode empty list
+        self.assertEqual(self.tokenizer.decode([], skip_special_tokens=True), [])
+        self.assertEqual(self.tokenizer.decode([batch_tokens_ids[0], []], skip_special_tokens=True), [string, ""])
+
     def test_decode_transcription_mode(self):
         # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
         # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
