@@ -207,7 +207,7 @@ class TrainingArguments:
 
     Parameters:
         output_dir (`str`, *optional*, defaults to `"trainer_output"`):
-            The output directory where the model predictions and checkpoints will be written. Can be set via the HF_OUTPUT_DIR environment variable.
+            The output directory where the model predictions and checkpoints will be written.
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
@@ -329,11 +329,10 @@ class TrainingArguments:
                 - `"best"`: Save is done whenever a new `best_metric` is achieved.
 
                 If `"epoch"` or `"steps"` is chosen, saving will also be performed at the
-                very end of training, always. Can be set via the HF_SAVE_STRATEGY environment variable.
+                very end of training, always.
         save_steps (`int` or `float`, *optional*, defaults to 500):
             Number of updates steps before two checkpoint saves if `save_strategy="steps"`. Should be an integer or a
             float in range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
-            Can be set via the HF_SAVE_STEPS environment variable.
         save_total_limit (`int`, *optional*):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             `output_dir`. When `load_best_model_at_end` is enabled, the "best" checkpoint according to
@@ -341,7 +340,6 @@ class TrainingArguments:
             `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
             alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
             checkpoints are saved: the last one and the best one (if they are different).
-            Can be set via the HF_SAVE_TOTAL_LIMIT environment variable.
         enable_jit_checkpoint (`bool`, *optional*, defaults to `False`):
             Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. When enabled, training will
             checkpoint upon receiving SIGTERM, allowing for graceful termination without losing
@@ -353,7 +351,6 @@ class TrainingArguments:
             SIGTERM with adequate time before the job time limit. Calculate the required grace period as: longest
             possible iteration time + checkpoint saving time. For example, if an iteration takes 2 minutes and
             checkpoint saving takes 2 minutes, set at least 4 minutes (240 seconds) of grace time.
-            Can be set via the HF_ENABLE_JIT_CHECKPOINT environment variable.
         save_safetensors (`bool`, *optional*, defaults to `True`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -647,7 +644,6 @@ class TrainingArguments:
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
             [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
             scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
-            Can be set via the HF_RESUME_FROM_CHECKPOINT environment variable.
         hub_model_id (`str`, *optional*):
             The name of the repository to keep in sync with the local *output_dir*. It can be a simple model ID in
             which case the model will be pushed in your namespace. Otherwise it should be the whole repository name,
@@ -789,8 +785,7 @@ class TrainingArguments:
     output_dir: str | None = field(
         default=None,
         metadata={
-            "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided. "
-            "Can be set via the HF_OUTPUT_DIR environment variable."
+            "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
         },
     )
 
@@ -931,8 +926,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`. "
-                "If smaller than 1, will be interpreted as ratio of total training steps. "
-                "Can be set via the HF_SAVE_STEPS environment variable."
+                "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
     )
@@ -946,7 +940,7 @@ class TrainingArguments:
                 " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
                 " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
                 " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
-                " Default is unlimited checkpoints. Can be set via the HF_SAVE_TOTAL_LIMIT environment variable."
+                " Default is unlimited checkpoints."
             )
         },
     )
@@ -962,8 +956,7 @@ class TrainingArguments:
                 "Kubernetes: set terminationGracePeriodSeconds (default 30s is insufficient!) in your job definition. "
                 "Slurm: use --signal=USR1@<seconds> in sbatch to send SIGTERM before time limit. "
                 "Calculate required grace period as: iteration time + checkpoint saving time. "
-                "Example: 2min iteration + 2min checkpoint = 240 seconds minimum. "
-                "Can be set via the HF_ENABLE_JIT_CHECKPOINT environment variable."
+                "Example: 2min iteration + 2min checkpoint = 240 seconds minimum."
             )
         },
     )
@@ -1269,8 +1262,7 @@ class TrainingArguments:
     resume_from_checkpoint: str | None = field(
         default=None,
         metadata={
-            "help": "The path to a folder with a valid checkpoint for your model. "
-            "Can be set via the HF_RESUME_FROM_CHECKPOINT environment variable."
+            "help": "The path to a folder with a valid checkpoint for your model."
         },
     )
     hub_model_id: str | None = field(
@@ -1713,30 +1705,6 @@ class TrainingArguments:
             self.deepspeed_plugin = DeepSpeedPlugin()
             self.deepspeed_plugin.set_mixed_precision(self.mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
-
-        # Override enable_jit_checkpoint from environment if set
-        if "HF_ENABLE_JIT_CHECKPOINT" in os.environ:
-            self.enable_jit_checkpoint = strtobool(os.environ.get("HF_ENABLE_JIT_CHECKPOINT"))
-
-        # Override save_strategy from environment if set
-        if "HF_SAVE_STRATEGY" in os.environ:
-            self.save_strategy = os.environ.get("HF_SAVE_STRATEGY")
-
-        # Override save_steps from environment if set
-        if "HF_SAVE_STEPS" in os.environ:
-            self.save_steps = float(os.environ.get("HF_SAVE_STEPS"))
-
-        # Override save_total_limit from environment if set
-        if "HF_SAVE_TOTAL_LIMIT" in os.environ:
-            self.save_total_limit = int(os.environ.get("HF_SAVE_TOTAL_LIMIT"))
-
-        # Override output_dir from environment if set
-        if "HF_OUTPUT_DIR" in os.environ:
-            self.output_dir = os.environ.get("HF_OUTPUT_DIR")
-
-        # Override resume_from_checkpoint from environment if set
-        if "HF_RESUME_FROM_CHECKPOINT" in os.environ:
-            self.resume_from_checkpoint = os.environ.get("HF_RESUME_FROM_CHECKPOINT")
 
         if self.use_cpu:
             self.dataloader_pin_memory = False
