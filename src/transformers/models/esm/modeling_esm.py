@@ -732,8 +732,6 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.lm_head = EsmLMHead(config)
 
-        self.init_weights()
-
         self.post_init()
 
     def get_output_embeddings(self):
@@ -828,8 +826,6 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.classifier = EsmClassificationHead(config)
 
-        self.init_weights()
-
         self.post_init()
 
     @can_return_tuple
@@ -902,8 +898,6 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
 
         self.post_init()
 

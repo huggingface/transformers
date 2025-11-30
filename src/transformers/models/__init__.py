@@ -244,6 +244,7 @@ if TYPE_CHECKING:
     from .musicgen_melody import *
     from .mvp import *
     from .myt5 import *
+    from .nanochat import *
     from .nemotron import *
     from .nllb import *
     from .nllb_moe import *
@@ -311,6 +312,8 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3_tracker import *
+    from .sam3_tracker_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *

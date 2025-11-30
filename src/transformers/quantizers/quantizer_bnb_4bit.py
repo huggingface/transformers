@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from functools import cached_property
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -38,6 +37,7 @@ from ..utils import (
 if is_torch_available():
     import torch
 
+    from ..core_model_loading import WeightConverter
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
@@ -172,17 +172,13 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
             # We are ready for quantization in this case (note, the +1 is for the weight itself)
             if len(self.param_quant_stats[module_name]) == len(self.bnb_keys) + 1:
-                param_kwargs = {}
-                if self.is_bnb_supports_quant_storage_module:
-                    param_kwargs["module"] = module
-
                 weight = self.param_quant_stats[module_name].pop(f"{module_name}.weight")
                 new_value = bnb.nn.Params4bit.from_prequantized(
                     data=weight,
                     quantized_stats=self.param_quant_stats[module_name],
                     requires_grad=False,
                     device=target_device,
-                    **param_kwargs,
+                    module=module,
                 )
                 # Set it
                 module._parameters[tensor_name] = new_value
@@ -204,7 +200,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = new_value
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -247,7 +243,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear
@@ -269,9 +265,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     " converted to 8-bit but kept in 32-bit."
                 )
             self.modules_to_not_convert.extend(keys_on_cpu)
-
         model = replace_with_bnb_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            quantization_config=self.quantization_config,
+            pre_quantized=self.pre_quantized,
         )
 
         model.config.quantization_config = self.quantization_config
@@ -285,15 +283,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None):
         return True
 
-    @cached_property
-    def is_bnb_supports_quant_storage_module(self) -> bool:
-        """
-        determines if the current version of bitsandbytes supports
-        the `module` parameter in `Params4bit.from_prequantized`
-        :return:
-        """
-        return True
-
     @property
     def is_trainable(self) -> bool:
         return True
@@ -305,3 +294,29 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
+
+    def get_quantize_ops(self):
+        from ..integrations.bitsandbytes import Bnb4bitQuantize
+
+        return Bnb4bitQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.bitsandbytes import Bnb4bitDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_patterns=[
+                        "weight.nested_absmax",
+                        "weight.nested_quant_map",
+                        "weight.quant_map",
+                        "weight.absmax",
+                        "weight.quant_state.bitsandbytes__nf4",
+                        "weight.quant_state.bitsandbytes__fp4",
+                        "weight",
+                    ],
+                    target_patterns="weight",
+                    operations=[Bnb4bitDeserialize(self)],
+                )
+            ]
+        return []

@@ -114,7 +114,7 @@ class T5GemmaModuleConfig(Gemma2Config):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -892,9 +892,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
@@ -1020,12 +1017,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     @can_return_tuple
     @auto_docstring

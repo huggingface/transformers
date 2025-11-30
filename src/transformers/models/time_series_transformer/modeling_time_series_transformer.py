@@ -608,7 +608,7 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     config: TimeSeriesTransformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = True
     # TODO: tests would need a rewrite to check for correct implementation
     # Current tests always assume certain inputs to be passed
@@ -1057,9 +1057,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
         return transformer_inputs, loc, scale, static_feat
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1296,12 +1293,6 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
     def output_params(self, dec_output):
         return self.parameter_projection(dec_output)
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @torch.jit.ignore
     def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:

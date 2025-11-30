@@ -176,9 +176,7 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] SeamlessM4TTokenizer
     - __call__
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## SeamlessM4TTokenizerFast

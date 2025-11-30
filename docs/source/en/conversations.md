@@ -26,6 +26,8 @@ This guide shows you how to quickly load chat models in Transformers from the co
 
 After you've [installed Transformers](./installation), you can chat with a model directly from the command line. The command below launches an interactive session with a model, with a few base commands listed at the start of the session.
 
+> For the following commands, please make sure [`transformers serve` is running](https://huggingface.co/docs/transformers/main/en/serving).
+
 ```bash
 transformers chat Qwen/Qwen2.5-0.5B-Instruct
 ```

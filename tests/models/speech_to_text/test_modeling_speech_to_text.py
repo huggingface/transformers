@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_fp16,
     require_torchaudio,
+    slow,
     torch_device,
 )
 
@@ -605,6 +606,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 @require_torchaudio
 @require_sentencepiece
 @require_tokenizers
+@slow
 @unittest.skip("@eustlb broken in a weird way. To investigate later.")
 class Speech2TextModelIntegrationTests(unittest.TestCase):
     @classmethod

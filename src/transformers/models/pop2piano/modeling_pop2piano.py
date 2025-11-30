@@ -538,7 +538,7 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
 class Pop2PianoPreTrainedModel(PreTrainedModel):
     config: Pop2PianoConfig
     base_model_prefix = "transformer"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
@@ -983,9 +983,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
 
     def get_mel_conditioner_outputs(
         self,

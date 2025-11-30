@@ -520,7 +520,7 @@ class TvpPooler(nn.Module):
 class TvpPreTrainedModel(PreTrainedModel):
     config: TvpConfig
     base_model_prefix = "model"
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()

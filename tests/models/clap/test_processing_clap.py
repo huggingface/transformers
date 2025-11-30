@@ -16,8 +16,9 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import ClapFeatureExtractor, ClapProcessor, RobertaTokenizer, RobertaTokenizerFast
+from transformers import ClapFeatureExtractor, ClapProcessor, RobertaTokenizer
 from transformers.testing_utils import require_sentencepiece, require_torchaudio
+from transformers.tokenization_utils_tokenizers import TokenizersBackend
 
 from .test_feature_extraction_clap import floats_list
 
@@ -48,7 +49,7 @@ class ClapProcessorTest(unittest.TestCase):
         processor = ClapProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, RobertaTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, TokenizersBackend)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, ClapFeatureExtractor)
@@ -65,7 +66,7 @@ class ClapProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, RobertaTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, TokenizersBackend)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, ClapFeatureExtractor)

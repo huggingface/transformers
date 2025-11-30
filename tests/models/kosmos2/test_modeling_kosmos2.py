@@ -408,6 +408,10 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip(reason="Kosmos2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite -- kosmos2 needs to prepare `image_embeds_position_mask`, and it must be padded accordingly

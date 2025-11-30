@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
@@ -153,7 +153,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
@@ -226,3 +226,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def get_accelerator_warm_up_factor(self):
         # Pre-processing is done cleanly, so we can allocate everything here
         return 2
+
+    def get_quantize_ops(self):
+        from ..integrations.finegrained_fp8 import Fp8Quantize
+
+        return Fp8Quantize(self)

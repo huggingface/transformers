@@ -24,7 +24,7 @@ import torch
 from transformers.image_utils import load_image
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import require_mistral_common
-from transformers.tokenization_mistral_common import MistralCommonTokenizer
+from transformers.tokenization_mistral_common import MistralCommonBackend
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
 
@@ -63,7 +63,7 @@ AUDIO_BASE_64 = """//uUxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAHNAAFFIAACAwQGBwkLD
 
 
 @require_mistral_common
-class TestMistralCommonTokenizer(unittest.TestCase):
+class TestMistralCommonBackend(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -72,7 +72,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # determine if we already have this downloaded
         cls.local_files_only = len(list_local_hf_repo_files(cls.repo_id, revision=None)) > 0
 
-        cls.tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+        cls.tokenizer: MistralCommonBackend = AutoTokenizer.from_pretrained(
             cls.repo_id,
             tokenizer_type="mistral",
             local_files_only=cls.local_files_only,
@@ -87,18 +87,18 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Define SPM tokenizer to test the private methods that handle SPM and Tekken differencies.
         cls.spm_repo_id = "mistralai/Mistral-7B-v0.3"
 
-        # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+        # cls.tokenizer_audio: MistralCommonBackend = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
         local_files_only = len(list_local_hf_repo_files(repo_id, revision=None)) > 0
 
-        cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+        cls.tokenizer_audio: MistralCommonBackend = AutoTokenizer.from_pretrained(
             repo_id,
             local_files_only=local_files_only,
             revision=None,
         )
-        cls.ref_tokenizer_audio: MistralCommonTokenizer = MistralTokenizer.from_hf_hub(
+        cls.ref_tokenizer_audio: MistralCommonBackend = MistralTokenizer.from_hf_hub(
             repo_id, local_files_only=local_files_only
         )
 
@@ -132,7 +132,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         del cls.ref_special_ids
         gc.collect()
 
-    # Copy paste of `MistralCommonTokenizer._tekken_piece_to_id`
+    # Copy paste of `MistralCommonBackend._tekken_piece_to_id`
     def _ref_piece_to_id(self, piece: str) -> int:
         tekken_tokenizer = self.ref_tokenizer.instruct_tokenizer.tokenizer
 
@@ -146,7 +146,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
             return tekken_tokenizer.unk_id
 
-    def _get_spm_tokenizer(self) -> MistralCommonTokenizer:
+    def _get_spm_tokenizer(self) -> MistralCommonBackend:
         local_files_only = len(list_local_hf_repo_files(self.spm_repo_id, revision=None)) > 0
         return AutoTokenizer.from_pretrained(
             self.spm_repo_id,
@@ -186,7 +186,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
     def test_save_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             self.tokenizer.save_pretrained(tmp_dir)
-            loaded_tokenizer = MistralCommonTokenizer.from_pretrained(tmp_dir)
+            loaded_tokenizer = MistralCommonBackend.from_pretrained(tmp_dir)
 
         self.assertIsNotNone(loaded_tokenizer)
         self.assertEqual(self.tokenizer.get_vocab(), loaded_tokenizer.get_vocab())
@@ -196,7 +196,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.save_pretrained`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.save_pretrained`."
         ):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 self.tokenizer.save_pretrained(tmp_dir, unk_args="")
@@ -275,7 +275,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test encode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.encode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.encode`."
         ):
             self.tokenizer.encode("Hello, world!", add_special_tokens=True, unk_args="")
 
@@ -304,14 +304,14 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 3:
         # decode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.decode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.decode`."
         ):
             self.tokenizer.decode(tokens_ids, skip_special_tokens=False, unk_args="")
 
     def test_decode_transcription_mode(self):
         # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
         # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
-        # we made the explicit choice of skipping "lang:xx" it to ease users life, see `[~MistralCommonTokenizer.decode]`
+        # we made the explicit choice of skipping "lang:xx" it to ease users life, see `[~MistralCommonBackend.decode]`
         expected_string = "lang:en[TRANSCRIBE]"
 
         openai_transcription_request = {
@@ -360,7 +360,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         # Test 2:
         # batch_decode with unsupported kwargs
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.batch_decode`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_decode`."
         ):
             self.tokenizer.batch_decode(batch_tokens_ids, skip_special_tokens=False, unk_args="")
 
@@ -411,7 +411,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(tokens, expected_tokens)
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [add_special_tokens] are not supported by `MistralCommonTokenizer.tokenize`."
+            ValueError, msg="Kwargs [add_special_tokens] are not supported by `MistralCommonBackend.tokenize`."
         ):
             self.tokenizer.tokenize(string, add_special_tokens=True)
 
@@ -494,7 +494,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = MistralCommonTokenizer.from_pretrained(
+        right_tokenizer = MistralCommonBackend.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -646,7 +646,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 4:
         # padding_side="right"
-        right_tokenizer = MistralCommonTokenizer.from_pretrained(
+        right_tokenizer = MistralCommonBackend.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             padding_side="right",
@@ -767,7 +767,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 6:
         # truncation_side="left"
-        left_tokenizer = MistralCommonTokenizer.from_pretrained(
+        left_tokenizer = MistralCommonBackend.from_pretrained(
             self.repo_id,
             local_files_only=self.local_files_only,
             truncation_side="left",
@@ -804,7 +804,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.apply_chat_template`."
+            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.apply_chat_template`."
         ):
             self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
 
@@ -1140,7 +1140,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         with self.assertRaises(
             ValueError,
-            msg="Kwargs [unk_args] are not supported by `MistralCommonTokenizer.batch_apply_chat_template`.",
+            msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_apply_chat_template`.",
         ):
             self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
@@ -1510,23 +1510,23 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertEqual(tokens["special_tokens_mask"], [0] * len(expected_tokens))
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonTokenizer.__call__`."
+            ValueError, msg="Kwargs [wrong_kwarg] are not supported by `MistralCommonBackend.__call__`."
         ):
             self.tokenizer(text, wrong_kwarg=True)
 
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
         ):
             self.tokenizer(text, text_pair="Hello world!")
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
         ):
             self.tokenizer(text, text_target="Hello world!")
         with self.assertRaises(
             ValueError,
-            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`.",
+            msg="`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`.",
         ):
             self.tokenizer(text, text_pair_target="Hello world!")
 
@@ -1577,7 +1577,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         for truncation in ["only_first", TruncationStrategy.ONLY_FIRST, "only_second", TruncationStrategy.ONLY_SECOND]:
             with self.assertRaises(
                 ValueError,
-                msg="Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonTokenizer`.",
+                msg="Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonBackend`.",
             ):
                 self.tokenizer(text, truncation=truncation)
 

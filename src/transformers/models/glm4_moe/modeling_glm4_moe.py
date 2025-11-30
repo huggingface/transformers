@@ -82,7 +82,7 @@ class Glm4MoeRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -498,6 +498,9 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Glm4MoeTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm4MoeNaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -570,6 +573,7 @@ class Glm4MoeModel(Glm4MoePreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )

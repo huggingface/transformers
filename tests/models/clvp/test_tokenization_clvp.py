@@ -18,8 +18,9 @@ import os
 import unittest
 
 from transformers import ClvpTokenizer
+from transformers.testing_utils import slow
 
-from ...test_tokenization_common import TokenizerTesterMixin, slow
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -70,6 +71,12 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
+        # Remove files from parent class loading from hub to avoid conflicts
+        for filename in ["added_tokens.json", "special_tokens_map.json", "tokenizer_config.json"]:
+            filepath = os.path.join(cls.tmpdirname, filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_tokenizer with GPT2->Clvp
     @classmethod
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
@@ -80,7 +87,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
-        output_text = "lower[SPACE]newer"
+        output_text = "lower[SPACE]newer"  # [SPACE] tokens preserved when clean_up_tokenization_spaces=False (default)
         return input_text, output_text
 
     # Copied from transformers.tests.models.layoutxlm.test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_add_special_tokens
@@ -133,6 +140,9 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.test_padding
     def test_padding(self, max_length=15):
+        if not self.test_rust_tokenizer:
+            self.skipTest(reason="test_rust_tokenizer is set to False")
+
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
@@ -238,7 +248,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 sequence_1 = "This one too please."
                 encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
                 encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
-                encoded_sequence_dict = tokenizer.encode_plus(
+                encoded_sequence_dict = tokenizer(
                     sequence_0,
                     sequence_1,
                     add_special_tokens=True,

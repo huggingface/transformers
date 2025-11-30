@@ -210,5 +210,10 @@ class MgpstrProcessor(ProcessorMixin):
         decode_strs = [seq.replace(" ", "") for seq in self.wp_tokenizer.batch_decode(sequences)]
         return decode_strs
 
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return image_processor_input_names + ["labels"]
+
 
 __all__ = ["MgpstrProcessor"]

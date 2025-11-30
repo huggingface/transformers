@@ -813,7 +813,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
     config: DabDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]
 
     @torch.no_grad()
@@ -1201,9 +1201,6 @@ class DabDetrModel(DabDetrPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():

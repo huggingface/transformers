@@ -507,7 +507,6 @@ class TapasPreTrainedModel(PreTrainedModel):
     config: TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
 
     @torch.no_grad()
     def _init_weights(self, module):

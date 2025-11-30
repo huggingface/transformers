@@ -682,7 +682,7 @@ class Data2VecVisionEncoder(nn.Module):
 class Data2VecVisionPreTrainedModel(PreTrainedModel):
     config: Data2VecVisionConfig
     base_model_prefix = "data2vec_vision"
-    input_modalities = "image"
+    input_modalities = ("image",)
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Data2VecVisionLayer"]

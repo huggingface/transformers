@@ -884,9 +884,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1010,7 +1007,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     """
 )
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, GenerationMixin):
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
@@ -1021,12 +1018,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @auto_docstring
     def forward(

@@ -369,9 +369,9 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             inputs,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()

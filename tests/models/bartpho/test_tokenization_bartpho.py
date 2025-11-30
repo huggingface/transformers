@@ -13,6 +13,7 @@
 
 
 import os
+import tempfile
 import unittest
 
 from transformers.models.bartpho.tokenization_bartpho import VOCAB_FILES_NAMES, BartphoTokenizer
@@ -33,23 +34,23 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-
-        vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
         cls.special_tokens_map = {"unk_token": "<unk>"}
-
-        cls.monolingual_vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["monolingual_vocab_file"])
-        with open(cls.monolingual_vocab_file, "w", encoding="utf-8") as fp:
-            fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
-
-        tokenizer = BartphoTokenizer(SAMPLE_VOCAB, cls.monolingual_vocab_file, **cls.special_tokens_map)
-        tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        """Create a fresh tokenizer for each test instead of loading from saved."""
         kwargs.update(cls.special_tokens_map)
-        pretrained_name = pretrained_name or cls.tmpdirname
-        return BartphoTokenizer.from_pretrained(pretrained_name, **kwargs)
+
+        # Create a temporary directory for this tokenizer
+        tmpdir = tempfile.mkdtemp()
+        vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
+        vocab_tokens = dict(zip(vocab, range(len(vocab))))
+
+        monolingual_vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["monolingual_vocab_file"])
+        with open(monolingual_vocab_file, "w", encoding="utf-8") as fp:
+            fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
+
+        return BartphoTokenizer(SAMPLE_VOCAB, monolingual_vocab_file, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "This is a là test"
@@ -57,12 +58,21 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = BartphoTokenizer(SAMPLE_VOCAB, self.monolingual_vocab_file, **self.special_tokens_map)
-        text = "This is a là test"
-        bpe_tokens = "▁This ▁is ▁a ▁l à ▁t est".split()
-        tokens = tokenizer.tokenize(text)
-        self.assertListEqual(tokens, bpe_tokens)
+        vocab = ["▁This", "▁is", "▁a", "▁t", "est"]
+        vocab_tokens = dict(zip(vocab, range(len(vocab))))
+        special_tokens_map = {"unk_token": "<unk>"}
 
-        input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [4, 5, 6, 3, 3, 7, 8, 3]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monolingual_vocab_file = os.path.join(tmpdir, VOCAB_FILES_NAMES["monolingual_vocab_file"])
+            with open(monolingual_vocab_file, "w", encoding="utf-8") as fp:
+                fp.writelines(f"{token} {vocab_tokens[token]}\n" for token in vocab_tokens)
+            tokenizer = BartphoTokenizer(SAMPLE_VOCAB, monolingual_vocab_file, **special_tokens_map)
+
+            text = "This is a là test"
+            bpe_tokens = "▁This ▁is ▁a ▁l à ▁t est".split()
+            tokens = tokenizer.tokenize(text)
+            self.assertListEqual(tokens, bpe_tokens)
+
+            input_tokens = tokens + [tokenizer.unk_token]
+            input_bpe_tokens = [4, 5, 6, 3, 3, 7, 8, 3]
+            self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)

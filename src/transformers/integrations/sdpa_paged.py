@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
@@ -22,13 +20,13 @@ def sdpa_attention_paged_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
+    scaling: float | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
-    cache: Optional[PagedAttentionCache] = kwargs.pop("cache", None)
+    cache: PagedAttentionCache | None = kwargs.pop("cache", None)
     if cache is not None:
         # This changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
         key, value = cache.update(

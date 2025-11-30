@@ -648,6 +648,10 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             [encoder_expected_shape] * len(hidden_states),
         )
 
+    @unittest.skip("Pix2Struct has no base model, it was implemented before standardization")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 # We will verify our results on an image of a stop sign
 def prepare_img():

@@ -41,7 +41,7 @@ if is_torch_available():
 class ColQwen2PreTrainedModel(PreTrainedModel):
     config: ColQwen2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -171,10 +171,10 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
+                image_embeds = self.vlm.model.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )

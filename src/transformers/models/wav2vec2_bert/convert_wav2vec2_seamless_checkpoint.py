@@ -150,7 +150,7 @@ def convert_wav2vec2_bert_checkpoint(
 
     # save feature extractor
     fe = SeamlessM4TFeatureExtractor(padding_value=1)
-    fe._set_processor_class("Wav2Vec2BertProcessor")
+    fe._processor_class = "Wav2Vec2BertProcessor"
     fe.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:

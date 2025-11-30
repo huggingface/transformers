@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 import numpy as np
 
+from .audio_utils import is_valid_audio, load_audio
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .utils import PaddingStrategy, TensorType, is_torch_tensor, logging, to_numpy
 
@@ -122,8 +123,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             processed_features = {
-                key: [example[key] for example in processed_features] for key in processed_features[0]
+                key: [example[key] for example in processed_features] for key in processed_features[0].keys()
             }
 
         # The model's main input name, usually `input_values`, has be passed for padding
@@ -366,3 +368,19 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
+
+    def fetch_audio(self, audio_url_or_urls: Union[str, list[str], list[list[str]]]):
+        """
+        Convert a single or a list of urls into the corresponding `np.ndarray` objects.
+
+        If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
+        returned.
+        """
+        if isinstance(audio_url_or_urls, list):
+            return [self.fetch_audio(x) for x in audio_url_or_urls]
+        elif isinstance(audio_url_or_urls, str):
+            return load_audio(audio_url_or_urls)
+        elif is_valid_audio(audio_url_or_urls):
+            return audio_url_or_urls
+        else:
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(audio_url_or_urls)}")

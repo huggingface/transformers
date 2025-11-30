@@ -17,7 +17,6 @@ Time series distributional output classes and utilities.
 """
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
@@ -103,8 +102,8 @@ class DistributionOutput:
     def distribution(
         self,
         distr_args,
-        loc: Optional[torch.Tensor] = None,
-        scale: Optional[torch.Tensor] = None,
+        loc: torch.Tensor | None = None,
+        scale: torch.Tensor | None = None,
     ) -> Distribution:
         distr = self._base_distribution(distr_args)
         if loc is None and scale is None:
@@ -215,7 +214,7 @@ class NegativeBinomialOutput(DistributionOutput):
     # transformation since negative binomial should return integers. Instead
     # we scale the parameters.
     def distribution(
-        self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
+        self, distr_args, loc: torch.Tensor | None = None, scale: torch.Tensor | None = None
     ) -> Distribution:
         total_count, logits = distr_args
 

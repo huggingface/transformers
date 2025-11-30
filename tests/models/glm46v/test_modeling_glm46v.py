@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -512,7 +512,7 @@ class Glm46VIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm46VForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking",
@@ -547,7 +547,7 @@ class Glm46VIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Glm46VForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking",

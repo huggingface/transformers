@@ -454,7 +454,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     config: RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
 
     @torch.no_grad()
@@ -1438,9 +1438,6 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         self.decoder = RTDetrV2Decoder(config)
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():

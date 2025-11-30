@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ...modeling_layers import (
@@ -141,6 +141,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -353,6 +354,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -675,6 +677,7 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )

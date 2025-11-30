@@ -76,7 +76,7 @@ def _test_encoder_eager_matches_sdpa_inference(
 ):
     """
     This test is written as a regular function to be able to overload it easily with different tolerances.
-    Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
+    Otherwise, `parameterize.expand` prevents it as it removes the original function from the namespace.
     """
     if not self.has_attentions:
         self.skipTest(reason="Model architecture does not support attentions")

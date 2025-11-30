@@ -269,6 +269,13 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = OpenAIGPTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip("Tied weights mapping is reversed, so this is supposed to error out")
+    def test_correct_missing_keys(self):
+        # openai defines `_tied_weights_keys = {"transformer.tokens_embed.weight": "lm_head.weight"}` instead
+        # of the usual `_tied_weights_keys = {"lm_head.weight": "transformer.tokens_embed.weight"}`, so removing
+        # the head parameters actually removes the source weight, so this test is supposed to fail
+        pass
+
 
 @require_torch
 class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):

@@ -625,7 +625,7 @@ class BitEncoder(nn.Module):
 class BitPreTrainedModel(PreTrainedModel):
     config: BitConfig
     base_model_prefix = "bit"
-    input_modalities = "image"
+    input_modalities = ("image",)
     main_input_name = "pixel_values"
     _no_split_modules = ["BitEmbeddings"]
 

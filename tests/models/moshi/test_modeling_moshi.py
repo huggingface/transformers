@@ -834,6 +834,10 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             last_hidden_state=torch.randn(2, 3, 32), kwargs_depth_decoder={}
         )
 
+    @unittest.skip(reason="Moshi has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 def place_dict_on_device(dict_to_place, device):
     for key in dict_to_place:

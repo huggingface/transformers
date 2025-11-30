@@ -343,7 +343,7 @@ class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
 
 class Qwen2_5_VLModel(Qwen2VLModel):
     config: Qwen2_5_VLConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False

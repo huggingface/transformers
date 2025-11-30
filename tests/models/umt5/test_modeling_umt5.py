@@ -361,6 +361,10 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="UMT5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->UMT5
 class UMT5EncoderOnlyModelTester:

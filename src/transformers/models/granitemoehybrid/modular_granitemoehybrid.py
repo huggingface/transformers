@@ -37,6 +37,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
+    GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
     eager_attention_forward,
 )
@@ -108,6 +109,10 @@ class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
+class GraniteMoeHybridMoE(GraniteMoeSharedMoE):
+    pass
+
+
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -121,6 +126,9 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
+
+        # Allow non-MoE (dense)
+        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0

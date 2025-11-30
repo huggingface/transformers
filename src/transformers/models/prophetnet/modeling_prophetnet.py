@@ -1400,9 +1400,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder.word_embeddings = self.word_embeddings
         self.decoder.word_embeddings = self.word_embeddings
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1671,11 +1668,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    def get_encoder(self):
-        return self.prophetnet.encoder
-
-    def get_decoder(self):
-        return self.prophetnet.decoder
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.prophetnet.encoder
+        else:
+            return super().get_encoder(modality=modality)
 
 
 @auto_docstring(
@@ -1710,12 +1707,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.prophetnet.decoder.word_embeddings = value
-
-    def set_decoder(self, decoder):
-        self.prophetnet.decoder = decoder
-
-    def get_decoder(self):
-        return self.prophetnet.decoder
 
     @auto_docstring
     def forward(

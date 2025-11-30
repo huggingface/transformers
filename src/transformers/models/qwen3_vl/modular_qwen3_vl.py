@@ -30,7 +30,7 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -148,7 +148,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -171,6 +171,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_text"
     base_config_key = "text_config"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -211,16 +212,13 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 5000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
+            **kwargs,
+        )
 
 
 class Qwen3VLConfig(PreTrainedConfig):
@@ -822,7 +820,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Different from the original implementation, Qwen3VL use timestamps rather than absolute time position ids."""
 
-        # Since we use timestamps to seperate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split
+        # Since we use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1

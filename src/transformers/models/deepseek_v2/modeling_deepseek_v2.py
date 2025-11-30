@@ -465,8 +465,9 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekV2Moe):
-            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, DeepseekV2Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -537,6 +538,7 @@ class DeepseekV2Model(DeepseekV2PreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )

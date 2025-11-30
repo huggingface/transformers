@@ -999,7 +999,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config: SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["SamVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -1103,7 +1103,7 @@ class SamVisionModel(SamPreTrainedModel):
     """
 )
 class SamModel(SamPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
     def __init__(self, config: SamConfig):

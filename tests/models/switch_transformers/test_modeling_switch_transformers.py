@@ -708,6 +708,10 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip(reason="SwitchTransformers has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 class SwitchTransformersEncoderOnlyModelTester:
     def __init__(

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 
@@ -34,6 +34,7 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
+    from ..core_model_loading import WeightConverter
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
@@ -97,7 +98,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                     "for more details. "
                 )
 
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
@@ -195,7 +196,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear
@@ -219,7 +220,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             self.modules_to_not_convert.extend(keys_on_cpu)
 
         model = replace_with_bnb_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+            model,
+            modules_to_not_convert=self.modules_to_not_convert,
+            quantization_config=self.quantization_config,
+            pre_quantized=self.pre_quantized,
         )
 
         model.config.quantization_config = self.quantization_config
@@ -238,3 +242,21 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             model, self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         return model
+
+    def get_quantize_ops(self):
+        from ..integrations.bitsandbytes import Bnb8bitQuantize
+
+        return Bnb8bitQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.bitsandbytes import Bnb8bitDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_patterns=["SCB", "weight_format", "weight"],
+                    target_patterns="weight",
+                    operations=[Bnb8bitDeserialize(self)],
+                )
+            ]
+        return []

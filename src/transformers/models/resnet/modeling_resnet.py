@@ -248,7 +248,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
     config: ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
     @torch.no_grad()

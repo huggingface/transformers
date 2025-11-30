@@ -179,9 +179,7 @@ This implementation is the same as RoBERTa. Refer to the [documentation of RoBER
 ## XLMRobertaTokenizer
 
 [[autodoc]] XLMRobertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## XLMRobertaTokenizerFast

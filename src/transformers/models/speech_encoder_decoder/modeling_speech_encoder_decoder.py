@@ -67,7 +67,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     main_input_name = "inputs"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -147,9 +146,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             )
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()

@@ -477,6 +477,10 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
     def test_model_is_small(self):
         pass
 
+    @unittest.skip("Qwen3Omni has no base model, model architecture is special")
+    def test_model_base_model_prefix(self):
+        pass
+
     @unittest.skip("FIXME this is important, but in a rush to merge, cannot investigate now")
     def test_get_rope_index_video_with_audio(self):
         image_grid_thw = torch.empty((0, 3), dtype=torch.long)

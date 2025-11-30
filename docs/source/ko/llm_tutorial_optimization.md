@@ -106,7 +106,7 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-[`torch.cuda.max_memory_allocated`](https://pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html)를 호출하여 최대 GPU 메모리 할당을 측정해 보겠습니다.
+[`torch.cuda.memory.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_allocated.html)를 호출하여 최대 GPU 메모리 할당을 측정해 보겠습니다.
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())

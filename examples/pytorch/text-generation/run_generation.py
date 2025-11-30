@@ -37,7 +37,6 @@ from accelerate.utils import set_seed
 from transformers import (
     AutoTokenizer,
     BloomForCausalLM,
-    BloomTokenizerFast,
     CTRLLMHeadModel,
     CTRLTokenizer,
     GenerationMixin,
@@ -72,7 +71,7 @@ MODEL_CLASSES = {
     "xlnet": (XLNetLMHeadModel, XLNetTokenizer),
     "xlm": (XLMWithLMHeadModel, XLMTokenizer),
     "gptj": (GPTJForCausalLM, AutoTokenizer),
-    "bloom": (BloomForCausalLM, BloomTokenizerFast),
+    "bloom": (BloomForCausalLM, AutoTokenizer),
     "llama": (LlamaForCausalLM, AutoTokenizer),
     "opt": (OPTForCausalLM, GPT2Tokenizer),
 }

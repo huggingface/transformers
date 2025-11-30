@@ -13,13 +13,10 @@
 # limitations under the License.
 """Testing suite for the ColPali processor."""
 
-import shutil
-import tempfile
 import unittest
 
 import torch
 
-from transformers import GemmaTokenizer
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -28,11 +25,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import (
-        ColPaliProcessor,
-        PaliGemmaProcessor,
-        SiglipImageProcessor,
-    )
+    from transformers import ColPaliProcessor, GemmaTokenizer
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -42,19 +35,24 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColPaliProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-        image_processor.image_seq_length = 0
-        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_tokenizer(cls):
+        return GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        image_processor = image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor.image_seq_length = 0
+        return image_processor
 
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    @unittest.skip("ColpaliProcessor can only process one of text or images at a time")
+    def test_processor_with_multiple_inputs(self):
+        pass
+
+    @unittest.skip("ColpaliProcessor adds a prefix and suffix to the text")
+    def test_tokenizer_defaults(self):
+        pass
+
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 

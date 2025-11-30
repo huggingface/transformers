@@ -49,6 +49,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -249,14 +250,25 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
     """
 
     all_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Qwen2_5OmniThinkerForConditionalGeneration,) if is_torch_available() else ()
-
+    # pipeline_model_mapping = (
+    #     {
+    #         "any-to-any": Qwen2_5OmniForConditionalGeneration,
+    #         "image-text-to-text": Qwen2_5OmniThinkerForConditionalGeneration,
+    #     }
+    #     if is_torch_available()
+    #     else {}
+    # )
+    # FIXME @raushan Omni tests take ages because the model is big. Try to make it even smaller
+    pipeline_model_mapping = {}
     _is_composite = True
     model_split_percents = [0.5, 0.9]
 
@@ -291,6 +303,10 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 
     @unittest.skip(reason="QwenOmniThinker does not support output_hidden_states test")
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("Qwen2Omni has no base model, model architecture is special")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

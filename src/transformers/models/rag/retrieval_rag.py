@@ -22,7 +22,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends, strtobool
 from .configuration_rag import RagConfig
@@ -528,7 +528,7 @@ class RagRetriever:
             for j in range(n_docs)
         ]
 
-        contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
+        contextualized_inputs = self.generator_tokenizer(
             rag_input_strings,
             max_length=self.config.max_combined_length,
             return_tensors=return_tensors,
@@ -629,7 +629,7 @@ class RagRetriever:
         prefix = prefix if prefix is not None else self.config.generator.prefix
         retrieved_doc_embeds, doc_ids, docs = self.retrieve(question_hidden_states, n_docs)
 
-        input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
+        input_strings = self.question_encoder_tokenizer.decode(question_input_ids, skip_special_tokens=True)
         context_input_ids, context_attention_mask = self.postprocess_docs(
             docs, input_strings, prefix, n_docs, return_tensors=return_tensors
         )

@@ -99,7 +99,7 @@ class PersimmonRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -219,7 +219,7 @@ class PersimmonAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
 
-        self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
+        self.rotary_ndims = int(self.head_dim * config.rope_parameters["partial_rotary_factor"])
         self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
