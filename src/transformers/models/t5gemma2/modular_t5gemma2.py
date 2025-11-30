@@ -381,7 +381,7 @@ class T5Gemma2EncoderLayer(T5GemmaEncoderLayer):
     pass
 
 
-class T5Gemma2DecoderLayer(T5Gemma2EncoderLayer):
+class T5Gemma2DecoderLayer(T5GemmaEncoderLayer):
     """Decoder sub-layer: merged attention instead of vanilla self-attention."""
 
     def __init__(self, config, layer_idx: int):

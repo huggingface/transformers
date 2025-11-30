@@ -510,17 +510,29 @@ class T5Gemma2EncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class T5Gemma2DecoderLayer(T5Gemma2EncoderLayer):
+class T5Gemma2DecoderLayer(GradientCheckpointingLayer):
     """Decoder sub-layer: merged attention instead of vanilla self-attention."""
 
     def __init__(self, config, layer_idx: int):
-        super().__init__(config, layer_idx)
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.config = config
+        self.layer_idx = layer_idx
+        self.attention_type = config.layer_types[layer_idx]
 
         # replace vanilla self-attention with merged attention to support joint cross-attention.
         self.self_attn = T5Gemma2MergedAttention(
             config=config,
             layer_idx=layer_idx,
         )
+        self.pre_self_attn_layernorm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.mlp = T5Gemma2MLP(config)
+        self.pre_feedforward_layernorm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = T5Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
         self,
