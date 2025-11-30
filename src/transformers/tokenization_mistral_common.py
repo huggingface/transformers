@@ -363,6 +363,20 @@ class MistralCommonBackend(PushToHubMixin):
         return self.convert_ids_to_tokens(self.pad_token_id)
 
     @property
+    def all_special_ids(self) -> list[int]:
+        """
+        `list[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.).
+        """
+        return sorted(self._all_special_tokens_ids)
+
+    @property
+    def all_special_tokens(self) -> list[str]:
+        """
+        `list[str]`: A list of all unique special tokens.
+        """
+        return self.convert_ids_to_tokens(self.all_special_ids)
+
+    @property
     def vocab_size(self) -> int:
         """
         Returns the size of the vocabulary.

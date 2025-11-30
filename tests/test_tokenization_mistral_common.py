@@ -2110,3 +2110,19 @@ class TestMistralCommonBackend(unittest.TestCase):
         for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
             with self.assertRaises(ValueError):
                 MistralCommonBackend._get_validation_mode(invalid_mode)
+
+    def test_all_special_ids(self):
+        with patch.object(self.tokenizer, "_all_special_tokens_ids", {1, 0}):
+            self.assertEqual(self.tokenizer.all_special_ids, [0, 1])
+
+        spm_tokenizer = self._get_spm_tokenizer()
+        with patch.object(spm_tokenizer, "_all_special_tokens_ids", {1, 0}):
+            self.assertEqual(spm_tokenizer.all_special_ids, [0, 1])
+
+    def test_all_special_tokens(self):
+        with patch.object(self.tokenizer, "_all_special_tokens_ids", {1, 0}):
+            self.assertEqual(self.tokenizer.all_special_tokens, ["<unk>", "<s>"])
+
+        spm_tokenizer = self._get_spm_tokenizer()
+        with patch.object(spm_tokenizer, "_all_special_tokens_ids", {1, 0}):
+            self.assertEqual(spm_tokenizer.all_special_tokens, ["<unk>", "<s>"])
