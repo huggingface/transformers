@@ -16,19 +16,19 @@
 
 from typing import Any, Optional
 
+import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from ...utils.import_utils import requires
-
-import sentencepiece as spm
 
 
 logger = logging.get_logger(__name__)
 
 # original in https://github.com/multimodal-art-projection/YuE/blob/main/inference/mm_tokenizer_v0.2_hf/tokenizer.model
 
-VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}  
+VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
+
 
 @requires(backends=("sentencepiece",))
 class YuETokenizer(PreTrainedTokenizer):
@@ -37,7 +37,6 @@ class YuETokenizer(PreTrainedTokenizer):
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
-    
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -46,17 +45,16 @@ class YuETokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file: str,
-        bos_token = None,
-        eos_token= None,
-        unk_token = "<unk>",
-        pad_token = None,
-        additional_special_tokens = None,
+        bos_token=None,
+        eos_token=None,
+        unk_token="<unk>",
+        pad_token="<pad>",
+        additional_special_tokens=None,
         sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ):
-        
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        
+
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
 
         self.vocab_file = vocab_file
@@ -69,17 +67,19 @@ class YuETokenizer(PreTrainedTokenizer):
             additional_special_tokens = special_tokens
         else:
             additional_special_tokens = list(set(special_tokens + additional_special_tokens))
-            
-        unk_token = AddedToken(unk_token, special=True, normalized=False) if isinstance(unk_token, str) else unk_token
-        additional_special_tokens = [AddedToken(token, special=True, normalized=False) for token in additional_special_tokens]
 
+        unk_token = AddedToken(unk_token, special=True, normalized=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, special=True, normalized=False) if isinstance(pad_token, str) else pad_token
+        additional_special_tokens = [
+            AddedToken(token, special=True, normalized=False) for token in additional_special_tokens
+        ]
 
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            additional_special_tokens=additional_special_tokens, 
+            additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
@@ -87,7 +87,6 @@ class YuETokenizer(PreTrainedTokenizer):
         self.soa_token_id = self.convert_tokens_to_ids("<SOA>")
         self.eoa_token_id = self.convert_tokens_to_ids("<EOA>")
         self.xcodec_token_id = self.convert_tokens_to_ids("<xcodec>")
-
 
     @property
     def vocab_size(self):
@@ -121,4 +120,3 @@ class YuETokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         return "".join(tokens).replace("▁", " ").strip()
-
