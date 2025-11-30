@@ -33,7 +33,6 @@ import logging
 import os
 from collections.abc import Iterable
 from contextlib import nullcontext
-from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -586,7 +585,7 @@ def all_reduce_grads(model, world_mesh, use_ddp):
 class ContextParallelCollator:
     """Collator for context parallel training that splits sequences into chunks."""
 
-    def __init__(self, cp_mesh: Optional[DeviceMesh] = None):
+    def __init__(self, cp_mesh: DeviceMesh | None = None):
         self.cp_mesh = cp_mesh
 
     def __call__(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:

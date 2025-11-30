@@ -30,7 +30,6 @@ import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
 
 import aiohttp
 import datasets
@@ -333,12 +332,12 @@ class DataCollatorForWav2Vec2Pretraining:
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
-    padding: Union[bool, str] = "longest"
-    pad_to_multiple_of: Optional[int] = None
-    mask_time_prob: Optional[float] = 0.65
-    mask_time_length: Optional[int] = 10
+    padding: bool | str = "longest"
+    pad_to_multiple_of: int | None = None
+    mask_time_prob: float | None = 0.65
+    mask_time_length: int | None = 10
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, list[int] | torch.Tensor]]) -> dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
             features,
