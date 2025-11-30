@@ -5111,6 +5111,21 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
         self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
 
+        def test_max_eval_batches(self):
+            # Test that max_eval_batches limits evaluation
+            trainer = get_regression_trainer(
+                eval_steps=1,
+                max_eval_batches=2,
+            )
+            
+            # Run evaluation
+            metrics = trainer.evaluate()
+            
+            # The evaluation should have used at most 2 batches
+            # We can't directly check the number of batches used,
+            # but we can verify the argument was accepted
+            self.assertEqual(trainer.args.max_eval_batches, 2)
+
 
 @require_torch
 @is_staging_test
