@@ -40,20 +40,15 @@ Key features:
 ## Usage examples
 
 ```py
-from datetime import datetime, timedelta
 import torch
-
-from mistral_common.protocol.instruct.request import ChatCompletionRequest
-from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-from huggingface_hub import hf_hub_download
-from transformers import Mistral3ForConditionalGeneration
+from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
 
 
 model_id = "mistralai/Ministral-3-3B-Instruct-2512"
 
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = MistralCommonBackend.from_pretrained(model_id)
 model = Mistral3ForConditionalGeneration.from_pretrained(
-    model_id, torch_dtype=torch.bfloat16
+    model_id, torch_dtype=torch.bfloat16, device_map="auto"
 )
 
 image_url = "https://static.wikia.nocookie.net/essentialsdocs/images/7/70/Battle.png/revision/latest?cb=20220523172438"
@@ -73,12 +68,17 @@ messages = [
 
 tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True)
 
+tokenized["input_ids"] = tokenized["input_ids"].to(device="cuda")
+tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device="cuda")
+image_sizes = [tokenized["pixel_values"].shape[-2:]]
+
 output = model.generate(
-    tokenized,
-    max_new_tokens=1000,
+    **tokenized,
+    image_sizes=image_sizes,
+    max_new_tokens=512,
 )[0]
 
-decoded_output = tokenizer.decode(output[len(tokenized.tokens) :])
+decoded_output = tokenizer.decode(output[len(tokenized["input_ids"][0]):])
 print(decoded_output)
 ```
 
