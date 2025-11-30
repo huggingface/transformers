@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
+from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -177,6 +178,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -277,6 +279,7 @@ class T5Gemma2SelfAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.is_sliding = self.layer_type == "sliding_attention"
@@ -358,6 +361,7 @@ class T5Gemma2MergedAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.is_sliding = self.layer_type == "sliding_attention"
@@ -682,7 +686,7 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
             OutputRecorder(T5Gemma2MergedAttention, index=2, layer_name="cross_attn"),
         ],
     }
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
