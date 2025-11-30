@@ -13,8 +13,15 @@ logger = logging.get_logger(__name__)
 
 class CheckpointManager:
     def __init__(self, trainer, kill_wait: int = 3):
+        """
+        Initialize the CheckpointManager for Just-In-Time checkpoint handling.
+
+        Args:
+            trainer: The Trainer instance that will be used to save checkpoints when SIGTERM is received.
+            kill_wait (`int`, *optional*, defaults to 3): Grace period to distinguish between SIGTERM and SIGKILL.
+        """
         self.trainer = trainer
-        self.checkpoint_requested = False
+        self.is_checkpoint_requested = False
         self._original_sigterm_handler = None
         self.kill_wait = kill_wait
 
@@ -23,20 +30,20 @@ class CheckpointManager:
         logger.info("JIT checkpoint signal handler registered for SIGTERM")
 
     def _sigterm_handler(self, signum, frame):
-        if self.checkpoint_requested:
+        if self.is_checkpoint_requested:
             return
 
         logger.info(f"SIGTERM received, will request JIT checkpoint after {self.kill_wait}s")
-        threading.Timer(self.kill_wait, self._toggle_checkpoint_flag).start()
+        threading.Timer(self.kill_wait, self._enable_checkpoint).start()
 
-    def _toggle_checkpoint_flag(self):
+    def _enable_checkpoint(self):
         logger.info("Kill wait period elapsed, requesting checkpoint")
-        self.checkpoint_requested = True
+        self.is_checkpoint_requested = True
 
     def execute_jit_checkpoint(self):
         try:
             # Set checkpoint flag to False to avoid multiple checkpoints getting triggered by other callbacks
-            self.checkpoint_requested = False
+            self.is_checkpoint_requested = False
 
             logger.info("Starting JIT checkpointing...")
             current_step = self.trainer.state.global_step
@@ -69,11 +76,16 @@ class CheckpointManager:
             logger.error(f"Failed to save JIT checkpoint: {e}")
             raise
 
-    def should_checkpoint_now(self) -> bool:
-        return self.checkpoint_requested
-
 
 class JITCheckpointCallback(TrainerCallback):
+    """
+    Callback for Just-In-Time checkpointing on SIGTERM signals.
+
+    When SIGTERM is received, the checkpoint manager sets `is_checkpoint_requested=True`.
+    The callbacks detect this flag and set `control.should_training_stop=True`, which signals
+    the Trainer's training loop to exit gracefully after saving the checkpoint.
+    """
+
     def __init__(self):
         self.trainer = None
         self.jit_manager: Optional[CheckpointManager] = None
@@ -86,21 +98,29 @@ class JITCheckpointCallback(TrainerCallback):
             logger.info("JIT checkpointing enabled")
 
     def on_pre_optimizer_step(self, args, state, control, **kwargs):
-        if self.jit_manager and self.jit_manager.should_checkpoint_now():
+        if self.jit_manager and self.jit_manager.is_checkpoint_requested:
             control.should_training_stop = True
             self.jit_manager.execute_jit_checkpoint()
 
     def on_step_begin(self, args, state, control, **kwargs):
-        if self.jit_manager and self.jit_manager.should_checkpoint_now():
+        if self.jit_manager and self.jit_manager.is_checkpoint_requested:
             control.should_training_stop = True
             self.jit_manager.execute_jit_checkpoint()
 
     def on_step_end(self, args, state, control, **kwargs):
-        if self.jit_manager and self.jit_manager.should_checkpoint_now():
+        if self.jit_manager and self.jit_manager.is_checkpoint_requested:
             control.should_save = False
             control.should_training_stop = True
             self.jit_manager.execute_jit_checkpoint()
 
     def on_epoch_end(self, args, state, control, **kwargs):
-        if self.jit_manager and self.jit_manager.should_checkpoint_now():
+        if self.jit_manager and self.jit_manager.is_checkpoint_requested:
             control.should_save = False
+            control.should_training_stop = True
+            self.jit_manager.execute_jit_checkpoint()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        #  Restore original SIGTERM handler
+        if self.jit_manager and self.jit_manager._original_sigterm_handler is not None:
+            signal.signal(signal.SIGTERM, self.jit_manager._original_sigterm_handler)
+            logger.info("Restored original SIGTERM handler after training completion")

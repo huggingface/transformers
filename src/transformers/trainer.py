@@ -644,7 +644,7 @@ class Trainer:
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
 
         # Add JIT checkpoint callback if enabled
-        if hasattr(self.args, "enable_jit_checkpoint") and self.args.enable_jit_checkpoint:
+        if self.args.enable_jit_checkpoint:
             from .trainer_jit_checkpoint import JITCheckpointCallback
 
             jit_callback = JITCheckpointCallback()

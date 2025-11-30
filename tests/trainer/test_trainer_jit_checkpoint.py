@@ -68,7 +68,7 @@ class JITCheckpointTest(unittest.TestCase):
         manager = CheckpointManager(trainer)
         self.assertEqual(manager.trainer, trainer)
         self.assertEqual(manager.kill_wait, 3)
-        self.assertFalse(manager.checkpoint_requested)
+        self.assertFalse(manager.is_checkpoint_requested)
 
         # Test with custom parameters
         manager_custom = CheckpointManager(trainer, kill_wait=5)
@@ -108,21 +108,21 @@ class JITCheckpointTest(unittest.TestCase):
         mock_timer.return_value = mock_timer_instance
 
         # Test first SIGTERM call
-        self.assertFalse(manager.checkpoint_requested)
+        self.assertFalse(manager.is_checkpoint_requested)
         manager._sigterm_handler(signal.SIGTERM, None)
 
         # Verify checkpoint was NOT immediately requested (timer is used)
-        self.assertFalse(manager.checkpoint_requested)
+        self.assertFalse(manager.is_checkpoint_requested)
 
         # Verify timer was created with kill_wait period and correct callback
-        mock_timer.assert_called_once_with(2, manager._toggle_checkpoint_flag)
+        mock_timer.assert_called_once_with(2, manager._enable_checkpoint)
         mock_timer_instance.start.assert_called_once()
 
         # Manually trigger the timer callback to test flag setting
-        manager._toggle_checkpoint_flag()
+        manager._enable_checkpoint()
 
         # Verify checkpoint is now requested
-        self.assertTrue(manager.checkpoint_requested)
+        self.assertTrue(manager.is_checkpoint_requested)
 
         # Test second SIGTERM call (should be ignored)
         mock_timer.reset_mock()
@@ -137,25 +137,13 @@ class JITCheckpointTest(unittest.TestCase):
         manager = CheckpointManager(trainer)
 
         # Initially should not be requested
-        self.assertFalse(manager.checkpoint_requested)
+        self.assertFalse(manager.is_checkpoint_requested)
 
         # Toggle flag
-        manager._toggle_checkpoint_flag()
+        manager._enable_checkpoint()
 
         # Should now be requested
-        self.assertTrue(manager.checkpoint_requested)
-
-    def test_should_checkpoint_now(self):
-        """Test checkpoint condition checking."""
-        trainer = self.get_trainer()
-        manager = CheckpointManager(trainer)
-
-        # Initially should not checkpoint
-        self.assertFalse(manager.should_checkpoint_now())
-
-        # After requesting checkpoint
-        manager.checkpoint_requested = True
-        self.assertTrue(manager.should_checkpoint_now())
+        self.assertTrue(manager.is_checkpoint_requested)
 
     def test_execute_jit_checkpoint(self):
         """Test the checkpoint execution logic with sentinel file."""
@@ -169,7 +157,7 @@ class JITCheckpointTest(unittest.TestCase):
         trainer.state.global_step = 42
 
         # Set checkpoint requested flag
-        manager.checkpoint_requested = True
+        manager.is_checkpoint_requested = True
 
         # Execute checkpoint
         manager.execute_jit_checkpoint()
@@ -178,7 +166,7 @@ class JITCheckpointTest(unittest.TestCase):
         trainer._save_checkpoint.assert_called_once_with(trainer.model, trial=None)
 
         # Verify checkpoint flag was reset
-        self.assertFalse(manager.checkpoint_requested)
+        self.assertFalse(manager.is_checkpoint_requested)
 
         # Verify sentinel file was removed (should be in checkpoint-42 folder)
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-42"
@@ -221,7 +209,7 @@ class JITCheckpointTest(unittest.TestCase):
         self.assertEqual(str(context.exception), "Checkpoint failed")
 
         # Verify checkpoint flag was still reset to avoid multiple attempts
-        self.assertFalse(manager.checkpoint_requested)
+        self.assertFalse(manager.is_checkpoint_requested)
 
     def test_jit_checkpoint_callback_initialization(self):
         """Test JITCheckpointCallback initialization."""
@@ -266,13 +254,13 @@ class JITCheckpointTest(unittest.TestCase):
         # Mock execute method
         with patch.object(callback.jit_manager, "execute_jit_checkpoint") as mock_execute:
             # Test when checkpoint not requested
-            callback.jit_manager.checkpoint_requested = False
+            callback.jit_manager.is_checkpoint_requested = False
             callback.on_pre_optimizer_step(trainer.args, trainer.state, control)
             self.assertFalse(control.should_training_stop)
             mock_execute.assert_not_called()
 
             # Test when checkpoint requested
-            callback.jit_manager.checkpoint_requested = True
+            callback.jit_manager.is_checkpoint_requested = True
             callback.on_pre_optimizer_step(trainer.args, trainer.state, control)
             self.assertTrue(control.should_training_stop)
             mock_execute.assert_called_once()
@@ -290,13 +278,13 @@ class JITCheckpointTest(unittest.TestCase):
         # Mock execute method
         with patch.object(callback.jit_manager, "execute_jit_checkpoint") as mock_execute:
             # Test when checkpoint not requested
-            callback.jit_manager.checkpoint_requested = False
+            callback.jit_manager.is_checkpoint_requested = False
             callback.on_step_begin(trainer.args, trainer.state, control)
             self.assertFalse(control.should_training_stop)
             mock_execute.assert_not_called()
 
             # Test when checkpoint requested
-            callback.jit_manager.checkpoint_requested = True
+            callback.jit_manager.is_checkpoint_requested = True
             callback.on_step_begin(trainer.args, trainer.state, control)
             self.assertTrue(control.should_training_stop)
             mock_execute.assert_called_once()
@@ -315,7 +303,7 @@ class JITCheckpointTest(unittest.TestCase):
         # Mock execute method
         with patch.object(callback.jit_manager, "execute_jit_checkpoint") as mock_execute:
             # Test when checkpoint not requested
-            callback.jit_manager.checkpoint_requested = False
+            callback.jit_manager.is_checkpoint_requested = False
             callback.on_step_end(trainer.args, trainer.state, control)
             self.assertFalse(control.should_training_stop)
             mock_execute.assert_not_called()
@@ -324,7 +312,7 @@ class JITCheckpointTest(unittest.TestCase):
             control.should_save = True
 
             # Test when checkpoint requested
-            callback.jit_manager.checkpoint_requested = True
+            callback.jit_manager.is_checkpoint_requested = True
             callback.on_step_end(trainer.args, trainer.state, control)
             self.assertTrue(control.should_training_stop)
             self.assertFalse(control.should_save)
@@ -339,20 +327,56 @@ class JITCheckpointTest(unittest.TestCase):
         # Mock control object
         control = Mock()
         control.should_save = True
+        control.should_training_stop = False
 
-        # Test when checkpoint not requested
-        callback.jit_manager.checkpoint_requested = False
-        callback.on_epoch_end(trainer.args, trainer.state, control)
-        # should_save should remain unchanged when checkpoint not requested
-        self.assertTrue(control.should_save)
+        # Mock execute method
+        with patch.object(callback.jit_manager, "execute_jit_checkpoint") as mock_execute:
+            # Test when checkpoint not requested
+            callback.jit_manager.is_checkpoint_requested = False
+            callback.on_epoch_end(trainer.args, trainer.state, control)
+            # should_save should remain unchanged when checkpoint not requested
+            self.assertTrue(control.should_save)
+            self.assertFalse(control.should_training_stop)
+            mock_execute.assert_not_called()
 
-        # Reset control
-        control.should_save = True
+            # Reset control
+            control.should_save = True
+            control.should_training_stop = False
 
-        # Test when checkpoint requested
-        callback.jit_manager.checkpoint_requested = True
-        callback.on_epoch_end(trainer.args, trainer.state, control)
-        self.assertFalse(control.should_save)
+            # Test when checkpoint requested
+            callback.jit_manager.is_checkpoint_requested = True
+            callback.on_epoch_end(trainer.args, trainer.state, control)
+            self.assertFalse(control.should_save)
+            self.assertTrue(control.should_training_stop)
+            mock_execute.assert_called_once()
+
+    def test_jit_checkpoint_callback_on_train_end(self):
+        """Test signal handler restoration on training end."""
+        trainer = self.get_trainer()
+        callback = JITCheckpointCallback()
+
+        # Store original SIGTERM handler
+        original_handler = signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+        try:
+            callback.set_trainer(trainer)
+
+            # Verify signal handler was set up
+            self.assertIsNotNone(callback.jit_manager._original_sigterm_handler)
+
+            # Mock control object
+            control = Mock()
+
+            # Call on_train_end
+            callback.on_train_end(trainer.args, trainer.state, control)
+
+            # Verify signal handler was restored
+            current_handler = signal.signal(signal.SIGTERM, signal.SIG_DFL)
+            self.assertEqual(current_handler, callback.jit_manager._original_sigterm_handler)
+
+        finally:
+            # Restore original handler for cleanup
+            signal.signal(signal.SIGTERM, original_handler)
 
     @patch("threading.Timer")
     def test_kill_wait_period(self, mock_timer):
@@ -366,7 +390,7 @@ class JITCheckpointTest(unittest.TestCase):
         manager._sigterm_handler(signal.SIGTERM, None)
 
         # Verify Timer was created with the correct kill_wait period and callback
-        mock_timer.assert_called_once_with(5, manager._toggle_checkpoint_flag)
+        mock_timer.assert_called_once_with(5, manager._enable_checkpoint)
         mock_timer_instance.start.assert_called_once()
 
     def test_integration_with_trainer(self):
