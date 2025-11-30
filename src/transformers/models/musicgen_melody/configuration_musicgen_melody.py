@@ -234,5 +234,11 @@ class MusicgenMelodyConfig(PreTrainedConfig):
     def sampling_rate(self):
         return self.audio_encoder.sampling_rate
 
+    # overriding these because they crash - not 100% sure of that one
+    def get_text_config(self, decoder=None, encoder=None):
+        if decoder is None and encoder is None:
+            decoder = True
+        return super().get_text_config(decoder=decoder, encoder=encoder)
+
 
 __all__ = ["MusicgenMelodyConfig", "MusicgenMelodyDecoderConfig"]
