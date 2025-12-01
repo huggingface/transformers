@@ -111,7 +111,7 @@ class MistralPreTrainedModel(LlamaPreTrainedModel):
 
 
 class MistralModel(LlamaModel):
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
