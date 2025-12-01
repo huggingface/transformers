@@ -2009,9 +2009,9 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.activation_scheme = self.activation_scheme.lower()
         if self.activation_scheme not in ["dynamic", "static"]:
             raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
-        if len(self.weight_block_size) != 2:
+        if self.weight_block_size is not None and len(self.weight_block_size) != 2:
             raise ValueError("weight_block_size must be a tuple of two integers")
-        if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
+        if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
 
     def get_loading_attributes(self):
