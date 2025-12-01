@@ -28,11 +28,11 @@ from transformers import (
     PixtralImageProcessorFast,
     PixtralProcessor,
     PixtralVisionConfig,
-    AutoTokenizer,
 )
+from transformers.integrations.finegrained_fp8 import replace_with_fp8_linear
 from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.quantizers.auto import AutoQuantizationConfig
-from transformers.integrations.finegrained_fp8 import replace_with_fp8_linear
+
 
 # fmt: off
 STATE_DICT_MAPPING = {
@@ -198,7 +198,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
             "activation_scheme": "static",
             "modules_to_not_convert": ["model.vision_tower", "model.multi_modal_projector"],
             "quant_method": "fp8",
-            "weight_block_size": None
+            "weight_block_size": None,
         }
         kwargs["quantization_config"] = AutoQuantizationConfig.from_dict(quantization_config)
 
