@@ -916,7 +916,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(f"Unrecognized keys in `rope_parameters` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
-def standardize_rope_params(config, rope_theta: float | dict[str, float] | None = None):
+def standardize_rope_params(config: RotaryEmbeddingConfigMixin, rope_theta: float | dict[str, float] | None = None):
     """
     This is a deprecated function.
     It has been kept for backward compatibility with custom code models.
@@ -930,7 +930,7 @@ def standardize_rope_params(config, rope_theta: float | dict[str, float] | None 
     config.standardize_rope_params()
 
 
-def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
+def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: Optional[set] = None):
     """
     This is a deprecated function.
     It has been kept for backward compatibility with custom code models.
