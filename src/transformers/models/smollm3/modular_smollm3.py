@@ -21,7 +21,7 @@ import torch
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -125,6 +125,7 @@ class SmolLM3Config(PreTrainedConfig):
 
     model_type = "smollm3"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 2000000.0
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -168,12 +169,6 @@ class SmolLM3Config(PreTrainedConfig):
         mlp_bias: Optional[bool] = False,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.mlp_bias = mlp_bias
@@ -218,10 +213,13 @@ class SmolLM3Config(PreTrainedConfig):
         self.layer_types = layer_types
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 2000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
 
 class SmolLM3RotaryEmbedding(Qwen2RotaryEmbedding):

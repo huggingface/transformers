@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
 )
+from transformers.utils import enable_tf32
 
 
 NOT_DEVICE_TESTS = {
@@ -137,11 +138,9 @@ _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
 
 if is_torch_available():
-    import torch
-
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
-    torch.backends.cudnn.allow_tf32 = False
+    enable_tf32(False)
 
     # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
     # the patched version will always run with `fullgraph=True`.

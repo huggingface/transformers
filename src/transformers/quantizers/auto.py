@@ -224,7 +224,15 @@ class AutoHfQuantizer:
         if (
             isinstance(
                 quantization_config,
-                (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig, Mxfp4Config),
+                (
+                    GPTQConfig,
+                    AwqConfig,
+                    AutoRoundConfig,
+                    FbgemmFp8Config,
+                    CompressedTensorsConfig,
+                    Mxfp4Config,
+                    FineGrainedFP8Config,
+                ),
             )
             and quantization_config_from_args is not None
         ):
@@ -234,7 +242,7 @@ class AutoHfQuantizer:
 
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "" and not isinstance(quantization_config, Mxfp4Config):
+        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, FineGrainedFP8Config)):
             warnings.warn(warning_msg)
         else:
             # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
