@@ -163,76 +163,16 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            # Initialize linear layers
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
             std = getattr(self.config, "initializer_range", 0.02)
             nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            # Initialize embedding layers
             std = getattr(self.config, "initializer_range", 0.02)
             nn.init.normal_(module.weight, mean=0.0, std=std)
-        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            # Initialize convolution layers
-            std = getattr(self.config, "initializer_range", 0.02)
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif hasattr(module, "weight") and module.weight is not None:
-            # Handle various norm layers and parameter tensors
-            if "norm" in module.__class__.__name__.lower() or hasattr(module, "variance_epsilon"):
-                # RMSNorm, LayerNorm, etc.
-                nn.init.ones_(module.weight)
-            elif module.weight.dim() == 1:
-                # 1D parameter tensors (like gamma, ffn_gamma)
-                nn.init.constant_(module.weight, 1e-6)  # Default layer scale value
-        elif isinstance(module, VibeVoiceModel):
-            # The tokenizer parameters are not handled correctly, as `self.acoustic_tokenizer/semantic_tokenizer` are initialized
-            # from a PreTrainedModel, but then only the submodules are used -> here we reinit them properly
-            for submodule in module.acoustic_tokenizer.modules():
-                # Re-initialize gamma and ffn_gamma parameters
-                for attr_name in ["gamma", "ffn_gamma"]:
-                    if hasattr(submodule, attr_name):
-                        param = getattr(submodule, attr_name)
-                        if isinstance(param, nn.Parameter):
-                            nn.init.constant_(param, 1e-6)
-                # Re-initialize norm weights
-                for attr_name in ["norm", "ffn_norm"]:
-                    if hasattr(submodule, attr_name):
-                        norm_module = getattr(submodule, attr_name)
-                        if hasattr(norm_module, "weight") and norm_module.weight is not None:
-                            nn.init.ones_(norm_module.weight)
-
-            for submodule in module.semantic_tokenizer.modules():
-                # Re-initialize gamma and ffn_gamma parameters
-                for attr_name in ["gamma", "ffn_gamma"]:
-                    if hasattr(submodule, attr_name):
-                        param = getattr(submodule, attr_name)
-                        if isinstance(param, nn.Parameter):
-                            nn.init.constant_(param, 1e-6)
-                # Re-initialize norm weights
-                for attr_name in ["norm", "ffn_norm"]:
-                    if hasattr(submodule, attr_name):
-                        norm_module = getattr(submodule, attr_name)
-                        if hasattr(norm_module, "weight") and norm_module.weight is not None:
-                            nn.init.ones_(norm_module.weight)
-
-        # Handle special parameters that are direct attributes of modules
-        # (like gamma, ffn_gamma from acoustic/semantic tokenizers)
-        for attr_name in ["gamma", "ffn_gamma"]:
-            if hasattr(module, attr_name):
-                param = getattr(module, attr_name)
-                if isinstance(param, nn.Parameter):
-                    nn.init.constant_(param, 1e-6)  # Layer scale parameters
-
-        # Handle norm weights that might not be caught above
-        for attr_name in ["norm", "ffn_norm"]:
-            if hasattr(module, attr_name):
-                norm_module = getattr(module, attr_name)
-                if hasattr(norm_module, "weight") and norm_module.weight is not None:
-                    nn.init.ones_(norm_module.weight)
+        elif isinstance(module, VibeVoiceRMSNorm):
+            nn.init.ones_(module.weight)
 
 
 @auto_docstring(

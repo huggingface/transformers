@@ -323,21 +323,18 @@ class VibeVoiceSemanticTokenizerPreTrainedModel(PreTrainedModel):
     config: VibeVoiceSemanticTokenizerConfig
     base_model_prefix = "vibevoice_semantic_tokenizer"
     main_input_name = "audio"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
     _no_split_modules = ["VibeVoiceSemanticTokenizerEncoder"]
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Conv1d):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
             nn.init.normal_(module.weight, std=self.config.weight_init_value)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, VibeVoiceRMSNorm):
             nn.init.ones_(module.weight)
+        elif isinstance(module, VibeVoiceConvNext1dLayer):
+            nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
+            nn.init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
 
 
 @auto_docstring

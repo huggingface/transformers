@@ -80,6 +80,27 @@ class VibeVoiceAcousticTokenizerDecoderOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceConv1dCache"] = None
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class VibeVoiceRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        VibeVoiceRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 class VibeVoiceConv1dCache:
     """
     Similar to Mimi's Cache: https://github.com/huggingface/transformers/blob/cad7eeeb5e8a173f8d7d746ccdb6ef670ffe6be4/src/transformers/models/mimi/modeling_mimi.py#L76
@@ -170,27 +191,6 @@ class VibeVoiceConv1dCache:
             else:
                 self.cache[layer_idx][batch_mask] = new_cache
         return current_cache
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class VibeVoiceAcousticTokenizerRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        VibeVoiceAcousticTokenizerRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class VibeVoiceCausalConvTranspose1d(nn.Module):
@@ -308,53 +308,6 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
                 hidden_states = block(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
         hidden_states = self.head(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
         return hidden_states
-
-
-@auto_docstring
-class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
-    config: VibeVoiceAcousticTokenizerConfig
-    base_model_prefix = "vibevoice_acoustic_tokenizer"
-    main_input_name = "audio"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _no_split_modules = ["VibeVoiceAcousticTokenizerEncoder", "VibeVoiceAcousticTokenizerDecoder"]
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Conv1d):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.ConvTranspose1d):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, VibeVoiceAcousticTokenizerRMSNorm):
-            nn.init.ones_(module.weight)
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class VibeVoiceRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        VibeVoiceRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class VibeVoiceEncoderFeedForward(nn.Module):
@@ -480,6 +433,25 @@ class VibeVoiceConvNext1dLayer(nn.Module):
         # (ebezzam) see comment above
         hidden_states = residual + self.drop_path(hidden_states)
         return hidden_states
+
+
+@auto_docstring
+class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
+    config: VibeVoiceAcousticTokenizerConfig
+    base_model_prefix = "vibevoice_acoustic_tokenizer"
+    main_input_name = "audio"
+    _no_split_modules = ["VibeVoiceAcousticTokenizerEncoder", "VibeVoiceAcousticTokenizerDecoder"]
+
+    def _init_weights(self, module):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
+            nn.init.normal_(module.weight, std=self.config.weight_init_value)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, VibeVoiceRMSNorm):
+            nn.init.ones_(module.weight)
+        elif isinstance(module, VibeVoiceConvNext1dLayer):
+            nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
+            nn.init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
 
 
 class VibeVoiceAcousticTokenizerEncoder(nn.Module):

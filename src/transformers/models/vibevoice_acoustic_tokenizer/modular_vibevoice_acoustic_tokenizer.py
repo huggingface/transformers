@@ -160,6 +160,10 @@ class VibeVoiceAcousticTokenizerDecoderOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceConv1dCache"] = None
 
 
+class VibeVoiceRMSNorm(LlamaRMSNorm):
+    pass
+
+
 class VibeVoiceConv1dCache:
     """
     Similar to Mimi's Cache: https://github.com/huggingface/transformers/blob/cad7eeeb5e8a173f8d7d746ccdb6ef670ffe6be4/src/transformers/models/mimi/modeling_mimi.py#L76
@@ -250,10 +254,6 @@ class VibeVoiceConv1dCache:
             else:
                 self.cache[layer_idx][batch_mask] = new_cache
         return current_cache
-
-
-class VibeVoiceAcousticTokenizerRMSNorm(LlamaRMSNorm):
-    pass
 
 
 class VibeVoiceCausalConvTranspose1d(nn.Module):
@@ -375,22 +375,6 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
 
 class VibeVoiceAcousticTokenizerPreTrainedModel(VibeVoiceSemanticTokenizerPreTrainedModel):
     _no_split_modules = ["VibeVoiceAcousticTokenizerEncoder", "VibeVoiceAcousticTokenizerDecoder"]
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Conv1d):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.ConvTranspose1d):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, VibeVoiceAcousticTokenizerRMSNorm):
-            nn.init.ones_(module.weight)
 
 
 @auto_docstring
