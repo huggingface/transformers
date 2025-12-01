@@ -442,7 +442,6 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        
         >>> last_hidden_states = outputs.last_hidden_state
         >>> print(list(last_hidden_states.shape))
         [1, 220, 7, 7]
@@ -516,7 +515,6 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
-
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_label = logits.argmax(-1).item()
         >>> print(model.config.id2label[predicted_label])
