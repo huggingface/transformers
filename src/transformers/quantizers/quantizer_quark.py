@@ -118,5 +118,5 @@ class QuarkHfQuantizer(HfQuantizer):
 
         converters = []
         for key in CHECKPOINT_KEYS.keys():
-            converters.append(WeightConverter(source_keys=[key], target_keys=key, operations=[QuarkDeserialize(self)]))
+            converters.append(WeightConverter(source_patterns=[key], target_patterns=key, operations=[QuarkDeserialize(self)]))
         return converters
