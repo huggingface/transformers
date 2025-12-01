@@ -79,40 +79,34 @@ class ModernVBertConfig(PretrainedConfig):
     See the documentation for [`PretrainedConfig`] for more details.
 
     Args:
-        text_config (`PretrainedConfig` or `dict`, optional):
-            Custom text config or a dict with a `text_model_name` key for the text encoder. If `None`, the
-            default text backbone defined by `DEFAULT_TEXT_MODEL_NAME` is used.
-        vision_config (`PretrainedConfig` or `dict`, optional):
-            Custom vision config or a dict with a `vision_model_name` key for the vision encoder. If `None`, the
-            default vision backbone defined by `DEFAULT_VISION_MODEL_NAME` is used.
-        image_token_id (`int`, optional, defaults to 128257):
-            Token id reserved for image tokens inserted into the text stream.
-        pixel_shuffle_factor (`int`, optional, defaults to 4):
-            Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
-        vocab_size (`int`, optional):
-            Vocabulary size of the text model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`ModernVBertModel`]. If not provided, will be taken from
-            the `text_config`.
-        hidden_size (`int`, optional):
-            Dimensionality of the encoder layers and the pooler layer. If not provided, will be taken from
-            the `text_config`.
-        num_hidden_layers (`int`, optional):
-            Number of hidden layers in the text model. If not provided, will be taken from
-            the `text_config`.
-        initializer_range (`float`, optional, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_cutoff_factor (`float`, optional, defaults to 2.0):
-            The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
-        classifier_pooling (`str`, optional, defaults to "cls"):
-            The pooling strategy to use for classification tasks. Can be either `"cls"` or `"mean"`.
-        classifier_dropout (`float`, optional, defaults to 0.0):
-            The dropout probability for the classification head.
-        classifier_bias (`bool`, optional, defaults to `False`):
-            Whether to add a bias term to the classification head.
-        classifier_dropout (`float`, optional, defaults to 0.0):
-            The dropout probability for the classification head.
-        classifier_bias (`bool`, optional, defaults to `False`):
-            Whether to add a bias term to the classification head.
+            text_config (`PretrainedConfig` or `dict`, optional, *optional*):
+                ModernBert config to build the text encoder.
+            vision_config (`PretrainedConfig` or `dict`, optional, *optional*):
+                SiglipVision config to build the vision encoder.
+            image_token_id (`int`, optional, defaults to 128257, *optional*, defaults to 50407):
+                Token id reserved for image tokens inserted into the text stream.
+            pixel_shuffle_factor (`int`, optional, defaults to 4, *optional*, defaults to 4):
+                Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+            vocab_size (`int`, optional, *optional*):
+                Vocabulary size of the text model. Defines the number of different tokens that can be represented
+                by the `inputs_ids` passed when calling [`ModernVBertModel`]. If not provided, will be taken from
+                the `text_config`.
+            hidden_size (`int`, optional, *optional*):
+                Dimensionality of the encoder layers and the pooler layer. If not provided, will be taken from
+                the `text_config`.
+            num_hidden_layers (`int`, optional, *optional*):
+                Number of hidden layers in the text model. If not provided, will be taken from
+                the `text_config`.
+            initializer_range (`float`, optional, defaults to 0.02, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            initializer_cutoff_factor (`float`, optional, defaults to 2.0, *optional*, defaults to 2.0):
+                The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+            classifier_pooling (`str`, optional, defaults to "cls", *optional*, defaults to `"cls"`):
+                The pooling strategy to use for classification tasks. Can be either `"cls"` or `"mean"`.
+            classifier_dropout (`float`, optional, defaults to 0.0, *optional*, defaults to 0.0):
+                The dropout probability for the classification head.
+            classifier_bias (`bool`, optional, defaults to `False`, *optional*, defaults to `False`):
+                Whether to add a bias term to the classification head.
 
     Example:
     ```python
@@ -1032,14 +1026,14 @@ class ModernVBertForQuestionAnswering(ModernVBertPreTrainedModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple, ModernVBertMaskedLMOutput]:
         r"""
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
-            Mask to avoid performing attention on padding pixel indices.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1130,14 +1124,14 @@ class ModernVBertForMultipleChoice(ModernVBertPreTrainedModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
-            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
