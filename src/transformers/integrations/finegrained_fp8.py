@@ -14,8 +14,7 @@
 # limitations under the License.
 
 import re
-from collections.abc import Sequence
-from typing import Any
+from typing import Optional
 
 from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
@@ -549,6 +548,9 @@ def replace_with_fp8_linear(
     quantization_config=None,
 ):
     """Helper function to replace model layers with FP8 versions."""
+    if quantization_config.dequantize:
+        return model
+
     if modules_to_not_convert is None:
         modules_to_not_convert = []
     modules_to_not_convert += ["lm_head"]
@@ -652,41 +654,45 @@ class Fp8Quantize(ConversionOps):
 class Fp8Dequantize(ConversionOps):
     """Inverse operation of :class:`Fp8Quantize`. Takes a pair (weight, scale) and reconstructs the fp32 tensor."""
 
-    def __init__(self, block_size: tuple[int, int] | None = None):
-        self.block_size = block_size
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
 
     def convert(
         self,
-        value: Sequence[torch.Tensor] | dict[str, torch.Tensor],
-        *,
-        context: dict[str, Any],
-    ) -> torch.Tensor:
-        if isinstance(value, dict):
-            tensors = list(value.values())
-        else:
-            tensors = list(value) if isinstance(value, Sequence) else [value]
-        if len(tensors) != 2:
-            raise ValueError("Fp8Dequantize expects exactly two tensors: quantized weights and scales.")
-        quantized, scales = tensors
-        if not isinstance(quantized, torch.Tensor) or not isinstance(scales, torch.Tensor):
-            raise TypeError("Fp8Dequantize expects tensors as inputs.")
+        input_dict: dict[str, torch.Tensor],
+        model: Optional[torch.nn.Module] = None,
+        full_layer_name: str | None = None,
+        missing_keys=None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) != 2:
+            # in case of no scales, the weights are not quantized, so we return the weights as is
+            return {
+                full_layer_name: input_dict["weight$"][0]
+                if isinstance(input_dict["weight$"], list)
+                else input_dict["weight$"]
+            }
+        quantized = input_dict["weight$"][0] if isinstance(input_dict["weight$"], list) else input_dict["weight$"]
+        scales = (
+            input_dict["weight_scale_inv"][0]
+            if isinstance(input_dict["weight_scale_inv"], list)
+            else input_dict["weight_scale_inv"]
+        )
 
-        quantized_fp32 = quantized.to(torch.float32)
-        rows, cols = quantized_fp32.shape[-2:]
-        block_size = self.block_size
-        if block_size is None:
-            quant_config = context.get("quantization_config")
-            block_size = getattr(quant_config, "weight_block_size", None)
-        if block_size is None:
-            block_size = (rows, cols)
+        rows, cols = quantized.shape[-2:]
+        block_size = self.hf_quantizer.quantization_config.weight_block_size
+
         block_m, block_n = block_size
         if rows % block_m != 0 or cols % block_n != 0:
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
             )
 
-        reshaped = quantized_fp32.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
+        reshaped = quantized.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
         expanded_scales = scales.to(torch.float32).reshape(-1, rows // block_m, cols // block_n)
         expanded_scales = expanded_scales.unsqueeze(-1).unsqueeze(2)
         dequantized = reshaped * expanded_scales
-        return dequantized.reshape(quantized_fp32.shape)
+
+        return {
+            full_layer_name: dequantized.reshape(quantized.shape),
+        }
