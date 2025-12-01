@@ -960,6 +960,8 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Merged attention module will always require a mask which is incompatible with the FA backend")
+    @unittest.skip(
+        reason="Merged attention module will always require a mask which is incompatible with the FA backend"
+    )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
