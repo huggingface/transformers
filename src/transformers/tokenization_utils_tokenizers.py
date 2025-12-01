@@ -42,7 +42,7 @@ from .tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from .utils import PaddingStrategy, add_end_docstrings, is_offline_mode, logging
 
 
 logger = logging.get_logger(__name__)
@@ -219,6 +219,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # Optionally patches mistral tokenizers with wrong regex
         if vocab_size > 100000 and getattr(self._tokenizer, "pre_tokenizer", None) is not None:
+            kwargs.pop("tokenizer", None)
             self._tokenizer = self._patch_mistral_regex(
                 self._tokenizer,
                 self.init_kwargs.get("name_or_path", None),
@@ -1089,7 +1090,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     return True
             return False
 
-        if pretrained_model_name_or_path is not None and (is_local or is_base_mistral(pretrained_model_name_or_path)):
+        if is_offline_mode():
+            is_local = True
+
+        if pretrained_model_name_or_path is not None and (
+            is_local or (not is_local and is_base_mistral(pretrained_model_name_or_path))
+        ):
             _config_file = cached_file(
                 pretrained_model_name_or_path,
                 "config.json",
@@ -1126,7 +1132,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ]
                     ):
                         return tokenizer
-                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
+                elif transformers_version and version.parse(transformers_version) >= version.parse("4.57.3"):
                     return tokenizer
 
                 mistral_config_detected = True
