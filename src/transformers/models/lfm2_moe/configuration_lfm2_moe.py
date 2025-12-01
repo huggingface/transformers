@@ -162,6 +162,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
         self.layer_types = layer_types
+        self.initializer_range = initializer_range
 
         self.rope_parameters = rope_parameters
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys

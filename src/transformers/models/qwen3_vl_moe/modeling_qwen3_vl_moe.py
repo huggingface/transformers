@@ -385,8 +385,8 @@ class Qwen3VLMoeTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 @auto_docstring
@@ -402,7 +402,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.router", index=0),
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
@@ -687,7 +687,7 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
-        device = grid_thw.device
+        device = self.pos_embed.weight.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
