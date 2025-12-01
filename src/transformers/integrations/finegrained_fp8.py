@@ -367,7 +367,7 @@ class FP8Linear(nn.Linear):
                 if self.activation_scheme == "dynamic":
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
-                    scale = self.act_scale
+                    scale = self.activation_scale
                     qinput = (input / scale).to(torch.float8_e4m3fn)
                 else:
                     raise NotImplementedError("Not supported")
