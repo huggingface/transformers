@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_diffusers,
     slow,
     torch_device,
 )
@@ -406,6 +407,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
+    @require_diffusers
     def test_1b5_inference_no_voice(self):
         """
         reproducer that generates JSON with expected output: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
