@@ -751,10 +751,6 @@ class PreTrainedConfig(PushToHubMixin):
 
         config = cls(**config_dict)
 
-        # default tie_word_embeddings to False if None, see https://github.com/huggingface/transformers/issues/42313
-        if hasattr(config, "tie_word_embeddings") and config.tie_word_embeddings is None:
-            config.tie_word_embeddings = False
-
         # Update config with kwargs if needed
         if "num_labels" in kwargs and "id2label" in kwargs:
             num_labels = kwargs["num_labels"]

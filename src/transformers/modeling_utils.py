@@ -2254,17 +2254,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return expanded_tied_weights
 
         tied_mapping = self._tied_weights_keys
-        text_config = self.config.get_text_config(decoder=True)
-        if not hasattr(text_config, "tie_word_embeddings"):
-            logger.warning(
-                f"Text config {text_config.__class__.__name__} does not have 'tie_word_embeddings' attribute. "
-                "This may cause issues with weight tying."
-            )
-        tie_word_embeddings = getattr(text_config, "tie_word_embeddings", None)
-        tie_encoder_decoder = getattr(self.config, "tie_encoder_decoder", False)
-        should_tie = tie_encoder_decoder if tie_word_embeddings is None else tie_word_embeddings
         # If the config does not specify any tying, return empty dict
-        if not should_tie:
+        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
             return {}
         # If None, return empty dict
         elif tied_mapping is None:
@@ -3187,11 +3178,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
             # Recursively descend to find tied weight keys
-            tied_keys_attr = getattr(self, "all_tied_weights_keys", None)
-            if tied_keys_attr is not None:
-                _tied_weights_keys = set(tied_keys_attr.keys())
-            else:
-                _tied_weights_keys = set(_get_tied_weight_keys(self))
+            _tied_weights_keys = set(_get_tied_weight_keys(self))
             error_names = []
             to_delete_names = set()
             for names in shared_ptrs.values():
@@ -4423,9 +4410,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
-        tied_keys_attr = getattr(self, "all_tied_weights_keys", {}) or {}
-        tied_keys = set(tied_keys_attr.keys())
-        for key in missing_keys - tied_keys:
+        for key in missing_keys - self.all_tied_weights_keys.keys():
             param = model_state_dict[key]
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
