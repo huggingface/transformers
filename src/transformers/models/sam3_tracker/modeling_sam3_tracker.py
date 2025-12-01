@@ -768,7 +768,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         "occlusion_spatial_embedding_parameter",
     ]
     _checkpoint_conversion_mapping = {
-        "tracker_model.": "",
+        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }
@@ -870,7 +870,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

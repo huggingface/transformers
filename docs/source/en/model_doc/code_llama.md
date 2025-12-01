@@ -167,16 +167,12 @@ visualizer("""def func(a, b):
 ## CodeLlamaTokenizer
 
 [[autodoc]] CodeLlamaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CodeLlamaTokenizerFast
 
 [[autodoc]] CodeLlamaTokenizerFast
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - update_post_processor
     - save_vocabulary

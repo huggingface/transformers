@@ -540,20 +540,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         super().save_pretrained(save_directory, *args, **kwargs)
         self._hf_peft_config_loaded = prev_val
 
-    @staticmethod
-    def _fix_state_dict_key_on_save(key) -> tuple[str, bool]:
-        # save the model with the original weights format
-        return key.replace(".base_layer", ""), False
-
-    def _fix_state_dict_keys_on_save(self, state_dict):
-        if is_peft_available and self._hf_peft_config_loaded:
-            # state dict is only adapter, should keep the same
-            return state_dict
-        # rename back the base model state dict
-        return {
-            self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items() if ".lora_" not in key
-        }
-
     def _get_adapter_name(self):
         return list(self.peft_config.keys())[0]
 
