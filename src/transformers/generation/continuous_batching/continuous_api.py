@@ -841,7 +841,6 @@ class ContinuousBatchingManager:
         )
         return use_cuda_graph
 
-
     @traced
     def start(self) -> None:
         """Start the background generation thread."""

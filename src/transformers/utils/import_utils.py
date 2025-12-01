@@ -1300,6 +1300,7 @@ def is_jit_tracing() -> bool:
     except Exception:
         return False
 
+
 def is_cuda_stream_capturing() -> bool:
     try:
         import torch

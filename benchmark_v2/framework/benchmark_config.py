@@ -103,9 +103,9 @@ class BenchmarkConfig:
 
         # The combination of flash_attention_2, compile and generate is not supported # FIXME: support it
         if (
-            not self.continuous_batching and
-            self.attn_implementation == "flash_attention_2" and
-            self.compile_config is not None
+            not self.continuous_batching
+            and self.attn_implementation == "flash_attention_2"
+            and self.compile_config is not None
         ):
             logger.error(
                 "The combination of flash_attention_2, compile and generate is not supported. Turning off compile."
@@ -121,9 +121,9 @@ class BenchmarkConfig:
 
         # Continuous batching supports compile mode "default" or "max-autotune-no-cudagraphs"
         if (
-            self.continuous_batching and
-            self.compile_config is not None and
-            self.compile_config.mode not in ["default", "max-autotune-no-cudagraphs"]
+            self.continuous_batching
+            and self.compile_config is not None
+            and self.compile_config.mode not in ["default", "max-autotune-no-cudagraphs"]
         ):
             logger.error(
                 f"You have continuous batching and compile enabled, but {self.compile_config.mode = } is not supported."
