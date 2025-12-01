@@ -89,12 +89,6 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
     @unittest.skip(
         "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
     )
-    def test_tokenizer_mismatch_warning(self):
-        pass
-
-    @unittest.skip(
-        "We disable this test for PreTrainedTokenizerFast because it is the only tokenizer that is not linked to any model"
-    )
     def test_encode_decode_with_spaces(self):
         pass
 
