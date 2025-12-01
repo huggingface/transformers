@@ -234,4 +234,5 @@ class MusicgenMelodyConfig(PreTrainedConfig):
     def sampling_rate(self):
         return self.audio_encoder.sampling_rate
 
+
 __all__ = ["MusicgenMelodyConfig", "MusicgenMelodyDecoderConfig"]
