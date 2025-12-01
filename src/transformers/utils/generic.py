@@ -944,7 +944,7 @@ class OutputRecorder:
     class_name: Optional[str] = None
 
 
-def check_model_inputs(tie_last_hidden_states=True):
+def check_model_inputs(func=None, *, tie_last_hidden_states=True):
     """
     Decorator to intercept specific layer outputs without using hooks.
     Compatible with torch.compile (Dynamo tracing).
@@ -1115,6 +1115,8 @@ def check_model_inputs(tie_last_hidden_states=True):
 
         return wrapper
 
+    if func is not None:
+        return wrapped_fn(func)
     return wrapped_fn
 
 
