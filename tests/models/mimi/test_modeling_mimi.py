@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -291,7 +292,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()

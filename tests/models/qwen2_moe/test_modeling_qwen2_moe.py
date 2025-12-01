@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     run_first,
     run_test_using_subprocess,
@@ -66,7 +67,7 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         return True
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):

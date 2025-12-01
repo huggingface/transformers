@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     run_first,
     slow,
@@ -432,7 +433,7 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     @run_first
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",

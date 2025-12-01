@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_large_cpu_ram,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -285,7 +286,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         return config
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow

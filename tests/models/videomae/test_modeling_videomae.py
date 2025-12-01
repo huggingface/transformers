@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_vision,
     slow,
@@ -349,7 +350,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             check_hidden_states_output(inputs_dict, config, model_class)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
