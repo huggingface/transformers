@@ -16,7 +16,8 @@ limitations under the License.
 
 # Version 5 Migration guide
 
-> [!NOTE] 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
+> [!NOTE] 
+> 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
 > movement. We have a section dedicated to what is planned for future release candidates, yet is known not to work in 
 > the RC0. Look for "Disclaimers for the RC0".
 > 
