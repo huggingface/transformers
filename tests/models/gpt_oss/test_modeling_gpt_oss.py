@@ -202,7 +202,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     # Non-distributed inference
     # ------------------------
     @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
+    def load_and_forward(model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
@@ -210,6 +210,13 @@ class GptOssIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
         )
+
+        # Set the correct mode
+        if mode == "train":
+            model.train()
+        else:
+            model.eval()
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
@@ -308,6 +315,7 @@ if __name__ == "__main__":
             model_id,
             attn_impl,
             self.input_text,
+            mode=mode,
             use_kernels=kernels,
         )
 
