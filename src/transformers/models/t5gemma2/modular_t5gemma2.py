@@ -469,6 +469,13 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
     config: T5Gemma2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+
+    # Mask creation is incompatible
+    # FA due to non-default creation / SWA
+    _supports_flash_attn = False
+    # Flex due to custom masks not compatible to be merged after creation
+    _supports_flex_attn = False
+
     _no_split_modules = [
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",

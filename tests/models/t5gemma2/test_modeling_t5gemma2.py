@@ -633,9 +633,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     _is_stateful = True
     is_encoder_decoder = True
 
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = T5Gemma2ForConditionalGeneration if is_torch_available() else None
-
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     test_cpu_offload = False
     test_disk_offload_safetensors = False
@@ -794,10 +791,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                 (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
             )
 
-    @unittest.skip("T5Gemma2 eager/FA2 attention outputs are expected to be different")
-    def test_flash_attn_2_equivalence(self):
-        pass
-
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")
     def test_attention_outputs(self):
         pass
@@ -947,10 +940,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             torch.testing.assert_close(normalized_0[2], normalized_1[2], rtol=1e-3, atol=1e-4)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @unittest.skip(reason="T5Gemma doesn't support flex masking")
-    def test_flex_attention_with_grads(self):
-        pass
-
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
@@ -963,6 +952,14 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    def test_torch_compile_for_training(self):
+        pass
+
     @unittest.skip(reason="Self&cross attention are splited after the merged attention")
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Merged attention module will always require a mask which is incompatible with the FA backend")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass

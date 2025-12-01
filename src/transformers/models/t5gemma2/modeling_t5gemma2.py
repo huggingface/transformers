@@ -664,6 +664,7 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
     config: T5Gemma2Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+
     _no_split_modules = [
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
@@ -672,9 +673,13 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
         "SiglipMultiheadAttentionPoolingHead",
     ]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+
+    # Mask creation is incompatible
+    # FA due to non-default creation / SWA
+    _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_flex_attn = True
+    # Flex due to custom masks not compatible to be merged after creation
+    _supports_flex_attn = False
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
