@@ -150,6 +150,13 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
+    def get_input_embeddings(self):
+        # Vision backbones from timm do not expose token embeddings, so there is nothing to return.
+        return None
+
+    def set_input_embeddings(self, value):
+        raise NotImplementedError("TimmWrapperModel does not own token embeddings and cannot set them.")
+
     @auto_docstring
     def forward(
         self,
