@@ -350,7 +350,7 @@ There is a tracker for that here: https://github.com/huggingface/transformers/is
 ### `use_auth_token`
 
 The `use_auth_token` argument/parameter is deprecated in favor of `token` everywhere.
-You should be able to search and replace `use_auth_token` with `token` and get the same logic.a
+You should be able to search and replace `use_auth_token` with `token` and get the same logic.
 
 Linked PR: https://github.com/huggingface/transformers/pull/41666
 
