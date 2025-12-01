@@ -146,7 +146,7 @@ Transformers의 비전 모델은 입력값으로 PyTorch 텐서 형태의 픽셀
 ```py
 from datasets import load_dataset
 
-dataset = load_dataset("food101", split="train[:100]")
+dataset = load_dataset("ethz/food101", split="train[:100]")
 ```
 
 [transforms](https://pytorch.org/vision/stable/transforms.html) 모듈의 [Compose](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html)API는 여러 변환을 하나로 묶어주는 역할을 합니다. 여기서는 이미지를 무작위로 자르고 리사이즈하는 [RandomResizedCrop](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html)과 색상을 무작위로 바꾸는 [ColorJitter](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html)를 함께 사용해보겠습니다.
