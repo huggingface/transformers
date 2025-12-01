@@ -1089,7 +1089,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     return True
             return False
 
-        if pretrained_model_name_or_path is not None and (is_local or is_base_mistral(pretrained_model_name_or_path)):
+        if pretrained_model_name_or_path is not None and (
+            is_local or (not is_local and is_base_mistral(pretrained_model_name_or_path))
+        ):
             _config_file = cached_file(
                 pretrained_model_name_or_path,
                 "config.json",
