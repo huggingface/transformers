@@ -4012,8 +4012,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if dtype_orig is not None:
             torch.set_default_dtype(dtype_orig)
 
-        print("calling load pretrained model")
-
         # Finalize model weight initialization
         model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs = cls._load_pretrained_model(
             model,
@@ -4140,7 +4138,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 merged_state_dict = {}
                 i = 0
                 for file in checkpoint_files:
-                    print(f"getting file {i}")
                     file_pointer = safe_open(file, framework="pt", device="cpu")
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
@@ -4176,15 +4173,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # finally close all opened file pointers
             for k in all_pointer:
                 k.__exit__(None, None, None)
-
-        # from torchao.prototype.safetensors.safetensors_support import (
-        #     unflatten_tensor_state_dict,
-        # )
-        # from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
-        # if is_metadata_torchao(hf_quantizer.metadata):
-        #     print('calling unflatten', model.state_dict().keys(), hf_quantizer.metadata)
-        #     unflattened_state_dict, _ = unflatten_tensor_state_dict(model.state_dict(), hf_quantizer.metadata)
-        #     model.load_state_dict(unflattened_state_dict, strict=False)
 
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()

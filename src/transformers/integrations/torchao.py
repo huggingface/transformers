@@ -282,6 +282,7 @@ class TorchAoDeserialize(ConversionOps):
 
         print("calling unflatten")
         print(param_data)
+        print(self.hf_quantizer.metadata)
         unflattened_state_dict, _ = unflatten_tensor_state_dict(param_data, self.hf_quantizer.metadata)
         print(f"unflattened_state_dict: {unflattened_state_dict}")
         new_param = unflattened_state_dict[full_layer_name]
