@@ -118,9 +118,7 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 ## CLIPTokenizer
 
 [[autodoc]] CLIPTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CLIPTokenizerFast

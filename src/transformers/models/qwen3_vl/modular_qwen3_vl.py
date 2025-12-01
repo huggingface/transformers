@@ -30,7 +30,7 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -171,6 +171,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_text"
     base_config_key = "text_config"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -211,16 +212,13 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 5000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
+            **kwargs,
+        )
 
 
 class Qwen3VLConfig(PreTrainedConfig):
@@ -706,7 +704,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
         hidden_states[visual_pos_masks, :] = local_this
         return hidden_states
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -964,7 +962,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw)
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1107,7 +1105,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     config: Qwen3VLConfig
     _checkpoint_conversion_mapping = {}
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,

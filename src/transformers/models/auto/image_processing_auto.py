@@ -130,7 +130,7 @@ else:
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
             ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
-            ("llama4", ("Llama4ImageProcessor", "Llama4ImageProcessorFast")),
+            ("llama4", (None, "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
