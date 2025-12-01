@@ -211,6 +211,25 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             for k, v in trainer.args.fsdp_config.items():
                 self.assertEqual(v, self.fsdp_config[k])
 
+    def test_fsdp_version_2_config(self):
+        output_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {
+            "output_dir": output_dir,
+            "train_len": 128,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "fsdp": True,
+            "fsdp_config": {
+                "fsdp_version": 2,
+                "reshard_after_forward": True,
+            },
+        }
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(**kwargs)
+            plugin_args = trainer.args._process_fsdp_args()
+            self.assertEqual(plugin_args["fsdp_version"], 2)
+            self.assertTrue(plugin_args["reshard_after_forward"])
+
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     @run_first
