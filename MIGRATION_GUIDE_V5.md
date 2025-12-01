@@ -565,15 +565,20 @@ but also makes the commands less bloated. The new signature of `transformers cha
 ```
 Usage: transformers chat [OPTIONS] BASE_URL MODEL_ID [GENERATE_FLAGS]...
 
-  Chat with a model from the command line.
+Chat with a model from the command line.
 ```
 
-Example:
+It works hand in hand with `transformers serve`, which means that if `transformers serve` is running on its default endpoint, `transformers chat` can be launched as follows:
 
 ```sh
-transformers chat https://router.huggingface.co/v1 HuggingFaceTB/SmolLM3-3B
+transformers chat HuggingFaceTB/SmolLM3-3B
 ```
 
+It can however use any OpenAI API compatible HTTP endpoint:
+
+```sh
+transformers chat HuggingFaceTB/SmolLM3-3B https://router.huggingface.co/v1
+```
 
 Linked PRs: 
 - https://github.com/huggingface/transformers/pull/40997
