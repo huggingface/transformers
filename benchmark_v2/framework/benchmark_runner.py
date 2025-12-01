@@ -315,6 +315,7 @@ class BenchmarkRunner:
         benchmark_configs: list[BenchmarkConfig],
         num_tokens_to_profile: int = 0,
         pretty_print_summary: bool = True,
+        summarized: bool = True,
     ) -> tuple[str, dict[str, Any]]:
         """Run multiple benchmarks for the given model ID and list of benchmark configs."""
         all_results = {}
@@ -356,7 +357,7 @@ class BenchmarkRunner:
 
             # Cleanup model and save results
             self.cleanup()
-            self.save_results(model_id, all_results, timestamp=timestamp)
+            self.save_results(model_id, all_results, timestamp=timestamp, summarized=summarized)
 
         if len(all_results) < 1:
             raise RuntimeError("No benchmark was run successfully")
@@ -383,7 +384,7 @@ class BenchmarkRunner:
 
         return (timestamp, all_results)
 
-    def save_results(self, model_name: str, results: dict, timestamp: str = "") -> str:
+    def save_results(self, model_name: str, results: dict, timestamp: str = "", summarized: bool = True) -> str:
         """Save benchmark results to JSON file."""
         # Create model-specific subdirectory
         model_name = model_name.replace("/", "_")
@@ -400,7 +401,7 @@ class BenchmarkRunner:
         for cfg_hash in results.keys():
             converted_results[cfg_hash] = {
                 "metadata": results[cfg_hash]["metadata"].to_dict(),
-                "measurements": results[cfg_hash]["measurements"].to_dict(),
+                "measurements": results[cfg_hash]["measurements"].to_dict(summarized=summarized),
                 "config": results[cfg_hash]["config"].to_dict(),
             }
 
