@@ -47,7 +47,7 @@ class AfmoeModelTester(CausalLMModelTester):
         num_key_value_heads=16,
         head_dim=128,
         hidden_act="silu",
-        max_position_embeddings=16384,
+        max_position_embeddings=128,
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=False,
