@@ -189,7 +189,7 @@ class CircleCIJob:
             {"run": {"name": "download and unzip hub cache", "command": 'curl -L -o huggingface-cache.tar.gz https://huggingface.co/datasets/hf-internal-testing/hf_hub_cache/resolve/main/huggingface-cache.tar.gz && apt-get install pigz && tar --use-compress-program="pigz -d -p 8" -xf huggingface-cache.tar.gz && mv -n hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/'}},
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n 1 {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} tests/models/mluke/test_tokenization_mluke.py | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n 6 {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} tests/models/afmoe/test_modeling_afmoe.py | tee tests_output.txt)"}
             },
             {"run":
                 {
@@ -349,7 +349,7 @@ PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
-ALL_TESTS = [tokenization_job]
+ALL_TESTS = [torch_job]
 
 def create_circleci_config(folder=None):
     if folder is None:
