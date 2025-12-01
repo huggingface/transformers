@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Ministral model configuration"""
+
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
@@ -97,7 +98,7 @@ class Ministral3Config(PreTrainedConfig):
 
     >>> # Initializing a model from the Ministral3 configuration
     >>> text_model = Ministral3ForCausalLM(text_config)
-    
+
     >>> # Initializing a model from the Mistral3 configuration
     >>> model = Mistral3ForConditionalGeneration(configuration)
 

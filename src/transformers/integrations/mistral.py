@@ -98,7 +98,9 @@ def convert_tekken_tokenizer(tokenizer_file: str):
 
     # Convert
     tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=MistralConverter(vocab=vocab, additional_special_tokens=all_special, pattern=pattern).converted()
+        tokenizer_object=MistralConverter(
+            vocab=vocab, additional_special_tokens=all_special, pattern=pattern
+        ).converted()
     )
 
     # Post-process

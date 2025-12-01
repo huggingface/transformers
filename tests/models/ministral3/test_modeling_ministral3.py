@@ -82,7 +82,9 @@ class Ministral3IntegrationTest(unittest.TestCase):
     @slow
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = Mistral3ForConditionalGeneration.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512", device_map="auto")
+        model = Mistral3ForConditionalGeneration.from_pretrained(
+            "mistralai/Ministral-3-3B-Instruct-2512", device_map="auto"
+        )
         input_ids = torch.tensor([input_ids]).to(model.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -96,10 +98,14 @@ class Ministral3IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_3b_generation(self):
-        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in"
+        EXPECTED_TEXT_COMPLETION = (
+            "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in"
+        )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512")
-        model = Mistral3ForConditionalGeneration.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512", device_map="auto")
+        model = Mistral3ForConditionalGeneration.from_pretrained(
+            "mistralai/Ministral-3-3B-Instruct-2512", device_map="auto"
+        )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
