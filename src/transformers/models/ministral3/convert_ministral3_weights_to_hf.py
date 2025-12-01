@@ -30,8 +30,8 @@ from transformers import (
     PixtralVisionConfig,
 )
 from transformers.integrations.mistral import convert_tekken_tokenizer
-from transformers.quantizers.auto import AutoHfQuantizer
-
+from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
+from transformers.integrations.finegrained_fp8 import replace_with_fp8_linear
 
 # fmt: off
 STATE_DICT_MAPPING = {
@@ -195,14 +195,14 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
         assert original_config["quantization"]["qscheme_act"] == "TENSOR"
         quantization_config = {
             "activation_scheme": "static",
-            "modules_to_not_convert": None,
+            "modules_to_not_convert": ["model.vision_tower.*"],
             "quant_method": "fp8",
             "weight_block_size": [
                 1,
                 1,
             ]
         }
-        kwargs["quantization_config"] = quantization_config 
+        kwargs["quantization_config"] = AutoQuantizationConfig.from_dict(quantization_config)
 
     new_config = Mistral3Config(
         vision_config=new_vision_config,
@@ -242,10 +242,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
         else:
             raise ValueError(f"Unknown config type {type(config)}.")
 
-        # let's swap nn.Linear to FP8 Linear before loading
-        hf_quantizer = AutoHfQuantizer.from_config(model.config.quantization_config)
-        hf_quantizer.preprocess_model(model, model.config)
-
+    # let's swap nn.Linear to FP8 Linear before loading
+    model = replace_with_fp8_linear(model, model.config.quantization_config.modules_to_not_convert, model.config.quantization_config)
+    import ipdb; ipdb.set_trace()
     model.load_state_dict(full_state_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
     return config
