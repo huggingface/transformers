@@ -275,7 +275,7 @@ For legacy implementations, the original BERT Python tokenizer code (including `
 - https://github.com/huggingface/transformers/pull/41626
 
 
-## Things that are a bit new / not working for RC0: 
+## Disclaimers for the RC0
 
 ### PEFT + MoE:
 Because we are switching from the naive MOE (`nn.ModuleList` for experts) we currently have an issue with MoEs that have adapters. For more details see https://github.com/huggingface/transformers/issues/42491#issuecomment-3591485649. 
