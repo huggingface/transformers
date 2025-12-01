@@ -30,6 +30,7 @@ from transformers import (
     PixtralVisionConfig,
 )
 from transformers.integrations.mistral import convert_tekken_tokenizer
+from transformers.quantizers.auto import AutoHfQuantizer
 
 
 # fmt: off
@@ -44,6 +45,14 @@ STATE_DICT_MAPPING = {
     r"^layers.(\d+).feed_forward.w1.weight":      r"model.language_model.layers.\1.mlp.gate_proj.weight",
     r"^layers.(\d+).feed_forward.w2.weight":      r"model.language_model.layers.\1.mlp.down_proj.weight",
     r"^layers.(\d+).feed_forward.w3.weight":      r"model.language_model.layers.\1.mlp.up_proj.weight",
+    r"^layers.(\d+).attention.w(q|k|v|o).qscale_act": r"model.language_model.layers.\1.self_attn.\2_proj.act_scale",
+    r"^layers.(\d+).feed_forward.w1.qscale_act":      r"model.language_model.layers.\1.mlp.gate_proj.act_scale",
+    r"^layers.(\d+).feed_forward.w2.qscale_act":      r"model.language_model.layers.\1.mlp.down_proj.act_scale",
+    r"^layers.(\d+).feed_forward.w3.qscale_act":      r"model.language_model.layers.\1.mlp.up_proj.act_scale",
+    r"^layers.(\d+).attention.w(q|k|v|o).qscale_weight": r"model.language_model.layers.\1.self_attn.\2_proj.weight_scale_inv",
+    r"^layers.(\d+).feed_forward.w1.qscale_weight":      r"model.language_model.layers.\1.mlp.gate_proj.weight_scale_inv",
+    r"^layers.(\d+).feed_forward.w2.qscale_weight":      r"model.language_model.layers.\1.mlp.down_proj.weight_scale_inv",
+    r"^layers.(\d+).feed_forward.w3.qscale_weight":      r"model.language_model.layers.\1.mlp.up_proj.weight_scale_inv",
 
     # Vision model keys
     r"vision_encoder.transformer.layers.(\d+).attention_norm.weight": r"model.vision_tower.transformer.layers.\1.attention_norm.weight",
@@ -91,6 +100,9 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
     new_dict = {}
 
     for old_key, tensor in original_state_dict.items():
+        if "fake_quantizer" in old_key:
+            continue
+
         new_key = map_old_key_to_new(old_key)
 
         if "vision" in old_key:
@@ -108,9 +120,9 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
             key_value_dim = head_dim * num_key_value_heads
             query_dim = head_dim * num_attention_heads
 
-        if "q_proj" in new_key:
+        if "q_proj" in new_key and new_key.endswith("weight"):
             tensor = permute_for_rope(tensor, num_attention_heads, query_dim, hidden_size)
-        elif "k_proj" in new_key:
+        elif "k_proj" in new_key and new_key.endswith("weight"):
             tensor = permute_for_rope(tensor, num_key_value_heads, key_value_dim, hidden_size)
 
         new_dict[new_key] = tensor
@@ -178,6 +190,20 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
     _ = new_vision_config.pop("max_image_size")
     new_vision_config = PixtralVisionConfig(hidden_act="silu", **new_vision_config)
 
+    kwargs = {}
+    if original_config.get("quantization", {}).get("qformat_weight") == "fp8_e4m3":
+        assert original_config["quantization"]["qscheme_act"] == "TENSOR"
+        quantization_config = {
+            "activation_scheme": "static",
+            "modules_to_not_convert": None,
+            "quant_method": "fp8",
+            "weight_block_size": [
+                1,
+                1,
+            ]
+        }
+        kwargs["quantization_config"] = quantization_config 
+
     new_config = Mistral3Config(
         vision_config=new_vision_config,
         text_config=new_text_config,
@@ -185,6 +211,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
         image_token_id=image_token_id,
         spatial_merge_size=spatial_merge_size,
         vision_feature_layer=-1,
+        **kwargs,
     )
     return new_config
 
@@ -192,6 +219,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
 def convert_and_write_model(input_dir: str, output_dir: str, max_position_embeddings: int):
     """Convert the model and save it (this implicitly save the config as well)."""
     params = read_json(os.path.join(input_dir, "params.json"))
+
     config = convert_config(params, max_position_embeddings)
 
     full_state_dict = {}
@@ -214,6 +242,10 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
         else:
             raise ValueError(f"Unknown config type {type(config)}.")
 
+    # let's swap nn.Linear to FP8 Linear before loading
+    hf_quantizer = AutoHfQuantizer.from_config(model.config.quantization_config)
+
+    import ipdb; ipdb.set_trace()
     model.load_state_dict(full_state_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
     return config
