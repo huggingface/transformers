@@ -251,6 +251,7 @@ class KyutaiSpeechToTextModel(MoshiModel):
 
 
 class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 

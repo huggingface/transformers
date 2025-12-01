@@ -1069,7 +1069,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
 
 @auto_docstring
 class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["codec_model"]
