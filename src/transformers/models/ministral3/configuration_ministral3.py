@@ -153,6 +153,7 @@ class Ministral3Config(PreTrainedConfig):
                 "rope_theta": 1000000.0,
                 "factor": 16.0,
                 "original_max_position_embeddings": 16384,
+                "max_position_embeddings": max_position_embeddings,
                 "beta_fast": 32.0,
                 "beta_slow": 1.0,
                 "mscale_all_dim": 1.0,
