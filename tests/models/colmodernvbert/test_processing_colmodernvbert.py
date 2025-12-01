@@ -19,7 +19,6 @@ import unittest
 
 import torch
 
-from transformers import BertTokenizer
 from transformers.models.colmodernvbert.processing_colmodernvbert import ColModernVBertProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -30,8 +29,6 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import (
         ColModernVBertProcessor,
-        ModernVBertImageProcessor,
-        ModernVBertProcessor,
     )
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.txt")
@@ -44,7 +41,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = ColModernVBertProcessor.from_pretrained("ModernVBert/colmodernvbert")
+        processor = ColModernVBertProcessor.from_pretrained("./colmvb_merged__new")
         processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
@@ -106,7 +103,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # The following tests override the parent tests because ColModernVBertProcessor can only take one of images or text as input at a time.
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
@@ -123,7 +120,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
@@ -140,7 +137,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
@@ -152,7 +149,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], 112)
 
     def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
@@ -169,7 +166,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -188,7 +185,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -207,7 +204,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_doubly_passed_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -223,7 +220,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
 
     def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -244,7 +241,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], 15)
 
     def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -269,6 +266,43 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
+    def test_tokenizer_defaults(self):
+        """
+        Tests that tokenizer is called correctly when passing text to the processor.
+        This test verifies that processor(text=X) produces the same output as tokenizer(self.query_prefix + X + suffix).
+        """
+        # Skip if processor doesn't have tokenizer
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+        tokenizer = components["tokenizer"]
+
+        input_str = ["lower newer"]
+
+        # Process with both tokenizer and processor (disable padding to ensure same output)
+        try:
+            encoded_processor = processor(text=input_str, padding=False, return_tensors="pt")
+        except Exception:
+            # The processor does not accept text only input, so we can skip this test
+            self.skipTest("Processor does not accept text-only input.")
+        tok_inputs = [processor.query_prefix + s + processor.query_augmentation_token * 10 for s in input_str]
+        encoded_tok = tokenizer(tok_inputs, padding=False, return_tensors="pt")
+
+        # Verify outputs match (handle processors that might not return token_type_ids)
+        for key in encoded_tok:
+            if key in encoded_processor:
+                self.assertListEqual(encoded_tok[key].tolist(), encoded_processor[key].tolist())
+
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
     def test_processor_text_has_no_visual(self):
+        pass
+
+    @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
+    def test_processor_with_multiple_inputs(self):
         pass

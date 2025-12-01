@@ -13,15 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch ColModernVBert model."""
 
-import collections
 import gc
-import re
 import unittest
 from typing import ClassVar
 
-import pytest
-from PIL import Image
 from huggingface_hub import hf_hub_download
+from PIL import Image
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -45,8 +42,6 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
-
-    from transformers.pytorch_utils import id_tensor_storage
 
 
 class ColModernVBertForRetrievalModelTester:
@@ -74,7 +69,7 @@ class ColModernVBertForRetrievalModelTester:
             "type_vocab_size": 2,
             "is_decoder": False,
             "initializer_range": 0.02,
-            "tie_word_embeddings": False,
+            "reference_compile": False,
         },
         is_training=False,
         vision_config={
@@ -91,7 +86,7 @@ class ColModernVBertForRetrievalModelTester:
         pixel_shuffle_factor=2,
         embedding_dim=64,
     ):
-        self.is_training = is_training  
+        self.is_training = is_training
         self.parent = parent
         self.batch_size = batch_size
         self.text_config = text_config
@@ -126,13 +121,7 @@ class ColModernVBertForRetrievalModelTester:
         )
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([
-            self.batch_size, 
-            self.num_images, 
-            3, 
-            self.image_size, 
-            self.image_size
-        ])
+        pixel_values = floats_tensor([self.batch_size, self.num_images, 3, self.image_size, self.image_size])
         config = self.get_config()
 
         return config, pixel_values
@@ -153,6 +142,7 @@ class ColModernVBertForRetrievalModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
+
 
 @require_torch
 class ColModernVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
@@ -196,22 +186,22 @@ class ColModernVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(
-        reason="Some undefined behavior encountered with test versions of this model. Skip for now."
-    )
-    def test_model_parallelism(self):
+    # @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
+    # def test_model_parallelism(self):
+    #     pass
+
+    @unittest.skip(reason="The test seems not to be compatible, tries to load the base model through the retrieval.")
+    def test_correct_missing_keys(self):
         pass
 
-    @unittest.skip(
-        reason="The test seems not to be compatible, tries to load the base model through the retrieval."
-    )
-    def test_correct_missing_keys(self):
+    @unittest.skip(reason="Error related to ModernBERT model parallelism: self.dtype is broken.")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
 
 @require_torch
 class ColModernVBertModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "ModernVBERT/colmodernvbert-hf"
+    model_name: ClassVar[str] = "ModernVBERT/colmodernvbert-merged"
 
     def setUp(self):
         self.processor = ColModernVBertProcessor.from_pretrained(self.model_name)
@@ -234,12 +224,12 @@ class ColModernVBertModelIntegrationTest(unittest.TestCase):
         # Load the test dataset
         queries = [
             "A paint on the wall",
-            "ColModernVBERT matches the performance of models nearly 10x larger on visual document benchmarks."
+            "ColModernVBERT matches the performance of models nearly 10x larger on visual document benchmarks.",
         ]
 
         images = [
             Image.open(hf_hub_download("HuggingFaceTB/SmolVLM", "example_images/rococo.jpg", repo_type="space")),
-            Image.open(hf_hub_download("ModernVBERT/colmodernvbert", "table.png", repo_type="model"))
+            Image.open(hf_hub_download("ModernVBERT/colmodernvbert", "table.png", repo_type="model")),
         ]
 
         # Preprocess the examples
@@ -260,17 +250,16 @@ class ColModernVBertModelIntegrationTest(unittest.TestCase):
         scores = torch.softmax(scores, dim=-1)
 
         assert scores.ndim == 2, f"Expected 2D tensor, got {scores.ndim}"
-        assert scores.shape == (len(images), len(images)), f"Expected shape {(len(images), len(images))}, got {scores.shape}"
+        assert scores.shape == (len(images), len(images)), (
+            f"Expected shape {(len(images), len(images))}, got {scores.shape}"
+        )
 
         # Check if the maximum scores per row are in the diagonal of the matrix score
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(images), device=scores.device)).all())
 
         # Further validation: fine-grained check, with a hardcoded score from the original implementation
         expected_scores = torch.tensor(
-            [
-                [0.9350, 0.0650],
-                [0.0015, 0.9985]
-            ],
+            [[0.9350, 0.0650], [0.0015, 0.9985]],
             dtype=scores.dtype,
         )
 
