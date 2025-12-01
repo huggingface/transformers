@@ -197,10 +197,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
             "activation_scheme": "static",
             "modules_to_not_convert": ["model.vision_tower.*"],
             "quant_method": "fp8",
-            "weight_block_size": [
-                1,
-                1,
-            ]
+            "weight_block_size": None
         }
         kwargs["quantization_config"] = AutoQuantizationConfig.from_dict(quantization_config)
 
