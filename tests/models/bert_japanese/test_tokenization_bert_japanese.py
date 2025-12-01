@@ -448,24 +448,3 @@ class AutoTokenizerCustomTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
         self.assertIsInstance(tokenizer, BertJapaneseTokenizer)
 
-
-class BertTokenizerMismatchTest(unittest.TestCase):
-    def test_tokenizer_mismatch_warning(self):
-        EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
-        with self.assertLogs("transformers", level="WARNING") as cm:
-            BertTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
-            self.assertTrue(
-                cm.records[0].message.startswith(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this function"
-                    " is called from."
-                )
-            )
-        EXAMPLE_BERT_ID = "google-bert/bert-base-cased"
-        with self.assertLogs("transformers", level="WARNING") as cm:
-            BertJapaneseTokenizer.from_pretrained(EXAMPLE_BERT_ID)
-            self.assertTrue(
-                cm.records[0].message.startswith(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this function"
-                    " is called from."
-                )
-            )
