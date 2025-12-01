@@ -224,7 +224,15 @@ class AutoHfQuantizer:
         if (
             isinstance(
                 quantization_config,
-                (GPTQConfig, AwqConfig, AutoRoundConfig, FbgemmFp8Config, CompressedTensorsConfig, Mxfp4Config, FineGrainedFP8Config),
+                (
+                    GPTQConfig,
+                    AwqConfig,
+                    AutoRoundConfig,
+                    FbgemmFp8Config,
+                    CompressedTensorsConfig,
+                    Mxfp4Config,
+                    FineGrainedFP8Config,
+                ),
             )
             and quantization_config_from_args is not None
         ):

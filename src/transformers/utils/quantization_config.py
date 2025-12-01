@@ -2013,9 +2013,10 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
             raise ValueError("weight_block_size must be a tuple of two positive integers")
-    
+
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize}
+
 
 class QuarkConfig(QuantizationConfigMixin):
     def __init__(

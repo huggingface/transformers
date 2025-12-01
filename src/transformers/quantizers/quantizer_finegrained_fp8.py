@@ -240,8 +240,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return Fp8Quantize(self)
 
     def get_weight_conversions(self):
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
         from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained_fp8 import Fp8Dequantize
 
         if self.pre_quantized and self.quantization_config.dequantize:
             return [

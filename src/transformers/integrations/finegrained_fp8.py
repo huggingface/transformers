@@ -14,8 +14,7 @@
 # limitations under the License.
 
 import re
-from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Optional
 
 from ..core_model_loading import ConversionOps
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
@@ -497,7 +496,6 @@ def _replace_with_fp8_linear(
     quantization_config=None,
     has_been_replaced=False,
 ):
-
     iterator = list(model.named_parameters()).copy()
     for name, empty_tensor in iterator:
         current_key_name = name
@@ -667,12 +665,19 @@ class Fp8Dequantize(ConversionOps):
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-
         if len(input_dict) != 2:
             # in case of no scales, the weights are not quantized, so we return the weights as is
-            return {full_layer_name: input_dict["weight$"][0] if isinstance(input_dict["weight$"], list) else input_dict["weight$"] }
+            return {
+                full_layer_name: input_dict["weight$"][0]
+                if isinstance(input_dict["weight$"], list)
+                else input_dict["weight$"]
+            }
         quantized = input_dict["weight$"][0] if isinstance(input_dict["weight$"], list) else input_dict["weight$"]
-        scales = input_dict["weight_scale_inv"][0] if isinstance(input_dict["weight_scale_inv"], list) else input_dict["weight_scale_inv"]
+        scales = (
+            input_dict["weight_scale_inv"][0]
+            if isinstance(input_dict["weight_scale_inv"], list)
+            else input_dict["weight_scale_inv"]
+        )
 
         rows, cols = quantized.shape[-2:]
         block_size = self.hf_quantizer.quantization_config.weight_block_size
