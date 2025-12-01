@@ -339,7 +339,7 @@ class FP8Linear(nn.Linear):
                     torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
                 )
         else:
-            self.register_parameter("weight_scale_inv", None) 
+            self.register_parameter("weight_scale_inv", None)
         self.activation_scheme = activation_scheme
 
         if self.activation_scheme == "static":
