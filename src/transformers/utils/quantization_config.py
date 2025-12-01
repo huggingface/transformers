@@ -72,6 +72,7 @@ class AwqFormat(str, Enum):
     GEMV_FAST = "gemv_fast"
 
 class AwqBackend(str, Enum):
+    LEGACY_AWQ = "autoawq"
     AUTO = "auto"
     MACHETE = "machete"
     MARLIN = "marlin"
@@ -831,6 +832,9 @@ class AwqConfig(GPTQConfig):
         # Compatible with legacy field: version
         if kwargs.get("version") is not None:
             format = kwargs.pop("version").lower()
+        # Compatible with legacy backend
+        if backend == AwqBackend.LEGACY_AWQ:
+            backend = AwqBackend.AUTO
         self.zero_point = zero_point
         self.modules_to_not_convert = modules_to_not_convert
 
