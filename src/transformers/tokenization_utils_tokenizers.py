@@ -42,7 +42,7 @@ from .tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from .utils import PaddingStrategy, add_end_docstrings, is_offline_mode, logging
 
 
 logger = logging.get_logger(__name__)
@@ -1088,6 +1088,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if re.search("base_model:.*mistralai", "".join(model.tags)):
                     return True
             return False
+
+        if is_offline_mode():
+            is_local = True
 
         if pretrained_model_name_or_path is not None and (
             is_local or (not is_local and is_base_mistral(pretrained_model_name_or_path))
