@@ -179,7 +179,8 @@ class GPTQTest(unittest.TestCase):
         if not is_gptqmodel_available():
             self.skipTest("gptqmodel not available")
 
-        from gptqmodel.utils.importer import hf_select_quant_linear
+        from gptqmodel.utils.importer import hf_select_quant_linear_v2
+        from gptqmodel.quantization import METHOD
 
         if hasattr(self.config, "quantization_config"):
             checkpoint_format = self.config.quantization_config.get("checkpoint_format")
@@ -187,15 +188,18 @@ class GPTQTest(unittest.TestCase):
         else:
             checkpoint_format = "gptq"
             meta = None
-        QuantLinear = hf_select_quant_linear(
+
+        QuantLinear = hf_select_quant_linear_v2(
             bits=self.bits,
             group_size=self.group_size,
             desc_act=self.desc_act,
             sym=self.sym,
             device_map=self.device_map,
-            checkpoint_format=checkpoint_format,
+            format=checkpoint_format,
+            quant_method=METHOD.GPTQ,
             meta=meta,
             backend=self.quantization_config.backend,
+            pack=False,
         )
         self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
 
