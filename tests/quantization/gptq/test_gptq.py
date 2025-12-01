@@ -233,6 +233,7 @@ class GPTQTest(unittest.TestCase):
         Test the serialization of the model and the loading of the quantized weights works
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
+            self.tokenizer.save_pretrained(tmpdirname)
             self.quantized_model.save_pretrained(tmpdirname)
             if not is_gptqmodel_available():
                 self.skipTest("gptqmodel not available")
