@@ -1194,6 +1194,12 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         self.n_window_infer = self.config.n_window_infer
         self.conv_chunksize = self.config.conv_chunksize
 
+    def get_input_embeddings(self):
+        return self.conv2d1
+
+    def set_input_embeddings(self, value):
+        self.conv2d1 = value
+
     def forward(
         self,
         input_features,
@@ -1643,7 +1649,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     def get_input_embeddings(self):
         return self.codec_embedding
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

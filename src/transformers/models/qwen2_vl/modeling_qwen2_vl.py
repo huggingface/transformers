@@ -671,6 +671,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config: Qwen2VLVisionConfig
     input_modalities = ("image", "video")
     _no_split_modules = ["Qwen2VLVisionBlock"]
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config) -> None:
         super().__init__(config)
