@@ -317,7 +317,17 @@ labels = tokenizer(text_target=tgt_texts, ...)
 ## Disclaimers for the RC0
 
 ### PEFT + MoE:
+
 Because we are switching from the naive MOE (`nn.ModuleList` for experts) we currently have an issue with MoEs that have adapters. For more details see https://github.com/huggingface/transformers/issues/42491#issuecomment-3591485649. 
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
+
+### Tensor parallel and Expert parallel + MoE
+
+We are streamlining the MoE support with vLLM; while this is being implemented, tensor parallelism and expert parallelism aren't working as expected.
+This is known and actively being worked on.
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
 
 ### Custom pretrained models:
 For anyone inheriting from a `transformers` `PreTrainedModel`, the weights are automatically initialized with the common scheme: 
