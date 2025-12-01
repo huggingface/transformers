@@ -125,6 +125,7 @@ class GptOssExperts(nn.Module):
                 next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
         else:
+            num_tokens = hidden_states.shape[0]
             hidden_states = hidden_states.repeat(self.num_experts, 1)
             hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
             gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
@@ -135,9 +136,14 @@ class GptOssExperts(nn.Module):
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(self.num_experts, batch_size, -1, self.hidden_size)
-            next_states = (
-                next_states * routing_weights.transpose(0, 1).view(self.num_experts, batch_size, -1)[..., None]
+            
+            full_routing_weights = torch.zeros(
+                num_tokens, self.num_experts, device=routing_weights.device, dtype=routing_weights.dtype
             )
+            full_routing_weights.scatter_(1, router_indices, routing_weights)
+            full_routing_weights = full_routing_weights.transpose(0, 1).view(self.num_experts, batch_size, -1, 1)
+            
+            next_states = next_states * full_routing_weights
             next_states = next_states.sum(dim=0)
         return next_states
 
