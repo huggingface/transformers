@@ -20,7 +20,6 @@ import requests
 
 from transformers import (
     AutoProcessor,
-    BitsAndBytesConfig,
     FastVlmConfig,
     FastVlmForConditionalGeneration,
     FastVlmModel,
@@ -29,7 +28,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_bitsandbytes,
     require_torch,
     require_vision,
     slow,
@@ -232,6 +230,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 
 
 @require_torch
+@slow
 class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
@@ -239,12 +238,10 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
-    @require_bitsandbytes
     @require_vision
     def test_small_model_integration_test(self):
         model = FastVlmForConditionalGeneration.from_pretrained(
-            "KamilaMila/FastVLM-0.5B", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
         )
 
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
@@ -253,23 +250,19 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        expected_decoded_texts = """
-user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\nWhen visiting this place, you should be cautious about the following:\n\n1. Water safety:
-"""  # fmt: skip
+        expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **"  # fmt: skip
 
-        EXPECTED_DECODED_TEXT = expected_decoded_texts[1:-1]
+        EXPECTED_DECODED_TEXT = expected_decoded_texts
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     @require_vision
     def test_small_model_integration_test_batch(self):
         model = FastVlmForConditionalGeneration.from_pretrained(
-            "KamilaMila/FastVLM-0.5B", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
         )
 
         prompts = [
@@ -286,8 +279,8 @@ user\n\nWhat are the things I should be cautious about when I visit this place?\
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:",
-            "user\n\nWhat is this?\nassistant\nThe image depicts two cats lying on a pink surface, which appears to be a couch or"
+            "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+            "user\n\nWhat is this?\nassistant\nThe image depicts two cats lying on a pink surface, which could be a couch or a"
         ]  # fmt: skip
 
         self.assertEqual(
@@ -295,12 +288,10 @@ user\n\nWhat are the things I should be cautious about when I visit this place?\
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "KamilaMila/FastVLM-0.5B"
         model = FastVlmForConditionalGeneration.from_pretrained(
-            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            model_id, device_map=torch_device, dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained(model_id)
 
