@@ -102,7 +102,6 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         vision_feature_layer=-1,
         vision_aspect_ratio="anyres_max_9",
         image_grid_pinpoints=None,
-        tie_word_embeddings=False,
         multimodal_projector_bias=True,
         **kwargs,
     ):
@@ -188,7 +187,13 @@ class LlavaOnevisionConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
+
+        # Due to a mismatch at model addition-time, the `tie_word_embeddings` was saved in the text config, even
+        # though it concerns the main model... So we hardcode a fix here
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = True
+            self.text_config.tie_word_embeddings = False
 
 
 __all__ = ["LlavaOnevisionConfig"]
