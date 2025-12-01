@@ -294,7 +294,7 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model.push_to_hub(model_name, organization="nielsr")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

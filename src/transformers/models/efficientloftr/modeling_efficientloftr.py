@@ -126,7 +126,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -668,7 +668,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     config_class = EfficientLoFTRConfig
     base_model_prefix = "efficientloftr"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
