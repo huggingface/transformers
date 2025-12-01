@@ -11,17 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import codecs
-import os
-import tempfile
 import unittest
-from io import BytesIO
 
 import httpx
 import numpy as np
 import pytest
-from huggingface_hub.file_download import hf_hub_url, http_get
+from huggingface_hub.file_download import hf_hub_download
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
@@ -46,8 +42,8 @@ if is_vision_available():
 
 
 def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: str | None = None) -> "PIL.Image.Image":
-    url = hf_hub_url(dataset_id, filename, repo_type="dataset", revision=revision)
-    return PIL.Image.open(BytesIO(httpx.get(url, follow_redirects=True).content))
+    path = hf_hub_download(dataset_id, filename, repo_type="dataset", revision=revision)
+    return PIL.Image.open(path)
 
 
 def get_random_image(height, width):
@@ -738,54 +734,30 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_base64_prefix(self):
-        try:
-            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
-            with open(tmp_file, "wb") as f:
-                http_get(
-                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_0.txt", f
-                )
-
-            with open(tmp_file, encoding="utf-8") as b64:
-                img = load_image(b64.read())
-                img_arr = np.array(img)
-
-        finally:
-            os.remove(tmp_file)
-
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_0.txt", repo_type="dataset"
+        )
+        with open(path, encoding="utf-8") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
         self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_base64(self):
-        try:
-            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
-            with open(tmp_file, "wb") as f:
-                http_get(
-                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_1.txt", f
-                )
-
-            with open(tmp_file, encoding="utf-8") as b64:
-                img = load_image(b64.read())
-                img_arr = np.array(img)
-
-        finally:
-            os.remove(tmp_file)
-
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_1.txt", repo_type="dataset"
+        )
+        with open(path, encoding="utf-8") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
         self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_base64_encoded_bytes(self):
-        try:
-            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
-            with open(tmp_file, "wb") as f:
-                http_get(
-                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_2.txt", f
-                )
-
-            with codecs.open(tmp_file, encoding="unicode_escape") as b64:
-                img = load_image(b64.read())
-                img_arr = np.array(img)
-
-        finally:
-            os.remove(tmp_file)
-
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_2.txt", repo_type="dataset"
+        )
+        with codecs.open(path, encoding="unicode_escape") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
         self.assertEqual(img_arr.shape, (256, 256, 3))
 
     def test_load_img_rgba(self):
@@ -797,11 +769,7 @@ class LoadImageTester(unittest.TestCase):
 
         img = load_image(img)  # img with mode RGBA
         img_arr = np.array(img)
-
-        self.assertEqual(
-            img_arr.shape,
-            (512, 512, 3),
-        )
+        self.assertEqual(img_arr.shape, (512, 512, 3))
 
     def test_load_img_la(self):
         # we use revision="refs/pr/1" until the PR is merged

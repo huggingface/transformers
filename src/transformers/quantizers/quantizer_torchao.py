@@ -548,13 +548,13 @@ class TorchAoHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             return [
                 WeightConverter(
-                    source_keys=["weight:qdata", "weight:scale", "weight:zero_point"],
-                    target_keys="weight",
+                    source_patterns=["weight:qdata", "weight:scale", "weight:zero_point"],
+                    target_patterns="weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
                 WeightConverter(
-                    source_keys=["weight:_data"],
-                    target_keys="weight",
+                    source_patterns=["weight:_data"],
+                    target_patterns="weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
                 # used for unsafe serialization

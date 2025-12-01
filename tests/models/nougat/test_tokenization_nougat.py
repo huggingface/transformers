@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import unittest
 
-from transformers import NougatTokenizerFast
-from transformers.models.nougat.tokenization_nougat_fast import markdown_compatible, normalize_list_like_lines
+from transformers import NougatTokenizer
+from transformers.models.nougat.tokenization_nougat import markdown_compatible, normalize_list_like_lines
 from transformers.testing_utils import require_levenshtein, require_nltk, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -25,103 +24,12 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "facebook/nougat-base"
-    slow_tokenizer_class = None
-    rust_tokenizer_class = NougatTokenizerFast
-    tokenizer_class = NougatTokenizerFast
-    test_rust_tokenizer = True
-    test_slow_tokenizer = False
-    from_pretrained_vocab_key = "tokenizer_file"
-    special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
+    tokenizer_class = NougatTokenizer
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        tokenizer = NougatTokenizerFast.from_pretrained("facebook/nougat-base")
-        tokenizer.save_pretrained(cls.tmpdirname)
-
-    @classmethod
-    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
-        _kwargs = copy.deepcopy(cls.special_tokens_map)
-        _kwargs.update(kwargs)
-        kwargs = _kwargs
-        pretrained_name = pretrained_name or cls.tmpdirname
-        return NougatTokenizerFast.from_pretrained(pretrained_name, **kwargs)
-
-    def test_padding(self, max_length=6):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-                # Simple input
-                sentence1 = "This is a simple input"
-                sentence2 = ["This is a simple input 1", "This is a simple input 2"]
-                pair1 = ("This is a simple input", "This is a pair")
-                pair2 = [
-                    ("This is a simple input 1", "This is a simple input 2"),
-                    ("This is a simple pair 1", "This is a simple pair 2"),
-                ]
-
-                # Simple input tests
-                try:
-                    tokenizer_r.encode(sentence1, max_length=max_length)
-                    tokenizer_r.encode_plus(sentence1, max_length=max_length)
-
-                    tokenizer_r.batch_encode_plus(sentence2, max_length=max_length)
-                    tokenizer_r.encode(pair1, max_length=max_length)
-                    tokenizer_r.batch_encode_plus(pair2, max_length=max_length)
-                except ValueError:
-                    self.fail("Nougat Tokenizer should be able to deal with padding")
-
-                tokenizer_r.pad_token = None  # Hotfixing padding = None
-                self.assertRaises(
-                    ValueError, tokenizer_r.encode, sentence1, max_length=max_length, padding="max_length"
-                )
-
-                # Simple input
-                self.assertRaises(
-                    ValueError, tokenizer_r.encode_plus, sentence1, max_length=max_length, padding="max_length"
-                )
-
-                # Simple input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    sentence2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
-
-                # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, pair1, max_length=max_length, padding="max_length")
-
-                # Pair input
-                self.assertRaises(
-                    ValueError, tokenizer_r.encode_plus, pair1, max_length=max_length, padding="max_length"
-                )
-
-                # Pair input
-                self.assertRaises(
-                    ValueError,
-                    tokenizer_r.batch_encode_plus,
-                    pair2,
-                    max_length=max_length,
-                    padding="max_length",
-                )
-
-    @unittest.skip(reason="NougatTokenizerFast does not have tokenizer_file in its signature")
-    def test_rust_tokenizer_signature(self):
-        pass
-
-    @unittest.skip(reason="NougatTokenizerFast does not support pretokenized inputs")
-    def test_pretokenized_inputs(self):
-        pass
-
-    @unittest.skip(reason="NougatTokenizerFast directly inherits from PreTrainedTokenizerFast")
-    def test_prepare_for_model(self):
-        pass
-
-    @unittest.skip(reason="This needs a slow tokenizer. Nougat does not have one!")
-    def test_encode_decode_with_spaces(self):
-        pass
+    integration_expected_tokens = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ġ', 'ð', 'Ł', 'ĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶ', 'Ł', 'æ', '´', '»', 'çļĦ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'Hi', 'Ġ', 'ĠH', 'ello', 'Ċ', 'Hi', 'ĠĠ', 'ĠH', 'ello', 'Ċ', 'Ċ', 'Ġ', 'Ċ', 'ĠĠ', 'Ċ', 'ĠH', 'ello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠH', 'ello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']  # fmt: skip
+    integration_expected_token_ids = [2113, 343, 281, 1185, 243, 195, 276, 269, 255, 221, 63, 435, 8613, 301, 243, 47, 40, 38, 38, 38, 34, 312, 495, 343, 34500, 2230, 36, 221, 33239, 276, 185, 135, 142, 31778, 186, 273, 276, 187, 131, 272, 185, 269, 130, 221, 33719, 243, 414, 13716, 221, 33719, 304, 414, 13716, 221, 221, 243, 221, 304, 221, 414, 13716, 221, 0, 221, 2197, 0, 10158, 221, 592, 1093, 4935, 1502, 391, 10651, 10033, 48, 414, 13716, 36, 221, 11847, 243, 2326, 312, 243, 12043, 272, 12043, 136, 304, 243, 2326, 304, 243, 12043, 265, 221, 62, 1220, 1905, 417, 2589, 10671]  # fmt: skip
+    expected_tokens_from_ids = ['This', 'Ġis', 'Ġa', 'Ġtest', 'Ġ', 'ð', 'Ł', 'ĺ', 'Ĭ', 'Ċ', 'I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ', '9', '2', '0', '0', '0', ',', 'Ġand', 'Ġthis', 'Ġis', 'Ġfals', 'Ã©', '.', 'Ċ', 'çĶ', 'Ł', 'æ', '´', '»', 'çļĦ', 'ç', 'ľ', 'Ł', 'è', '°', 'Ľ', 'æ', 'ĺ', '¯', 'Ċ', 'Hi', 'Ġ', 'ĠH', 'ello', 'Ċ', 'Hi', 'ĠĠ', 'ĠH', 'ello', 'Ċ', 'Ċ', 'Ġ', 'Ċ', 'ĠĠ', 'Ċ', 'ĠH', 'ello', 'Ċ', '<s>', 'Ċ', 'hi', '<s>', 'there', 'Ċ', 'The', 'Ġfollowing', 'Ġstring', 'Ġshould', 'Ġbe', 'Ġproperly', 'Ġencoded', ':', 'ĠH', 'ello', '.', 'Ċ', 'But', 'Ġ', 'ird', 'Ġand', 'Ġ', 'à¸', 'Ľ', 'à¸', 'µ', 'ĠĠ', 'Ġ', 'ird', 'ĠĠ', 'Ġ', 'à¸', 'Ķ', 'Ċ', 'H', 'ey', 'Ġhow', 'Ġare', 'Ġyou', 'Ġdoing']  # fmt: skip
+    integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
 
 class MarkdownCompatibleTest(unittest.TestCase):
@@ -182,7 +90,7 @@ class TestNormalizeListLikeLines(unittest.TestCase):
 class NougatPostProcessingTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.tokenizer = NougatTokenizerFast.from_pretrained("facebook/nougat-base")
+        self.tokenizer = NougatTokenizer.from_pretrained("facebook/nougat-base")
 
     def test_correct_tables_basic(self):
         input_str = "\\begin{table} \\begin{tabular}{l l}  & \\ \\end{tabular} \\end{table}"
