@@ -60,15 +60,14 @@ class Blip2Processor(ProcessorMixin):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
-    def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
+    def __init__(self, image_processor, tokenizer, num_query_tokens=32, **kwargs):
         tokenizer.return_token_type_ids = False
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)
             tokenizer.add_tokens([self.image_token], special_tokens=True)
         else:
             self.image_token = tokenizer.image_token
-        # Default to 32 if missing, matching official BLIP-2 checkpoints
-        self.num_query_tokens = num_query_tokens if num_query_tokens is not None else 32
+        self.num_query_tokens = num_query_tokens
 
         super().__init__(image_processor, tokenizer)
 
