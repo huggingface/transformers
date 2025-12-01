@@ -184,9 +184,9 @@ def w8a8_block_fp8_matmul_triton(
     assert len(block_size) == 2
     block_n, block_k = block_size[0], block_size[1]
 
-    assert A.shape[-1] == B.shape[-1], f"{A.shape}, {B.shape}"
-    assert A.shape[:-1] == As.shape[:-1], f"{A.shape}, {As.shape}"
-    assert A.is_contiguous()
+    assert A.shape[-1] == B.shape[-1]
+
+    assert A.shape[:-1] == As.shape[:-1] and A.is_contiguous()
     assert triton.cdiv(A.shape[-1], block_k) == As.shape[-1]
     M = A.numel() // A.shape[-1]
 
@@ -372,18 +372,19 @@ class FP8Linear(nn.Linear):
                     qinput = (input / scale).to(torch.float8_e4m3fn)
                 else:
                     raise NotImplementedError("Not supported")
-
-                scale = scale[None, None, None].repeat(qinput.shape[:2] + (1,))
-                scale_inv = scale_inv[None, None]
-
-                output = w8a8_block_fp8_matmul_triton(
-                    qinput,
-                    weight,
-                    scale,
-                    scale_inv,
-                    self.block_size,
-                    output_dtype=input.dtype,
-                )
+                if self.activation_scheme == "static":
+                    output = F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), None) * scale_inv * scale
+                    output = output.to(input.dtype)
+                else:
+                    output = w8a8_block_fp8_matmul_triton(
+                        qinput,
+                        weight,
+                        scale,
+                        scale_inv,
+                        self.block_size,
+                        output_dtype=input.dtype,
+                    )
+                
             # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
             torch_accelerator_module.synchronize()
