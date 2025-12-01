@@ -35,33 +35,31 @@ class LlavaOnevisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 151646):
-            The image token index to encode the image prompt.
-        video_token_index (`int`, *optional*, defaults to 151647):
-            The video token index to encode the video prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-            Aspect ratio used when processong image features. The default value is "anyres_max_9".
-        image_grid_pinpoints (`List`, *optional*):
-            A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
+            vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
+                The config object or dictionary of the vision backbone.
+            text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
+                The config object or dictionary of the text backbone.
+            image_token_index (`int`, *optional*, defaults to 151646):
+                The image token index to encode the image prompt.
+            video_token_index (`int`, *optional*, defaults to 151647):
+                The video token index to encode the video prompt.
+            projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+                The activation function used by the multimodal projector.
+            vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
+                The feature selection strategy used to select the vision feature from the vision backbone.
+                Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
+                If `"full"`, the full vision features are used.
+            vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
+                The index of the layer to select the vision feature. If multiple indices are provided,
+                the vision feature of the corresponding indices will be concatenated to form the
+                vision features.
+            vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+                Aspect ratio used when processong image features. The default value is "anyres_max_9".
+            image_grid_pinpoints (`List`, *optional*):
+                A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
+                of the form `(height, width)`.
+            multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+                Whether to use bias in the multimodal projector.
 
     Example:
 
