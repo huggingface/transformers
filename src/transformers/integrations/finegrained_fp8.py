@@ -322,19 +322,24 @@ class FP8Linear(nn.Linear):
         self.in_features = in_features
         self.out_features = out_features
 
+        if block_size is not None:
+            self.block_size = block_size
+        else:
+            self.block_size = (out_features, in_features)
+
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
 
         if self.weight.element_size() == 1:
-            scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
-            scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-            self.weight_scale_inv = nn.Parameter(
-                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
-            )
+            scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
+            scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
+            if scale_out_features * scale_in_features == 1:
+                self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32, device=device))
+            else:
+                self.weight_scale_inv = nn.Parameter(
+                    torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+                )
         else:
-            self.register_parameter("weight_scale_inv", None)
-
-        self.block_size = block_size
-
+            self.register_parameter("weight_scale_inv", None) 
         self.activation_scheme = activation_scheme
 
         if bias:
