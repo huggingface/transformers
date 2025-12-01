@@ -337,6 +337,9 @@ class FP8Linear(nn.Linear):
         self.block_size = block_size
 
         self.activation_scheme = activation_scheme
+        if self.activation_scheme == "static":
+            self.register_parameter("act_scale", None)
+
 
         if bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
@@ -357,7 +360,14 @@ class FP8Linear(nn.Linear):
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
             with torch_accelerator_module.device(input.device):
-                qinput, scale = act_quant(input, self.block_size[1])
+                if self.activation_scheme == "dynamic":
+                    qinput, scale = act_quant(input, self.block_size[1])
+                elif self.activation_scheme == "static":
+                    scale = self.act_scale
+                    qinput = (input / scale).to(torch.float8_e4m3fn)
+                else:
+                    raise NotImplementedError("Not supported")
+
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
                     weight,
