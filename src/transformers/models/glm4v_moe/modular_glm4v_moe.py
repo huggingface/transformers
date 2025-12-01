@@ -579,7 +579,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

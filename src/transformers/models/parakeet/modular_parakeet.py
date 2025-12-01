@@ -405,7 +405,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     @can_return_tuple
     def forward(
         self,
