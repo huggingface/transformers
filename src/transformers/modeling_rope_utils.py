@@ -916,29 +916,29 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(f"Unrecognized keys in `rope_parameters` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
-def standardize_rope_params(*args, **kwargs):
+def standardize_rope_params(config, rope_theta: float | dict[str, float] | None = None):
     """
     This is a deprecated function.
     It has been kept for backward compatibility with custom code models.
-    It does nothing except issuing a warning.
     """
     warnings.warn(
         "`standardize_rope_params` is deprecated and has been removed. "
         "Its functionality has been moved to RotaryEmbeddingConfigMixin.standardize_rope_params method. "
-        "PreTrainedConfig inherits this class, so you can simply remove the function call.",
+        "PreTrainedConfig inherits this class, so please call self.standardize_rope_params() instead.",
         FutureWarning,
     )
+    config.standardize_rope_params()
 
 
-def rope_config_validation(*args, **kwargs):
+def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
     """
     This is a deprecated function.
     It has been kept for backward compatibility with custom code models.
-    It does nothing except issuing a warning.
     """
     warnings.warn(
         "`rope_config_validation` is deprecated and has been removed. "
         "Its functionality has been moved to RotaryEmbeddingConfigMixin.validate_rope method. "
-        "PreTrainedConfig inherits this class, so you can simply remove the function call.",
+        "PreTrainedConfig inherits this class, so please call self.validate_rope() instead.",
         FutureWarning,
     )
+    config.validate_rope(ignore_keys=ignore_keys)
