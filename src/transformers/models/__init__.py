@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .afmoe import *
     from .aimv2 import *
     from .albert import *
     from .align import *
@@ -343,6 +344,7 @@ if TYPE_CHECKING:
     from .switch_transformers import *
     from .t5 import *
     from .t5gemma import *
+    from .t5gemma2 import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *
