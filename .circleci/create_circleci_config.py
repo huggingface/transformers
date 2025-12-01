@@ -189,7 +189,7 @@ class CircleCIJob:
             {"run": {"name": "download and unzip hub cache", "command": 'curl -L -o huggingface-cache.tar.gz https://huggingface.co/datasets/hf-internal-testing/hf_hub_cache/resolve/main/huggingface-cache.tar.gz && apt-get install pigz && tar --use-compress-program="pigz -d -p 8" -xf huggingface-cache.tar.gz && mv -n hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/'}},
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} tests/models/bloom/test_tokenization_bloom.py tests/models/layoutlmv2/test_tokenization_layoutlmv2.py tests/models/siglip/test_tokenization_siglip.py tests/models/bert_japanese/test_tokenization_bert_japanese.py tests/models/blenderbot_small/test_tokenization_blenderbot_small.py tests/models/cohere/test_tokenization_cohere.py tests/models/bert/test_tokenization_bert.py tests/models/distilbert/test_tokenization_distilbert.py tests/models/mluke/test_tokenization_mluke.py tests/models/splinter/test_tokenization_splinter.py tests/models/pop2piano/test_tokenization_pop2piano.py | tee tests_output.txt)"}
             },
             {"run":
                 {
@@ -349,7 +349,7 @@ PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job]  # fmt: skip
-
+ALL_TESTS = [tokenization_job]
 
 def create_circleci_config(folder=None):
     if folder is None:

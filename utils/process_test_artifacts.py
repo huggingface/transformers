@@ -23,8 +23,8 @@ import math
 import os
 
 
-MAX_PARALLEL_NODES = 8  # TODO create a mapping!
-AVERAGE_TESTS_PER_NODES = 5
+MAX_PARALLEL_NODES = 1  # TODO create a mapping!
+AVERAGE_TESTS_PER_NODES = 1
 
 
 def count_lines(filepath):
