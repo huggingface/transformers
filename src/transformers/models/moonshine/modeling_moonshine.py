@@ -550,7 +550,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -635,7 +635,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

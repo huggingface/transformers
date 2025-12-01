@@ -281,7 +281,7 @@ class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
 # FlexOlmo model is identical to Mixtral model except:
 # - FlexOlmo does not use sliding window attention.
 class FlexOlmoModel(MixtralModel):
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

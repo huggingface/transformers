@@ -376,7 +376,7 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 class GptOssModel(MixtralModel):
     _no_split_modules = ["GptOssDecoderLayer"]
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

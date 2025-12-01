@@ -518,7 +518,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

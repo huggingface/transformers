@@ -166,7 +166,7 @@ class Qwen2MoeModel(MixtralModel):
         self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen2MoeRotaryEmbedding(config=config)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

@@ -1182,7 +1182,7 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

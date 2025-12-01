@@ -460,7 +460,7 @@ class JetMoeModel(MixtralModel):
         self._attn_implementation = config._attn_implementation
         self.norm = JetMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

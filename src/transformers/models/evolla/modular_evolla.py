@@ -216,7 +216,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.Tensor],
@@ -759,7 +759,7 @@ class EvollaModel(EvollaPreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
