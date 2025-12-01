@@ -796,6 +796,16 @@ def is_torchcodec_available() -> bool:
 
 
 @lru_cache
+def is_torchcodec_importable() -> bool:
+    if is_torchcodec_available():
+        try:
+            return True
+        except Exception:
+            return False
+    return False
+
+
+@lru_cache
 def is_ninja_available() -> bool:
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the

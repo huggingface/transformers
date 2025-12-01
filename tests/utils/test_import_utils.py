@@ -1,7 +1,8 @@
+import builtins
 import sys
 
 from transformers.testing_utils import run_test_using_subprocess
-from transformers.utils.import_utils import clear_import_cache
+from transformers.utils.import_utils import clear_import_cache, is_torchcodec_importable
 
 
 @run_test_using_subprocess
@@ -24,3 +25,30 @@ def test_clear_import_cache():
 
     assert "transformers.models.auto.modeling_auto" in sys.modules
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
+
+
+def test_torchcodec_importable_handles_import_failure(monkeypatch):
+    """
+    Simulates an environment where the 'torchcodec' package is installed
+    (find_spec succeeds) but importing it fails (e.g., missing DLL on Windows).
+    The function should safely return False without raising.
+    """
+
+    # Pretend torchcodec is installed
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name == "torchcodec" else None,
+    )
+
+    # Simulate 'import torchcodec' raising a runtime error
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "torchcodec":
+            raise RuntimeError("simulated DLL load failure")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    # Should now return False (fallback) rather than raise
+    assert is_torchcodec_importable() is False

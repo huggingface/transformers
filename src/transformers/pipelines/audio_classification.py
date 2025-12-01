@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 import numpy as np
 
-from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
+from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_importable, logging
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -182,7 +182,7 @@ class AudioClassificationPipeline(Pipeline):
             if isinstance(inputs, torch.Tensor):
                 inputs = inputs.cpu().numpy()
 
-        if is_torchcodec_available():
+        if is_torchcodec_importable():
             import torch
             import torchcodec
 

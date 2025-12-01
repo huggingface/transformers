@@ -19,7 +19,7 @@ import numpy as np
 
 from ..generation import GenerationConfig
 from ..tokenization_python import PreTrainedTokenizer
-from ..utils import is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
+from ..utils import is_torch_available, is_torchaudio_available, is_torchcodec_importable, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
 
@@ -372,7 +372,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(inputs, torch.Tensor):
                 inputs = inputs.cpu().numpy()
 
-        if is_torchcodec_available():
+        if is_torchcodec_importable():
             import torchcodec
 
             if isinstance(inputs, torchcodec.decoders.AudioDecoder):
