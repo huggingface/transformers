@@ -128,9 +128,15 @@ Up to now, transformers maintained two parallel implementations for many tokeniz
 
 In v5, we consolidate to a single tokenizer file per model: `tokenization_<model>.py`. This file will use the most appropriate backend available:
 
-1. **TokenizersBackend** (preferred): Rust-based tokenizers from the 🤗 [tokenizers](https://github.com/huggingface/tokenizers) library. In general it provides optimal performance, but it also offers a lot more features that are commonly adopted across the ecosystem, like handling additional tokens, easily update the state of the tokenizer, automatic parallelization, and automatic offsets, etc. 
-2. **SentencePieceBackend**: for tokenizers requiring the `sentencepiece` library
-3. **PythonBackend**: pure Python implementations
+1. **TokenizersBackend** (preferred): Rust-based tokenizers from the 🤗 [tokenizers](https://github.com/huggingface/tokenizers) library. In general it provides optimal performance, but it also offers a lot more features that are commonly adopted across the ecosystem:
+  - handling additional tokens
+  - a full python API for setting and updating 
+  - automatic parallelization,
+  - automatic offsets
+  - customization
+  - training
+2. **SentencePieceBackend**: for tokenizers requiring the `sentencepiece` library. It inherits from `PythonBackend`. 
+3. **PythonBackend**: a Python implementations of the features provided by `tokenizers`. Basically allows adding tokens.
 4. **MistralCommonBackend**: relies on `MistralCommon`'s tokenization library. (Previously known as the `MistralCommonTokenizer`)
 
 The `AutoTokenizer` automatically selects the appropriate backend based on available files and dependencies. This is transparent, you continue to use `AutoTokenizer.from_pretrained()` as before. This allows transformers to be future-proof and modular to easily support future backends.
