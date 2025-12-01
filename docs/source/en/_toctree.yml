@@ -704,6 +704,8 @@
         title: T5
       - local: model_doc/t5gemma
         title: T5Gemma
+      - local: model_doc/t5gemma2
+        title: T5Gemma2
       - local: model_doc/t5v1.1
         title: T5v1.1
       - local: model_doc/ul2
