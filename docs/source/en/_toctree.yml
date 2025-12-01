@@ -598,6 +598,8 @@
         title: MiniMax
       - local: model_doc/ministral
         title: Ministral
+      - local: model_doc/ministral3
+        title: Ministral3
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral

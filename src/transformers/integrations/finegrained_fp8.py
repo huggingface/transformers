@@ -185,14 +185,15 @@ def w8a8_block_fp8_matmul_triton(
     block_n, block_k = block_size[0], block_size[1]
 
     assert A.shape[-1] == B.shape[-1]
+
     assert A.shape[:-1] == As.shape[:-1] and A.is_contiguous()
     assert triton.cdiv(A.shape[-1], block_k) == As.shape[-1]
     M = A.numel() // A.shape[-1]
 
     assert B.ndim == 2 and B.is_contiguous() and Bs.ndim == 2
     N, K = B.shape
-    assert triton.cdiv(N, block_n) == Bs.shape[0]
-    assert triton.cdiv(K, block_k) == Bs.shape[1]
+    assert triton.cdiv(N, block_n) == Bs.shape[0], f"{N}, {block_n}, {Bs.shape}"
+    assert triton.cdiv(K, block_k) == Bs.shape[1], f"{K}, {block_k}, {Bs.shape}"
 
     C_shape = A.shape[:-1] + (N,)
     C = A.new_empty(C_shape, dtype=output_dtype)
@@ -322,20 +323,28 @@ class FP8Linear(nn.Linear):
         self.in_features = in_features
         self.out_features = out_features
 
+        if block_size is not None:
+            self.block_size = block_size
+        else:
+            self.block_size = (out_features, in_features)
+
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
 
         if self.weight.element_size() == 1:
-            scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
-            scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-            self.weight_scale_inv = nn.Parameter(
-                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
-            )
+            scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
+            scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
+            if scale_out_features * scale_in_features == 1:
+                self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32, device=device))
+            else:
+                self.weight_scale_inv = nn.Parameter(
+                    torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+                )
         else:
             self.register_parameter("weight_scale_inv", None)
-
-        self.block_size = block_size
-
         self.activation_scheme = activation_scheme
+
+        if self.activation_scheme == "static":
+            self.activation_scale = nn.Parameter(torch.tensor(1.0, dtype=torch.float32, device=device))
 
         if bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
@@ -356,15 +365,27 @@ class FP8Linear(nn.Linear):
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             torch_accelerator_module = getattr(torch, device_type, torch.cuda)
             with torch_accelerator_module.device(input.device):
-                qinput, scale = act_quant(input, self.block_size[1])
-                output = w8a8_block_fp8_matmul_triton(
-                    qinput,
-                    weight,
-                    scale,
-                    scale_inv,
-                    self.block_size,
-                    output_dtype=input.dtype,
-                )
+                if self.activation_scheme == "dynamic":
+                    qinput, scale = act_quant(input, self.block_size[1])
+                elif self.activation_scheme == "static":
+                    scale = self.activation_scale
+                    qinput = (input / scale).to(torch.float8_e4m3fn)
+                else:
+                    raise NotImplementedError("Not supported")
+                # TODO: fix this later to use the triton kernel
+                if self.activation_scheme == "static":
+                    output = F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), None) * scale_inv * scale
+                    output = output.to(input.dtype)
+                else:
+                    output = w8a8_block_fp8_matmul_triton(
+                        qinput,
+                        weight,
+                        scale,
+                        scale_inv,
+                        self.block_size,
+                        output_dtype=input.dtype,
+                    )
+
             # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
             torch_accelerator_module.synchronize()

@@ -222,6 +222,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .minimax import *
     from .ministral import *
+    from .ministral3 import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
