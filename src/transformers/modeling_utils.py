@@ -2303,6 +2303,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
+                remove_from_missing = True
                 source_is_there = source_param_name not in missing_keys
                 target_is_there = target_param_name not in missing_keys
                 # Both are already present -> it means the config is wrong and do not reflect the actual
@@ -2335,7 +2336,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     # If we did not break from the loop, it was impossible to find a source key -> let's raise
                     else:
                         # TODO Cyril: here ideally we want to raise instead of warning, but will break our CI as we have
-                        # test loading model from empty dicts to perform init checks
+                        # test loading model from empty dicts to perform init checks - since we don't raise, add a flag
+                        # to NOT remove from missing keys as it's actually still missing
+                        remove_from_missing = False
                         logger.warning(
                             f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
                             f"{source_param_name} to {target_param_name}, but both are absent from the checkpoint, "
@@ -2355,7 +2358,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 setattr(parent, name, source_param)
                 self._adjust_bias(parent, source_param)
                 # Remove from missing if necesary
-                if missing_keys is not None:
+                if missing_keys is not None and remove_from_missing:
                     missing_keys.discard(target_param_name)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
