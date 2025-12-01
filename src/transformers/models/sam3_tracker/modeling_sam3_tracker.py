@@ -112,7 +112,7 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
     config_class = Sam3TrackerConfig
     base_model_prefix = "sam3_tracker"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
@@ -755,7 +755,7 @@ class Sam3TrackerVisionEncoderOutput(ModelOutput):
     """
 )
 class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
@@ -768,7 +768,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         "occlusion_spatial_embedding_parameter",
     ]
     _checkpoint_conversion_mapping = {
-        "tracker_model.": "",
+        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }
@@ -959,7 +959,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
 
         >>> # Postprocess masks
         >>> masks = processor.post_process_masks(
-        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
+        ...     outputs.pred_masks, inputs["original_sizes"]
         ... )
         ```
         """

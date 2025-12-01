@@ -35,6 +35,7 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
+        ("afmoe", "AfmoeConfig"),
         ("aimv2", "Aimv2Config"),
         ("aimv2_vision_model", "Aimv2VisionConfig"),
         ("albert", "AlbertConfig"),
@@ -222,7 +223,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("layoutlm", "LayoutLMConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("layoutlmv3", "LayoutLMv3Config"),
-        ("layoutxlm", "LayoutLMv2Config"),
+        ("layoutxlm", "LayoutXLMConfig"),
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
@@ -279,6 +280,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("musicgen", "MusicgenConfig"),
         ("musicgen_melody", "MusicgenMelodyConfig"),
         ("mvp", "MvpConfig"),
+        ("nanochat", "NanoChatConfig"),
         ("nemotron", "NemotronConfig"),
         ("nllb-moe", "NllbMoeConfig"),
         ("nougat", "VisionEncoderDecoderConfig"),
@@ -457,6 +459,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
 MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
+        ("afmoe", "AFMoE"),
         ("aimv2", "AIMv2"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "ALBERT"),
@@ -724,6 +727,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("musicgen_melody", "MusicGen Melody"),
         ("mvp", "MVP"),
         ("myt5", "myt5"),
+        ("nanochat", "NanoChat"),
         ("nemotron", "Nemotron"),
         ("nllb", "NLLB"),
         ("nllb-moe", "NLLB-MOE"),
@@ -915,12 +919,14 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("audioflamingo3_encoder", "audioflamingo3"),
         ("openai-gpt", "openai"),
+        ("blip-2", "blip_2"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
         ("kosmos-2", "kosmos2"),
         ("kosmos-2.5", "kosmos2_5"),
+        ("omdet-turbo", "omdet_turbo"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
@@ -936,7 +942,10 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm4v_moe_vision", "glm4v_moe"),
         ("glm4v_text", "glm4v"),
         ("glm4v_moe_text", "glm4v_moe"),
+        ("grounding-dino", "grounding_dino"),
+        ("mm-grounding-dino", "mm_grounding_dino"),
         ("idefics3_vision", "idefics3"),
+        ("mgp-str", "mgp_str"),
         ("siglip_vision_model", "siglip"),
         ("siglip2_vision_model", "siglip2"),
         ("aimv2_vision_model", "aimv2"),
@@ -962,6 +971,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        ("wav2vec2-bert", "wav2vec2_bert"),
     ]
 )
 

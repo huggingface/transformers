@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 class JanusPreTrainedModel(PreTrainedModel):
     config: JanusConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -545,7 +545,7 @@ class JanusEncoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class JanusVisionModel(JanusPreTrainedModel):
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     config: JanusVisionConfig
     _can_record_outputs = {
         "hidden_states": JanusEncoderLayer,
@@ -1164,7 +1164,7 @@ class JanusModel(JanusPreTrainedModel):
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    output_modalities = ["image", "text"]
+    output_modalities = ("image", "text")
     _can_compile_fullgraph = True
 
     def __init__(self, config: JanusConfig):

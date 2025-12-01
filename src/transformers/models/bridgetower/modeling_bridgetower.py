@@ -915,7 +915,7 @@ class BridgeTowerTextEmbeddings(nn.Module):
 class BridgeTowerPreTrainedModel(PreTrainedModel):
     config: BridgeTowerConfig
     base_model_prefix = "bridgetower"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -950,7 +950,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerVisionConfig
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config):
         super().__init__(config)
@@ -980,7 +980,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
 )
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
