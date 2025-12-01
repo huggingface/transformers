@@ -58,27 +58,17 @@ except ImportError:
 
 @use_kernel_forward_from_hub("RMSNorm")
 class HumanVRMSNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6) -> None:
-        """
-        HumanVRMSNorm implements an optimized root mean square normalization layer,
-        equivalent to advanced normalization techniques for stabilizing training in transformers.
-        """
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        # NEW: Adaptive scaling for stability (learnable scale parameter)
-        self.scale = nn.Parameter(torch.ones(hidden_size))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # NEW: Apply learnable scale after norm for smoother gradients
-        return (self.weight * hidden_states * self.scale).to(input_dtype)
-
-    def extra_repr(self) -> str:
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        return self.weight * hidden_states.to(input_dtype)
 
 
 class HumanVMLP(nn.Module):
@@ -476,24 +466,22 @@ class HumanVModel(HumanVPreTrainedModel):
 
 @auto_docstring
 class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = []  # ما خودمون مدیریت می‌کنیم، نه transformers
-    supports_gradient_checkpointing = True
+    _tied_weights_keys = ["model.embed_tokens.weight"] if tie_word_embeddings else None
 
     def __init__(self, config: HumanVConfig):
         super().__init__(config)
         self.config = config
 
-        # مدل اصلی (بدون lm_head)
+        # مدل اصلی
         self.model = HumanVModel(config)
 
-        # تنظیم lm_head بر اساس tie_word_embeddings
+        # اگر tie_word_embeddings=True باشه → lm_head نساز
         if config.tie_word_embeddings:
-            self.lm_head = None  # از embed_tokens.weight استفاده می‌کنیم
-            self._tied_weights_keys = ["model.embed_tokens.weight"]
+            self.lm_head = None
         else:
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.post_init()  # مهم: این باعث میشه weight tying درست اعمال بشه
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -509,31 +497,23 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             raise ValueError("Cannot set output embeddings when tie_word_embeddings=True")
         self.lm_head = new_embeddings
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            if self.lm_head is not None:
-                self.lm_head = None
-            # هیچ نیازی به کار اضافه نیست — چون از embed_tokens.weight استفاده می‌کنیم
-
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        cache_position=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
-
+    ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # مدل اصلی رو فراخوانی کن
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -550,16 +530,14 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
 
-        # محاسبه logits با توجه به tie یا نه
+        # منطق درست برای tie_word_embeddings
         if self.config.tie_word_embeddings:
-            # سریع‌ترین و درست‌ترین روش: matrix multiplication مستقیم
-            logits = torch.matmul(hidden_states, self.model.embed_tokens.weight.t())
+            logits = torch.nn.functional.linear(hidden_states, self.model.embed_tokens.weight)
         else:
             logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
-            # استاندارد shift برای Causal LM
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             loss_fct = nn.CrossEntropyLoss()
@@ -577,26 +555,23 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    # برای generate سریع‌تر (اختیاری ولی پیشنهاد میشه)
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
         if past_key_values is not None:
-            cache_position = kwargs.get("cache_position")
-            if cache_position is None:
-                cache_position = torch.arange(past_key_values.get_seq_length(), input_ids.shape[-1] + past_key_values.get_seq_length(), device=input_ids.device)
             input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 0)
-            if past_key_values is not None:
-                position_ids = position_ids[:, -input_ids.shape[1]:]
+        if attention_mask is not getattr(self, "attention_mask", None):
+            if attention_mask is not None and position_ids is None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids.masked_fill_(attention_mask == 0, 0)
+                if past_key_values is not None:
+                    position_ids = position_ids[:, -input_ids.shape[1]:]
 
         return {
             "input_ids": input_ids,
             "position_ids": position_ids,
             "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
+            "use_cache": kwargs.get("use_cache", True),
             "attention_mask": attention_mask,
             "cache_position": kwargs.get("cache_position"),
         }
