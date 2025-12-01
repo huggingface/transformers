@@ -3946,19 +3946,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         is_quantized = hf_quantizer is not None
 
-        weight_conversions: Optional[list[WeightConverter | WeightRenaming]] = None
-        model_type = getattr(config, "model_type", None)
-        if model_type is not None:
-            weight_conversions = get_checkpoint_conversion_mapping(model_type)
-            if weight_conversions is None:
-                weight_conversions = get_checkpoint_conversion_mapping("legacy")
-            if key_mapping is not None:
-                weight_conversions.extend(
-                    [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
-                )
-            if hf_quantizer is not None:
-                weight_conversions.extend(hf_quantizer.get_weight_conversions())
-
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 

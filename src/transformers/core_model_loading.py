@@ -69,7 +69,6 @@ def build_glob_alternation(
     """
     src_group_to_glob: dict[str, str] = {}
     tgt_group_to_glob: dict[str, str] = {}
-    group_to_pattern: dict[str, re.Pattern] = {}
     branches: list[str] = []
     i = 0
     for glob in globs:
@@ -78,12 +77,11 @@ def build_glob_alternation(
                 group_name = f"g{i}"
                 src_group_to_glob[group_name] = src
                 i += 1
-                # Convert the glob pattern to a regex with capture groups for wildcards
-                pattern_with_captures = src.replace("*", r"(.*?)")
-                group_to_pattern[group_name] = re.compile(f"^{pattern_with_captures}$")
                 body = src.replace("*", r".*")
                 branches.append(f"(?P<{group_name}>{body})")
-                tgt_group_to_glob[group_name] = glob.target_keys[0] if isinstance(glob.target_keys, list) else glob.target_keys
+                tgt_group_to_glob[group_name] = (
+                    glob.target_patterns[0] if isinstance(glob.target_patterns, list) else glob.target_patterns
+                )
         else:
             group_name = f"g{i}"
             src_group_to_glob[group_name] = glob
@@ -94,7 +92,7 @@ def build_glob_alternation(
             tgt_group_to_glob[group_name] = glob
 
     alternation = re.compile("|".join(branches))
-    return alternation, src_group_to_glob, tgt_group_to_glob, group_to_pattern
+    return alternation, src_group_to_glob, tgt_group_to_glob
 
 
 class ConversionOps:
@@ -336,7 +334,11 @@ class WeightTransform:
         branches = []
         for i, source_pattern in enumerate(self.source_patterns):
             group_name = f"g{i}"
-            pattern = source_pattern.replace(".*.", r"\..*\.")
+            # support both glob-style (*) and regex-style (.*) wildcards
+            if "*" in source_pattern and ".*" not in source_pattern:
+                pattern = source_pattern.replace("*", r".*")
+            else:
+                pattern = source_pattern.replace(".*.", r"\..*\.")
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
@@ -364,12 +366,20 @@ class WeightTransform:
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
-        if r"\1" in replacement:
+
+        if "*" in replacement and "*" in source_pattern_that_matched:
+            pattern_with_captures = source_pattern_that_matched.replace("*", r"(.*?)")
+            pattern_regex = re.compile(f"^{pattern_with_captures}$")
+            match = pattern_regex.match(source_key)
+            if match:
+                groups = match.groups()
+                replacement = replacement.replace("*", groups[0], 1)
+        elif r"\1" in replacement:
             # The index of the internal group we need to replace is the index of the matched named group as it comes
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
+
         renamed_key = source_key.replace(match_object.group(0), replacement)
 
         return renamed_key, source_pattern_that_matched
@@ -811,9 +821,9 @@ def convert_and_load_state_dict_in_model(
     # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
     # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
     if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _, _ = build_glob_alternation(list(tp_plan.keys()))
+        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
-        dtype_policy_alt, dtype_policy_by_group_name, _, _ = build_glob_alternation(list(dtype_plan.keys()))
+        dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
@@ -884,7 +894,15 @@ def convert_and_load_state_dict_in_model(
                 param_device = "cpu" if param_device == "disk" else param_device
                 future = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
-            mapping.add_tensor(renamed_key, original_key, source_pattern, future)
+            concrete_source_pattern = source_pattern
+            if isinstance(mapping, WeightConverter) and source_pattern is not None and "*" in source_pattern:
+                pattern_with_captures = source_pattern.replace("*", r"(.*?)")
+                pattern_regex = re.compile(f"^{pattern_with_captures}$")
+                concrete_source_pattern = extract_concrete_key_from_regex_pattern(
+                    original_key, source_pattern, pattern_regex
+                )
+
+            mapping.add_tensor(renamed_key, original_key, concrete_source_pattern, future)
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:

@@ -32,7 +32,7 @@ from ..quantizers.quantizers_utils import get_module_from_name
 
 if is_torchao_available():
     TORCHAO_VERSION = version.parse(importlib.metadata.version("torchao"))
-    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.14.0"):
+    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.15.0"):
         from torchao.prototype.safetensors.safetensors_support import (
             unflatten_tensor_state_dict,
         )
@@ -218,7 +218,7 @@ class TorchAoDeserialize(ConversionOps):
         is_unsafe_serialization = "_weight_" not in list(input_dict.keys())[0]
 
         param_data = {}
-        layer_name = '.'.join(full_layer_name.split(".")[:-1])
+        layer_name = ".".join(full_layer_name.split(".")[:-1])
         if is_unsafe_serialization:
             if isinstance(input_dict["weight"], list):
                 weight = input_dict["weight"][0]
@@ -226,19 +226,20 @@ class TorchAoDeserialize(ConversionOps):
                 weight = input_dict["weight"]
         else:
             for suffix in input_dict.keys():
-                if isinstance(input_dict[suffix], list):
-                    param_data[f"{layer_name}.{suffix}"] = input_dict[suffix][0]
-                else:
-                    param_data[f"{layer_name}.{suffix}"] = input_dict[suffix]
+                assert len(input_dict[suffix]) == 1
+                param_data[f"{layer_name}.{suffix}"] = input_dict[suffix][0]
 
         # If it's unsafe-serialized (i.e. not safetensors), no need for anything
         if is_unsafe_serialization:
             return {full_layer_name: weight}
         # Sanity check for the new serialization format
         elif not (TORCHAO_VERSION >= version.parse("0.15.0") and is_metadata_torchao(self.hf_quantizer.metadata)):
-            raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.14.0` installed")
+            raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.15.0` installed")
 
-        unflattened_state_dict, _ = unflatten_tensor_state_dict(param_data, self.hf_quantizer.metadata)
+        unflattened_state_dict, leftover_state_dict = unflatten_tensor_state_dict(
+            param_data, self.hf_quantizer.metadata
+        )
+        assert not leftover_state_dict  # there should be no unprocessed tensors
         new_param = unflattened_state_dict[full_layer_name]
 
         module, _ = get_module_from_name(model, full_layer_name)

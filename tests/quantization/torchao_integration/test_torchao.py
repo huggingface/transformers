@@ -738,7 +738,7 @@ class TorchAoSerializationTest(unittest.TestCase):
 
 
 @require_torchao
-@require_torchao_version_greater_or_equal("0.14.0")
+@require_torchao_version_greater_or_equal("0.15.0")
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
