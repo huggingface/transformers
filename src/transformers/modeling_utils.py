@@ -2104,7 +2104,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         possible_module_names = ["language_model", "text_model", "decoder"]
         for name in possible_module_names:
             if hasattr(self, name):
-                print(name)
                 setattr(self, name, decoder)
                 return
 
@@ -3111,8 +3110,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         metadata = {}
         if hf_quantizer is not None:
             state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self, safe_serialization)
-        print("saving")
-        print(state_dict)
         metadata["format"] = "pt"
 
         # Only save the model itself if we are using distributed training
@@ -3949,6 +3946,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         is_quantized = hf_quantizer is not None
 
+        weight_conversions: Optional[list[WeightConverter | WeightRenaming]] = None
+        model_type = getattr(config, "model_type", None)
+        if model_type is not None:
+            weight_conversions = get_checkpoint_conversion_mapping(model_type)
+            if weight_conversions is None:
+                weight_conversions = get_checkpoint_conversion_mapping("legacy")
+            if key_mapping is not None:
+                weight_conversions.extend(
+                    [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
+                )
+            if hf_quantizer is not None:
+                weight_conversions.extend(hf_quantizer.get_weight_conversions())
+
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
@@ -3987,19 +3997,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 checkpoint_files=checkpoint_files,
                 use_kernels=use_kernels,
             )
-
-        weight_conversions: Optional[list[WeightConverter | WeightRenaming]] = None
-        model_type = getattr(config, "model_type", None)
-        if model_type is not None:
-            weight_conversions = get_checkpoint_conversion_mapping(model_type)
-            if weight_conversions is None:
-                weight_conversions = get_checkpoint_conversion_mapping("legacy")
-            if key_mapping is not None:
-                weight_conversions.extend(
-                    [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
-                )
-            if hf_quantizer is not None:
-                weight_conversions.extend(hf_quantizer.get_weight_conversions())
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
@@ -4136,13 +4133,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Checkpoints are safetensors
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
                 merged_state_dict = {}
-                i = 0
                 for file in checkpoint_files:
                     file_pointer = safe_open(file, framework="pt", device="cpu")
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
-                    i += 1
             # User passed an explicit state_dict
             elif state_dict is not None:
                 merged_state_dict = state_dict
@@ -4466,14 +4461,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.initialize_weights()
 
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str],
+        self, missing_keys: set[str], unexpected_keys: set[str]
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
         Also, set the `_is_hf_initialized` on tied weight keys, to avoid initializing them as they are going to
         be tied anyway.
         """
-
         # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns

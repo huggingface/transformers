@@ -297,7 +297,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
         from torchao.quantization import quantize_
-        print("in create quantized param")
+
         full_name = param_name
         # Those are the pre quantized weights
         if ":" in param_name:
@@ -554,20 +554,11 @@ class TorchAoHfQuantizer(HfQuantizer):
         from ..integrations.torchao import TorchAoDeserialize
 
         if self.pre_quantized:
-            print("pre_quantized")
-            print(self.metadata)
             return [
                 WeightConverter(
-                    # source_keys=["_weight_qdata", "_weight_scale", "_weight_zero_point"],
                     source_keys=["*_weight_*"],
                     target_keys="*weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
-                # WeightConverter(
-                #     source_keys=["._weight__data"],
-                #     target_keys=".weight",
-                #     operations=[TorchAoDeserialize(self)],
-                # ),
-                # used for unsafe serialization
             ]
         return []

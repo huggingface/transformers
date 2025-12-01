@@ -712,11 +712,11 @@ class TorchAoSerializationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    # def test_original_model_expected_output(self):
-    #     input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device)
-    #     output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+    def test_original_model_expected_output(self):
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device)
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
 
-    #     self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def check_serialization_expected_output(self, device, expected_output, safe_serialization=False):
         """
@@ -725,26 +725,9 @@ class TorchAoSerializationTest(unittest.TestCase):
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
-
-            original_state_dict = self.quantized_model.state_dict()
-            print(original_state_dict)
-
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
                 tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization
             )
-
-            loaded_state_dict = loaded_quantized_model.state_dict()
-            for key in original_state_dict:
-                if not hasattr(original_state_dict[key], "qdata"):
-                    print(torch.equal(original_state_dict[key], loaded_state_dict[key]))
-                    continue
-                print(original_state_dict[key].qdata)
-                print(loaded_state_dict[key].qdata)
-                if not torch.equal(original_state_dict[key].qdata, loaded_state_dict[key].qdata):
-                    print("not equal")
-                    print(f"key: {key}, {original_state_dict[key]}, {loaded_state_dict[key]}")
-            print("equal")
-
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
             output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
