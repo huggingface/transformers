@@ -22,7 +22,7 @@ import os
 import re
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from safetensors import safe_open
 from safetensors.torch import save_file
@@ -241,7 +241,7 @@ def compute_module_sizes(
         if name in tied_keys:
             continue
         if hf_quantizer is not None:
-            dtype_size = hf_quantizer.param_element_size(model, name)
+            dtype_size = hf_quantizer.param_element_size(model, name, param)
         else:
             dtype_size = param.element_size()
         size = param.numel() * dtype_size
@@ -480,18 +480,15 @@ def accelerate_disk_offload(
     renamed) will be mapped to where they already reside on disk. Otherwise, the parameters will be resaved inside
     `disk_offload_folder` during loading.
     """
-    from ..core_model_loading import WeightRenaming, build_glob_alternation, repl
+    from ..core_model_loading import WeightRenaming, rename_source_key
 
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
 
-    rename = False
+    renamings = []
     if weight_mapping is not None:
         renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
-        if len(renamings) > 0:
-            rename = True
-            rename_alt, _, rename_by_group = build_glob_alternation(renamings)
 
     # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
     # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
@@ -505,10 +502,7 @@ def accelerate_disk_offload(
             weight_map = {k: os.path.join(folder, v) for k, v in sharded_metadata["weight_map"].items()}
 
         # Update the weight names according to the `weight_mapping`
-        weight_renaming_map = {
-            rename_alt.sub(lambda m: repl(m, rename_by_group), k).replace("\\", "") if rename else k: k
-            for k in weight_map
-        }
+        weight_renaming_map = {rename_source_key(k, renamings, [])[0]: k for k in weight_map}
 
         # Prepare the index using existing safetensors files
         disk_offload_index = {
@@ -550,14 +544,14 @@ def offload_weight(weight: torch.Tensor, weight_name: str, offload_folder: str |
 
 def _init_infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
-    tied_parameters: Optional[list[list[str]]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: list[str] | None = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ) -> tuple[
-    list[Union[int, str]],
-    dict[Union[int, str], Union[int, str]],
-    list[Union[int, str]],
+    list[int | str],
+    dict[int | str, int | str],
+    list[int | str],
     list[int],
     dict[str, int],
     list[list[str]],
@@ -620,12 +614,12 @@ def _init_infer_auto_device_map(
 
 def infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: list[str] | None = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
-    tied_parameters: Optional[list[list[str]]] = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ):
     """
