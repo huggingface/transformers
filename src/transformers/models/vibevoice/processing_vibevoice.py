@@ -121,6 +121,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         # Merge defaults with user kwargs
         output_kwargs = self._merge_kwargs(
             VibeVoiceProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 

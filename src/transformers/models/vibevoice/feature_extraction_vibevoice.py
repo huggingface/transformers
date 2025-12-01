@@ -71,9 +71,10 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = True,
+        max_length: Optional[int] = None,
     ) -> BatchFeature:
         """
-        Process audio for VibeVoice models.
+        Main method to prepare audio for the VibeVoice model.
 
         Args:
             audio: Audio input(s) to process. Can be:
@@ -133,9 +134,11 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         if padding:
             output_values = self.pad(
                 output_values,
+                max_length=max_length,
                 return_tensors=return_tensors,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
+                padding=padding,
             )
             if return_attention_mask:
                 output_values["input_features_mask"] = output_values.pop("attention_mask")
