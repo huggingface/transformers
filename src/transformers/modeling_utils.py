@@ -2336,7 +2336,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     # If we did not break from the loop, it was impossible to find a source key -> let's raise
                     else:
                         # TODO Cyril: here ideally we want to raise instead of warning, but will break our CI as we have
-                        # test loading model from empty dicts to perform init checks - since we don't raise, add a flag
+                        # tests loading model from empty dicts to perform init checks - since we don't raise, add a flag
                         # to NOT remove from missing keys as it's actually still missing
                         remove_from_missing = False
                         logger.warning(
