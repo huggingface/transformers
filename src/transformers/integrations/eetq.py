@@ -12,11 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..utils import is_accelerate_available, is_eetq_available, logging
+from ..utils import is_accelerate_available, is_torch_available, logging
 
-
-if is_eetq_available():
-    import eetq
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
+    
+if is_torch_available():
+    import torch
     import torch.nn as nn
 
 if is_accelerate_available():
@@ -24,6 +26,21 @@ if is_accelerate_available():
 
 logger = logging.get_logger(__name__)
 
+
+class EetqQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: dict[str, list[torch.Tensor]], full_layer_name: str | None = None, **kwargs) -> dict[str, torch.Tensor]:
+        from eetq import quantize_and_preprocess_weights
+
+        _, value = tuple(input_dict.items())[0]
+        value = value[0]
+
+        new_value, weight_scale = quantize_and_preprocess_weights(value)
+
+        return {full_layer_name: new_value,
+                f"{full_layer_name}_scales": weight_scale}
 
 def _replace_with_eetq_linear(
     model,
@@ -38,6 +55,7 @@ def _replace_with_eetq_linear(
 
     Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
+    import eetq
     if current_key_name is None:
         current_key_name = []
 

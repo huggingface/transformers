@@ -164,3 +164,7 @@ class EetqHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
+
+    def get_quantize_ops(self):
+        from ..integrations.eetq import EetqQuantize
+        return EetqQuantize(self)
