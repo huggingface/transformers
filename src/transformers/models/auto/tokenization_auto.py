@@ -384,6 +384,10 @@ def load_merges(merges_file):
 
 
 def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
+    # Bloom tokenizer classes were removed but should map to the fast backend for BC
+    if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
+        return TokenizersBackend
+
     if class_name in REGISTERED_FAST_ALIASES:
         return REGISTERED_FAST_ALIASES[class_name]
 
@@ -683,6 +687,9 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
 
     # Route to tokenizers backend (default)
     if backend == "tokenizers":
+        if tokenizer_class is None and TokenizersBackend is not None:
+            tokenizer_class = TokenizersBackend
+
         if tokenizer_class is not None:
             # Check if tokenizer_class inherits from PreTrainedTokenizer (but not from TokenizersBackend/SentencePieceBackend)
             # These are edge cases with custom logic (e.g., BioGptTokenizer with Moses tokenization)
