@@ -17,7 +17,9 @@ import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
+from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
@@ -29,13 +31,14 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
-from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+
 
 if is_torch_available():
     import torch
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
+
 
 @contextmanager
 def _patch_no_accelerator():
@@ -44,6 +47,7 @@ def _patch_no_accelerator():
         if hasattr(torch, "xpu"):
             stack.enter_context(patch("torch.xpu.is_available", return_value=False))
         yield
+
 
 @require_torch_accelerator
 class FineGrainedFP8ConfigTest(unittest.TestCase):
@@ -79,7 +83,7 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 )
 class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
-    quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"  
+    quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
     max_new_tokens = 10
     EXPECTED_OUTPUT = "Once upon a time, there was a man who was very rich."
@@ -196,7 +200,9 @@ class FP8QuantizerTest(unittest.TestCase):
         Simple test that checks if the dequantized model is working properly
         """
         quantization_config = FineGrainedFP8Config(dequantize=True)
-        dequantized_model = AutoModelForCausalLM.from_pretrained(self.quantized_model_name, device_map=self.device_map, quantization_config=quantization_config)
+        dequantized_model = AutoModelForCausalLM.from_pretrained(
+            self.quantized_model_name, device_map=self.device_map, quantization_config=quantization_config
+        )
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
         output = dequantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
         output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
