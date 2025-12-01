@@ -594,7 +594,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
     # If all methods failed, raise an error
     raise ValueError(
         f"Could not load tokenizer from {pretrained_model_name_or_path} using tokenizers backend. "
-        "No tokenizer.json, tekken.json, vocab.json+merges.txt, vocab.txt, or compatible SentencePiece model found."
+        "No tokenizer.json, tekken.json, vocab.json/merges.txt, vocab.txt, or compatible SentencePiece model found."
     )
 
 
@@ -719,49 +719,8 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                     "Please install it with: pip install tokenizers"
                 )
             logger.info("Loading tokenizer with tokenizers backend")
-            try:
-                return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
-            except ValueError as e:
-                # If tokenizers backend fails, try falling back to SentencePiece backend if available
-                spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
-                if spm_file is not None and SentencePieceBackend is not None:
-                    logger.info(
-                        f"Tokenizers backend failed: {e}. "
-                        f"Falling back to SentencePieceBackend since {spm_file} file was found."
-                    )
-                    files_loaded = [spm_file]
-                    kwargs["backend"] = "sentencepiece"
-                    kwargs["files_loaded"] = files_loaded
-                    # Resolve the SPM file path and pass it as vocab_file
-                    resolved_vocab_file = cached_file(
-                        pretrained_model_name_or_path,
-                        spm_file,
-                        cache_dir=kwargs.get("cache_dir"),
-                        force_download=kwargs.get("force_download", False),
-                        proxies=kwargs.get("proxies"),
-                        token=kwargs.get("token"),
-                        revision=kwargs.get("revision"),
-                        local_files_only=kwargs.get("local_files_only", False),
-                        subfolder=kwargs.get("subfolder", ""),
-                    )
-                    kwargs["vocab_file"] = resolved_vocab_file
-                    if tokenizer_class is not None and issubclass(tokenizer_class, SentencePieceBackend):
-                        logger.info(
-                            "Falling back to SentencePiece backend using tokenizer class that inherits from SentencePieceBackend."
-                        )
-                        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                    return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                # If no fallback available, try calling tokenizer class directly as last resort
-                if hasattr(tokenizer_class, "from_pretrained"):
-                    logger.info(
-                        f"Tokenizers backend failed: {e}. Trying to load tokenizer directly from tokenizer class."
-                    )
-                    # Filter out AutoTokenizer-specific kwargs that custom tokenizers don't accept
-                    custom_kwargs = {k: v for k, v in kwargs.items() if k not in ["backend", "files_loaded"]}
-                    custom_kwargs["_from_auto"] = True  # Signal that this is called from AutoTokenizer
-                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **custom_kwargs)
-                # Re-raise if no fallback options available
-                raise
+
+            return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
 
         # If no tokenizer class but tokenizers backend requested, fall back to SentencePiece if available
         spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
