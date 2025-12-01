@@ -242,10 +242,10 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
         else:
             raise ValueError(f"Unknown config type {type(config)}.")
 
-    # let's swap nn.Linear to FP8 Linear before loading
-    hf_quantizer = AutoHfQuantizer.from_config(model.config.quantization_config)
+        # let's swap nn.Linear to FP8 Linear before loading
+        hf_quantizer = AutoHfQuantizer.from_config(model.config.quantization_config)
+        model = hf_quantizer.preprocess(model)
 
-    import ipdb; ipdb.set_trace()
     model.load_state_dict(full_state_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
     return config
