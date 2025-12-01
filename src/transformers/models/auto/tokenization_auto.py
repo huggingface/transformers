@@ -59,6 +59,19 @@ else:
 
 logger = logging.get_logger(__name__)
 
+
+class AutoTokenizerError(ValueError):
+    """Base class for AutoTokenizer loading errors."""
+
+
+class AutoTokenizerBackendError(AutoTokenizerError):
+    """Raised when the requested tokenizer backend cannot be used."""
+
+
+class AutoTokenizerLoadError(AutoTokenizerError):
+    """Raised when no tokenizer can be loaded from a checkpoint."""
+
+
 # V5: Simplified mapping - single tokenizer class per model type (always prefer tokenizers-based)
 REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
 REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
@@ -432,7 +445,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         An instantiated tokenizer object
 
     Raises:
-        ValueError: If tokenizer could not be loaded with tokenizers backend
+        AutoTokenizerLoadError: If tokenizer could not be loaded with tokenizers backend
     """
     files_loaded = []
 
@@ -592,7 +605,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
             pass
 
     # If all methods failed, raise an error
-    raise ValueError(
+    raise AutoTokenizerLoadError(
         f"Could not load tokenizer from {pretrained_model_name_or_path} using tokenizers backend. "
         "No tokenizer.json, tekken.json, vocab.json/merges.txt, vocab.txt, or compatible SentencePiece model found."
     )
@@ -622,7 +635,8 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
         An instantiated tokenizer object
 
     Raises:
-        ValueError: If no tokenizer could be loaded
+        AutoTokenizerBackendError: If a requested backend dependency is missing
+        AutoTokenizerLoadError: If no tokenizer could be loaded
     """
     # Extract the backend parameter - default to "tokenizers" to prioritize tokenizers backend
     backend = kwargs.pop("backend", "tokenizers")
@@ -638,7 +652,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
     # Route to SentencePiece backend if requested
     if backend == "sentencepiece":
         if SentencePieceBackend is None:
-            raise ValueError(
+            raise AutoTokenizerBackendError(
                 "SentencePiece backend was requested but sentencepiece is not installed. "
                 "Please install it with: pip install sentencepiece"
             )
@@ -714,7 +728,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **custom_kwargs)
 
             if TokenizersBackend is None:
-                raise ValueError(
+                raise AutoTokenizerBackendError(
                     "Tokenizers backend is the default but tokenizers library is not installed. "
                     "Please install it with: pip install tokenizers"
                 )
@@ -756,7 +770,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        raise ValueError(
+        raise AutoTokenizerLoadError(
             f"Could not load tokenizer from {pretrained_model_name_or_path}. "
             "No tokenizer class could be determined and no SentencePiece model found."
         )
