@@ -402,6 +402,7 @@ class TestUseKernelsLifecycle(TestCasePlus):
             self.model.eval()
             self.assertTrue(any(m == Mode.INFERENCE for m in last_modes))
 
+
 @require_kernels
 class TestKernelMappingDeviceFiltering(TestCasePlus):
     """Test that kernel mappings correctly filter by current device."""
@@ -492,9 +493,7 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         """
         Test that single-device mappings continue to work as expected.
         """
-        kernel_mapping = {
-            "RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"
-        }
+        kernel_mapping = {"RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"}
 
         kernel_config = KernelConfig(kernel_mapping)
 
