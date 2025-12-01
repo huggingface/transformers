@@ -850,7 +850,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
         return inputs_embeds
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -965,7 +965,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         self.rotary_emb = T5Gemma2RotaryEmbedding(config)
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
