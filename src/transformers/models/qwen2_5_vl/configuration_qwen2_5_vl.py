@@ -28,7 +28,7 @@ import inspect
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Qwen2_5_VLVisionConfig(PreTrainedConfig):
@@ -151,6 +151,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
     model_type = "qwen2_5_vl_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
     # Default tensor parallel plan for base model `Qwen2_5_VL`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -212,9 +213,6 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -226,20 +224,28 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        if self.rope_parameters["rope_type"] == "mrope":
-            self.rope_parameters["rope_type"] = "default"
-        rope_config_validation(self, ignore_keys={"mrope_section"})
-
+        self.rope_parameters = rope_parameters
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
+            ignore_keys_at_rope_validation={"mrope"},
             **kwargs,
         )
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        if self.rope_parameters.get("rope_type", self.rope_parameters.get("type")) == "mrope":
+            self.rope_parameters["rope_type"] = "default"
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
 class Qwen2_5_VLConfig(PreTrainedConfig):

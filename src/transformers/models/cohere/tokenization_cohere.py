@@ -280,8 +280,8 @@ class CohereTokenizer(TokenizersBackend):
         Examples:
 
         ```python
-        tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-        tools = [
+        >> tokenizer = CohereTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
+        >> tools = [
             {
                 "name": "internet_search",
                 "description": "Returns a list of relevant document snippets for a textual query retrieved from the internet",
@@ -299,16 +299,15 @@ class CohereTokenizer(TokenizersBackend):
                 "parameter_definitions": {},
             },
         ]
-        conversation = [
+        >> conversation = [
             {"role": "user", "content": "Whats the biggest penguin in the world?"},
         ]
-        # Render the prompt, ready for user to inspect, or for input into the model
-        prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
-        print(prompt)
+        >> # Render the prompt, ready for user to inspect, or for input into the model
+        >> prompt = tokenizer.apply_tool_use_template(conversation, tools=tools, tokenize=False, add_generation_prompt=True)
+        >> print(prompt)
         >> inputs = tokenizer.encode(grounded_generation_prompt, add_special_tokens=False, return_tensors='pt')
         >> outputs = model.generate(inputs, max_new_tokens=128)
         >> print(tokenizer.decode(outputs[0]))
-        Action: ```json
         [
             {
                 "tool_name": "internet_search",
