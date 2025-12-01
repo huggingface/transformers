@@ -2284,8 +2284,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         that need to be tied. This is the default when `model.tie_weights()` is called on its own, outside of
         `__init__`, and `from_pretrained`, in case the config values were changed somewhere.
 
-        Note that during `from_pretrained`, this function will work symmetrically, i.e. if the `source` is a missing
-        weight, but the `target` is present, tying will still work in reverse.
+        Note that during `from_pretrained`, tying is *symmetric*: if the mapping says "tie target -> source" but
+        `source` is missing in the checkpoint while `target` exists, we *swap* source and target so we can still
+        tie everything to the parameter that actually exists.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
         if not recompute_mapping:
@@ -2295,10 +2296,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_keys = list(tied_keys.items())
         for i, (target_param_name, source_param_name) in enumerate(tied_keys):
-            # If both source and target are missing later, we may need to tie 2 weights so we use a list here
+            # Usually we tie a single target to a single source, but when both are missing we may later tie
+            # both the source and target to a third "backup" parameter that is present in the checkpoint, so we use
+            # a list here
             target_param_names = [target_param_name]
 
-            # This is `from_pretrained` -> let's check symmetrically
+            # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
                 source_is_there = source_param_name not in missing_keys
                 target_is_there = target_param_name not in missing_keys
@@ -2312,7 +2315,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     )
                     # Skip to next iteration
                     continue
-                # We're missing the source but we have the target -> simply reverse both
+                # We're missing the source but we have the target -> we swap them, tying the parameter that exists
                 elif not source_is_there and target_is_there:
                     target_param_name, source_param_name = source_param_name, target_param_name
                     target_param_names = [target_param_name]
