@@ -15,8 +15,11 @@
 import gc
 import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
+from unittest.mock import patch
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
+from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
@@ -35,6 +38,15 @@ if is_torch_available():
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
+
+
+@contextmanager
+def _patch_no_accelerator():
+    with ExitStack() as stack:
+        stack.enter_context(patch("torch.cuda.is_available", return_value=False))
+        if hasattr(torch, "xpu"):
+            stack.enter_context(patch("torch.xpu.is_available", return_value=False))
+        yield
 
 
 @require_torch_accelerator
@@ -71,9 +83,11 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 )
 class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
+    quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
     max_new_tokens = 10
     EXPECTED_OUTPUT = "Once upon a time, there was a man who was very rich."
+    EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device
     offload_device_map = {
         "model.embed_tokens": 0,
@@ -152,6 +166,25 @@ class FP8QuantizerTest(unittest.TestCase):
 
         self.assertEqual(nb_linears - 25, nb_fp8_linear)
 
+    def test_quantizer_validation_no_accelerator(self):
+        """Test quantizer validation when CUDA/XPU is not available"""
+        with _patch_no_accelerator():
+            config = FineGrainedFP8Config()
+            quantizer = FineGrainedFP8HfQuantizer(config)
+            quantizer.pre_quantized = False
+
+            with self.assertRaises(RuntimeError):
+                quantizer.validate_environment()
+
+    def test_dequantization_no_accelerator(self):
+        """Test dequantization when CUDA/XPU is not available"""
+        with _patch_no_accelerator():
+            config = FineGrainedFP8Config()
+            quantizer = FineGrainedFP8HfQuantizer(config)
+            quantizer.pre_quantized = True
+            quantizer.validate_environment()
+            self.assertTrue(quantizer.quantization_config.dequantize)
+
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -161,6 +194,32 @@ class FP8QuantizerTest(unittest.TestCase):
         output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
         output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertEqual(output_tokens, self.EXPECTED_OUTPUT)
+
+    def test_dequantized_model(self):
+        """
+        Simple test that checks if the dequantized model is working properly
+        """
+        quantization_config = FineGrainedFP8Config(dequantize=True)
+        dequantized_model = AutoModelForCausalLM.from_pretrained(
+            self.quantized_model_name, device_map=self.device_map, quantization_config=quantization_config
+        )
+        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+        output = dequantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+        output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertEqual(output_tokens, self.EXPECTED_DEQUANTIZED_OUTPUT)
+        del dequantized_model
+
+    def test_dequantize_when_no_accelerator(self):
+        """
+        Simple test that checks if the dequantized model is working properly when no accelerator is available
+        """
+        with _patch_no_accelerator():
+            dequantized_model = AutoModelForCausalLM.from_pretrained(self.quantized_model_name, device_map="cpu")
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to("cpu")
+            output = dequantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
+            self.assertEqual(output_tokens, self.EXPECTED_DEQUANTIZED_OUTPUT)
+            del dequantized_model
 
     def test_save_pretrained(self):
         """
