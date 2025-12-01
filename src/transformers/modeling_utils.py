@@ -2338,8 +2338,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         # test loading model from empty dicts to perform init checks
                         logger.warning(
                             f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
-                            f"{source_param_name} to {target_param_name}, but both are absent from the checkpoints, "
-                            "and we could not find another related tie weights for those keys"
+                            f"{source_param_name} to {target_param_name}, but both are absent from the checkpoint, "
+                            "and we could not find another related tied weight for those keys"
                         )
 
             # Perform the actual tying
