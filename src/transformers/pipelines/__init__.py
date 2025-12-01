@@ -694,7 +694,7 @@ def pipeline(
         "token": token,
         "trust_remote_code": trust_remote_code,
         "_commit_hash": commit_hash,
-        "local_files_only": local_files_only
+        "local_files_only": local_files_only,
     }
 
     if task is None and model is None:
