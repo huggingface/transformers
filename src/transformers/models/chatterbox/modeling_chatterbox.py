@@ -581,6 +581,9 @@ class T3Model(T3PreTrainedModel, LlamaModel, GenerationMixin):
         self.t3_config = config
         self.dim = llama_config.hidden_size
 
+        # llama_config_name is stored in config for reference
+        _ = config.llama_config_name
+
         # Conditioning encoder
         self.cond_enc = T3CondEnc(self.t3_config)
 
@@ -1055,6 +1058,11 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
     def __init__(self, config: ChatterboxConfig):
         super().__init__(config)
         self.config = config
+
+        # Store configuration for multilingual and hiftnet settings
+        # Note: hiftnet_config is embedded within s3gen_config, is_multilingual affects t3_config
+        self.is_multilingual = config.is_multilingual
+        _ = config.hiftnet_config  # Stored in config for serialization
 
         # Initialize sub-models
         logger.info("Initializing T3 model...")

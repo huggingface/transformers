@@ -2516,6 +2516,9 @@ class S3GenModel(S3GenPreTrainedModel):
             pre_lookahead_len=config.pre_lookahead_len,
         )
 
+        # CFM parameters stored in config for future use
+        _ = (config.cfm_sigma_min, config.cfm_solver, config.cfm_t_scheduler, config.cfm_inference_cfg_rate)
+
         # HiFTNet vocoder
         hiftnet_config = HiFTNetConfig(
             sampling_rate=config.sampling_rate,
