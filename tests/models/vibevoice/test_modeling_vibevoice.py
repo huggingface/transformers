@@ -84,13 +84,12 @@ class DummyNoiseScheduler:
         self.timesteps = torch.linspace(1000, 1, num_inference_steps).long()
 
 
-# TODO decrease sizes for quicker tests
 class VibeVoiceModelTester:
     def __init__(
         self,
         parent,
         batch_size=2,
-        seq_length=3,  # Smaller sequence length to debug
+        seq_length=3,
         is_training=True,
         use_cache=True,
         text_config={
