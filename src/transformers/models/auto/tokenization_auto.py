@@ -213,10 +213,28 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mgp-str", "MgpstrTokenizer"),
         ("minimax", "GPT2Tokenizer" if is_tokenizers_available() else None),
         (
+            "ministral3",
+            (
+                "MistralCommonBackend"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
+            ),
+        ),
+        (
             "mistral",
             "MistralCommonBackend"
             if is_mistral_common_available()
             else ("LlamaTokenizerFast" if is_tokenizers_available() else None),
+        ),
+        (
+            "mistral3",
+            (
+                "MistralCommonBackend"
+                if is_mistral_common_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
+                "LlamaTokenizerFast" if is_tokenizers_available() and not is_mistral_common_available() else None,
+            ),
         ),
         (
             "mixtral",
@@ -384,7 +402,10 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     for module_name, tokenizer_class in TOKENIZER_MAPPING_NAMES.items():
         if tokenizer_class == class_name:
             module_name = model_type_to_module_name(module_name)
-            if module_name in ["mistral", "mixtral", "ministral"] and class_name == "MistralCommonBackend":
+            if (
+                module_name in ["mistral", "mistral3", "mixtral", "ministral", "ministral3", "pixtral", "voxtral"]
+                and class_name == "MistralCommonTokenizer"
+            ):
                 module = importlib.import_module(".tokenization_mistral_common", "transformers")
             else:
                 module = importlib.import_module(f".{module_name}", "transformers.models")
