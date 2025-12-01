@@ -568,7 +568,7 @@ Usage: transformers chat [OPTIONS] BASE_URL MODEL_ID [GENERATE_FLAGS]...
 Chat with a model from the command line.
 ```
 
-It works hand in hand with `transformers serve`, which means that if `transformers serve` is running on its default endpoint, `transformers chat` can be launched as followed:
+It works hand in hand with `transformers serve`, which means that if `transformers serve` is running on its default endpoint, `transformers chat` can be launched as follows:
 
 ```sh
 transformers chat HuggingFaceTB/SmolLM3-3B
