@@ -203,7 +203,7 @@ class MinistralModel(Qwen2Model):
         super().__init__(config)
         del self.has_sliding_layers
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
