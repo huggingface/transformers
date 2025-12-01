@@ -82,11 +82,8 @@ class BenchmarkConfig:
         if compile_kwargs is None:
             self.compile_config = None
         else:
-            default_compile_kwargs = {
-                "mode": "max-autotune-no-cudagraphs" if continuous_batching else "default",
-                "fullgraph": True,
-            }
-            self.compile_config = CompileConfig(**default_compile_kwargs.update(compile_kwargs))
+            compile_kwargs["fullgraph"] = compile_kwargs.get("fullgraph", True)
+            self.compile_config = CompileConfig(**compile_kwargs)
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"
@@ -101,16 +98,16 @@ class BenchmarkConfig:
 
         # If flash_attention_2 is selected but not available, default to SDPA
         if self.attn_implementation == "flash_attention_2" and not is_fa2_or_kernel_available():
-            logger.warning("Flash attention is not available. Defaulting to SDPA.")
+            logger.error("Flash attention is not available. Defaulting to SDPA.")
             self.attn_implementation = "sdpa"
 
         # The combination of flash_attention_2, compile and generate is not supported # FIXME: support it
-        if all((
-            self.attn_implementation == "flash_attention_2",
-            self.compile_config is not None,
-            not self.continuous_batching,
-        )):
-            logger.warning(
+        if (
+            not self.continuous_batching and
+            self.attn_implementation == "flash_attention_2" and
+            self.compile_config is not None
+        ):
+            logger.error(
                 "The combination of flash_attention_2, compile and generate is not supported. Turning off compile."
             )
             self.compile_config = None
@@ -121,6 +118,18 @@ class BenchmarkConfig:
                 "Disabling continuous batching because of invalid configuration: flex attention is not supported."
             )
             self.continuous_batching = False
+
+        # Continuous batching supports compile mode "default" or "max-autotune-no-cudagraphs"
+        if (
+            self.continuous_batching and
+            self.compile_config is not None and
+            self.compile_config.mode not in ["default", "max-autotune-no-cudagraphs"]
+        ):
+            logger.error(
+                f"You have continuous batching and compile enabled, but {self.compile_config.mode = } is not supported."
+                " Supported modes are: default, max-autotune-no-cudagraphs. Changing to default."
+            )
+            self.compile_config.mode = "default"
 
     @property
     def hash(self) -> str:

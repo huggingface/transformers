@@ -77,23 +77,26 @@ def get_git_revision() -> str:
         return git_hash.readline().strip()
 
 
-def flush_memory():
-    """Flush GPU memory and run garbage collection."""
+def flush_memory(flush_compile: bool = True) -> None:
+    """Flush GPU memory and run garbage collection. If the flush_compile flag is set, we also clear the everything
+    related to compile cache."""
     gc.collect()
-    # Dynamo resets
-    torch._dynamo.reset()
-    torch._dynamo.reset_code_caches()
-    if hasattr(torch._inductor, "codecache"):
-        # Clear FX graph cache
-        if hasattr(torch._inductor.codecache, "FxGraphCache"):
-            torch._inductor.codecache.FxGraphCache.clear()
-        # Clear PyCodeCache
-        if hasattr(torch._inductor.codecache, "PyCodeCache"):
-            torch._inductor.codecache.PyCodeCache.cache_clear()
-        # Clear TritonFuture cache (for async compilation)
-        if hasattr(torch._inductor.codecache, "TritonFuture"):
-            if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
-                torch._inductor.codecache.TritonFuture._compile_cache.clear()
+    # If needed, flush everything related to torch.compile
+    if flush_compile:
+        # Dynamo resets
+        torch._dynamo.reset()
+        torch._dynamo.reset_code_caches()
+        if hasattr(torch._inductor, "codecache"):
+            # Clear FX graph cache
+            if hasattr(torch._inductor.codecache, "FxGraphCache"):
+                torch._inductor.codecache.FxGraphCache.clear()
+            # Clear PyCodeCache
+            if hasattr(torch._inductor.codecache, "PyCodeCache"):
+                torch._inductor.codecache.PyCodeCache.cache_clear()
+            # Clear TritonFuture cache (for async compilation)
+            if hasattr(torch._inductor.codecache, "TritonFuture"):
+                if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
+                    torch._inductor.codecache.TritonFuture._compile_cache.clear()
     # Clear CUDA cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -208,18 +211,19 @@ class BenchmarkRunner:
         """Run a single benchmark with the given model ID and config."""
         with torch.no_grad():
             self.logger.info(f"Running benchmark scenario: {config.name}")
+            self.logger.debug(f"Full config: {config.to_dict()}")
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            e2e_latency, _, _, _ = self.time_generate(config, warmup=True)
+            e2e_latency = self.time_generate(config, warmup=True)[0]
             if e2e_latency < 0:
-                self.logger.warning(f"Skipping config {config.name}: {e2e_latency = } (no GPU monitoring)")
+                self.logger.warning(f"Skipping config {config.name}: {e2e_latency = }")
                 return None
 
             # Warmup runs
             self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
             for _ in trange(config.warmup_iterations, desc="Warmup"):
-                _ = self.time_generate(config, warmup=True)
+                self.time_generate(config, warmup=True)
             self.logger.info("Warmup over.")
 
             # Measurement runs
@@ -242,7 +246,7 @@ class BenchmarkRunner:
         self, config: BenchmarkConfig, warmup: bool
     ) -> tuple[float, list[float], str, GPURawMetrics | None]:
         # Prepare gpu monitoring if needed
-        if config.gpu_monitoring is not None and not warmup:
+        if config.gpu_monitoring and not warmup:
             gpu_monitor = GPUMonitor(logger=self.logger)
             gpu_monitor.start()
         else:
@@ -252,11 +256,11 @@ class BenchmarkRunner:
         if config.continuous_batching:
             inputs = self.inputs["input_ids"].tolist()
             wall_time_0 = time.perf_counter()
-            results = self.model.generate_batch(inputs, allow_prefix_sharing=False, record_timestamps=True)
+            outputs = self.model.generate_batch(inputs, allow_prefix_sharing=False, record_timestamps=True)
         else:
             streamer = BenchmarkStreamer()
             wall_time_0 = time.perf_counter()
-            results = self.model.generate(**self.inputs, streamer=streamer)
+            outputs = self.model.generate(**self.inputs, streamer=streamer)
 
         wall_time_1 = time.perf_counter()
         gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
@@ -264,11 +268,13 @@ class BenchmarkRunner:
         # Retrieve timestamps and results in a way that allows similar post-processing
         input_tokens = self.inputs["input_ids"].size(-1)
         if config.continuous_batching:
-            timestamps = [result.timestamps for result in results.values()]
-            results = torch.tensor([result.generated_tokens for result in results.values()])
+            timestamps = [output.timestamps[:] for output in outputs.values()]
+            results = torch.tensor([output.generated_tokens[:] for output in outputs.values()])
         else:
             timestamps = [streamer.timestamps[1:]]  # skip the first timestamp because it's the input tokens
-            results = results[:, input_tokens:]
+            results = outputs[:, input_tokens:]
+        outputs = None
+        flush_memory(flush_compile=False)
 
         # Check if generation had the right number of tokens
         if results.size(-1) != config.num_tokens_to_generate:
@@ -281,6 +287,9 @@ class BenchmarkRunner:
         # Compute metrics
         e2e_latency = wall_time_1 - wall_time_0
         timestamps = torch.tensor(timestamps).sub(wall_time_0).tolist()
+        self.logger.info(
+            f"Time generate done in {e2e_latency:.2f} seconds. Memory usage: {torch.cuda.memory_allocated() / 1024**2:.2f} MB"
+        )
         return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
@@ -299,6 +308,7 @@ class BenchmarkRunner:
             os.makedirs(self.profile_dir, exist_ok=True)
         prof.export_chrome_trace(f"{self.profile_dir}/{config_name}.json")
 
+    @torch.inference_mode()
     def run_benchmarks(
         self,
         model_id: str,
