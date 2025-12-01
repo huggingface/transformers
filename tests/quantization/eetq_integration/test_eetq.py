@@ -20,8 +20,8 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, EetqCo
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
-    require_eetq,
     require_torch_gpu,
+    require_kernels,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -62,8 +62,8 @@ class EetqConfigTest(unittest.TestCase):
 
 @slow
 @require_torch_gpu
-@require_eetq
 @require_accelerate
+@require_kernels
 class EetqTest(unittest.TestCase):
     model_name = "facebook/opt-350m"
 

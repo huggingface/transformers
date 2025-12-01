@@ -26,22 +26,72 @@ if is_accelerate_available():
 
 logger = logging.get_logger(__name__)
 
-
 class EetqQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict: dict[str, list[torch.Tensor]], full_layer_name: str | None = None, **kwargs) -> dict[str, torch.Tensor]:
-        from eetq import quantize_and_preprocess_weights
-
         _, value = tuple(input_dict.items())[0]
         value = value[0]
+    
+        value_device = value.device
+        int8_weight = torch.t(value).contiguous().cpu()
+        int8_weight, scales = eetq_kernels_hub.quant_weights(int8_weight, torch.int8, False)
+        int8_weight = int8_weight.to(value_device)
+        scales = scales.to(value_device)
+        
+        # fix when pre-quantized
+        # int8_weight = eetq_kernels_hub.preprocess_weights(int8_weight)
 
-        new_value, weight_scale = quantize_and_preprocess_weights(value)
+        return {full_layer_name: int8_weight,
+                f"{full_layer_name}_scales": scales}
 
-        return {full_layer_name: new_value,
-                f"{full_layer_name}_scales": weight_scale}
+class EetqLinearMMFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx,
+        x,
+        weight,
+        scales,
+        bias=None
+    ):
+        # The forward pass can use ctx.
+        ctx.save_for_backward(x, weight, scales, bias)
+        output = eetq_kernels_hub.w8_a16_gemm(x, weight, scales)
+        output = output + bias if bias is not None else output
+        return output
 
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, weight, scales, bias = ctx.saved_tensors
+        identity = torch.eye(weight.shape[0]).to(weight.device).to(input.dtype)
+
+        # Dequantize the weight
+        weight = eetq_kernels_hub.w8_a16_gemm(identity, weight, scales)
+        
+        if ctx.needs_input_grad[0]:
+            # 2D matrix multiplication, unsqueeze to 3D
+            grad_input = grad_output.squeeze(0).matmul(
+                weight.transpose(0, 1)
+            ).unsqueeze(0)
+
+        return grad_input, None, None, None
+    
+class EetqLinear(nn.Module):
+    def __init__(self, in_features, out_features, bias=True, device="cuda:0"):
+        super().__init__()
+        self.register_buffer("weight", torch.zeros((in_features, out_features), dtype=torch.int8, device=device))
+        if bias:
+            self.register_buffer("bias", torch.zeros((out_features), dtype=torch.float16, device=device))
+        else:
+            self.bias = None
+        self.register_buffer("weight_scales", torch.zeros((out_features), dtype=torch.float16, device=device))
+
+    def forward(self, input):
+        output = EetqLinearMMFunction.apply(input, self.weight, self.weight_scales, self.bias)
+        return output
+    
+    
 def _replace_with_eetq_linear(
     model,
     modules_to_not_convert=None,
@@ -119,6 +169,10 @@ def replace_with_eetq_linear(
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
     """
+    from kernels import get_kernel
+
+    global eetq_kernels_hub
+    eetq_kernels_hub = get_kernel("kernels-community/quantization-eetq")
 
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
 

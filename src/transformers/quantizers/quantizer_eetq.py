@@ -19,7 +19,7 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_eetq_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_kernels_available, logging
 from .quantizers_utils import get_module_from_name
 
 
@@ -47,26 +47,10 @@ class EetqHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        if not is_eetq_available():
-            raise ImportError(
-                "Using `eetq` 8-bit quantization requires eetq."
-                "Please install the latest version of eetq from : https://github.com/NetEase-FuXi/EETQ"
-            )
-
-        try:
-            import eetq  # noqa: F401
-        except ImportError as exc:
-            if "shard_checkpoint" in str(exc):
-                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
-                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
-                # TODO: Update message once eetq releases a fix
-                raise ImportError(
-                    "You are using a version of EETQ that is incompatible with the current transformers version. "
-                    "Either downgrade transformers to <= v4.46.3 or, if available, upgrade EETQ to > v1.0.0."
-                ) from exc
-            else:
-                raise
-
+        
+        if not is_kernels_available():
+            raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
+             
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
 
@@ -101,7 +85,7 @@ class EetqHfQuantizer(HfQuantizer):
         return dtype
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from eetq import EetqLinear
+        from ..integrations.eetq import EetqLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
 
