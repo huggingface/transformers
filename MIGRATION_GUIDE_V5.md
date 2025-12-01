@@ -264,6 +264,55 @@ A few testing changes specific to tokenizers have been applied:
 
 For legacy implementations, the original BERT Python tokenizer code (including `WhitespaceTokenizer`, `BasicTokenizer`, etc.) is preserved in `bert_legacy.py` for reference purposes.
 
+#### 7. Deprecated / Modified Features
+
+**Special Tokens Structure:**
+- `SpecialTokensMixin`: Merged into `PreTrainedTokenizerBase` to simplify the tokenizer architecture.
+- `special_tokens_map`: Now only stores named special token attributes (e.g., `bos_token`, `eos_token`). Use `extra_special_tokens` for additional special tokens (formerly `additional_special_tokens`). `all_special_tokens` includes both named and extra tokens.
+
+```python
+# v4
+tokenizer.special_tokens_map  # Included 'additional_special_tokens'
+
+# v5
+tokenizer.special_tokens_map  # Only named tokens
+tokenizer.extra_special_tokens  # Additional tokens
+```
+
+- `special_tokens_map_extended` and `all_special_tokens_extended`: Removed. Access `AddedToken` objects directly from `_special_tokens_map` or `_extra_special_tokens` if needed.
+- `additional_special_tokens`: Still accepted for backward compatibility but is automatically converted to `extra_special_tokens`.
+
+**Deprecated Methods:**
+- `sanitize_special_tokens()`: Already deprecated in v4, removed in v5.
+- `prepare_seq2seq_batch()`: Deprecated; use `__call__()` with `text_target` parameter instead.
+
+```python
+# v4
+model_inputs = tokenizer.prepare_seq2seq_batch(src_texts, tgt_texts, max_length=128)
+
+# v5
+model_inputs = tokenizer(src_texts, text_target=tgt_texts, max_length=128, return_tensors="pt")
+model_inputs["labels"] = model_inputs.pop("input_ids_target")
+```
+
+- `BatchEncoding.words()`: Deprecated; use `word_ids()` instead.
+
+**Removed Methods:**
+- `create_token_type_ids_from_sequences()`: Removed from base class. Subclasses that need custom token type ID creation should implement this method directly.
+- `clean_up_tokenization()`: Removed from base class. Now defined at model class level for models that need it (e.g., PLBart, CLVP, Wav2Vec2).
+- `prepare_for_model()`, `build_inputs_with_special_tokens()`, `truncate_sequences()`: Moved from `tokenization_utils_base.py` to `tokenization_python.py` for `PythonBackend` tokenizers. `TokenizersBackend` provides model-ready input via `tokenize()` and `encode()`, so these methods are no longer needed in the base class.
+- `_switch_to_input_mode()`, `_switch_to_target_mode()`, `as_target_tokenizer()`: Removed from base class. Use `__call__()` with `text_target` parameter instead.
+
+```python
+# v4
+with tokenizer.as_target_tokenizer():
+    labels = tokenizer(tgt_texts, ...)
+
+# v5
+labels = tokenizer(text_target=tgt_texts, ...)
+```
+
+- `parse_response()`: Removed from base class.
 
 ## Library-wide changes with lesser impact
 
