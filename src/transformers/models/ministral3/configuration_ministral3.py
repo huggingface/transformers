@@ -68,7 +68,6 @@ class Ministral3Config(PreTrainedConfig):
     >>> # Initializing a Mistral3 configuration
     >>> configuration = Mistral3Config(vision_config, text_config)
 
-    >>> # Initializing a model from the ministral configuration
     >>> # Initializing a model from the Ministral3 configuration
     >>> text_model = Ministral3ForCausalLM(text_config)
     
