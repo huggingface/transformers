@@ -53,7 +53,7 @@ from .utils import (
     requires_backends,
 )
 from .utils.generic import strtobool
-from .utils.import_utils import is_optimum_neuron_available
+from .utils.import_utils import enable_tf32, is_optimum_neuron_available
 
 
 logger = logging.get_logger(__name__)
@@ -379,7 +379,7 @@ class TrainingArguments:
             metric values.
         tf32 (`bool`, *optional*):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
-            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
+            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32` and For PyTorch 2.9+ torch.backends.cuda.matmul.fp32_precision. For more details please refer to
             the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
             experimental API and it may change.
         ddp_backend (`str`, *optional*):
@@ -1601,11 +1601,7 @@ class TrainingArguments:
                         f"Setting TF32 in {device_str} backends to speedup torch compile, you won't see any improvement"
                         " otherwise."
                     )
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                    enable_tf32(True)
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
@@ -1613,20 +1609,12 @@ class TrainingArguments:
         if is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                    enable_tf32(True)
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = False
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = False
-                        torch.backends.cudnn.allow_tf32 = False
+                    enable_tf32(False)
                 # no need to assert on else
 
         if self.report_to == "all" or self.report_to == ["all"]:
