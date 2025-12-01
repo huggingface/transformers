@@ -103,12 +103,11 @@ class ColModernVBertProcessor(ModernVBertProcessor):
     for more information.
 
     Args:
-            image_processor ([`ModernVBertImageProcessor`]): The image processor is a required input.
-            tokenizer ([`PreTrainedTokenizerFast`], *optional*): The tokenizer is an optional input. If not provided, a
-                [`ModernVBertTokenizerFast`] will be loaded.
-            image_seq_len (`int`, *optional*, defaults to 64): The sequence length for the image modality.
-            visual_prompt_prefix (`Optional`, *optional*): The prefix prompt to use when processing images.
-            query_prefix (`Optional`, *optional*): The prefix to use when processing queries.
+            image_processor ([`ModernVBertImageProcessor`]): An instance of [`ModernVBertImageProcessor`]. The image processor is a required input.
+            tokenizer (`PreTrainedTokenizerBase`, *optional*): An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+            image_seq_len (`int`, *optional*, defaults to 64): The length of the image sequence i.e. the number of <image> tokens per image in the input.
+            visual_prompt_prefix (`Optional`, *optional*): A prefix to be prepended to visual prompts.
+            query_prefix (`Optional`, *optional*): A prefix to be prepended to query prompts.
     """
 
     def __init__(
