@@ -558,6 +558,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
