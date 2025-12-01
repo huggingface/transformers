@@ -368,9 +368,10 @@ class Trainer:
           model hasn't been wrapped, then `self.model_wrapped` is the same as `self.model`.
         - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
           data parallelism, this means some of the model layers are split on different GPUs).
-        - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
-          to `False` if model parallel or deepspeed is used, or if the default
-          `TrainingArguments.place_model_on_device` is overridden to return `False` .
+        - **place_model_on_device** -- Whether the Trainer should automatically place the
+            model on the specified device (GPU or CPU) before training. When set to `False`,
+            the user is responsible for manually moving the model to the target device
+            (e.g., by calling `model.to(device)`) before passing it to the Trainer. .
         - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
           in `train`)
 
