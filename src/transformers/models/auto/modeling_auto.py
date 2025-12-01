@@ -43,6 +43,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("afmoe", "AfmoeModel"),
         ("aimv2", "Aimv2Model"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "AlbertModel"),
@@ -279,6 +280,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("musicgen", "MusicgenModel"),
         ("musicgen_melody", "MusicgenMelodyModel"),
         ("mvp", "MvpModel"),
+        ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nystromformer", "NystromformerModel"),
@@ -490,6 +492,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mpt", "MptForCausalLM"),
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
+        ("nanochat", "NanoChatForCausalLM"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
@@ -611,6 +614,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("afmoe", "AfmoeForCausalLM"),
         ("apertus", "ApertusForCausalLM"),
         ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
@@ -702,6 +706,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("musicgen", "MusicgenForCausalLM"),
         ("musicgen_melody", "MusicgenMelodyForCausalLM"),
         ("mvp", "MvpForCausalLM"),
+        ("nanochat", "NanoChatForCausalLM"),
         ("nemotron", "NemotronForCausalLM"),
         ("olmo", "OlmoForCausalLM"),
         ("olmo2", "Olmo2ForCausalLM"),
@@ -1026,6 +1031,21 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("video_llama_3", "VideoLlama3ForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+    ]
+)
+
+# Models that accept text and optionally multimodal data in inputs
+# and can generate text and optionally multimodal data.
+MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
+    [
+        *list(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.items()),
+        ("granite_speech", "GraniteSpeechForConditionalGeneration"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
+        ("phi4_multimodal", "Phi4MultimodalForCausalLM"),
+        ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
+        ("qwen2_audio", "Qwen2AudioForConditionalGeneration"),
+        ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
+        ("voxtral", "VoxtralForConditionalGeneration"),
     ]
 )
 
@@ -1782,6 +1802,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FO
 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 )
+MODEL_FOR_MULTIMODAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES)
 MODEL_FOR_RETRIEVAL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_RETRIEVAL_MAPPING_NAMES)
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
@@ -2126,6 +2147,13 @@ class AutoModelForImageTextToText(_BaseAutoModelClass):
 AutoModelForImageTextToText = auto_class_update(AutoModelForImageTextToText, head_doc="image-text-to-text modeling")
 
 
+class AutoModelForMultimodalLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+
+AutoModelForMultimodalLM = auto_class_update(AutoModelForMultimodalLM, head_doc="multimodal generation")
+
+
 class AutoModelForAudioClassification(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
@@ -2276,6 +2304,7 @@ __all__ = [
     "MODEL_FOR_VISION_2_SEQ_MAPPING",
     "MODEL_FOR_RETRIEVAL_MAPPING",
     "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING",
+    "MODEL_FOR_MULTIMODAL_LM_MAPPING",
     "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
     "MODEL_MAPPING",
     "MODEL_WITH_LM_HEAD_MAPPING",
@@ -2303,6 +2332,7 @@ __all__ = [
     "AutoModelForMaskedImageModeling",
     "AutoModelForMaskedLM",
     "AutoModelForMultipleChoice",
+    "AutoModelForMultimodalLM",
     "AutoModelForNextSentencePrediction",
     "AutoModelForObjectDetection",
     "AutoModelForPreTraining",

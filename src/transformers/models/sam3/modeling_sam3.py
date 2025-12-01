@@ -2089,7 +2089,9 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
-    _checkpoint_conversion_mapping = {"detector_model.": ""}
+    _checkpoint_conversion_mapping = {
+        r"detector_model.(.+)": r"\1"  # the regex allows to remove the prefix, and add it back in revert mode
+    }
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",
@@ -2146,8 +2148,8 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> model = Sam3Model.from_pretrained("facebook/sam3-base")
-        >>> processor = Sam3Processor.from_pretrained("facebook/sam3-base")
+        >>> model = Sam3Model.from_pretrained("facebook/sam3")
+        >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
         >>> # Pre-compute text embeddings
         >>> text_inputs = processor(text="cat", return_tensors="pt")
@@ -2184,8 +2186,8 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> model = Sam3Model.from_pretrained("facebook/sam3-base")
-        >>> processor = Sam3Processor.from_pretrained("facebook/sam3-base")
+        >>> model = Sam3Model.from_pretrained("facebook/sam3")
+        >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
         >>> # Pre-compute vision embeddings
         >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
@@ -2233,8 +2235,8 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoModel, AutoProcessor
 
-        >>> model = AutoModel.from_pretrained("facebook/sam3-base")
-        >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
+        >>> model = AutoModel.from_pretrained("facebook/sam3")
+        >>> processor = AutoProcessor.from_pretrained("facebook/sam3")
 
         >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
         >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")

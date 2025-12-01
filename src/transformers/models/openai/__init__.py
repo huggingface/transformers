@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_openai import *
     from .modeling_openai import *
     from .tokenization_openai import *
-    from .tokenization_openai_fast import *
 else:
     import sys
 

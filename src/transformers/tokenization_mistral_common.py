@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import os
 import re
 import shutil
@@ -19,9 +18,10 @@ import warnings
 from collections.abc import Callable, Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
+from huggingface_hub import create_repo
 
 from transformers.audio_utils import load_audio_as
 from transformers.tokenization_utils_base import (
@@ -30,7 +30,6 @@ from transformers.tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
-    PreTrainedTokenizerBase,
     TextInput,
     TruncationStrategy,
 )
@@ -151,7 +150,7 @@ class MistralTokenizerType(str, Enum):
 
 
 @requires(backends=("mistral-common",))
-class MistralCommonTokenizer(PushToHubMixin):
+class MistralCommonBackend(PushToHubMixin):
     """
     Class to wrap `mistral-common` tokenizers.
 
@@ -170,23 +169,23 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     Supports the following methods from the `PreTrainedTokenizerBase` class:
 
-    - [`~MistralCommonTokenizer.get_vocab`]: Returns the vocabulary as a dictionary of token to index.
+    - [`~MistralCommonBackend.get_vocab`]: Returns the vocabulary as a dictionary of token to index.
         This is a lossy conversion for Tekkenizer as some decoding errors are collapsed into the same token.
-    - [`~MistralCommonTokenizer.encode`]: Encode a string to a list of integers.
-    - [`~MistralCommonTokenizer.decode`]: Decode a list of integers to a string.
-    - [`~MistralCommonTokenizer.batch_decode`]: Decode a batch of list of integers to a list of strings.
-    - [`~MistralCommonTokenizer.convert_tokens_to_ids`]: Convert a list of tokens to a list of integers.
-    - [`~MistralCommonTokenizer.convert_ids_to_tokens`]: Convert a list of integers to a list of tokens.
-    - [`~MistralCommonTokenizer.tokenize`]: Tokenize a string.
-    - [`~MistralCommonTokenizer.get_special_tokens_mask`]: Get the special tokens mask for a list of tokens.
-    - [`~MistralCommonTokenizer.prepare_for_model`]: Prepare a list of inputs for the model.
-    - [`~MistralCommonTokenizer.pad`]: Pad a list of inputs to the same length.
-    - [`~MistralCommonTokenizer.truncate_sequences`]: Truncate a list of sequences to the same length.
-    - [`~MistralCommonTokenizer.apply_chat_template`]: Apply a chat template to a list of messages.
-    - [`~MistralCommonTokenizer.__call__`]: Tokenize a string or a list of strings.
-    - [`~MistralCommonTokenizer.from_pretrained`]: Download and cache a pretrained tokenizer from the Hugging Face model hub or local directory.
-    - [`~MistralCommonTokenizer.save_pretrained`]: Save a tokenizer to a directory, so it can be reloaded using the `from_pretrained` class method.
-    - [`~MistralCommonTokenizer.push_to_hub`]: Upload tokenizer to the Hugging Face model hub.
+    - [`~MistralCommonBackend.encode`]: Encode a string to a list of integers.
+    - [`~MistralCommonBackend.decode`]: Decode a list of integers to a string.
+    - [`~MistralCommonBackend.batch_decode`]: Decode a batch of list of integers to a list of strings.
+    - [`~MistralCommonBackend.convert_tokens_to_ids`]: Convert a list of tokens to a list of integers.
+    - [`~MistralCommonBackend.convert_ids_to_tokens`]: Convert a list of integers to a list of tokens.
+    - [`~MistralCommonBackend.tokenize`]: Tokenize a string.
+    - [`~MistralCommonBackend.get_special_tokens_mask`]: Get the special tokens mask for a list of tokens.
+    - [`~MistralCommonBackend.prepare_for_model`]: Prepare a list of inputs for the model.
+    - [`~MistralCommonBackend.pad`]: Pad a list of inputs to the same length.
+    - [`~MistralCommonBackend.truncate_sequences`]: Truncate a list of sequences to the same length.
+    - [`~MistralCommonBackend.apply_chat_template`]: Apply a chat template to a list of messages.
+    - [`~MistralCommonBackend.__call__`]: Tokenize a string or a list of strings.
+    - [`~MistralCommonBackend.from_pretrained`]: Download and cache a pretrained tokenizer from the Hugging Face model hub or local directory.
+    - [`~MistralCommonBackend.save_pretrained`]: Save a tokenizer to a directory, so it can be reloaded using the `from_pretrained` class method.
+    - [`~MistralCommonBackend.push_to_hub`]: Upload tokenizer to the Hugging Face model hub.
 
     Here are the key differences with the `PreTrainedTokenizerBase` class:
 
@@ -204,17 +203,17 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def __init__(
         self,
-        tokenizer_path: Union[str, os.PathLike, Path],
+        tokenizer_path: str | os.PathLike | Path,
         mode: ValidationMode = ValidationMode.test,
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
-        model_input_names: Optional[list[str]] = None,
+        model_input_names: list[str] | None = None,
         clean_up_tokenization_spaces: bool = False,
         **kwargs,
     ):
         """
-        Constructs a `MistralCommonTokenizer`.
+        Constructs a `MistralCommonBackend`.
 
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding applied.
@@ -246,7 +245,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 tokenization process.
         """
         if kwargs:
-            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonTokenizer`.")
+            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonBackend`.")
 
         self._tokenizer_path = Path(tokenizer_path)
         self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=mode)
@@ -272,7 +271,25 @@ class MistralCommonTokenizer(PushToHubMixin):
                 )
             self.model_input_names = model_input_names
 
-        self._cache_get_vocab: Optional[dict[str, int]] = None
+        self._cache_get_vocab: dict[str, int] | None = None
+
+    @staticmethod
+    def clean_up_tokenization(text: str) -> str:
+        """
+        Clean up a list of simple English tokenization artifacts like spaces before punctuation.
+        """
+        return (
+            text.replace(" .", ".")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" ,", ",")
+            .replace(" ' ", "'")
+            .replace(" n't", "n't")
+            .replace(" 'm", "'m")
+            .replace(" 's", "'s")
+            .replace(" 've", "'ve")
+            .replace(" 're", "'re")
+        )
 
     @property
     def bos_token_id(self) -> int:
@@ -368,7 +385,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     @add_end_docstrings(
         ENCODE_KWARGS_DOCSTRING,
         """
-            **kwargs: Not supported by `MistralCommonTokenizer.encode`.
+            **kwargs: Not supported by `MistralCommonBackend.encode`.
                 Will raise an error if used.
         """,
         """
@@ -378,16 +395,16 @@ class MistralCommonTokenizer(PushToHubMixin):
     )
     def encode(
         self,
-        text: Union[TextInput, EncodedInput],
+        text: TextInput | EncodedInput,
         text_pair: None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, None] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
         **kwargs,
     ) -> list[int]:
@@ -398,12 +415,12 @@ class MistralCommonTokenizer(PushToHubMixin):
             text (`str` or `List[int]`):
                 The first sequence to be encoded. This can be a string or a list of integers (tokenized string ids).
             text_pair (`None`, *optional*):
-                Not supported by `MistralCommonTokenizer.encode`. Kept to match `PreTrainedTokenizerBase.encode` signature.
+                Not supported by `MistralCommonBackend.encode`. Kept to match `PreTrainedTokenizerBase.encode` signature.
         """
         if kwargs:
-            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.encode`.")
+            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.encode`.")
         if text_pair:
-            raise ValueError("`MistralCommonTokenizer.encode` does not support `text_pair`.")
+            raise ValueError("`MistralCommonBackend.encode` does not support `text_pair`.")
 
         padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
             padding=padding,
@@ -436,7 +453,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         self,
         token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> str:
         """
@@ -452,14 +469,14 @@ class MistralCommonTokenizer(PushToHubMixin):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces`.
             kwargs (additional keyword arguments, *optional*):
-                Not supported by `MistralCommonTokenizer.decode`.
+                Not supported by `MistralCommonBackend.decode`.
                 Will raise an error if used.
 
         Returns:
             `str`: The decoded sentence.
         """
         if kwargs:
-            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.decode`.")
+            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.decode`.")
 
         clean_up_tokenization_spaces = clean_up_tokenization_spaces or self.cleanup_tokenization_spaces
 
@@ -470,7 +487,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         decoded_string = self.tokenizer.decode(token_ids, special_token_policy=special_token_policy)
         if clean_up_tokenization_spaces:
-            decoded_string = PreTrainedTokenizerBase.clean_up_tokenization(decoded_string)
+            decoded_string = self.clean_up_tokenization(decoded_string)
 
         # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
         # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
@@ -484,7 +501,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         self,
         sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> list[str]:
         """
@@ -499,7 +516,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces`.
             kwargs (additional keyword arguments, *optional*):
-                Not supported by `MistralCommonTokenizer.batch_decode`.
+                Not supported by `MistralCommonBackend.batch_decode`.
                 Will raise an error if used.
 
         Returns:
@@ -527,9 +544,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     def convert_ids_to_tokens(self, ids: int, skip_special_tokens: bool = False) -> str: ...
     @overload
     def convert_ids_to_tokens(self, ids: list[int], skip_special_tokens: bool = False) -> list[str]: ...
-    def convert_ids_to_tokens(
-        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
-    ) -> Union[str, list[str]]:
+    def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
         """
         Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
         added tokens.
@@ -587,7 +602,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         else:
             raise ValueError(f"Unknown tokenizer type: {self._tokenizer_type}")
 
-    def convert_tokens_to_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
+    def convert_tokens_to_ids(self, tokens: str | list[str]) -> int | list[int]:
         """
         Converts a token string (or a sequence of tokens) in a single integer id (or a sequence of ids), using the
         vocabulary.
@@ -632,29 +647,29 @@ class MistralCommonTokenizer(PushToHubMixin):
             text (`str`):
                 The sequence to be encoded.
             **kwargs (additional keyword arguments):
-                Not supported by `MistralCommonTokenizer.tokenize`.
+                Not supported by `MistralCommonBackend.tokenize`.
                 Will raise an error if used.
 
         Returns:
             `List[str]`: The list of tokens.
         """
         if kwargs:
-            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.tokenize`.")
+            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.tokenize`.")
 
         return self.convert_ids_to_tokens(self._text_to_ids(text, add_special_tokens=False), skip_special_tokens=False)
 
     def _encode_plus(
         self,
-        text: Union[TextInput, EncodedInput],
+        text: TextInput | EncodedInput,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -690,19 +705,16 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _batch_encode_plus(
         self,
-        batch_text: Union[
-            list[TextInput],
-            list[EncodedInput],
-        ],
+        batch_text: list[TextInput] | list[EncodedInput],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -758,7 +770,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             token_ids_0 (`List[int]`):
                 List of ids of the sequence.
             token_ids_1 (`List[int]`, *optional*):
-                Not supported by `MistralCommonTokenizer`. Kept to match the interface of `PreTrainedTokenizerBase`.
+                Not supported by `MistralCommonBackend`. Kept to match the interface of `PreTrainedTokenizerBase`.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
@@ -767,11 +779,11 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         if token_ids_1 is not None:
             raise ValueError(
-                "`token_ids_1` is not supported by `MistralCommonTokenizer` and should be `None`, kept for compatibility."
+                "`token_ids_1` is not supported by `MistralCommonBackend` and should be `None`, kept for compatibility."
             )
         if already_has_special_tokens:
             raise ValueError(
-                "`already_has_special_tokens` is not supported by `MistralCommonTokenizer` and should be `False`."
+                "`already_has_special_tokens` is not supported by `MistralCommonBackend` and should be `False`."
             )
 
         all_special_ids = self._all_special_ids()  # cache the ids
@@ -781,16 +793,16 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _batch_prepare_for_model(
         self,
-        batch_ids: list[Union[PreTokenizedInput, list[int]]],
+        batch_ids: list[PreTokenizedInput | list[int]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -849,14 +861,14 @@ class MistralCommonTokenizer(PushToHubMixin):
         ids: list[int],
         pair_ids: None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, None] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -873,15 +885,15 @@ class MistralCommonTokenizer(PushToHubMixin):
             ids (`List[int]`):
                 Tokenized input ids of the first sequence.
             pair_ids (`None`, *optional*):
-                Not supported by `MistralCommonTokenizer`. Kept to match the interface of `PreTrainedTokenizerBase`.
+                Not supported by `MistralCommonBackend`. Kept to match the interface of `PreTrainedTokenizerBase`.
         """
         if pair_ids is not None:
             raise ValueError(
-                "`pair_ids` is not supported by `MistralCommonTokenizer` and should be `None`, kept for compatibility."
+                "`pair_ids` is not supported by `MistralCommonBackend` and should be `None`, kept for compatibility."
             )
         if kwargs:
             raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.prepare_for_model`."
+                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.prepare_for_model`."
             )
 
         padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
@@ -944,10 +956,10 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _get_padding_truncation_strategies(
         self,
-        padding: Union[str, PaddingStrategy, bool] = False,
-        truncation: Optional[Union[str, TruncationStrategy, bool]] = None,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
+        padding: str | PaddingStrategy | bool = False,
+        truncation: str | TruncationStrategy | bool | None = None,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
         verbose: bool = True,
         **kwargs,
     ):
@@ -999,7 +1011,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 truncation_strategy = truncation
             if truncation in [TruncationStrategy.ONLY_FIRST, TruncationStrategy.ONLY_SECOND]:
                 raise ValueError(
-                    "Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonTokenizer`."
+                    "Truncation strategy `only_first` and `only_second` are not supported by `MistralCommonBackend`."
                 )
         else:
             truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
@@ -1057,12 +1069,12 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
+        encoded_inputs: dict[str, EncodedInput] | BatchEncoding,
+        max_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
@@ -1131,19 +1143,17 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def pad(
         self,
-        encoded_inputs: Union[
-            BatchEncoding,
-            list[BatchEncoding],
-            dict[str, EncodedInput],
-            dict[str, list[EncodedInput]],
-            list[dict[str, EncodedInput]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        encoded_inputs: BatchEncoding
+        | list[BatchEncoding]
+        | dict[str, EncodedInput]
+        | dict[str, list[EncodedInput]]
+        | list[dict[str, EncodedInput]],
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
     ) -> BatchEncoding:
         """
@@ -1205,7 +1215,8 @@ class MistralCommonTokenizer(PushToHubMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -1297,7 +1308,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         ids: list[int],
         pair_ids: None = None,
         num_tokens_to_remove: int = 0,
-        truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
+        truncation_strategy: str | TruncationStrategy = "longest_first",
         stride: int = 0,
         **kwargs,
     ) -> tuple[list[int], None, list[int]]:
@@ -1309,7 +1320,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 Tokenized input ids. Can be obtained from a string by chaining the `tokenize` and
                 `convert_tokens_to_ids` methods.
             pair_ids (`None`, *optional*):
-                Not supported by `MistralCommonTokenizer`. Kept to match the signature of `PreTrainedTokenizerBase.truncate_sequences`.
+                Not supported by `MistralCommonBackend`. Kept to match the signature of `PreTrainedTokenizerBase.truncate_sequences`.
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
             truncation_strategy (`str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*, defaults to `'longest_first'`):
@@ -1329,10 +1340,10 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         if kwargs:
             raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.truncate_sequences`."
+                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.truncate_sequences`."
             )
         if pair_ids:
-            raise ValueError("`pair_ids` is not supported by `MistralCommonTokenizer.truncate_sequences`.")
+            raise ValueError("`pair_ids` is not supported by `MistralCommonBackend.truncate_sequences`.")
 
         if num_tokens_to_remove <= 0:
             return (ids, None, [])
@@ -1369,18 +1380,18 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        tools: Optional[list[Union[dict, Callable]]] = None,
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
+        tools: list[dict | Callable] | None = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
         tokenize: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
+        padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
         return_dict: bool = True,
         **kwargs,
-    ) -> Union[str, list[int], list[str], list[list[int]], BatchEncoding]:
+    ) -> str | list[int] | list[str] | list[list[int]] | BatchEncoding:
         """
         Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids.
@@ -1395,7 +1406,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#automated-function-conversion-for-tool-use)
                 for more information.
             add_generation_prompt (`bool`, *optional*):
-                This argument is a no-op for `MistralCommonTokenizer`. However it cannot be used at the same time as `continue_final_message` to keep the API consistent and
+                This argument is a no-op for `MistralCommonBackend`. However it cannot be used at the same time as `continue_final_message` to keep the API consistent and
                 if any conversation ends with an assistant message, it will raise an error. In such case, use `continue_final_message` instead.
             continue_final_message (bool, *optional*):
                 If this is set, the chat will be formatted so that the final
@@ -1427,7 +1438,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
                 If at least one conversation contains an image, its pixel values will be returned in the `pixel_values` key.
             kwargs (additional keyword arguments, *optional*):
-                Not supported by `MistralCommonTokenizer.apply_chat_template`.
+                Not supported by `MistralCommonBackend.apply_chat_template`.
                 Will raise an error if used.
 
         Returns:
@@ -1436,7 +1447,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         if kwargs:
             raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.apply_chat_template`."
+                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.apply_chat_template`."
             )
         if not isinstance(truncation, bool):
             raise TypeError("`truncation` must be a boolean for `apply_chat_template` method.")
@@ -1464,22 +1475,21 @@ class MistralCommonTokenizer(PushToHubMixin):
         def _maybe_adapt_message(message: dict[str, Any]) -> None:
             """Adapt message to `mistral-common` format and leave validation to `mistral-common`."""
             if not isinstance(message, dict):
-                return
-            maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
-                "content"
-            )
+                return message
+            maybe_list_content: str | list[dict[str, str | dict[str, Any]]] | None = message.get("content")
             if not maybe_list_content or isinstance(maybe_list_content, str):
-                return
+                return message
 
-            normalized_content: list[dict[str, Union[str, dict[str, Any]]]] = []
+            normalized_content: list[dict[str, str | dict[str, Any]]] = []
+            message = message.copy()
             for content in maybe_list_content:
                 content_type = content.get("type", None)
                 if not content_type:
                     continue
                 elif content_type == "image":
-                    maybe_url: Optional[str] = content.get("url")
-                    maybe_path: Optional[str] = content.get("path")
-                    maybe_base64: Optional[str] = content.get("base64")
+                    maybe_url: str | None = content.get("url")
+                    maybe_path: str | None = content.get("path")
+                    maybe_base64: str | None = content.get("base64")
                     if maybe_url:
                         image_content = maybe_url
                     elif maybe_path:
@@ -1494,9 +1504,9 @@ class MistralCommonTokenizer(PushToHubMixin):
                         raise ValueError("Image content must be specified.")
                     normalized_content.append({"type": "image_url", "image_url": {"url": image_content}})
                 elif content_type == "audio":
-                    maybe_url: Optional[str] = content.get("url")
-                    maybe_path: Optional[str] = content.get("path")
-                    maybe_base64: Optional[str] = content.get("base64")
+                    maybe_url: str | None = content.get("url")
+                    maybe_path: str | None = content.get("path")
+                    maybe_base64: str | None = content.get("base64")
                     if maybe_url or maybe_path:
                         audio_data = load_audio_as(maybe_url or maybe_path, return_format="dict", force_mono=True)
                         normalized_content.append({"type": "input_audio", "input_audio": audio_data})
@@ -1507,15 +1517,16 @@ class MistralCommonTokenizer(PushToHubMixin):
                 else:
                     normalized_content.append(content)
             message["content"] = normalized_content
+            return message
 
         outputs = []
         images: list[np.ndarray] = []
         audios: list[np.ndarray] = []
 
         for conversation in conversations:
-            messages: list[dict[str, Union[str, list[dict[str, Union[str, dict[str, Any]]]]]]] = []
+            messages: list[dict[str, str | list[dict[str, str | dict[str, Any]]]]] = []
             for message in conversation:
-                _maybe_adapt_message(message)
+                message = _maybe_adapt_message(message)
                 messages.append(message)
 
             chat_request = ChatCompletionRequest.from_openai(
@@ -1546,7 +1557,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             )
             if return_dict:
                 if images:
-                    pixel_values: Union[list[np.ndarray], np.ndarray, torch.Tensor]
+                    pixel_values: list[np.ndarray] | np.ndarray | torch.Tensor
                     if return_tensors == "pt":
                         if not is_torch_available():
                             raise ImportError(
@@ -1574,7 +1585,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         else:
             logger.warning(
-                "`MistralCommonTokenizer.apply_chat_template(..., tokenize=False)` is unsafe and may lead to unexpected behavior."
+                "`MistralCommonBackend.apply_chat_template(..., tokenize=False)` is unsafe and may lead to unexpected behavior."
                 " Please consider using `tokenize=True` instead and don't encode the output manually."
             )
             return outputs
@@ -1582,19 +1593,19 @@ class MistralCommonTokenizer(PushToHubMixin):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, EncodedInput, list[TextInput], list[EncodedInput], None] = None,
+        text: TextInput | EncodedInput | list[TextInput] | list[EncodedInput] | None = None,
         text_pair: None = None,
         text_target: None = None,
         text_pair_target: None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, None] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -1610,18 +1621,18 @@ class MistralCommonTokenizer(PushToHubMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of int
                 (encoded strings).
             text_pair (`None`, *optional*):
-                Not supported by `MistralCommonTokenizer`. Kept to match the signature of `PreTrainedTokenizerBase.__call__`.
+                Not supported by `MistralCommonBackend`. Kept to match the signature of `PreTrainedTokenizerBase.__call__`.
             text_target (`None`, *optional*):
-                Not supported by `MistralCommonTokenizer`. Kept to match the signature of `PreTrainedTokenizerBase.__call__`.
+                Not supported by `MistralCommonBackend`. Kept to match the signature of `PreTrainedTokenizerBase.__call__`.
             text_pair_target (`None`, *optional*):
-                Not supported by `MistralCommonTokenizer`. Kept to match the signature of `PreTrainedTokenizerBase.__call__`.
+                Not supported by `MistralCommonBackend`. Kept to match the signature of `PreTrainedTokenizerBase.__call__`.
         """
         if kwargs:
-            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.__call__`.")
+            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.__call__`.")
 
         if text_pair or text_target or text_pair_target:
             raise ValueError(
-                "`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`."
+                "`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonBackend`."
             )
 
         def _is_valid_text_input(t):
@@ -1699,23 +1710,23 @@ class MistralCommonTokenizer(PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_model_name_or_path: Union[str, os.PathLike],
+        pretrained_model_name_or_path: str | os.PathLike,
         *init_inputs,
         mode: ValidationMode = ValidationMode.test,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         model_max_length: int = VERY_LARGE_INTEGER,
         padding_side: str = "left",
         truncation_side: str = "right",
-        model_input_names: Optional[list[str]] = None,
+        model_input_names: list[str] | None = None,
         clean_up_tokenization_spaces: bool = False,
         **kwargs,
     ):
         r"""
-        Instantiate a `MistralCommonTokenizer` from a predefined
+        Instantiate a `MistralCommonBackend` from a predefined
         tokenizer.
 
         Args:
@@ -1724,7 +1735,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
                 - A path to a *directory* containing the tokenizer config, for instance saved
-                  using the [`MistralCommonTokenizer.tokenization_mistral_common.save_pretrained`] method, e.g.,
+                  using the [`MistralCommonBackend.tokenization_mistral_common.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
             mode (`ValidationMode`, *optional*, defaults to `ValidationMode.test`):
                 Validation mode for the `MistralTokenizer` tokenizer.
@@ -1761,18 +1772,17 @@ class MistralCommonTokenizer(PushToHubMixin):
                 Whether or not the model should cleanup the spaces that were added when splitting the input text during the
                 tokenization process.
             kwargs (additional keyword arguments, *optional*):
-                Not supported by `MistralCommonTokenizer.from_pretrained`.
+                Not supported by `MistralCommonBackend.from_pretrained`.
                 Will raise an error if used.
         """
         if init_inputs:
-            raise ValueError("`init_inputs` are not supported by `MistralCommonTokenizer.from_pretrained`.")
+            raise ValueError("`init_inputs` are not supported by `MistralCommonBackend.from_pretrained`.")
 
-        # Handle kwargs and AutoTokenizer case
-        ignore_subset = {"_from_auto", "trust_remote_code"}
-        if kwargs and not (set_kwargs := set(kwargs.keys())).issubset(ignore_subset):
-            raise ValueError(
-                f"Kwargs {list(set_kwargs - ignore_subset)} are not supported by `MistralCommonTokenizer.from_pretrained`."
-            )
+        # Handle kwargs and AutoTokenizer/AutoProcessor case
+        if kwargs and not set(kwargs.keys()).issubset(
+            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto"}
+        ):
+            raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonBackend.from_pretrained`.")
 
         if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(
@@ -1826,14 +1836,12 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def save_pretrained(
         self,
-        save_directory: Union[str, os.PathLike, Path],
+        save_directory: str | os.PathLike | Path,
         push_to_hub: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        commit_message: Optional[str] = None,
-        repo_id: Optional[str] = None,
-        private: Optional[bool] = None,
-        repo_url: Optional[str] = None,
-        organization: Optional[str] = None,
+        token: str | bool | None = None,
+        commit_message: str | None = None,
+        repo_id: str | None = None,
+        private: bool | None = None,
         **kwargs,
     ) -> tuple[str, ...]:
         """
@@ -1841,7 +1849,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
 
         This method make sure the full tokenizer can then be re-loaded using the
-        [`~MistralCommonTokenizer.tokenization_mistral_common.from_pretrained`] class method.
+        [`~MistralCommonBackend.tokenization_mistral_common.from_pretrained`] class method.
 
         Args:
             save_directory (`str` or `os.PathLike`): The path to a directory where the tokenizer will be saved.
@@ -1855,10 +1863,8 @@ class MistralCommonTokenizer(PushToHubMixin):
             commit_message (`str`, *optional*): The commit message to use when pushing to the hub.
             repo_id (`str`, *optional*): The name of the repository to which push to the Hub.
             private (`bool`, *optional*): Whether the model repository is private or not.
-            repo_url (`str`, *optional*): The URL to the Git repository to which push to the Hub.
-            organization (`str`, *optional*): The name of the organization in which you would like to push your model.
             kwargs (`Dict[str, Any]`, *optional*):
-                Not supported by `MistralCommonTokenizer.save_pretrained`.
+                Not supported by `MistralCommonBackend.save_pretrained`.
                 Will raise an error if used.
 
         Returns:
@@ -1866,7 +1872,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         if kwargs:
             raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.save_pretrained`."
+                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.save_pretrained`."
             )
 
         save_directory = Path(save_directory)
@@ -1876,9 +1882,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         if push_to_hub:
             repo_id = repo_id or str(save_directory).split(os.path.sep)[-1]
-            repo_id = self._create_repo(
-                repo_id, token=token, private=private, repo_url=repo_url, organization=organization
-            )
+            repo_id = create_repo(repo_id, token=token, private=private, exist_ok=True).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
             self._upload_modified_files(
