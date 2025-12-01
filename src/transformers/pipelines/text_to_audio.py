@@ -172,6 +172,11 @@ class TextToAudioPipeline(Pipeline):
                 **kwargs,
             )
         else:
+            # Add speaker ID if needed and user didn't insert at start of text
+            if self.model.config.model_type == "csm":
+                text = [f"[0]{t}" if not t.startswith("[") else t for t in text]
+            if self.model.config.model_type == "dia":
+                text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
 
         return output
@@ -195,6 +200,12 @@ class TextToAudioPipeline(Pipeline):
 
             # ensure dict output to facilitate postprocessing
             forward_params.update({"return_dict_in_generate": True})
+
+            if self.model.config.model_type in ["csm"]:
+                # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
+                # needed for decoding to audio
+                if "output_audio" not in forward_params:
+                    forward_params["output_audio"] = True
 
             output = self.model.generate(**model_inputs, **forward_params)
         else:
