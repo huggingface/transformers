@@ -333,8 +333,6 @@ class Phi4MultimodalConfig(Phi3Config):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to `1.0`):
-            Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 199999):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int` or `list[int]`, *optional*, defaults to `[199999, 200020]`):
@@ -390,7 +388,6 @@ class Phi4MultimodalConfig(Phi3Config):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        partial_rotary_factor: Optional[int] = 1,
         bos_token_id: Optional[int] = 199999,
         eos_token_id: Optional[list[int]] = [199999, 200020],
         pad_token_id: Optional[int] = 199999,
@@ -429,7 +426,6 @@ class Phi4MultimodalConfig(Phi3Config):
             use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
             rope_parameters=rope_parameters,
-            partial_rotary_factor=partial_rotary_factor,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
@@ -534,7 +530,7 @@ class Phi4MultimodalVisionEncoder(SiglipEncoder):
 class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
@@ -1442,7 +1438,7 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 
 
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
-    input_modalities = ["image", "audio", "text"]
+    input_modalities = ("image", "audio", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):

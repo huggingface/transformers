@@ -40,7 +40,7 @@ from .configuration_glm46v import Glm46VConfig
 class Glm46VPreTrainedModel(PreTrainedModel):
     config: Glm46VConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
     _skip_keys_device_placement = "past_key_values"
