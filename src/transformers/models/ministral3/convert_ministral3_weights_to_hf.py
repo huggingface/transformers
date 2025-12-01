@@ -200,9 +200,9 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
             "weight_block_size": [
                 1,
                 1,
-            ]
+            ],
         }
-        kwargs["quantization_config"] = quantization_config 
+        kwargs["quantization_config"] = quantization_config
 
     new_config = Mistral3Config(
         vision_config=new_vision_config,
