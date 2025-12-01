@@ -61,7 +61,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Whether or not to add special tokens when encoding the sequences. This will use the underlying
                 `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens are
                 automatically added to the input ids. This is useful if you want to add `bos` or `eos` tokens
-                automatically.
+                automatically. When Tokenizer is loading with `finetuning` mode it adds both `bos` and `eos`. Else, for "test" mode it only adds `bos`.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
@@ -215,7 +215,7 @@ class MistralCommonBackend(PushToHubMixin):
         """
         Constructs a `MistralCommonBackend`.
 
-        - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
+        - **model_input_names** (`list[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding applied.
             Should be `'right'` or `'left'`.
         - **truncation_side** (`str`) -- The default value for the side on which the model should have truncation
@@ -224,8 +224,11 @@ class MistralCommonBackend(PushToHubMixin):
         Args:
             tokenizer_path (`str` or `os.PathLike` or `Path`):
                 Path to the tokenizer file to load the `MistralTokenizer`.
-            mode (`ValidationMode`, *optional*, defaults to `ValidationMode.test`):
-                The mode to use for the tokenizer. This will be passed to the `MistralTokenizer` constructor.
+            mode (`Union[str, ValidationMode]`, *optional*, defaults to `ValidationMode.test`):
+                The mode to use for the tokenizer. This will be passed to the `MistralTokenizer` constructor. Possible values are:
+                - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
+                - `"test"` or `ValidationMode.test`: The test mode.
+                It changes how the tokenizer validates the input and prepares the request to the model.
             model_max_length (`int`, *optional*):
                 The maximum length (in number of tokens) for the inputs to the transformer model. When the tokenizer is
                 loaded with [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], this will be set to the
@@ -248,7 +251,8 @@ class MistralCommonBackend(PushToHubMixin):
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonBackend`.")
 
         self._tokenizer_path = Path(tokenizer_path)
-        self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=mode)
+        self._mode = self._get_validation_mode(mode)
+        self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=self._mode)
         self._tokenizer_type = (
             MistralTokenizerType.tekken
             if isinstance(self.tokenizer.instruct_tokenizer.tokenizer, Tekkenizer)
@@ -259,6 +263,7 @@ class MistralCommonBackend(PushToHubMixin):
         self.model_max_length = model_max_length
         self.cleanup_tokenization_spaces = clean_up_tokenization_spaces
         self.deprecation_warnings = {}  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
+        self._all_special_tokens_ids = self._get_all_special_ids()
 
         if model_input_names is not None:
             if (
@@ -290,6 +295,16 @@ class MistralCommonBackend(PushToHubMixin):
             .replace(" 've", "'ve")
             .replace(" 're", "'re")
         )
+
+    @property
+    def mode(self) -> ValidationMode:
+        """
+        `ValidationMode`: The mode used by the tokenizer. Possible values are:
+            - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
+            - `"test"` or `ValidationMode.test`: The test mode.
+            It changes how the tokenizer validates the input and prepares the request to the model.
+        """
+        return self._mode
 
     @property
     def bos_token_id(self) -> int:
@@ -348,6 +363,20 @@ class MistralCommonBackend(PushToHubMixin):
         return self.convert_ids_to_tokens(self.pad_token_id)
 
     @property
+    def all_special_ids(self) -> list[int]:
+        """
+        `list[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.).
+        """
+        return sorted(self._all_special_tokens_ids)
+
+    @property
+    def all_special_tokens(self) -> list[str]:
+        """
+        `list[str]`: A list of all unique special tokens.
+        """
+        return self.convert_ids_to_tokens(self.all_special_ids)
+
+    @property
     def vocab_size(self) -> int:
         """
         Returns the size of the vocabulary.
@@ -390,7 +419,7 @@ class MistralCommonBackend(PushToHubMixin):
         """,
         """
         Returns:
-            `List[int]`, `torch.Tensor`: The tokenized ids of the text.
+            `list[int]`, `torch.Tensor`: The tokenized ids of the text.
         """,
     )
     def encode(
@@ -412,7 +441,7 @@ class MistralCommonBackend(PushToHubMixin):
         Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
 
         Args:
-            text (`str` or `List[int]`):
+            text (`str` or `list[int]`):
                 The first sequence to be encoded. This can be a string or a list of integers (tokenized string ids).
             text_pair (`None`, *optional*):
                 Not supported by `MistralCommonBackend.encode`. Kept to match `PreTrainedTokenizerBase.encode` signature.
@@ -451,18 +480,19 @@ class MistralCommonBackend(PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
+        token_ids: Union[int, list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
-    ) -> str:
+    ) -> Union[str, list[str]]:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
         tokens and clean up tokenization spaces.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor]`):
-                List of tokenized input ids. Can be obtained using the `__call__` method.
+            token_ids (`Union[int, list[int], list[list[int]], np.ndarray, torch.Tensor]`):
+                A single sequence or a batch (list of sequences) of tokenized input ids. Can be obtained using the
+                `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (`bool`, *optional*):
@@ -473,14 +503,76 @@ class MistralCommonBackend(PushToHubMixin):
                 Will raise an error if used.
 
         Returns:
-            `str`: The decoded sentence.
+            `Union[str, list[str]]`: The decoded string for a single sequence, or a list of decoded strings for a
+            batch of sequences.
         """
         if kwargs:
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.decode`.")
 
+        token_ids = to_py_obj(token_ids)
+
+        if isinstance(token_ids, (list, tuple)) and len(token_ids) > 0 and isinstance(token_ids[0], (list, tuple)):
+            return self._batch_decode(
+                sequences=token_ids,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            )
+
+        return self._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+        )
+
+    def batch_decode(
+        self,
+        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool | None = None,
+        **kwargs,
+    ) -> list[str]:
+        """
+        Convert a list of lists of token ids into a list of strings by calling decode.
+
+        This method is provided for backwards compatibility. The `decode` method now handles batched input natively,
+        so you can use `decode` directly instead of `batch_decode`.
+
+        Args:
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces`.
+            kwargs (additional keyword arguments, *optional*):
+                Not supported by `MistralCommonBackend.batch_decode`.
+                Will raise an error if used.
+
+        Returns:
+            `list[str]`: The list of decoded sentences.
+        """
+        if kwargs:
+            raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.batch_decode`.")
+
+        return self._batch_decode(
+            sequences=sequences,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+        )
+
+    def _decode(
+        self,
+        token_ids: Union[int, list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool | None = None,
+    ) -> str:
         clean_up_tokenization_spaces = clean_up_tokenization_spaces or self.cleanup_tokenization_spaces
 
         # Convert inputs to python lists
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+
         token_ids = to_py_obj(token_ids)
 
         special_token_policy = SpecialTokenPolicy.IGNORE if skip_special_tokens else SpecialTokenPolicy.KEEP
@@ -497,37 +589,17 @@ class MistralCommonBackend(PushToHubMixin):
 
         return decoded_string
 
-    def batch_decode(
+    def _batch_decode(
         self,
         sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool | None = None,
-        **kwargs,
     ) -> list[str]:
-        """
-        Convert a list of lists of token ids into a list of strings by calling decode.
-
-        Args:
-            sequences (`Union[List[int], List[List[int]], np.ndarray, torch.Tensor]`):
-                List of tokenized input ids. Can be obtained using the `__call__` method.
-            skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces`.
-            kwargs (additional keyword arguments, *optional*):
-                Not supported by `MistralCommonBackend.batch_decode`.
-                Will raise an error if used.
-
-        Returns:
-            `List[str]`: The list of decoded sentences.
-        """
         return [
-            self.decode(
+            self._decode(
                 seq,
                 skip_special_tokens=skip_special_tokens,
                 clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                **kwargs,
             )
             for seq in sequences
         ]
@@ -550,13 +622,13 @@ class MistralCommonBackend(PushToHubMixin):
         added tokens.
 
         Args:
-            ids (`int` or `List[int]`):
+            ids (`int` or `list[int]`):
                 The token id (or token ids) to convert to tokens.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
         Returns:
-            `str` or `List[str]`: The decoded token(s).
+            `str` or `list[str]`: The decoded token(s).
         """
 
         if isinstance(ids, int):
@@ -608,10 +680,10 @@ class MistralCommonBackend(PushToHubMixin):
         vocabulary.
 
         Args:
-            tokens (`str` or `List[str]`): One or several token(s) to convert to token id(s).
+            tokens (`str` or `list[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
-            `int` or `List[int]`: The token id or list of token ids.
+            `int` or `list[int]`: The token id or list of token ids.
         """
 
         if isinstance(tokens, str):
@@ -632,9 +704,8 @@ class MistralCommonBackend(PushToHubMixin):
         """
         Converts a string into a sequence of tokens ids, using the tokenizer.
         """
-        tokens_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(
-            text, bos=add_special_tokens, eos=add_special_tokens
-        )
+        add_eos = add_special_tokens and self._mode == ValidationMode.finetuning
+        tokens_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=add_special_tokens, eos=add_eos)
         return tokens_ids
 
     def tokenize(self, text: TextInput, **kwargs) -> list[str]:
@@ -651,7 +722,7 @@ class MistralCommonBackend(PushToHubMixin):
                 Will raise an error if used.
 
         Returns:
-            `List[str]`: The list of tokens.
+            `list[str]`: The list of tokens.
         """
         if kwargs:
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonBackend.tokenize`.")
@@ -751,7 +822,7 @@ class MistralCommonBackend(PushToHubMixin):
 
         return BatchEncoding(batch_outputs)
 
-    def _all_special_ids(self) -> set[int]:
+    def _get_all_special_ids(self) -> set[int]:
         if self._tokenizer_type == MistralTokenizerType.tekken:
             return {t["rank"] for t in self.tokenizer.instruct_tokenizer.tokenizer._all_special_tokens}
         elif self._tokenizer_type == MistralTokenizerType.spm:
@@ -767,9 +838,9 @@ class MistralCommonBackend(PushToHubMixin):
         special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of ids of the sequence.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Not supported by `MistralCommonBackend`. Kept to match the interface of `PreTrainedTokenizerBase`.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
@@ -786,9 +857,7 @@ class MistralCommonBackend(PushToHubMixin):
                 "`already_has_special_tokens` is not supported by `MistralCommonBackend` and should be `False`."
             )
 
-        all_special_ids = self._all_special_ids()  # cache the ids
-
-        special_tokens_mask = [1 if token in all_special_ids else 0 for token in token_ids_0]
+        special_tokens_mask = [1 if token in self._all_special_tokens_ids else 0 for token in token_ids_0]
         return special_tokens_mask
 
     def _batch_prepare_for_model(
@@ -882,7 +951,7 @@ class MistralCommonBackend(PushToHubMixin):
         manages a moving window (with user defined stride) for overflowing tokens.
 
         Args:
-            ids (`List[int]`):
+            ids (`list[int]`):
                 Tokenized input ids of the first sequence.
             pair_ids (`None`, *optional*):
                 Not supported by `MistralCommonBackend`. Kept to match the interface of `PreTrainedTokenizerBase`.
@@ -1081,7 +1150,7 @@ class MistralCommonBackend(PushToHubMixin):
 
         Args:
             encoded_inputs:
-                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -1171,13 +1240,13 @@ class MistralCommonBackend(PushToHubMixin):
         </Tip>
 
         Args:
-            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
-                tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
-                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, list[int]]`, `Dict[str, list[list[int]]` or `List[Dict[str, list[int]]]`):
+                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, list[int]]`) or a batch of
+                tokenized inputs (list of [`BatchEncoding`], *Dict[str, list[list[int]]]* or *List[Dict[str,
+                list[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors), see
+                Instead of `list[int]` you can have tensors (numpy arrays, PyTorch tensors), see
                 the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -1316,7 +1385,7 @@ class MistralCommonBackend(PushToHubMixin):
         Truncates a sequence pair in-place following the strategy.
 
         Args:
-            ids (`List[int]`):
+            ids (`list[int]`):
                 Tokenized input ids. Can be obtained from a string by chaining the `tokenize` and
                 `convert_tokens_to_ids` methods.
             pair_ids (`None`, *optional*):
@@ -1335,7 +1404,7 @@ class MistralCommonBackend(PushToHubMixin):
                 sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            `Tuple[List[int], None, List[int]]`: The truncated `ids` and the list of
+            `Tuple[list[int], None, list[int]]`: The truncated `ids` and the list of
             overflowing tokens. `None` is returned to match Transformers signature.
         """
         if kwargs:
@@ -1442,7 +1511,7 @@ class MistralCommonBackend(PushToHubMixin):
                 Will raise an error if used.
 
         Returns:
-            `Union[str, List[int], List[str], List[List[int]], BatchEncoding]`: A list of token ids representing the tokenized chat so far, including control
+            `Union[str, list[int], list[str], list[list[int]], BatchEncoding]`: A list of token ids representing the tokenized chat so far, including control
             tokens. This output is ready to pass to the model, either directly or via methods like `generate()`.
         """
         if kwargs:
@@ -1617,7 +1686,7 @@ class MistralCommonBackend(PushToHubMixin):
         sequences.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
+            text (`str`, `list[str]`, `list[list[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of int
                 (encoded strings).
             text_pair (`None`, *optional*):
@@ -1657,8 +1726,8 @@ class MistralCommonBackend(PushToHubMixin):
 
         if not _is_valid_text_input(text):
             raise ValueError(
-                "text input must be of type `str` (single example), `List[str]` (batch or single encoded example) "
-                "or `List[List[int]]` (batch of encoded examples)."
+                "text input must be of type `str` (single example), `list[str]` (batch or single encoded example) "
+                "or `list[list[int]]` (batch of encoded examples)."
             )
 
         is_batched = isinstance(text, (list, tuple)) and isinstance(text[0], (str, list, tuple))
@@ -1712,7 +1781,7 @@ class MistralCommonBackend(PushToHubMixin):
         cls,
         pretrained_model_name_or_path: str | os.PathLike,
         *init_inputs,
-        mode: ValidationMode = ValidationMode.test,
+        mode: Union[str, ValidationMode] = ValidationMode.test,
         cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
@@ -1737,8 +1806,11 @@ class MistralCommonBackend(PushToHubMixin):
                 - A path to a *directory* containing the tokenizer config, for instance saved
                   using the [`MistralCommonBackend.tokenization_mistral_common.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-            mode (`ValidationMode`, *optional*, defaults to `ValidationMode.test`):
-                Validation mode for the `MistralTokenizer` tokenizer.
+            mode (`Union[str, ValidationMode]`, *optional*, defaults to `ValidationMode.test`):
+                Validation mode for the `MistralTokenizer` tokenizer. Possible values are:
+                - `"finetuning"` or `ValidationMode.finetuning`: The finetuning mode.
+                - `"test"` or `ValidationMode.test`: The test mode.
+                It changes how the tokenizer validates the input and prepare the request to the model.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the
                 standard cache should not be used.
@@ -1783,6 +1855,8 @@ class MistralCommonBackend(PushToHubMixin):
             {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto"}
         ):
             raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonBackend.from_pretrained`.")
+
+        mode = cls._get_validation_mode(mode)
 
         if not os.path.isdir(pretrained_model_name_or_path):
             tokenizer_path = download_tokenizer_from_hf_hub(
@@ -1894,3 +1968,21 @@ class MistralCommonBackend(PushToHubMixin):
             )
 
         return (str(save_directory / self._tokenizer_path.name),)
+
+    @staticmethod
+    def _get_validation_mode(mode: Union[str, ValidationMode]) -> ValidationMode:
+        """Get the validation mode from a string or a ValidationMode."""
+        _invalid_mode_msg = (
+            f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."
+        )
+        if isinstance(mode, str):
+            try:
+                mode = ValidationMode[mode]
+            except KeyError:
+                raise ValueError(_invalid_mode_msg)
+        elif not isinstance(mode, (str, ValidationMode)):
+            raise ValueError(_invalid_mode_msg)
+
+        if mode not in [ValidationMode.finetuning, ValidationMode.test]:
+            raise ValueError(_invalid_mode_msg)
+        return mode
