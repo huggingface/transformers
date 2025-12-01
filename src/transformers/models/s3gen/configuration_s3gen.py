@@ -153,7 +153,7 @@ class S3GenConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`S3GenModel`]. It is used to instantiate a S3Gen
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the S3Gen
-    [ResembleAI/chatterbox](https://huggingface.co/ResembleAI/chatterbox) architecture.
+    [ResembleAI/chatterbox-hf](https://huggingface.co/ResembleAI/chatterbox-hf) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -315,4 +315,4 @@ class S3GenConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["S3GenConfig", "HiFTNetConfig"]
+__all__ = ["S3GenConfig"]

@@ -206,7 +206,7 @@ class ChatterboxConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ChatterboxModel`]. It is used to instantiate a
     Chatterbox model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [ResembleAI/chatterbox](https://huggingface.co/ResembleAI/chatterbox-hf).
+    [ResembleAI/chatterbox-hf](https://huggingface.co/ResembleAI/chatterbox-hf).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -298,4 +298,4 @@ class ChatterboxConfig(PretrainedConfig):
         return output
 
 
-__all__ = ["ChatterboxConfig", "T3Config"]
+__all__ = ["ChatterboxConfig"]

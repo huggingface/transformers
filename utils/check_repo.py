@@ -103,8 +103,8 @@ PRIVATE_MODELS = [
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "Ovis2VisionModel",
-    "T3Model",  # Internal building block of Chatterbox model.
-    "T3PreTrainedModel",  # Internal building block of Chatterbox model.
+    "_T3Model",  # Internal building block of Chatterbox model.
+    "_T3PreTrainedModel",  # Internal building block of Chatterbox model.
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
