@@ -655,7 +655,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
-    config.rope_parameters = config.rope_parameters or {}
+    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
     config.rope_parameters.update(rope_params)
 
     if any(name in config.__class__.__name__.lower() for name in ["gemma3", "modernbert"]):
