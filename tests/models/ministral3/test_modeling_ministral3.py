@@ -15,7 +15,6 @@
 """Testing suite for the PyTorch Ministral3 model."""
 
 import gc
-import logging
 import unittest
 
 import pytest
@@ -24,7 +23,6 @@ from transformers import AutoTokenizer, Mistral3ForConditionalGeneration, is_tor
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -37,7 +35,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Ministral3ForCausalLM,
         Ministral3Model,
     )
 
@@ -52,6 +49,8 @@ class Ministral3ModelTester(CausalLMModelTester):
 
 @require_torch
 class Ministral3ModelTest(CausalLMModelTest, unittest.TestCase):
+    _is_stateful = True
+    model_split_percents = [0.5, 0.6]
     model_tester_class = Ministral3ModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146

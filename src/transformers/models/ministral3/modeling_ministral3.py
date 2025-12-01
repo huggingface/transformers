@@ -15,10 +15,15 @@ from transformers.utils.generic import check_model_inputs
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GenericForQuestionAnswering, GenericForTokenClassification, GradientCheckpointingLayer
+from ...modeling_layers import (
+    GenericForQuestionAnswering,
+    GenericForSequenceClassification,
+    GenericForTokenClassification,
+    GradientCheckpointingLayer,
+)
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -34,6 +39,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -120,6 +126,7 @@ class Ministral3Attention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -353,7 +360,7 @@ class Ministral3Model(Ministral3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -495,23 +502,8 @@ class Ministral3ForTokenClassification(GenericForTokenClassification, Ministral3
     pass
 
 
-@auto_docstring
-class Ministral3ForSequenceClassification(PreTrainedModel):
-    config: Ministral3Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Ministral3DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Ministral3DecoderLayer,
-        "attentions": Ministral3Attention,
-    }
+class Ministral3ForSequenceClassification(GenericForSequenceClassification, Ministral3PreTrainedModel):
+    pass
 
 
 class Ministral3ForQuestionAnswering(GenericForQuestionAnswering, Ministral3PreTrainedModel):
