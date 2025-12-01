@@ -201,7 +201,7 @@ class ColModernVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ColModernVBertModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "ModernVBERT/colmodernvbert-merged"
+    model_name: ClassVar[str] = "ModernVBERT/colmodernvbert-hf"
 
     def setUp(self):
         self.processor = ColModernVBertProcessor.from_pretrained(self.model_name)
@@ -211,6 +211,7 @@ class ColModernVBertModelIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     @slow
+    @unittest.skip(reason="Model not available on HF for the moment.")
     def test_model_integration_test(self):
         """
         Test if the model is able to retrieve the correct pages for a small and easy dataset.
