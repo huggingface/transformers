@@ -2165,7 +2165,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         else:
             audio_feature_lengths = None
 
-        if position_ids is None:
+        if attention_mask is not None and position_ids is None:
             past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
             if past_key_values_length == 0 or self.rope_deltas is None:
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
