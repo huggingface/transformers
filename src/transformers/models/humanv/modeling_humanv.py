@@ -476,18 +476,45 @@ class HumanVModel(HumanVPreTrainedModel):
 
 @auto_docstring
 class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _tied_weights_keys = []  # ما خودمون مدیریت می‌کنیم، نه transformers
+    supports_gradient_checkpointing = True
 
     def __init__(self, config: HumanVConfig):
         super().__init__(config)
-        self.model = HumanVModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.post_init()
+        self.config = config
 
-    @can_return_tuple
+        # مدل اصلی (بدون lm_head)
+        self.model = HumanVModel(config)
+
+        # تنظیم lm_head بر اساس tie_word_embeddings
+        if config.tie_word_embeddings:
+            self.lm_head = None  # از embed_tokens.weight استفاده می‌کنیم
+            self._tied_weights_keys = ["model.embed_tokens.weight"]
+        else:
+            self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.post_init()  # مهم: این باعث میشه weight tying درست اعمال بشه
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head if not self.config.tie_word_embeddings else self.model.embed_tokens
+
+    def set_output_embeddings(self, new_embeddings):
+        if self.config.tie_word_embeddings:
+            raise ValueError("Cannot set output embeddings when tie_word_embeddings=True")
+        self.lm_head = new_embeddings
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            if self.lm_head is not None:
+                self.lm_head = None
+            # هیچ نیازی به کار اضافه نیست — چون از embed_tokens.weight استفاده می‌کنیم
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -498,69 +525,16 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        rewards: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple, CausalLMOutputWithPast]:
 
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
-                `[0, config.n_positions - 1]`.
-
-                [What are position IDs?](../glossary#position-ids)
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, head_dim)`.
-
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-                this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-                the complete sequence length.
-            logits_to_keep (`Union[int, torch.Tensor]`, *optional*, defaults to 0):
-                Number of logits to keep from the end of the sequence.
-            rewards (`torch.FloatTensor` of shape `(batch_size, sequence_length - 1)`, *optional*):
-                Rewards for RLHF, used to weight the cross-entropy loss when `rlhf` is enabled in config.
-            **kwargs (`dict`, *optional*):
-                Additional keyword arguments passed along to the model.
-
-        Returns:
-            CausalLMOutputWithPast: An object containing the loss, logits, past_key_values, hidden_states, and attentions.
-        """
-        outputs: BaseModelOutputWithPast = self.model(
+        # مدل اصلی رو فراخوانی کن
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -568,23 +542,33 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             **kwargs,
         )
+
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        # محاسبه logits با توجه به tie یا نه
+        if self.config.tie_word_embeddings:
+            # سریع‌ترین و درست‌ترین روش: matrix multiplication مستقیم
+            logits = torch.matmul(hidden_states, self.model.embed_tokens.weight.t())
+        else:
+            logits = self.lm_head(hidden_states)
+
         loss = None
         if labels is not None:
-            if self.config.rlhf and rewards is not None:
-                # NEW: RLHF-compatible loss (simple reward-weighted CE; for full PPO, use external lib like trl)
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-                ce_loss = nn.CrossEntropyLoss(reduction='none')(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-                loss = (ce_loss * rewards.view(-1)).mean()  # Weight by rewards
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-                loss = nn.CrossEntropyLoss()(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            # استاندارد shift برای Causal LM
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
@@ -592,6 +576,30 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # برای generate سریع‌تر (اختیاری ولی پیشنهاد میشه)
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
+        if past_key_values is not None:
+            cache_position = kwargs.get("cache_position")
+            if cache_position is None:
+                cache_position = torch.arange(past_key_values.get_seq_length(), input_ids.shape[-1] + past_key_values.get_seq_length(), device=input_ids.device)
+            input_ids = input_ids[:, -1:]
+
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 0)
+            if past_key_values is not None:
+                position_ids = position_ids[:, -input_ids.shape[1]:]
+
+        return {
+            "input_ids": input_ids,
+            "position_ids": position_ids,
+            "past_key_values": past_key_values,
+            "use_cache": kwargs.get("use_cache"),
+            "attention_mask": attention_mask,
+            "cache_position": kwargs.get("cache_position"),
+        }
 
 
 class HumanVForSequenceClassification(GenericForSequenceClassification, HumanVPreTrainedModel):
