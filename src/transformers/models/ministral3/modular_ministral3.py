@@ -106,7 +106,7 @@ class Ministral3ForTokenClassification(GenericForTokenClassification, Ministral3
     pass
 
 
-class Ministral3ForSequenceClassification(GenericForSequenceClassification, MistralPreTrainedModel):
+class Ministral3ForSequenceClassification(GenericForSequenceClassification, Ministral3PreTrainedModel):
     pass
 
 

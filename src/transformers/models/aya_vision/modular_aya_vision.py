@@ -162,7 +162,7 @@ class AyaVisionModel(LlavaModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

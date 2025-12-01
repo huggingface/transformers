@@ -145,7 +145,7 @@ Start by loading a small sample of the [food101](https://hf.co/datasets/food101)
 ```py
 from datasets import load_dataset
 
-dataset = load_dataset("food101", split="train[:100]")
+dataset = load_dataset("ethz/food101", split="train[:100]")
 ```
 
 From the [transforms](https://pytorch.org/vision/stable/transforms.html) module, use the [Compose](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) API to chain together [RandomResizedCrop](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) and [ColorJitter](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html). These transforms randomly crop and resize an image, and randomly adjusts an images colors.
