@@ -16,6 +16,12 @@ limitations under the License.
 
 # Version 5 Migration guide
 
+> [!NOTE] 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
+> movement. We have a section dedicated to what is planned for future release candidates, yet is known not to work in 
+> the RC0. Look for "Disclaimers for the RC0".
+> 
+> We'll be eagerly awaiting your feedback in our GitHub issues!
+
 ## Library-wide changes with widespread impact
 
 ### Removal of TensorFlow and Jax
@@ -326,6 +332,13 @@ _We aim for this to be fixed and released in a following release candidate in th
 
 We are streamlining the MoE support with vLLM; while this is being implemented, tensor parallelism and expert parallelism aren't working as expected.
 This is known and actively being worked on.
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
+
+### Remote code incompatibility
+
+A lot of paths were removed and reworked; paths like `transformers.tokenization_utils` and `transformers.tokenization_utils_fast`, which no longer exist.
+We'll be working on backwards compatibility for these before version 5 is fully released.
 
 _We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
 
