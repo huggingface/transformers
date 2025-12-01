@@ -275,6 +275,76 @@ For legacy implementations, the original BERT Python tokenizer code (including `
 - https://github.com/huggingface/transformers/pull/41626
 
 
+## Disclaimers for the RC0
+
+### PEFT + MoE:
+Because we are switching from the naive MOE (`nn.ModuleList` for experts) we currently have an issue with MoEs that have adapters. For more details see https://github.com/huggingface/transformers/issues/42491#issuecomment-3591485649. 
+
+### Custom pretrained models:
+For anyone inheriting from a `transformers` `PreTrainedModel`, the weights are automatically initialized with the common scheme: 
+```python
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """
+        Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
+        initialization scheme, it should be overridden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
+        """
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range or 0.02
+        elif hasattr(self.config, "init_std"):
+            std = self.config.init_std
+        elif hasattr(self.config, "initializer_factor"):
+            std = self.config.initializer_factor
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            if getattr(module, "weight", None) is not None:
+                init.normal_(module.weight, mean=0.0, std=std)
+            if getattr(module, "bias", None) is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            if getattr(module, "weight", None) is not None:
+                init.normal_(module.weight, mean=0.0, std=std)
+                # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+                if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                    init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
+        elif (
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                init.ones_(module.weight)
+            if hasattr(module, "bias") and module.bias is not None:
+                init.zeros_(module.bias)
+```
+
+If you want to avoid that, for now you should just do:
+
+```
+class CustomModel(Qwen3VLForConditionalGeneration):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.action_head = nn.Linear(1024, 7)
+        self.positional_embedding = nn.Parameter(torch.randn(16, 1152))
+        self.post_init()
+    
+    def _init_weights(self, module):
+        pass 
+
+```
+There is a tracker for that here: https://github.com/huggingface/transformers/issues/42418.
+
 ## Library-wide changes with lesser impact
 
 ### `use_auth_token`
