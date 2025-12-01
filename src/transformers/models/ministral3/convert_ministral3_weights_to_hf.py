@@ -244,7 +244,7 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
 
         # let's swap nn.Linear to FP8 Linear before loading
         hf_quantizer = AutoHfQuantizer.from_config(model.config.quantization_config)
-        model = hf_quantizer.preprocess(model)
+        hf_quantizer.preprocess_model(model, model.config)
 
     model.load_state_dict(full_state_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
