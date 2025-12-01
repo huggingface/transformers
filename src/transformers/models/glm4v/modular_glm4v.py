@@ -847,7 +847,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         del self.has_sliding_layers
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
