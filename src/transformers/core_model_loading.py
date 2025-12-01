@@ -456,7 +456,9 @@ class WeightConverter(WeightTransform):
                     config=config,
                     missing_keys=missing_keys,
                 )
-
+        # If operations already handled everything (e.g., set module in-place), return early
+        if not collected_tensors:
+            return collected_tensors, misc
         # Tensors are returned from ops with the target patterns, we need to expand them to full name.
         # This means we need to grab the prefix and suffix to add to every target key
         full_name = layer_name

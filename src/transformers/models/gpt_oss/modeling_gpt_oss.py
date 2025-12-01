@@ -136,13 +136,13 @@ class GptOssExperts(nn.Module):
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
             next_states = next_states.view(self.num_experts, batch_size, -1, self.hidden_size)
-            
+
             full_routing_weights = torch.zeros(
                 num_tokens, self.num_experts, device=routing_weights.device, dtype=routing_weights.dtype
             )
             full_routing_weights.scatter_(1, router_indices, routing_weights)
             full_routing_weights = full_routing_weights.transpose(0, 1).view(self.num_experts, batch_size, -1, 1)
-            
+
             next_states = next_states * full_routing_weights
             next_states = next_states.sum(dim=0)
         return next_states
