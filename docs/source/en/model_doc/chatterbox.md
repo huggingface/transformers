@@ -266,6 +266,10 @@ If you use Chatterbox in your research, please cite:
     - english_only
     - multilingual
 
+## T3Config
+
+[[autodoc]] T3Config
+
 ## ChatterboxModel
 
 [[autodoc]] ChatterboxModel

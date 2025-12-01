@@ -35,7 +35,7 @@ from ...modeling_utils import PreTrainedModel
 from ...models.s3gen.modeling_s3gen import S3GenModel
 from ...models.s3tokenizer.modeling_s3tokenizer import drop_invalid_tokens
 from ...utils import auto_docstring
-from ..llama.modeling_llama import LlamaConfig, LlamaModel
+from ..llama.modeling_llama import LlamaConfig, LlamaModel, LlamaPreTrainedModel
 from .configuration_chatterbox import ChatterboxConfig
 
 
@@ -552,7 +552,7 @@ class AlignmentStreamAnalyzer:
 # ============================================================================
 
 
-class _T3PreTrainedModel(PreTrainedModel):
+class T3PreTrainedModel(LlamaPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -565,7 +565,7 @@ class _T3PreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class _T3Model(_T3PreTrainedModel, GenerationMixin):
+class T3Model(T3PreTrainedModel, LlamaModel, GenerationMixin):
     """
     T3 (Token-To-Token) TTS model using LLaMA as backbone.
 
@@ -573,32 +573,32 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
     """
 
     def __init__(self, config):
-        super().__init__(config)
-        self.config = config
-
-        # Create LLaMA backbone
+        # Create LLaMA backbone config and initialize parent LlamaModel
         llama_config = LlamaConfig(**config.llama_config_dict)
-        self.tfmr = LlamaModel(llama_config)
+        super().__init__(llama_config)
+
+        # Store the full T3 config for T3-specific settings
+        self.t3_config = config
         self.dim = llama_config.hidden_size
 
         # Conditioning encoder
-        self.cond_enc = T3CondEnc(config)
+        self.cond_enc = T3CondEnc(self.t3_config)
 
         # Text and speech embeddings
-        self.text_emb = nn.Embedding(config.text_tokens_dict_size, self.dim)
-        self.speech_emb = nn.Embedding(config.speech_tokens_dict_size, self.dim)
+        self.text_emb = nn.Embedding(self.t3_config.text_tokens_dict_size, self.dim)
+        self.speech_emb = nn.Embedding(self.t3_config.speech_tokens_dict_size, self.dim)
 
         # Positional embeddings
-        if config.input_pos_emb == "learned":
-            max_text_seq_len = config.max_text_tokens + 2
+        if self.t3_config.input_pos_emb == "learned":
+            max_text_seq_len = self.t3_config.max_text_tokens + 2
             self.text_pos_emb = LearnedPositionEmbeddings(max_text_seq_len, self.dim)
 
-            max_mel_seq_len = config.max_speech_tokens + 2 + 2
+            max_mel_seq_len = self.t3_config.max_speech_tokens + 2 + 2
             self.speech_pos_emb = LearnedPositionEmbeddings(max_mel_seq_len, self.dim)
 
         # Output heads
-        self.text_head = nn.Linear(self.dim, config.text_tokens_dict_size, bias=False)
-        self.speech_head = nn.Linear(self.dim, config.speech_tokens_dict_size, bias=False)
+        self.text_head = nn.Linear(self.dim, self.t3_config.text_tokens_dict_size, bias=False)
+        self.speech_head = nn.Linear(self.dim, self.t3_config.speech_tokens_dict_size, bias=False)
 
         # Voice encoder for speaker conditioning
         self.voice_encoder = VoiceEncoder()
@@ -638,7 +638,7 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
             text_emb[1].zero_()  # CFG uncond
 
         speech_emb = self.speech_emb(speech_tokens)
-        if self.config.input_pos_emb == "learned":
+        if self.t3_config.input_pos_emb == "learned":
             text_emb = text_emb + self.text_pos_emb(text_tokens)
             speech_emb = speech_emb + self.speech_pos_emb(speech_tokens)
 
@@ -672,7 +672,7 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
         Supports both training mode (with t3_cond, text_tokens, speech_tokens) and
         generation mode (with inputs_embeds from prepare_inputs_for_generation).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.t3_config.use_return_dict
 
         # Training/evaluation mode
         if t3_cond is not None and text_tokens is not None and speech_tokens is not None:
@@ -680,7 +680,7 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
                 t3_cond=t3_cond, text_tokens=text_tokens, speech_tokens=speech_tokens
             )
 
-            tfmr_out = self.tfmr(
+            tfmr_out = super().forward(
                 inputs_embeds=embeds,
                 output_hidden_states=True,
                 return_dict=True,
@@ -722,7 +722,7 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
             output_hidden_states = output_hidden_states if output_hidden_states is not None else True
             use_cache = use_cache if use_cache is not None else True
 
-            tfmr_out = self.tfmr(
+            tfmr_out = super().forward(
                 inputs_embeds=inputs_embeds,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -778,8 +778,8 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
             "inputs_embeds": inputs_embeds,
             "past_key_values": past_key_values,
             "use_cache": use_cache if use_cache is not None else True,
-            "output_attentions": self.config.use_alignment_analyzer
-            if hasattr(self.config, "use_alignment_analyzer")
+            "output_attentions": self.t3_config.use_alignment_analyzer
+            if hasattr(self.t3_config, "use_alignment_analyzer")
             else False,
             "output_hidden_states": True,
         }
@@ -847,7 +847,7 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
         text_tokens = torch.atleast_2d(text_tokens).to(dtype=torch.long, device=self.device)
 
         if initial_speech_tokens is None:
-            initial_speech_tokens = self.config.start_speech_token * torch.ones_like(text_tokens[:, :1])
+            initial_speech_tokens = self.t3_config.start_speech_token * torch.ones_like(text_tokens[:, :1])
 
         # Prepare conditioning embeddings (text + initial speech)
         embeds, len_cond = self.prepare_input_embeds(
@@ -855,24 +855,24 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
         )
 
         # Setup alignment analyzer if needed
-        if self.config.use_alignment_analyzer:
+        if self.t3_config.use_alignment_analyzer:
             alignment_analyzer = AlignmentStreamAnalyzer(
-                self.tfmr,
+                self,
                 text_tokens_slice=(len_cond, len_cond + text_tokens.size(-1)),
-                alignment_layer_idx=self.config.alignment_layer_idx,
-                eos_idx=self.config.stop_speech_token,
+                alignment_layer_idx=self.t3_config.alignment_layer_idx,
+                eos_idx=self.t3_config.stop_speech_token,
             )
         else:
             alignment_analyzer = None
 
-        max_steps = max_new_tokens or self.config.max_speech_tokens
+        max_steps = max_new_tokens or self.t3_config.max_speech_tokens
         device = embeds.device
         use_cfg = cfg_weight > 0.0 and embeds.size(0) > 1
 
         # If using CFG, we need manual generation loop (HF generate doesn't support CFG batching)
         if use_cfg:
             # Manual generation loop for CFG
-            bos_token = torch.tensor([[self.config.start_speech_token]], dtype=torch.long, device=device)
+            bos_token = torch.tensor([[self.t3_config.start_speech_token]], dtype=torch.long, device=device)
             bos_embed = self.speech_emb(bos_token)
             bos_embed = bos_embed + self.speech_pos_emb.get_fixed_embedding(0)
             bos_embed = torch.cat([bos_embed, bos_embed], dim=0)  # Duplicate for CFG
@@ -926,7 +926,7 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
                 predicted.append(next_token)
                 generated_ids = torch.cat([generated_ids, next_token], dim=1)
 
-                if stop_on_eos and next_token.view(-1) == self.config.stop_speech_token:
+                if stop_on_eos and next_token.view(-1) == self.t3_config.stop_speech_token:
                     logger.info(f"EOS token detected at step {i + 1}")
                     break
 
@@ -987,18 +987,18 @@ class _T3Model(_T3PreTrainedModel, GenerationMixin):
             logits_processors.append(TopPLogitsWarper(top_p=top_p))
 
             # Generate using HuggingFace's generate (batch size 1)
-            bos_token = torch.tensor([[self.config.start_speech_token]], dtype=torch.long, device=device)
+            bos_token = torch.tensor([[self.t3_config.start_speech_token]], dtype=torch.long, device=device)
 
             generated_ids = self.generate(
                 input_ids=bos_token,
                 max_new_tokens=max_steps,
                 do_sample=do_sample,
                 logits_processor=logits_processors,
-                bos_token_id=self.config.start_speech_token,
-                eos_token_id=self.config.stop_speech_token if stop_on_eos else None,
-                pad_token_id=self.config.stop_speech_token,
+                bos_token_id=self.t3_config.start_speech_token,
+                eos_token_id=self.t3_config.stop_speech_token if stop_on_eos else None,
+                pad_token_id=self.t3_config.stop_speech_token,
                 num_return_sequences=num_return_sequences,
-                output_attentions=self.config.use_alignment_analyzer,
+                output_attentions=self.t3_config.use_alignment_analyzer,
                 output_hidden_states=True,
                 return_dict_in_generate=False,
                 use_cache=True,
@@ -1058,7 +1058,7 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
 
         # Initialize sub-models
         logger.info("Initializing T3 model...")
-        self.t3 = _T3Model(config.t3_config)
+        self.t3 = T3Model(config.t3_config)
 
         logger.info("Initializing S3Gen model...")
         self.s3gen = S3GenModel(config.s3gen_config)
@@ -1269,7 +1269,6 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
             speech_tokens = speech_tokens[speech_tokens < 6561]
 
         # Step 3: Generate waveform with S3Gen using prepared reference dict
-        # Mirror original chatterbox: use s3gen.inference() which handles mel + vocoding
         wav, _ = self.s3gen.inference(
             speech_tokens=speech_tokens,
             ref_dict={k: (v.to(self.device) if torch.is_tensor(v) else v) for k, v in conds.gen.items()},

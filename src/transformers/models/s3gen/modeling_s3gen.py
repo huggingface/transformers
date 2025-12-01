@@ -25,7 +25,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio.compliance.kaldi as Kaldi
 from librosa.filters import mel as librosa_mel_fn
-
 from scipy.signal import get_window
 from torch import pow, sin
 from torch.distributions.uniform import Uniform

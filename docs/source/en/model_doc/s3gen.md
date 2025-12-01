@@ -153,6 +153,10 @@ config = S3GenConfig(
 
 [[autodoc]] S3GenConfig
 
+## HiFTNetConfig
+
+[[autodoc]] HiFTNetConfig
+
 ## S3GenModel
 
 [[autodoc]] S3GenModel
