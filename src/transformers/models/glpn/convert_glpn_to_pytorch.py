@@ -16,7 +16,6 @@
 
 import argparse
 from collections import OrderedDict
-from pathlib import Path
 
 import requests
 import torch
@@ -179,18 +178,8 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     # finally, push to hub if required
     if push_to_hub:
         logger.info("Pushing model and image processor to the hub...")
-        model.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        image_processor.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        image_processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

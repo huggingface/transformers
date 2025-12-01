@@ -443,16 +443,16 @@ class Mxfp4HfQuantizer(HfQuantizer):
             if self.quantization_config.dequantize:
                 return [
                     WeightConverter(
-                        source_keys=["_blocks", "_scales"],
-                        target_keys="",
+                        source_patterns=["_blocks", "_scales"],
+                        target_patterns="",
                         operations=[Mxfp4Dequantize(self)],
                     )
                 ]
             else:
                 return [
                     WeightConverter(
-                        source_keys=["_blocks", "_scales"],
-                        target_keys="",
+                        source_patterns=["_blocks", "_scales"],
+                        target_patterns="",
                         operations=[Mxfp4Deserialize(self)],
                     )
                 ]
