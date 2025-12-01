@@ -534,7 +534,8 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                 if "vocab" in fast_sig.parameters:
                     try:
                         vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
-                        files_loaded.append(spm_file)
+                        if spm_file not in files_loaded:
+                            files_loaded.append(spm_file)
                         kwargs["backend"] = "tokenizers"
                         kwargs["files_loaded"] = files_loaded
                         # If tokenizer needs both vocab and merges (BPE models)
@@ -549,6 +550,14 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                             )
                     except Exception:
                         pass
+                if TokenizersBackend is not None and issubclass(tokenizer_class, TokenizersBackend):
+                    # Provide the SentencePiece model directly when tokenizer.json is absent or extraction fails.
+                    if spm_file not in files_loaded:
+                        files_loaded.append(spm_file)
+                    kwargs["backend"] = "tokenizers"
+                    kwargs["files_loaded"] = files_loaded
+                    kwargs.setdefault("vocab_file", resolved_spm)
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             except ImportError as e:
                 if "sentencepiece" in str(e).lower() or "SentencePiece" in str(e):
                     raise ImportError(
@@ -1103,16 +1112,10 @@ class AutoTokenizer:
 
         model_type = config_class_to_model_type(type(config).__name__)
         if model_type is not None:
-            tokenizer_class = TOKENIZER_MAPPING[type(config)]
-
+            tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
                 return _try_load_tokenizer_with_fallbacks(
                     tokenizer_class, pretrained_model_name_or_path, inputs, kwargs
-                )
-            else:
-                raise ValueError(
-                    "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
-                    "in order to use this tokenizer."
                 )
 
         raise ValueError(

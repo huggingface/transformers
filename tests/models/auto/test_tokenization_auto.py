@@ -316,6 +316,12 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer, TokenizersBackend)
         self.assertTrue(tokenizer.is_fast)
 
+    @require_tokenizers
+    def test_auto_tokenizer_loads_sentencepiece_only_repo(self):
+        tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-mbart")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
+
     def test_auto_tokenizer_fast_no_slow(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
         # There is no fast CTRL so this always gives us a slow tokenizer.
