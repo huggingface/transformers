@@ -244,16 +244,6 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
         model = replace_with_fp8_linear(model, model.config.quantization_config.modules_to_not_convert, model.config.quantization_config)
 
     model.load_state_dict(full_state_dict, strict=True, assign=True)
-    # model.to("cuda")
-
-    # tokenzier = AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512")
-    # with torch.no_grad():
-    #     input_ids = tokenzier.encode("How many people live in Paris?", return_tensors="pt").to("cuda")
-
-    #     import ipdb; ipdb.set_trace()
-    #     out = model.generate(input_ids, max_new_tokens=20)
-
-    # assert False
     model.save_pretrained(output_dir)
     return config
 
