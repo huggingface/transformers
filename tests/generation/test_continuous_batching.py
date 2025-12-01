@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_kernels,
     require_read_token,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )

@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     require_pyctcdecode,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torchaudio,
     require_torchcodec,
     run_test_in_subprocess,

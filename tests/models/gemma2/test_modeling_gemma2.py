@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
-    require_torch_large_gpu,
     run_test_using_subprocess,
     slow,
     torch_device,

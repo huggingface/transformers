@@ -41,7 +41,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,

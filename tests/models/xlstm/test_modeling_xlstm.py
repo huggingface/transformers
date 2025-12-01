@@ -18,7 +18,13 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, is_torch_available, xLSTMConfig
-from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_read_token,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
