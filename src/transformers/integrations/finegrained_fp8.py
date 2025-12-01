@@ -372,6 +372,7 @@ class FP8Linear(nn.Linear):
                     qinput = (input / scale).to(torch.float8_e4m3fn)
                 else:
                     raise NotImplementedError("Not supported")
+                # TODO: fix this later to use the triton kernel
                 if self.activation_scheme == "static":
                     output = F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), None) * scale_inv * scale
                     output = output.to(input.dtype)
