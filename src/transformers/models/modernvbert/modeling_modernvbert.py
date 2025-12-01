@@ -4,116 +4,38 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+import math
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
+from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndCrossAttentions, MaskedLMOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    MaskedLMOutput,
+    MultipleChoiceModelOutput,
+    QuestionAnsweringModelOutput,
+    SequenceClassifierOutput,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
-from ..modernbert import ModernBertModel
-from ..modernbert.modeling_modernbert import ModernBertPredictionHead
+from ..modernbert import ModernBertConfig, ModernBertModel
 from ..siglip import SiglipVisionModel
 from .configuration_modernvbert import ModernVBertConfig
-
-
-class DecoupledEmbedding(nn.Embedding):
-    # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/sparse.html#Embedding
-    """
-    Implements a decoupling of parameters to allow freezing (or not) a subset of the embeddings.
-    In practise, the regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `num_additional_embeddings` > 0, then it will create `num_additional_embeddings` additional parameters that are always trained.
-    If `num_additional_embeddings=0`, then the module defaults back to the regular behavior of `nn.Embedding`.
-    """
-
-    def __init__(
-        self,
-        num_embeddings,
-        num_additional_embeddings,
-        embedding_dim,
-        partially_freeze=False,
-        device=None,
-        dtype=None,
-        padding_idx=None,
-        **kwargs,
-    ) -> None:
-        """
-        num_additional_embeddings: int. Number of additional embeddings. Only useful when you `partially_freeze=True`.
-        partially_freeze: bool. If True, the regular `weight` will be frozen. `additional_weight` is never frozen.
-
-        Note: there are a lot of other parameters to initialize a standard `nn.Embedding` such as `padding_idx`, `max_norm` or `norm_type`. We are not supporting these.
-        """
-        if padding_idx is not None and padding_idx > num_embeddings:
-            raise ValueError(f"padding_idx must be within num_embeddings. Got {padding_idx} and {num_embeddings}")
-
-        super().__init__(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            device=device,
-            dtype=dtype,
-            padding_idx=padding_idx,
-            **kwargs,
-        )
-        self.num_embeddings = num_embeddings
-        self.num_additional_embeddings = num_additional_embeddings
-        self.partially_freeze = partially_freeze
-
-        if partially_freeze:
-            self.weight.requires_grad_(False)
-
-        if self.num_additional_embeddings > 0:
-            self.additional_embedding = nn.Embedding(
-                num_embeddings=num_additional_embeddings,
-                embedding_dim=embedding_dim,
-                device=device,
-                dtype=dtype,
-            )
-
-    def forward(self, input_ids):
-        """
-        we have 2 embeddings, with different indices - one pretrained self.weight and another
-        self.additional_embedding.weight that is being trained.
-
-        in order to make a lookup of the input ids, we:
-        1. find out the indices of the entries belonging to the 2nd embedding
-        2. extract those values while subtracting the size of the first embedding (num_embeddings),
-           since the 2nd embedding starts from 0 and not num_embeddings
-        3. perform the 2nd embedding lookup
-        4. now we handle the 1st embedding, we overwrite indices belonging to the 2nd embedding with a padding index
-        5. perform the 1st embedding lookup
-        6. now we overwrite the values in the 1st embedding lookup with the values of the 2nd embedding lookup
-
-        note: for the 1st embedding lookup we could have looked up only the low indices and not do
-        the padding, but then we have to create a new tensor and populate it with 2 tensors that are
-        spread out across various indices - i.e. not a simple concat - I haven't benchmarked the
-        complex case if it's any faster, given that seqlens are usually relatively short it's
-        probably not faster or if faster not by much - but might be a good idea to measure.
-
-        """
-        if self.num_additional_embeddings == 0:
-            return super().forward(input_ids)
-
-        input_ids = input_ids.clone()
-        additional_vocab_indices = torch.where(input_ids >= self.num_embeddings)
-        input_ids_additional_vocab = input_ids[additional_vocab_indices]
-        additional_embeddings = self.additional_embedding(input_ids_additional_vocab - self.num_embeddings)
-
-        # for successful lookup replace input_ids with 0, the results of these will be discarded anyway
-        input_ids[additional_vocab_indices] = 0
-        full_vector = F.embedding(input_ids, self.weight)
-        full_vector[additional_vocab_indices] = additional_embeddings  # overwrite the records with high indices
-        return full_vector
 
 
 @dataclass
 class ModernVBertBaseModelOutput(BaseModelOutput):
     """
-    Base class for ModernVBERT model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    Base class for ModernVBERT model's outputs.
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
@@ -143,7 +65,7 @@ class ModernVBertBaseModelOutput(BaseModelOutput):
 @dataclass
 class ModernVBertMaskedLMOutput(MaskedLMOutput):
     """
-    Base class for ModernVBERT model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    Base class for ModernVBERT model's outputs with masked language modeling loss.
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
             Masked language modeling (MLM) loss.
@@ -216,6 +138,7 @@ class ModernVBertConnector(nn.Module):
         return self.modality_projection(image_hidden_states)
 
 
+@auto_docstring
 class ModernVBertPreTrainedModel(PreTrainedModel):
     config_class = ModernVBertConfig
     base_model_prefix = "model"
@@ -226,18 +149,63 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     input_modalities = ["image", "text"]
 
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", 0.02)
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+        std = self.config.initializer_range
+        cutoff_factor = self.config.initializer_cutoff_factor
+
+        stds = {
+            "in": self.config.initializer_range,
+            "out": self.config.initializer_range / math.sqrt(2.0 * self.config.num_hidden_layers),
+            "embedding": self.config.initializer_range,
+            "final_out": self.config.hidden_size**-0.5,
+        }
+
+        def init_weight(module: nn.Module, std: float):
+            init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-cutoff_factor * std,
+                b=cutoff_factor * std,
+            )
+
+            if isinstance(module, nn.Linear):
+                if module.bias is not None:
+                    init.zeros_(module.bias)
+
+        if isinstance(module, ModernVBertConnector):
+            init_weight(module.modality_projection.proj, stds["out"])
+        elif isinstance(module, ModernVBertPredictionHead):
+            init_weight(module.dense, stds["out"])
+        elif isinstance(module, ModernVBertForMaskedLM):
+            init_weight(module.lm_head, stds["out"])
+        elif isinstance(module, ModernVBertPredictionHead):
+            init_weight(module.dense, std)
+        elif isinstance(
+            module,
+            (
+                ModernVBertForSequenceClassification,
+                ModernVBertForMultipleChoice,
+                ModernVBertForTokenClassification,
+                ModernVBertForQuestionAnswering,
+            ),
+        ):
+            init_weight(module.classifier, stds["final_out"])
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            init_weight(module, std)
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                init.zeros_(module.bias)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    ModernVBertModel is a model that combines a vision encoder (SigLIP) and a text encoder (ModernBert).
+
+    ModernVBert is the base model of the visual retriver ColModernVBert, and was introduced in the following paper:
+    [*ModernVBERT: Towards Smaller Visual Document Retrievers*](https://arxiv.org/abs/2510.01149).
+    """
+)
 class ModernVBertModel(ModernVBertPreTrainedModel):
     def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
@@ -302,7 +270,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
                 The attention mask indicating padded regions in the image.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
+        # pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
         pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
         # Remove padding images - padding images are full 0.
@@ -389,7 +357,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """,
-        checkpoint="modernvbert/ModernVBert",
+        checkpoint="ModernVBERT/modernvbert",
     )
     def forward(
         self,
@@ -435,7 +403,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
-            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
+            image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
             inputs_embeds = self.inputs_merger(
                 input_ids=input_ids, inputs_embeds=inputs_embeds, image_hidden_states=image_hidden_states
             )
@@ -459,9 +427,22 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         )
 
 
+# copied from transformers.models.moderbert.modeling_modernbert
+class ModernVBertPredictionHead(nn.Module):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__()
+        self.config = config
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.classifier_bias)
+        self.act = ACT2FN[config.classifier_activation]
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.norm(self.act(self.dense(hidden_states)))
+
+
 @auto_docstring
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embeddings.tok_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -469,7 +450,7 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.model = ModernVBertModel(config)
-        self.projection_head = ModernBertPredictionHead(config.text_config)
+        self.projection_head = ModernVBertPredictionHead(config.text_config)
         self.lm_head = nn.Linear(config.hidden_size, self.vocab_size, bias=config.text_config.decoder_bias)
 
         # Initialize weights and apply final processing
@@ -480,10 +461,6 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    @torch.compile(dynamic=True)
-    def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
-        return self.lm_head(self.projection_head(output))
 
     @can_return_tuple
     @auto_docstring(
@@ -496,7 +473,7 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """,
-        checkpoint="modernvbert/ModernVBert",
+        checkpoint="ModernVBERT/modernvbert",
     )
     def forward(
         self,
@@ -545,7 +522,7 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
         )
         hidden_states = outputs[0]
 
-        logits = self.compiled_head(hidden_states)
+        logits = self.lm_head(self.projection_head(hidden_states))
 
         loss = None
         if labels is not None:
@@ -564,5 +541,523 @@ class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    def resize_token_embeddings(self, new_num_tokens=None, pad_to_multiple_of=None, mean_resizing=True):
+        embeds = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 
-__all__ = ["ModernVBertPreTrainedModel", "ModernVBertModel", "ModernVBertForMaskedLM"]
+        # if not tying embeddings, resize lm_head as well
+        if not self.config.tie_word_embeddings:
+            old_lm_head_weight = self.lm_head.weight.data
+            old_lm_head_bias = self.lm_head.bias.data
+            old_num_tokens, old_embedding_dim = old_lm_head_weight.shape
+
+            if new_num_tokens is None:
+                new_num_tokens = old_num_tokens
+
+            # Create new lm_head with the new size
+            new_lm_head = nn.Linear(self.lm_head.in_features, new_num_tokens, bias=self.lm_head.bias is not None)
+            new_lm_head.to(old_lm_head_weight.device)
+
+            # Initialize the new lm_head and copy over the weights from the old lm_head
+            self._init_weights(new_lm_head)
+            new_lm_head.weight.data[: min(old_num_tokens, new_num_tokens), :] = old_lm_head_weight[
+                : min(old_num_tokens, new_num_tokens), :
+            ]
+
+            if mean_resizing and new_num_tokens > old_num_tokens:
+                mean_vector = old_lm_head_weight.mean(dim=0, keepdim=True)
+                new_lm_head.weight.data[old_num_tokens:, :] = mean_vector.repeat(new_num_tokens - old_num_tokens, 1)
+
+            if old_lm_head_bias is not None:
+                # If lm_head has a bias, resize it as well
+                new_lm_head.bias.data[: min(old_num_tokens, new_num_tokens)] = old_lm_head_bias[
+                    : min(old_num_tokens, new_num_tokens)
+                ]
+
+                if mean_resizing and new_num_tokens > old_num_tokens:
+                    new_lm_head.bias.data[old_num_tokens:] = 0.0
+
+            self.set_output_embeddings(new_lm_head)
+
+        return embeds
+
+
+@auto_docstring(
+    custom_intro="""
+    The ModernVBert Model with a sequence classification head on top that performs pooling.
+    """
+)
+class ModernVBertForSequenceClassification(ModernVBertPreTrainedModel):
+    def __init__(self, config: ModernVBertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.config = config
+
+        self.model = ModernVBertModel(config)
+        self.head = ModernVBertPredictionHead(config.text_config)
+        self.drop = nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+        max_num_images is the maximum number of images among the batch_size samples in the batch.
+        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+        For efficiency, we only pass through the vision_model's forward the real images by
+        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
+        """,
+        checkpoint="ModernVBERT/modernvbert",
+    )
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
+        image_hidden_states: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[tuple, ModernVBertMaskedLMOutput]:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        batch_size (`int`, *optional*):
+            The batch size of the input. If not provided, it will be inferred from `input_ids` or `inputs_embeds`.
+        seq_len (`int`, *optional*):
+            The sequence length of the input. If not provided, it will be inferred from `input_ids` or `inputs_embeds`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+
+        if batch_size is None and seq_len is None:
+            if inputs_embeds is not None:
+                batch_size, seq_len = inputs_embeds.shape[:2]
+            else:
+                batch_size, seq_len = input_ids.shape[:2]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
+            image_hidden_states=image_hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            **kwargs,
+        )
+        last_hidden_state = outputs[0]
+
+        if self.config.classifier_pooling == "cls":
+            last_hidden_state = last_hidden_state[:, 0]
+        elif self.config.classifier_pooling == "mean":
+            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
+                dim=1, keepdim=True
+            )
+
+        pooled_output = self.head(last_hidden_state)
+        pooled_output = self.drop(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,)
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The ModernVBert Model with a token classification head on top, e.g. for Named Entity Recognition (NER) tasks.
+    """
+)
+class ModernVBertForTokenClassification(ModernVBertPreTrainedModel):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.model = ModernVBertModel(config)
+        self.head = ModernVBertPredictionHead(config.text_config)
+        self.drop = nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+        max_num_images is the maximum number of images among the batch_size samples in the batch.
+        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+        For efficiency, we only pass through the vision_model's forward the real images by
+        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
+        """,
+        checkpoint="ModernVBERT/modernvbert",
+    )
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
+        image_hidden_states: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[tuple, ModernVBertMaskedLMOutput]:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
+            image_hidden_states=image_hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            **kwargs,
+        )
+        last_hidden_state = outputs[0]
+
+        last_hidden_state = self.head(last_hidden_state)
+        last_hidden_state = self.drop(last_hidden_state)
+        logits = self.classifier(last_hidden_state)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@auto_docstring
+class ModernVBertForQuestionAnswering(ModernVBertPreTrainedModel):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.model = ModernVBertModel(config)
+        self.head = ModernVBertPredictionHead(config.text_config)
+        self.drop = nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+        max_num_images is the maximum number of images among the batch_size samples in the batch.
+        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+        For efficiency, we only pass through the vision_model's forward the real images by
+        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
+        """,
+        checkpoint="ModernVBERT/modernvbert",
+    )
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
+        image_hidden_states: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[torch.Tensor] = None,
+        end_positions: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[tuple, ModernVBertMaskedLMOutput]:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
+            image_hidden_states=image_hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            **kwargs,
+        )
+        last_hidden_state = outputs[0]
+
+        last_hidden_state = self.head(last_hidden_state)
+        last_hidden_state = self.drop(last_hidden_state)
+        logits = self.classifier(last_hidden_state)
+
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
+
+        loss = None
+        if start_positions is not None and end_positions is not None:
+            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return QuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The ModernVBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a softmax) e.g. for RocStories/SWAG tasks.
+    """
+)
+class ModernVBertForMultipleChoice(ModernVBertPreTrainedModel):
+    def __init__(self, config: ModernVBertConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.model = ModernVBertModel(config)
+        self.head = ModernVBertPredictionHead(config.text_config)
+        self.drop = nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
+        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
+        max_num_images is the maximum number of images among the batch_size samples in the batch.
+        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
+        For efficiency, we only pass through the vision_model's forward the real images by
+        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
+        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
+        """,
+        checkpoint="ModernVBERT/modernvbert",
+    )
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_attention_mask: Optional[torch.BoolTensor] = None,
+        image_hidden_states: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The hidden states of the image encoder after modality projection.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        pixel_values = (
+            pixel_values.view(
+                -1, pixel_values.size(-4), pixel_values.size(-3), pixel_values.size(-2), pixel_values.size(-1)
+            )
+            if pixel_values is not None
+            else None
+        )
+        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        pixel_attention_mask = (
+            pixel_attention_mask.view(-1, pixel_attention_mask.size(-2), pixel_attention_mask.size(-1))
+            if pixel_attention_mask is not None
+            else None
+        )
+        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+        image_hidden_states = (
+            image_hidden_states.view(
+                -1, image_hidden_states.size(-3), image_hidden_states.size(-2), image_hidden_states.size(-1)
+            )
+            if image_hidden_states is not None
+            else None
+        )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
+            image_hidden_states=image_hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            **kwargs,
+        )
+        last_hidden_state = outputs[0]  # shape (num_choices, seq_len, hidden_size)
+
+        # If classifier_pooling is "cls", isolate the <cls> token
+        if self.config.classifier_pooling == "cls":
+            indices_0 = torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device)
+            # for left or right padding, <cls> is the first non-pad token
+            if attention_mask is not None:
+                # make attention_mask long for argmax
+                attention_mask = attention_mask.long()
+                cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
+            # if no pad, <cls> is the first token
+            else:
+                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
+            # extract the <cls> token for the logits
+            last_hidden_state = last_hidden_state[indices_0, cls_mask]
+
+        # If classifier_pooling is "mean", pool the hidden states by averaging over the sequence length
+        elif self.config.classifier_pooling == "mean":
+            num_non_pad_tokens = attention_mask.sum(dim=1, keepdim=True)
+            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / num_non_pad_tokens
+
+        pooled_output = self.head(last_hidden_state)
+        pooled_output = self.drop(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        reshaped_logits = logits.view(-1, num_choices)
+
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "ModernVBertPreTrainedModel",
+    "ModernVBertModel",
+    "ModernVBertForMaskedLM",
+    "ModernVBertForSequenceClassification",
+    "ModernVBertForTokenClassification",
+    "ModernVBertForQuestionAnswering",
+    "ModernVBertForMultipleChoice",
+]

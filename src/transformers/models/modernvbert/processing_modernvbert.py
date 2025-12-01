@@ -11,6 +11,25 @@ DEFAULT_CHAT_TEMPLATE = "{% for message in messages %}{{message['role'] | capita
 
 
 class ModernVBertProcessor(Idefics3Processor):
+    r"""
+    Constructs a ModernVBert processor which wraps a LLama tokenizer and ModernVBert image processor into a single processor.
+
+    [`ModernVBertProcessor`] offers all the functionalities of [`Idefics3Processor`]. See
+    the docstring of [`~IdeficsProcessor.__call__`] for more information.
+
+    Args:
+        image_processor (`ModernVBertImageProcessor`):
+            An instance of [`ModernVBertImageProcessor`]. The image processor is a required input.
+        tokenizer (`PreTrainedTokenizerBase`, *optional*):
+            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
+        image_seq_len (`int`, *optional*, defaults to 169):
+            The length of the image sequence i.e. the number of <image> tokens per image in the input.
+            This parameter is used to build the string from the input prompt and image tokens and should match the
+            value the model used. It is computed as: image_seq_len = int(((image_size // patch_size) ** 2) / (scale_factor**2))
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+    """
+
     image_processor_class = "ModernVBertImageProcessor"
 
     def apply_chat_template(self, conversation, chat_template=None, **kwargs):

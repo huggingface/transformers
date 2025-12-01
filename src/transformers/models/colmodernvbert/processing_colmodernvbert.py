@@ -53,7 +53,6 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         image_processor,
         tokenizer=None,
         image_seq_len: int = 64,
-        chat_template=None,
         visual_prompt_prefix: Optional[str] = None,
         query_prefix: Optional[str] = None,
         **kwargs,
@@ -62,7 +61,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             image_processor=image_processor,
             tokenizer=tokenizer,
             image_seq_len=image_seq_len,
-            chat_template=chat_template,
+            chat_template=None,  # No chat template used for retrieval
             **kwargs,
         )
         self.visual_prompt_prefix = (

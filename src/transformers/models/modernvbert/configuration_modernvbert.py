@@ -4,11 +4,15 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 from ..modernbert import ModernBertConfig
 from ..siglip import SiglipVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class ModernVBertConfig(PretrainedConfig):
@@ -28,18 +32,12 @@ class ModernVBertConfig(PretrainedConfig):
             default vision backbone defined by `DEFAULT_VISION_MODEL_NAME` is used.
         image_token_id (`int`, optional, defaults to 128257):
             Token id reserved for image tokens inserted into the text stream.
-        vocab_size (`int`, optional, defaults to 128256):
-            Vocabulary size used by the text embeddings.
-        tie_word_embeddings (`bool`, optional, defaults to `False`):
-            Whether to tie input token embeddings and output token embeddings.
         pixel_shuffle_factor (`int`, optional, defaults to 4):
             Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
-        additional_vocab_size (`int`, optional, defaults to 0):
-            Number of extra tokens appended to the base vocabulary (useful for adapters / special tokens).
-        pad_token_id (`int`, optional):
-            Padding token id.
         initializer_range (`float`, optional, defaults to 0.02):
-            Stddev used for weight initialization.
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_cutoff_factor (`float`, optional, defaults to 2.0):
+            The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
     ```python
@@ -67,9 +65,22 @@ class ModernVBertConfig(PretrainedConfig):
         vision_config=None,
         image_token_id: Optional[int] = 50407,
         pixel_shuffle_factor: Optional[int] = 4,
+        vocab_size: Optional[int] = None,
+        hidden_size: Optional[int] = None,
+        num_attention_heads: Optional[int] = None,
+        num_hidden_layers: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,
+        initializer_cutoff_factor: Optional[float] = 2.0,
+        classifier_pooling: Literal["cls", "mean"] = "cls",
+        classifier_dropout: Optional[float] = 0.0,
+        classifier_bias: Optional[bool] = False,
         **kwargs,
     ):
+        if classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {classifier_pooling}.'
+            )
+
         if text_config is None:
             text_config = self.sub_configs["text_config"]()
         elif isinstance(text_config, dict):
@@ -82,21 +93,34 @@ class ModernVBertConfig(PretrainedConfig):
             vision_config = self.sub_configs["vision_config"](**vision_config)
         self.vision_config = vision_config
 
-        self.initializer_range = initializer_range
-        self.pixel_shuffle_factor = pixel_shuffle_factor
+        # Common model parameters overrides
+        self.vocab_size = self._resolve_text_config_param("vocab_size", vocab_size)
+        self.hidden_size = self._resolve_text_config_param("hidden_size", hidden_size)
+        self.num_attention_heads = self._resolve_text_config_param("num_attention_heads", num_attention_heads)
+        self.num_hidden_layers = self._resolve_text_config_param("num_hidden_layers", num_hidden_layers)
 
-        # aliases for easier access
-        self.hidden_size = self.text_config.hidden_size
-        self.vocab_size = self.text_config.vocab_size
+        self.pixel_shuffle_factor = pixel_shuffle_factor
+        self.initializer_range = initializer_range
+        self.initializer_cutoff_factor = initializer_cutoff_factor
+        self.classifier_pooling = classifier_pooling
+        self.classifier_dropout = classifier_dropout
+        self.classifier_bias = classifier_bias
 
         super().__init__(image_token_id=image_token_id, **kwargs)
+
+    def _resolve_text_config_param(self, param_name: str, param_value: Optional[int]):
+        if param_value is not None:
+            logger.warning(f"Overriding `{param_name}` of the `text_config`.")
+            setattr(self.text_config, param_name, param_value)
+            return param_value
+        return getattr(self.text_config, param_name)
 
     @classmethod
     def from_pretrained_models(
         cls,
         text_model_name: str,
         vision_model_name: str,
-        vocab_size: int = None,
+        vocab_size: Optional[int] = None,
         **kwargs,
     ) -> "PretrainedConfig":
         text_model_config = cls.sub_configs["text_config"].from_pretrained(text_model_name)
@@ -114,4 +138,4 @@ class ModernVBertConfig(PretrainedConfig):
         )
 
 
-__all__ = ["ModernVBertConfig", "ModernVBertTextConfig", "ModernVBertVisionConfig"]
+__all__ = ["ModernVBertConfig"]

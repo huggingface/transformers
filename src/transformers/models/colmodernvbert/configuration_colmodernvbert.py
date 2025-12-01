@@ -21,7 +21,7 @@ class ColModernVBertConfig(PreTrainedConfig):
     from the "ColPali: Efficient Document Retrieval with Vision Language Models" paper.
 
     Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
-    ColModernVBert model, e.g. TODO: [ModernVBERT/colmodernvbert-merged](https://huggingface.co/vidore/ColModernVBert-v1.0-hf).
+    ColModernVBert model, e.g. [ModernVBERT/colmodernvbert-merged](https://huggingface.co/ModernVBERT/colmodernvbert-merged).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

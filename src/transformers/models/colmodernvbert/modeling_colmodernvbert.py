@@ -9,6 +9,7 @@ from typing import Optional
 
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
 from ..modernvbert import ModernVBertModel
@@ -30,20 +31,24 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.get_text_config().initializer_range
-        )
+        std = self.config.vlm_config.initializer_range
+        cutoff_factor = self.config.vlm_config.initializer_cutoff_factor
+
+        def init_weight(module: nn.Module, std: float):
+            init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-cutoff_factor * std,
+                b=cutoff_factor * std,
+            )
+
+            if isinstance(module, nn.Linear):
+                if module.bias is not None:
+                    init.zeros_(module.bias)
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init_weight(module, std)
 
 
 @dataclass
@@ -83,7 +88,7 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     a single model that can take into account both the textual and visual content (layout, charts, ...) of a document.
 
     ColModernVBert is trained on top of ModernVBert, and was introduced in the following paper:
-    TODO: Include paper.
+    [*ModernVBERT: Towards Smaller Visual Document Retrievers*](https://arxiv.org/abs/2510.01149).
 
     ColModernVBert is part of the ColVision model family, which was introduced with ColPali in the following paper:
     [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
@@ -99,7 +104,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         self.model = ModernVBertModel(config.vlm_config)
         self.embedding_proj_layer = nn.Linear(self.config.get_text_config().hidden_size, self.config.embedding_dim)
 
-        self._tied_weights_keys = [f"model.{k}" for k in (self.model._tied_weights_keys or [])]
+        self._tied_weights_keys = {f"model.{k}": v for k, v in (self.model._tied_weights_keys or {}).items()}
 
         self.post_init()
 
@@ -144,6 +149,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
         if attention_mask is not None:
+            attention_mask = attention_mask.to(dtype=embeddings.dtype, device=embeddings.device)
             embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         return ColModernVBertForRetrievalOutput(
@@ -158,15 +164,6 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.model.set_output_embeddings(new_embeddings)
-
-    def tie_weights(self):
-        return self.model.tie_weights()
 
     def resize_token_embeddings(
         self,
