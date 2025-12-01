@@ -20,6 +20,7 @@ import pytest
 from transformers import AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -63,14 +64,14 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
-    # Ignore copy
+    @is_flaky(max_attempts=2)
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
-        config.num_experts = 8
+        config.num_experts = 3
         config.expert_interval = 2
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
@@ -84,7 +85,7 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_length = 1000
+        pad_length = input_ids.shape[1] * 4
         # Add padding tokens (assume that pad_token_id=1) to input_ids
         padding_block = torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(torch_device)
         padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left

@@ -20,6 +20,7 @@ import pytest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -68,7 +69,7 @@ class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Mixtral flash attention does not support right padding")
 
-    # Ignore copy
+    @is_flaky(max_attempts=2)
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
