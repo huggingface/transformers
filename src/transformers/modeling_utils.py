@@ -2297,6 +2297,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for i, (target_param_name, source_param_name) in enumerate(tied_keys):
             # If both source and target are missing later, we may need to tie 2 weights so we use a list here
             target_param_names = [target_param_name]
+
             # This is `from_pretrained` -> let's check symmetrically
             if missing_keys is not None:
                 source_is_there = source_param_name not in missing_keys
