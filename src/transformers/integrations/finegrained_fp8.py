@@ -338,7 +338,7 @@ class FP8Linear(nn.Linear):
 
         self.activation_scheme = activation_scheme
         if self.activation_scheme == "static":
-            self.register_parameter("act_scale", None)
+            self.register_parameter("activation_scale", None)
 
 
         if bias:
