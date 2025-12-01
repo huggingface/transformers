@@ -1076,6 +1076,7 @@ class Qwen2_5OmniPatchMerger(nn.Module):
 class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniVisionEncoderConfig
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
+    _input_embed_layer = "patch_embed"
     input_modalities = ("image", "video")
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:

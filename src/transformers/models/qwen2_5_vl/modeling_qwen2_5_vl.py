@@ -307,6 +307,7 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)

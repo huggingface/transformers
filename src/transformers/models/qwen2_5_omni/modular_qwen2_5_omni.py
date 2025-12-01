@@ -1920,6 +1920,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
     config: Qwen2_5OmniVisionEncoderConfig
     input_modalities = ("image", "video")
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)

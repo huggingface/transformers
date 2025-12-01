@@ -888,10 +888,12 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        # The Q-Former operates on embeddings provided by upstream modules (e.g. query tokens or text embeddings).
+        # It does not own input embeddings itself, so we return `None` to signal that there is nothing to update.
+        return None
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+        raise NotImplementedError("Blip2QFormerModel does not own input embeddings and cannot set them.")
 
     def get_extended_attention_mask(
         self,
