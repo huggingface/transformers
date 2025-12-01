@@ -68,6 +68,20 @@
       title: Perplexity of fixed-length models
     title: Generate API
   - sections:
+    - local: optimization_overview
+      title: Overview
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_one
+      title: GPU
+    - local: perf_infer_gpu_multi
+      title: Distributed inference
+    - local: perf_infer_cpu
+      title: CPU
+    - local: perplexity
+      title: Perplexity of fixed-length models
+    title: Generate API
+  - sections:
     - local: attention_interface
       title: Attention backends
     - local: continuous_batching
