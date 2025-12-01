@@ -19,6 +19,7 @@ class ModernVBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a `ModernVBert` model. It is used to
     instantiate a ModernVBert model according to the specified arguments and defines the model architecture.
+    e.g. [ModernVBERT/modernvbert](https://huggingface.co/ModernVBERT/modernvbert).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
     See the documentation for [`PretrainedConfig`] for more details.
@@ -34,10 +35,30 @@ class ModernVBertConfig(PretrainedConfig):
             Token id reserved for image tokens inserted into the text stream.
         pixel_shuffle_factor (`int`, optional, defaults to 4):
             Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+        vocab_size (`int`, optional):
+            Vocabulary size of the text model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`ModernVBertModel`]. If not provided, will be taken from
+            the `text_config`.
+        hidden_size (`int`, optional):
+            Dimensionality of the encoder layers and the pooler layer. If not provided, will be taken from
+            the `text_config`.
+        num_hidden_layers (`int`, optional):
+            Number of hidden layers in the text model. If not provided, will be taken from
+            the `text_config`.
         initializer_range (`float`, optional, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_cutoff_factor (`float`, optional, defaults to 2.0):
             The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+        classifier_pooling (`str`, optional, defaults to "cls"):
+            The pooling strategy to use for classification tasks. Can be either `"cls"` or `"mean"`.
+        classifier_dropout (`float`, optional, defaults to 0.0):
+            The dropout probability for the classification head.
+        classifier_bias (`bool`, optional, defaults to `False`):
+            Whether to add a bias term to the classification head.
+        classifier_dropout (`float`, optional, defaults to 0.0):
+            The dropout probability for the classification head.
+        classifier_bias (`bool`, optional, defaults to `False`):
+            Whether to add a bias term to the classification head.
 
     Example:
     ```python
@@ -67,7 +88,6 @@ class ModernVBertConfig(PretrainedConfig):
         pixel_shuffle_factor: Optional[int] = 4,
         vocab_size: Optional[int] = None,
         hidden_size: Optional[int] = None,
-        num_attention_heads: Optional[int] = None,
         num_hidden_layers: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,
         initializer_cutoff_factor: Optional[float] = 2.0,
@@ -96,7 +116,6 @@ class ModernVBertConfig(PretrainedConfig):
         # Common model parameters overrides
         self.vocab_size = self._resolve_text_config_param("vocab_size", vocab_size)
         self.hidden_size = self._resolve_text_config_param("hidden_size", hidden_size)
-        self.num_attention_heads = self._resolve_text_config_param("num_attention_heads", num_attention_heads)
         self.num_hidden_layers = self._resolve_text_config_param("num_hidden_layers", num_hidden_layers)
 
         self.pixel_shuffle_factor = pixel_shuffle_factor

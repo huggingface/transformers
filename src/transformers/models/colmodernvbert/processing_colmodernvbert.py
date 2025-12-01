@@ -40,12 +40,12 @@ class ColModernVBertProcessor(ModernVBertProcessor):
     for more information.
 
     Args:
-        image_processor ([`ModernVBertImageProcessor`], *optional*):
-            The image processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*): A prefix to be used for the query.
+            image_processor ([`ModernVBertImageProcessor`]):
+                The image processor is a required input.
+            tokenizer (`<fill_type>`, *optional*): <fill_docstring>
+            image_seq_len (`int`, *optional*, defaults to 64): <fill_docstring>
+            visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
+            query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
     def __init__(

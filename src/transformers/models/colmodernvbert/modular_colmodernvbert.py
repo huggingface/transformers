@@ -103,12 +103,12 @@ class ColModernVBertProcessor(ModernVBertProcessor):
     for more information.
 
     Args:
-        image_processor ([`ModernVBertImageProcessor`], *optional*):
-            The image processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*): A prefix to be used for the query.
+            image_processor ([`ModernVBertImageProcessor`]):
+                The image processor is a required input.
+            tokenizer (`<fill_type>`, *optional*): <fill_docstring>
+            image_seq_len (`int`, *optional*, defaults to 64): <fill_docstring>
+            visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
+            query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
     def __init__(
@@ -413,11 +413,17 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
         Language modeling loss (for next-token prediction).
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
+        `(batch_size, sequence_length, hidden_size)`.
+        Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True` and `pixel_values` are provided):
+        Tuple of `torch.FloatTensor` (one for the output of the image modality projection + one for the output of each layer) of shape
+        `(batch_size, num_channels, image_size, image_size)`.
+        Hidden-states of the image encoder at the output of each layer plus the initial modality projection outputs.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
