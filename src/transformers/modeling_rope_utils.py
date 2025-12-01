@@ -657,7 +657,7 @@ class RotaryEmbeddingConfigMixin:
         # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
-        rope_parameters = self.rope_parameters
+        rope_parameters = self.rope_parameters or {}
 
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
         if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
@@ -938,7 +938,10 @@ def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: Opti
     warnings.warn(
         "`rope_config_validation` is deprecated and has been removed. "
         "Its functionality has been moved to RotaryEmbeddingConfigMixin.validate_rope method. "
-        "PreTrainedConfig inherits this class, so please call self.validate_rope() instead.",
+        "PreTrainedConfig inherits this class, so please call self.validate_rope() instead. "
+        "Also, make sure to use the new rope_parameters syntax. "
+        "You can call self.standardize_rope_params() in the meantime.",
         FutureWarning,
     )
+    config.standardize_rope_params()
     config.validate_rope(ignore_keys=ignore_keys)
