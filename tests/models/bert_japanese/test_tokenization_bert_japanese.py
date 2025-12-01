@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer
-from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
@@ -447,4 +446,3 @@ class AutoTokenizerCustomTest(unittest.TestCase):
         EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
         tokenizer = AutoTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
         self.assertIsInstance(tokenizer, BertJapaneseTokenizer)
-
