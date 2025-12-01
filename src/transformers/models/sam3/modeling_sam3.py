@@ -1002,7 +1002,7 @@ class Sam3VisionModel(Sam3PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1373,7 +1373,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             spatial_shapes,
         )
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         vision_features: list[torch.Tensor],
@@ -1690,7 +1690,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         rpb_matrix = rpb_matrix.permute(0, 3, 1, 2).contiguous()  # [batch_size, num_heads, num_queries, height*width]
         return rpb_matrix
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         vision_features: torch.Tensor,
@@ -1990,7 +1990,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         self.prompt_cross_attn_norm = nn.LayerNorm(hidden_size)
         self.prompt_cross_attn_dropout = nn.Dropout(config.dropout)
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         decoder_queries: torch.Tensor,
@@ -2089,7 +2089,9 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
-    _checkpoint_conversion_mapping = {"detector_model.": ""}
+    _checkpoint_conversion_mapping = {
+        r"detector_model.(.+)": r"\1"  # the regex allows to remove the prefix, and add it back in revert mode
+    }
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",
@@ -2201,7 +2203,7 @@ class Sam3Model(Sam3PreTrainedModel):
         vision_outputs = self.vision_encoder(pixel_values, **kwargs)
         return vision_outputs
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
