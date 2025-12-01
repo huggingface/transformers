@@ -385,7 +385,7 @@ class FP8Linear(nn.Linear):
                         self.block_size,
                         output_dtype=input.dtype,
                     )
-                
+
             # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
             torch_accelerator_module.synchronize()
