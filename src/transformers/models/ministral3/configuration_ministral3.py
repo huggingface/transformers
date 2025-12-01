@@ -106,7 +106,7 @@ class Ministral3Config(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "ministal3"
+    model_type = "ministral3"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `MistralModel`
     base_model_tp_plan = {
@@ -142,21 +142,24 @@ class Ministral3Config(PreTrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = {
-            "type": "yarn",
-            "rope_theta": 1000000.0,
-            "factor": 16.0,
-            "original_max_position_embeddings": 16384,
-            "beta_fast": 32.0,
-            "beta_slow": 1.0,
-            "mscale_all_dim": 1.0,
-            "mscale": 1.0,
-            "llama_4_scaling_beta": 0.1,
-        },
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         sliding_window: Optional[int] = None,
         attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
+        if rope_parameters is None:
+            rope_parameters = {
+                "type": "yarn",
+                "rope_theta": 1000000.0,
+                "factor": 16.0,
+                "original_max_position_embeddings": 16384,
+                "beta_fast": 32.0,
+                "beta_slow": 1.0,
+                "mscale_all_dim": 1.0,
+                "mscale": 1.0,
+                "llama_4_scaling_beta": 0.1,
+            }
+
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
