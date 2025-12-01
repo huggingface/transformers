@@ -219,6 +219,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # Optionally patches mistral tokenizers with wrong regex
         if vocab_size > 100000 and getattr(self._tokenizer, "pre_tokenizer", None) is not None:
+            kwargs.pop("tokenizer", None)
             self._tokenizer = self._patch_mistral_regex(
                 self._tokenizer,
                 self.init_kwargs.get("name_or_path", None),
