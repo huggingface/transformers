@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from functools import wraps
 from typing import TYPE_CHECKING, Optional, TypedDict
 
@@ -913,3 +914,31 @@ class RotaryEmbeddingConfigMixin:
             unused_keys = received_keys - required_keys
         if unused_keys:
             logger.warning(f"Unrecognized keys in `rope_parameters` for 'rope_type'='{rope_type}': {unused_keys}")
+
+
+def standardize_rope_params(*args, **kwargs):
+    """
+    This is a deprecated function.
+    It has been kept for backward compatibility with custom code models.
+    It does nothing except issuing a warning.
+    """
+    warnings.warn(
+        "`standardize_rope_params` is deprecated and has been removed. "
+        "Its functionality has been moved to RotaryEmbeddingConfigMixin.standardize_rope_params method. "
+        "PreTrainedConfig inherits this class, so you can simply remove the function call.",
+        FutureWarning,
+    )
+
+
+def rope_config_validation(*args, **kwargs):
+    """
+    This is a deprecated function.
+    It has been kept for backward compatibility with custom code models.
+    It does nothing except issuing a warning.
+    """
+    warnings.warn(
+        "`rope_config_validation` is deprecated and has been removed. "
+        "Its functionality has been moved to RotaryEmbeddingConfigMixin.validate_rope method. "
+        "PreTrainedConfig inherits this class, so you can simply remove the function call.",
+        FutureWarning,
+    )
