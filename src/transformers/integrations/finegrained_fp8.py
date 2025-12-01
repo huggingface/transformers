@@ -184,15 +184,16 @@ def w8a8_block_fp8_matmul_triton(
     assert len(block_size) == 2
     block_n, block_k = block_size[0], block_size[1]
 
-    assert A.shape[-1] == B.shape[-1]
-    assert A.shape[:-1] == As.shape[:-1] and A.is_contiguous()
+    assert A.shape[-1] == B.shape[-1], f"{A.shape}, {B.shape}"
+    assert A.shape[:-1] == As.shape[:-1], f"{A.shape}, {As.shape}"
+    assert A.is_contiguous()
     assert triton.cdiv(A.shape[-1], block_k) == As.shape[-1]
     M = A.numel() // A.shape[-1]
 
     assert B.ndim == 2 and B.is_contiguous() and Bs.ndim == 2
     N, K = B.shape
-    assert triton.cdiv(N, block_n) == Bs.shape[0]
-    assert triton.cdiv(K, block_k) == Bs.shape[1]
+    assert triton.cdiv(N, block_n) == Bs.shape[0], f"{N}, {block_n}, {Bs.shape}"
+    assert triton.cdiv(K, block_k) == Bs.shape[1], f"{K}, {block_k}, {Bs.shape}"
 
     C_shape = A.shape[:-1] + (N,)
     C = A.new_empty(C_shape, dtype=output_dtype)
@@ -371,6 +372,9 @@ class FP8Linear(nn.Linear):
                     qinput = (input / scale).to(torch.float8_e4m3fn)
                 else:
                     raise NotImplementedError("Not supported")
+
+                scale = scale[None, None, None].repeat(qinput.shape[:2] + (1,))
+                scale_inv = scale_inv[None, None]
 
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
