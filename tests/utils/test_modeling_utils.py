@@ -92,6 +92,8 @@ from transformers.utils.import_utils import (
     is_torch_npu_available,
 )
 
+from ..test_modeling_common import compare_state_dicts
+
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
@@ -184,10 +186,35 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
-        def tie_weights(self, missing_keys=None, **kwargs):
-            self.linear_2.weight = self.linear.weight
-            if missing_keys is not None:
-                missing_keys.discard("linear_2.weight")
+    class BaseModelWithMultipleTiedWeights(PreTrainedModel):
+        config_class = PreTrainedConfig
+        _tied_weights_keys = {"linear_2.weight": "linear.weight", "linear_3.weight": "linear.weight"}
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(5, 5)
+            self.linear_2 = nn.Linear(5, 5)
+            self.linear_3 = nn.Linear(5, 5)
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class BaseModelWithMultipleMixedTiedWeights(PreTrainedModel):
+        config_class = PreTrainedConfig
+        # Here the tied keys both refer to `linear.weight`, but they are inconsistent in the mapping, i.e. they
+        # are provided as a "circular" dependency
+        _tied_weights_keys = {"linear_2.weight": "linear.weight", "linear_3.weight": "linear_2.weight"}
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(5, 5)
+            self.linear_2 = nn.Linear(5, 5)
+            self.linear_3 = nn.Linear(5, 5)
+            self.post_init()
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
 
     class ModelWithHead(PreTrainedModel):
         base_model_prefix = "base"
@@ -257,11 +284,6 @@ if is_torch_available():
 
         def forward(self, x):
             return self.decoder(self.base(x))
-
-        def tie_weights(self, missing_keys=None, **kwargs):
-            self.decoder.weight = self.base.linear.weight
-            if missing_keys is not None:
-                missing_keys.discard("decoder.weight")
 
     class Prepare4dCausalAttentionMaskModel(nn.Module):
         def forward(self, inputs_embeds):
@@ -1371,6 +1393,83 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIs(new_model.base.linear.weight, new_model.decoder.weight)
             # Should only complain about the missing bias
             self.assertSetEqual(load_info["missing_keys"], {"decoder.bias"})
+
+    def test_tied_weights_can_load_symmetrically(self):
+        """Test that we can correctly load and tie weights even though the wrong key was saved."""
+        model = BaseModelWithTiedWeights(PreTrainedConfig())
+        # Just to be sure it's actually tied
+        self.assertIs(model.linear.weight, model.linear_2.weight)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save the config
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                f.write(json.dumps(model.config.to_dict()))
+
+            state_dict = model.state_dict()
+            # Save using the wrong key
+            state_dict.pop("linear.weight")
+            safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
+
+            new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+            # Assert no missing keys
+            self.assertSetEqual(load_info["missing_keys"], set())
+            # It's still the same weight
+            self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
+
+            # Make sure both state dict are the same
+            compare_state_dicts(model.state_dict(), new_model.state_dict())
+
+    def test_tied_weights_can_load_symmetrically_multiple_keys(self):
+        """Test that we can correctly load and tie weights even though the wrong key was saved, when we
+        have more than 1 target to the same source."""
+        # First class is consistent in how they provide the source, second is not -> make sure it works in both cases
+        for model_class in [BaseModelWithMultipleTiedWeights, BaseModelWithMultipleMixedTiedWeights]:
+            with self.subTest(model_class.__name__):
+                model = model_class(PreTrainedConfig())
+                # Just to be sure it's actually tied
+                self.assertIs(model.linear.weight, model.linear_2.weight)
+                self.assertIs(model.linear.weight, model.linear_3.weight)
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    # Save the config
+                    with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                        f.write(json.dumps(model.config.to_dict()))
+
+                    state_dict = model.state_dict()
+                    # Keep only 1 of the 3 tied keys, but not the source (which is `linear.weight`)
+                    state_dict.pop("linear.weight")
+                    state_dict.pop("linear_3.weight")
+                    safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
+
+                    new_model, load_info = BaseModelWithMultipleTiedWeights.from_pretrained(
+                        tmp_dir, output_loading_info=True
+                    )
+                    # Assert no missing keys
+                    self.assertSetEqual(load_info["missing_keys"], set())
+                    # It's still the same weight
+                    self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
+                    self.assertIs(new_model.linear.weight, new_model.linear_3.weight)
+
+                    # Make sure both state dict are the same
+                    compare_state_dicts(model.state_dict(), new_model.state_dict())
+
+                    # Now, do the same but try to keep `linear_2.weight` in the saved key instead of `linear_3.weight`
+                    # to make sure it does not matter
+                    state_dict = model.state_dict()
+                    # Keep only 1 of the 3 tied keys, but not the source (which is `linear.weight`)
+                    state_dict.pop("linear.weight")
+                    state_dict.pop("linear_2.weight")
+                    safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
+
+                    new_model, load_info = BaseModelWithMultipleTiedWeights.from_pretrained(
+                        tmp_dir, output_loading_info=True
+                    )
+                    # Assert no missing keys
+                    self.assertSetEqual(load_info["missing_keys"], set())
+                    # It's still the same weight
+                    self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
+                    self.assertIs(new_model.linear.weight, new_model.linear_3.weight)
+
+                    # Make sure both state dict are the same
+                    compare_state_dicts(model.state_dict(), new_model.state_dict())
 
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig())
