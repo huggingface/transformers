@@ -46,11 +46,10 @@ class QuantoQuantize(ConversionOps):
         module.freeze()
         module.weight.requires_grad = False
 
-        # need to discard some missing keys we already updated the module in freeze. For the weight, we still pass it
+        # need to discard some missing keys we already updated the module in freeze.
         module_name = full_layer_name.rsplit(".", 1)[0]
         missing_keys.discard(f"{module_name}.input_scale")
         missing_keys.discard(f"{module_name}.output_scale")
-        return {full_layer_name: module.weight}
 
 
 def replace_with_quanto_layers(
