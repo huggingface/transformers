@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Any, Optional
+from typing import Any
 
 
 def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
@@ -22,7 +22,7 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
     return module, tensor_name
 
 
-def should_convert_module(full_name, patterns: Optional[list] = None):
+def should_convert_module(full_name, patterns: list[str] | None = None):
     if patterns is None:
         return True
 
