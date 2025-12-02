@@ -66,6 +66,8 @@ jobs:
   run-quality:
     runs-on: ubuntu-22.04
     needs: [get-pr-number, get-pr-info, check-timestamps]
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
