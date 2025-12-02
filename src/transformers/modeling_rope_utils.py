@@ -640,16 +640,6 @@ class RotaryEmbeddingConfigMixin:
             self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
             ignore_keys_at_rope_validation = {"partial_rotary_factor"}
 
-        # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
-        rope_type = self.rope_parameters.get("rope_type", self.rope_parameters.get("type", "default"))
-        if rope_type in ["llama3", "yarn", "longrope"]:
-            if hasattr(self, "original_max_position_embeddings"):
-                # NOTE: Phi3 (and potentially other models) save `original_max_position_embeddings` field
-                # containing the pretrained value outside rope parameters
-                self.rope_parameters["original_max_position_embeddings"] = self.original_max_position_embeddings
-            else:
-                self.rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
-
         self.standardize_rope_params()
         self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
@@ -672,6 +662,17 @@ class RotaryEmbeddingConfigMixin:
             for layer_type in self.layer_types:
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
+
+        # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
+        rope_type = rope_parameters["rope_type"]
+        if rope_type in ["llama3", "yarn", "longrope"]:
+            if hasattr(self, "original_max_position_embeddings"):
+                # NOTE: Phi3 (and potentially other models) save `original_max_position_embeddings` field
+                # containing the pretrained value outside rope parameters
+                self.rope_parameters["original_max_position_embeddings"] = self.original_max_position_embeddings
+            else:
+                self.rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
+
         self.rope_parameters = rope_parameters
 
     def validate_rope(self: "PreTrainedConfig", ignore_keys: Optional[set] = None):
