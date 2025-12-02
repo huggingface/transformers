@@ -803,7 +803,8 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -827,6 +828,12 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         )
         pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=text_outputs.last_hidden_state,
+                pooler_output=text_features,
+            )
 
         return text_features
 

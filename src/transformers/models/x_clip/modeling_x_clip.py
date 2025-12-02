@@ -1205,8 +1205,12 @@ class XCLIPModel(XCLIPPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`XCLIPTextModel`].
@@ -1229,7 +1233,15 @@ class XCLIPModel(XCLIPPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
         )
-        text_features = self.text_projection(text_outputs.pooler_output)
+        pooled_output = text_outputs.pooler_output
+        text_features = self.text_projection(pooled_output)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=text_outputs.last_hidden_state,
+                pooler_output=text_features,
+            )
+
         return text_features
 
     @filter_out_non_signature_kwargs()

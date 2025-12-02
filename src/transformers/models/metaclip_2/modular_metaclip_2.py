@@ -560,6 +560,7 @@ class MetaClip2Model(CLIPModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        return_dict: bool = False,
     ):
         r"""
         Returns:
@@ -581,6 +582,7 @@ class MetaClip2Model(CLIPModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=return_dict,
         )
 
     def get_image_features(

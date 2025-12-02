@@ -1475,7 +1475,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
         projection layer to the pooled output of the CLVP text encoder model.
@@ -1495,6 +1496,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             `torch.FloatTensor` of shape `(batch_size, output_dim)`:
@@ -1519,13 +1522,20 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         ```
         """
 
-        outputs = self.text_encoder_model(
+        text_outputs: ClvpEncoderOutput = self.text_encoder_model(
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
         )
+        text_features = text_outputs.embeds
 
-        return outputs[0]
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=text_outputs.last_hidden_state,
+                pooler_output=text_features,
+            )
+
+        return text_features
 
     def get_speech_features(
         self,

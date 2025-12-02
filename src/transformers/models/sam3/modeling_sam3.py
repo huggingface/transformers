@@ -35,6 +35,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPooling,
     ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -2134,9 +2135,14 @@ class Sam3Model(Sam3PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
+        return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Text embeddings that can be passed as `text_embeds` to the forward method.
@@ -2164,8 +2170,16 @@ class Sam3Model(Sam3PreTrainedModel):
         """
         text_features = self.text_encoder(
             input_ids=input_ids, attention_mask=attention_mask, **kwargs
-        ).last_hidden_state
-        text_features = self.text_projection(text_features)
+        )
+        last_hidden_state = text_features.last_hidden_state
+        text_features = self.text_projection(last_hidden_state)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=last_hidden_state,
+                pooler_output=text_features,
+            )
+
         return text_features
 
     @auto_docstring
