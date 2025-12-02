@@ -63,24 +63,14 @@ jobs:
 #              exit -1;
 #            fi
 
-  run-quality:
+
+  init_comment_with_url:
+    name: Init Comment on PR
     runs-on: ubuntu-22.04
-    needs: [get-pr-number, get-pr-info, check-timestamps]
+    needs: [check-timestamps]
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          # Instead of checking out the base repo, use the contributor's repo name
-          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
-          # You may need fetch-depth: 0 for being able to push
-          fetch-depth: "0"
-
-      - name: Check commits
-        run: |
-          git log -n 3
-
       - name: Comment on PR with workflow run link
         id: init_comment
         env:
@@ -98,3 +88,19 @@ jobs:
               body: `Quality fix is beginning .... [View the workflow run here](${runUrl}).`
             });
             core.setOutput('comment_id', botComment.id);
+
+  run-quality:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Instead of checking out the base repo, use the contributor's repo name
+          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+          # You may need fetch-depth: 0 for being able to push
+          fetch-depth: "0"
+
+      - name: Check commits
+        run: |
+          git log -n 3
