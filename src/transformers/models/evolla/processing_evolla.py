@@ -16,14 +16,12 @@
 Processor class for EVOLLA.
 """
 
-import os
 from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
     ProcessorMixin,
 )
-from ..auto import AutoTokenizer
 
 
 PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
@@ -47,15 +45,6 @@ class EvollaProcessor(ProcessorMixin):
             The maximum length of the text to be generated.
     """
 
-    attributes = ["protein_tokenizer", "tokenizer"]
-    valid_kwargs = ["sequence_max_length"]
-    # protein_tokenizer_class = "EsmTokenizer"
-    # tokenizer_class = "LlamaTokenizerFast"
-    protein_tokenizer_class = "AutoTokenizer"
-    tokenizer_class = "AutoTokenizer"
-    protein_tokenizer_dir_name = "protein_tokenizer"
-    # tokenizer_dir_name = "text_tokenizer"
-
     def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
         if protein_tokenizer is None:
             raise ValueError("You need to specify an `protein_tokenizer`.")
@@ -76,7 +65,7 @@ class EvollaProcessor(ProcessorMixin):
             sa_sequence = "".join([s.upper() + f.lower() for s, f in zip(aa_seq, foldseek)])
             sa_sequences.append(sa_sequence)
 
-        sa_tokens = self.protein_tokenizer.batch_encode_plus(
+        sa_tokens = self.protein_tokenizer(
             sa_sequences, return_tensors="pt", truncation=True, max_length=protein_max_length, padding=True
         )
         return sa_tokens
@@ -205,43 +194,6 @@ class EvollaProcessor(ProcessorMixin):
 
     def protein_decode(self, *args, **kwargs):
         return self.protein_tokenizer.decode(*args, **kwargs)
-
-    # overwrite to save the protein tokenizer in a separate folder
-    # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)
-    def save_pretrained(self, save_directory, **kwargs):
-        # only save the protein tokenizer in sub_dir
-        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, self.protein_tokenizer_dir_name))
-
-        # we modify the attributes so that only the text tokenizer are saved in the main folder
-        protein_tokenizer_present = "protein_tokenizer" in self.attributes
-        # find the correct position of it in the attributes list
-        protein_tokenizer_index = self.attributes.index("protein_tokenizer") if protein_tokenizer_present else None
-        if protein_tokenizer_present and protein_tokenizer_index is not None:
-            self.attributes.remove("protein_tokenizer")
-
-        outputs = super().save_pretrained(save_directory, **kwargs)
-
-        if protein_tokenizer_present and protein_tokenizer_index is not None:
-            self.attributes.insert(protein_tokenizer_index, "protein_tokenizer")
-
-        return outputs
-
-    # overwrite to load the protein tokenizer from a separate folder
-    # Adapted from instructblip.processing_instructblip.py (https://github.com/huggingface/transformers/blob/9b479a245b793cac2a8b2e87c6d8e81bb24e20c4/src/transformers/models/instructblip/processing_instructblip.py#L191-L221)
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        processor = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # if return_unused_kwargs a tuple is returned where the second element is 'unused_kwargs'
-        if isinstance(processor, tuple):
-            processor = processor[0]
-        protein_tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path, subfolder=cls.protein_tokenizer_dir_name
-        )
-
-        processor.protein_tokenizer = protein_tokenizer
-
-        return processor
 
 
 __all__ = ["EvollaProcessor"]

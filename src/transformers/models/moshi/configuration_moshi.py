@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -183,7 +183,7 @@ class MoshiConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -252,7 +252,7 @@ class MoshiConfig(PreTrainedConfig):
         num_key_value_heads: Optional[int] = None,
         audio_vocab_size: Optional[int] = None,
         max_position_embeddings: Optional[int] = 3000,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         head_dim: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,
@@ -282,14 +282,7 @@ class MoshiConfig(PreTrainedConfig):
         self.ffn_dim = ffn_dim
         self.rms_norm_eps = rms_norm_eps
         self.num_codebooks = num_codebooks
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         audio_encoder_config = kwargs.pop("audio_encoder_config", {})
         audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")

@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
 
     from ...feature_extraction_utils import FeatureExtractionMixin
-    from ...tokenization_utils import PreTrainedTokenizerBase
+    from ...tokenization_python import PreTrainedTokenizerBase
 
 
 ListOfDict = list[dict[str, Union[int, str]]]
@@ -79,9 +79,6 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
     """
-
-    feature_extractor_class = "AutoFeatureExtractor"
-    tokenizer_class = "Wav2Vec2CTCTokenizer"
 
     def __init__(
         self,

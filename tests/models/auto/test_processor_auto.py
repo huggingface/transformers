@@ -33,8 +33,12 @@ from transformers import (
     AutoFeatureExtractor,
     AutoProcessor,
     AutoTokenizer,
+    BaseVideoProcessor,
     BertTokenizer,
+    FeatureExtractionMixin,
+    ImageProcessingMixin,
     LlamaTokenizer,
+    LlavaOnevisionVideoProcessor,
     LlavaProcessor,
     ProcessorMixin,
     SiglipImageProcessor,
@@ -42,12 +46,15 @@ from transformers import (
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
 )
+from transformers.models.auto.feature_extraction_auto import get_feature_extractor_config
+from transformers.models.auto.image_processing_auto import get_image_processor_config
+from transformers.models.auto.video_processing_auto import get_video_processor_config
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
-from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
+from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
     PROCESSOR_NAME,
-    is_tokenizers_available,
 )
 
 
@@ -62,6 +69,7 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
 SAMPLE_VOCAB_LLAMA = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
+SAMPLE_CONFIG = get_tests_dir("fixtures/config.json")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
 
@@ -88,15 +96,67 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
+    def test_processor_from_local_subfolder_from_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
+            processor.save_pretrained(f"{tmpdirname}/processor_subfolder")
+
+            processor = Wav2Vec2Processor.from_pretrained(tmpdirname, subfolder="processor_subfolder")
+
+        self.assertIsInstance(processor, Wav2Vec2Processor)
+
     def test_processor_from_local_directory_from_extractor_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             # copy relevant files
             copyfile(SAMPLE_PROCESSOR_CONFIG, os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME))
             copyfile(SAMPLE_VOCAB, os.path.join(tmpdirname, "vocab.json"))
+            copyfile(SAMPLE_CONFIG, os.path.join(tmpdirname, "config.json"))
 
             processor = AutoProcessor.from_pretrained(tmpdirname)
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    def test_subcomponent_get_config_dict_saved_as_nested_config(self):
+        """
+        Tests that we can get config dict of a subcomponents of a processor,
+        even if they were saved as nested dict in `processor_config.json`
+        """
+        # Test feature extractor first
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
+            processor.save_pretrained(tmpdirname)
+
+            config_dict_1 = get_feature_extractor_config(tmpdirname)
+            feature_extractor_1 = Wav2Vec2FeatureExtractor(**config_dict_1)
+            self.assertIsInstance(feature_extractor_1, Wav2Vec2FeatureExtractor)
+
+            config_dict_2, _ = FeatureExtractionMixin.get_feature_extractor_dict(tmpdirname)
+            feature_extractor_2 = Wav2Vec2FeatureExtractor(**config_dict_2)
+            self.assertIsInstance(feature_extractor_2, Wav2Vec2FeatureExtractor)
+            self.assertEqual(config_dict_1, config_dict_2)
+
+        # Test image and video processors next
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+            processor.save_pretrained(tmpdirname)
+
+            config_dict_1 = get_image_processor_config(tmpdirname)
+            image_processor_1 = SiglipImageProcessor(**config_dict_1)
+            self.assertIsInstance(image_processor_1, SiglipImageProcessor)
+
+            config_dict_2, _ = ImageProcessingMixin.get_image_processor_dict(tmpdirname)
+            image_processor_2 = SiglipImageProcessor(**config_dict_2)
+            self.assertIsInstance(image_processor_2, SiglipImageProcessor)
+            self.assertEqual(config_dict_1, config_dict_2)
+
+            config_dict_1 = get_video_processor_config(tmpdirname)
+            video_processor_1 = LlavaOnevisionVideoProcessor(**config_dict_1)
+            self.assertIsInstance(video_processor_1, LlavaOnevisionVideoProcessor)
+
+            config_dict_2, _ = BaseVideoProcessor.get_video_processor_dict(tmpdirname)
+            video_processor_2 = LlavaOnevisionVideoProcessor(**config_dict_2)
+            self.assertIsInstance(video_processor_2, LlavaOnevisionVideoProcessor)
+            self.assertEqual(config_dict_1, config_dict_2)
 
     def test_processor_from_processor_class(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -164,14 +224,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_from_pretrained_dynamic_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
-            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor")
+            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor_updated")
         # If remote code is disabled, we can't load this config.
         with self.assertRaises(ValueError):
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=False
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=False
             )
 
-        processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor", trust_remote_code=True)
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True
+        )
         self.assertTrue(processor.special_attribute_present)
         self.assertEqual(processor.__class__.__name__, "NewProcessor")
 
@@ -181,18 +243,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         tokenizer = processor.tokenizer
         self.assertTrue(tokenizer.special_attribute_present)
-        if is_tokenizers_available():
-            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
+        self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
 
-            # Test we can also load the slow version
-            new_processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
-            )
-            new_tokenizer = new_processor.tokenizer
-            self.assertTrue(new_tokenizer.special_attribute_present)
-            self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizer")
-        else:
-            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+        new_processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
+        )
+        new_tokenizer = new_processor.tokenizer
+        self.assertTrue(new_tokenizer.special_attribute_present)
+        self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizerFast")
 
     def test_new_processor_registration(self):
         try:
@@ -240,9 +298,10 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             special_attribute_present = False
 
         class NewProcessor(ProcessorMixin):
-            feature_extractor_class = "AutoFeatureExtractor"
-            tokenizer_class = "AutoTokenizer"
             special_attribute_present = False
+
+            def __init__(self, feature_extractor, tokenizer):
+                super().__init__(feature_extractor, tokenizer)
 
         try:
             AutoConfig.register("custom", CustomConfig)
@@ -250,7 +309,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             AutoTokenizer.register(CustomConfig, slow_tokenizer_class=NewTokenizer)
             AutoProcessor.register(CustomConfig, NewProcessor)
             # If remote code is not set, the default is to use local classes.
-            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor")
+            processor = AutoProcessor.from_pretrained("hf-internal-testing/test_dynamic_processor_updated")
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertFalse(processor.special_attribute_present)
             self.assertFalse(processor.feature_extractor.special_attribute_present)
@@ -258,7 +317,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             # If remote code is disabled, we load the local ones.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=False
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=False
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertFalse(processor.special_attribute_present)
@@ -267,7 +326,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
             # If remote is enabled, we load from the Hub.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", trust_remote_code=True
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertTrue(processor.special_attribute_present)
@@ -294,9 +353,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             pass
 
         class NewProcessor(ProcessorMixin):
-            feature_extractor_class = "AutoFeatureExtractor"
-            tokenizer_class = "AutoTokenizer"
-
             def __init__(self, feature_extractor, tokenizer, processor_attr_1=1, processor_attr_2=True):
                 super().__init__(feature_extractor, tokenizer)
 
@@ -310,7 +366,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             AutoProcessor.register(CustomConfig, NewProcessor)
             # If remote code is not set, the default is to use local classes.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor", processor_attr_2=False
+                "hf-internal-testing/test_dynamic_processor_updated", processor_attr_2=False
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
             self.assertEqual(processor.processor_attr_1, 1)
@@ -335,9 +391,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             pass
 
         class NewProcessor(ProcessorMixin):
-            feature_extractor_class = "NewFeatureExtractor"
-            tokenizer_class = "NewTokenizer"
-
             def __init__(self, feature_extractor, tokenizer):
                 super().__init__(feature_extractor, tokenizer)
 
@@ -348,7 +401,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             AutoProcessor.register(CustomConfig, NewProcessor)
             # If remote code is not set, the default is to use local classes.
             processor = AutoProcessor.from_pretrained(
-                "hf-internal-testing/test_dynamic_processor",
+                "hf-internal-testing/test_dynamic_processor_updated",
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
         finally:
@@ -365,7 +418,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
-        self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")
+        self.assertEqual(processor.__class__.__name__, "BertTokenizer")
 
     def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
@@ -469,7 +522,10 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_chat_templates(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer = LlamaTokenizer(SAMPLE_VOCAB_LLAMA, keep_accents=True)
+            # Extract vocab and merges from SentencePiece model
+            extractor = SentencePieceExtractor(SAMPLE_VOCAB_LLAMA)
+            vocab_ids, vocab_scores, merges = extractor.extract()
+            tokenizer = LlamaTokenizer(vocab=vocab_scores, merges=merges)
             image_processor = SiglipImageProcessor()
             chat_template = "default dummy template for testing purposes only"
             processor = LlavaProcessor(

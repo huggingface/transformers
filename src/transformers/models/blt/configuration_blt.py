@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -30,6 +30,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "blt_local_encoder"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -44,7 +45,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         max_position_embeddings: Optional[int] = 24576,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 2816,
         initializer_range: Optional[float] = 0.02,
@@ -65,14 +66,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -85,6 +79,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
     """
 
     model_type = "blt_local_decoder"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -99,7 +94,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         max_position_embeddings: Optional[int] = 24576,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 2816,
         initializer_range: Optional[float] = 0.02,
@@ -120,14 +115,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -140,6 +128,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
     """
 
     model_type = "blt_global_transformer"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -150,7 +139,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         max_position_embeddings: Optional[int] = 4096,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         intermediate_size: Optional[int] = 5632,
         initializer_range: Optional[float] = 0.02,
@@ -167,13 +156,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
+        self.rope_parameters = rope_parameters
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -211,7 +194,7 @@ class BltPatcherConfig(PreTrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 2048):
             Dimension of the MLP representations.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -231,7 +214,7 @@ class BltPatcherConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-5,
         dropout: Optional[float] = 0.0,
         intermediate_size: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
@@ -247,13 +230,7 @@ class BltPatcherConfig(PreTrainedConfig):
         self.hidden_act = "silu"  # Blt uses silu activation
         self.intermediate_size = intermediate_size or int(8 * self.hidden_size / 3)
         self.initializer_range = initializer_range
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
+        self.rope_parameters = rope_parameters
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
@@ -307,7 +284,7 @@ class BltConfig(PreTrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
 
@@ -329,6 +306,7 @@ class BltConfig(PreTrainedConfig):
 
     model_type = "blt"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     sub_configs = {
         "patcher_config": BltPatcherConfig,
         "encoder_config": BltLocalEncoderConfig,
@@ -356,7 +334,7 @@ class BltConfig(PreTrainedConfig):
         global_config: Optional[dict] = None,
         tie_word_embeddings: Optional[bool] = False,
         initializer_range: Optional[float] = 0.02,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
         # Basic model configuration
@@ -375,13 +353,6 @@ class BltConfig(PreTrainedConfig):
         self.realtime_patching = kwargs.get("realtime_patching", True)
         self.patching_threshold_add = kwargs.get("patching_threshold_add")
         self.monotonicity = kwargs.get("monotonicity", False)
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
 
         # Cross attention configurations
         self.cross_attn_k = cross_attn_k
@@ -433,6 +404,8 @@ class BltConfig(PreTrainedConfig):
         self.global_config.encoder_cross_output_size = (
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
+
+        self.rope_parameters = rope_parameters
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)

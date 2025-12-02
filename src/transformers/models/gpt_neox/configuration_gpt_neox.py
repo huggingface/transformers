@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -50,8 +50,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        rotary_pct (`float`, *optional*, defaults to 0.25):
-            percentage of hidden dimensions to allocate to rotary embeddings
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio probability of the attention score.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -59,8 +57,7 @@ class GPTNeoXConfig(PreTrainedConfig):
             hidden states.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
             Argument used when doing token classification, used in the model [`GPTNeoXForTokenClassification`].
-
-            The dropout ratio for the hidden layer.
+            The dropout ratio for the c;assifier head.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -75,7 +72,7 @@ class GPTNeoXConfig(PreTrainedConfig):
             Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
             speedup at large scales (e.g. 20B).
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `True`):
@@ -119,7 +116,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         num_attention_heads: Optional[int] = 64,
         intermediate_size: Optional[int] = 24576,
         hidden_act: Optional[str] = "gelu",
-        rotary_pct: Optional[float] = 0.25,
         attention_dropout: Optional[float] = 0.0,
         hidden_dropout: Optional[float] = 0.0,
         classifier_dropout: Optional[float] = 0.1,
@@ -131,11 +127,10 @@ class GPTNeoXConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
         use_parallel_residual: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = True,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -143,32 +138,36 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.rotary_pct = rotary_pct
-        self.partial_rotary_factor = rotary_pct
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
         self.classifier_dropout = classifier_dropout
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
         self.attention_bias = attention_bias
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rotary_emb_base", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        # Model uses non-standard naming for rope params, overwrite!
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
 __all__ = ["GPTNeoXConfig"]

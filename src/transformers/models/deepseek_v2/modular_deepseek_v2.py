@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from collections.abc import Callable
 from typing import Optional
 
@@ -21,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -86,7 +86,7 @@ class DeepseekV2Config(LlamaConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -119,6 +119,9 @@ class DeepseekV2Config(LlamaConfig):
             Number of selected groups per token for expert selection.
         topk_method (`str`, *optional*, defaults to `"greedy"`):
             The method used for selecting top-k experts in the routed gate mechanism.
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+            Whether to renormalize the router probabilities when `top_k > 1`. This flag is kept for backward
+            compatibility with previously released checkpoints and runtimes relying on the legacy DeepSeek config.
         v_head_dim (`int`, *optional*, defaults to 128):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
@@ -142,9 +145,9 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_colwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
     }
 
     model_type = "deepseek_v2"
@@ -167,7 +170,7 @@ class DeepseekV2Config(LlamaConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -182,6 +185,7 @@ class DeepseekV2Config(LlamaConfig):
         routed_scaling_factor: Optional[float] = 1.0,
         topk_group: Optional[int] = None,
         topk_method: Optional[str] = "greedy",
+        norm_topk_prob: Optional[bool] = False,
         v_head_dim: Optional[int] = 128,
         num_experts_per_tok: Optional[int] = None,
         moe_intermediate_size: Optional[int] = 1407,
@@ -198,6 +202,7 @@ class DeepseekV2Config(LlamaConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.topk_group = topk_group
         self.topk_method = topk_method
+        self.norm_topk_prob = norm_topk_prob
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
         self.moe_intermediate_size = moe_intermediate_size
@@ -224,12 +229,10 @@ def apply_rotary_emb(
     return xq_out, xk_out
 
 
-class DeepseekV2Experts(Qwen2MoeExperts, nn.ModuleList):
+class DeepseekV2Experts(Qwen2MoeExperts):
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__(config)
         self.num_experts = config.n_routed_experts
-        for _ in range(config.n_routed_experts):
-            self.append(DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV2Moe(nn.Module):
@@ -267,6 +270,7 @@ class DeepseekV2Moe(nn.Module):
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
         topk_weight = topk_weight * self.routed_scaling_factor
+        topk_weight = torch.zeros_like(router_logits).scatter_(1, topk_idx, topk_weight)
         return topk_idx, topk_weight
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -367,10 +371,6 @@ class DeepseekV2Attention(nn.Module):
         position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
         key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
@@ -439,10 +439,12 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, DeepseekV2Moe):
-            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, DeepseekV2Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -49,8 +49,6 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
             intermediate_multiple_size.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
-        rotary_pct (`float`, *optional*, defaults to 1.00):
-            percentage of hidden dimensions to allocate to rotary embeddings
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -61,7 +59,7 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -93,19 +91,17 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         num_attention_heads: Optional[int] = 32,
         intermediate_multiple_size: Optional[int] = 4,
         hidden_act: Optional[str] = "gelu",
-        rotary_pct: Optional[float] = 1.00,
         max_position_embeddings: Optional[int] = 2048,
         initializer_range: Optional[float] = 0.02,
         layer_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         bos_token_id: Optional[int] = 31996,
         eos_token_id: Optional[int] = 31999,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_dropout: Optional[float] = 0.1,
         hidden_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -113,24 +109,27 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_multiple_size = intermediate_multiple_size
         self.hidden_act = hidden_act
-        self.rotary_pct = rotary_pct
-        self.partial_rotary_factor = rotary_pct
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rotary_emb_base", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        # Model uses non-standard naming for rope params, overwrite!
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
 __all__ = ["GPTNeoXJapaneseConfig"]

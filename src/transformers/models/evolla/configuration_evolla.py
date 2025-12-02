@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -190,6 +190,7 @@ class EvollaConfig(PreTrainedConfig):
 
     model_type = "EvollaModel"
     sub_configs = {"protein_encoder_config": SaProtConfig}
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -203,7 +204,7 @@ class EvollaConfig(PreTrainedConfig):
         hidden_act: Optional[str] = "silu",  # llama activation function
         max_position_embeddings: Optional[int] = 8192,  # llama rope max length
         rms_norm_eps: Optional[int] = 1e-05,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -249,14 +250,7 @@ class EvollaConfig(PreTrainedConfig):
         self.resampler_heads = resampler_heads
         self.resampler_num_latents = resampler_num_latents
         self.resampler_ff_mult = resampler_ff_mult
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # Subconfig
         if protein_encoder_config is None:

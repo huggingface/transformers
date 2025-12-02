@@ -42,6 +42,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -152,10 +153,11 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = config.image_token_index
-        attention_mask = input_ids.ne(1).to(torch_device)
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -166,7 +168,9 @@ class LlavaVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LlavaForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
@@ -180,7 +184,11 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         else ()
     )
     pipeline_model_mapping = (
-        {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
+        {
+            "image-to-text": LlavaForConditionalGeneration,
+            "image-text-to-text": LlavaForConditionalGeneration,
+            "any-to-any": LlavaForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )
@@ -281,6 +289,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
 
 @require_torch
+@slow
 class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
@@ -288,7 +297,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -314,7 +322,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -345,7 +352,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
-    @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -397,7 +403,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
-    @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -445,7 +450,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -502,14 +506,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
-    @slow
     @require_torch
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
-        model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-1.5-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
-        )
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
 
         processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
@@ -578,7 +579,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
-    @slow
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "llava-hf/llava-1.5-7b-hf"
@@ -593,7 +593,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
 
-    @slow
     @require_bitsandbytes
     def test_generation_siglip_backbone(self):
         model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
@@ -622,7 +621,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_text = processor.batch_decode(output, skip_special_tokens=True)[0]
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
-    @slow
     def test_pixtral(self):
         model_id = "mistral-community/pixtral-12b"
         model = LlavaForConditionalGeneration.from_pretrained(model_id)
@@ -652,7 +650,6 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)
 
-    @slow
     @require_bitsandbytes
     def test_pixtral_4bit(self):
         model_id = "mistral-community/pixtral-12b"
@@ -681,7 +678,6 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         self.assertTrue(output in EXPECTED_GENERATION)
 
-    @slow
     @require_bitsandbytes
     def test_pixtral_batched(self):
         model_id = "mistral-community/pixtral-12b"

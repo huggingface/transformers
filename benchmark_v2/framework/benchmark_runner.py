@@ -6,7 +6,6 @@ import pathlib
 import re
 import tempfile
 import time
-from contextlib import nullcontext
 from datetime import datetime
 from queue import Queue
 from typing import Any
@@ -79,24 +78,6 @@ def get_git_revision() -> str:
         return git_hash.readline().strip()
 
 
-def get_sdpa_backend(backend_name: str | None) -> torch.nn.attention.SDPBackend | None:
-    """Get the SDPA backend enum from string name."""
-    if backend_name is None:
-        return None
-
-    try:
-        backend_map = {
-            "math": torch.nn.attention.SDPBackend.MATH,
-            "flash_attention": torch.nn.attention.SDPBackend.FLASH_ATTENTION,
-            "efficient_attention": torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION,
-            "cudnn_attention": torch.nn.attention.SDPBackend.CUDNN_ATTENTION,
-        }
-        return backend_map.get(backend_name.lower())
-    except AttributeError:
-        # torch.nn.attention.SDPBackend not available in older torch versions
-        return None
-
-
 def flush_memory():
     """Flush GPU memory and run garbage collection."""
     gc.collect()
@@ -117,8 +98,6 @@ def flush_memory():
     # Clear CUDA cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        torch.cuda.reset_max_memory_allocated()
-        torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
     gc.collect()
 
@@ -225,18 +204,15 @@ class BenchmarkRunner:
         self, model_id: str, config: BenchmarkConfig, num_tokens_to_profile: int = 0
     ) -> dict[str, Any] | None:
         """Run a single benchmark with the given model ID and config."""
-        sdpa_ctx = nullcontext()
-        if config.attn_implementation == "sdpa":
-            sdpa_backend = get_sdpa_backend(config.sdpa_backend)
-            sdpa_ctx = torch.nn.attention.sdpa_kernel(sdpa_backend)
-
-        with sdpa_ctx, torch.no_grad():
+        with torch.no_grad():
             self.logger.info(f"Running benchmark scenario: {config.name}")
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = self.time_generate(
-                max_new_tokens=1, gpu_monitor=None
+            e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
+                max_new_tokens=config.num_tokens_to_generate,
+                use_continuous_batching=config.continuous_batching,
+                gpu_monitor=None,
             )
             if e2e_latency < 0:
                 self.logger.warning(f"Skipping config {config.name}: {e2e_latency = } (no GPU monitoring)")
@@ -244,19 +220,24 @@ class BenchmarkRunner:
 
             # Warmup runs
             self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
-            for _ in trange(config.warmup_iterations):
-                _ = self.time_generate(max_new_tokens=config.num_tokens_to_generate)
+            for _ in trange(config.warmup_iterations, desc="Warmup"):
+                _ = self.time_generate(
+                    max_new_tokens=config.num_tokens_to_generate,
+                    use_continuous_batching=config.continuous_batching,
+                    gpu_monitor=None,
+                )
             self.logger.info("Warmup over.")
 
             # Measurement runs
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
-            for _ in trange(config.measurement_iterations):
-                e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics = self.time_generate(
+            for _ in trange(config.measurement_iterations, desc="Benchmarking"):
+                e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
                     max_new_tokens=config.num_tokens_to_generate,
+                    use_continuous_batching=config.continuous_batching,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
                 )
-                result.accumulate(e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics)
+                result.accumulate(e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
 
             # Profile if needed
@@ -277,37 +258,47 @@ class BenchmarkRunner:
     def time_generate(
         self,
         max_new_tokens: int,
+        use_continuous_batching: bool = False,
         gpu_monitor: GPUMonitor | None = None,
     ) -> tuple[float, list[float], str, GPURawMetrics | None]:
-        """Time the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
         # Prepare gpu monitoring if needed
         if gpu_monitor is not None:
             gpu_monitor.start()
-        # Prepare streamer
-        streamer = BenchmarkStreamer()
+
         # Generate and time
-        wall_time_0 = time.perf_counter()
-        outputs = self.model.generate(
-            **self.inputs,
-            max_new_tokens=max_new_tokens,
-            streamer=streamer,
-        )
+        if use_continuous_batching:
+            inputs = self.inputs["input_ids"].tolist()
+            wall_time_0 = time.perf_counter()
+            results = self.model.generate_batch(inputs, allow_prefix_sharing=False, record_timestamps=True)
+        else:
+            streamer = BenchmarkStreamer()
+            wall_time_0 = time.perf_counter()
+            results = self.model.generate(**self.inputs, streamer=streamer)
+
         wall_time_1 = time.perf_counter()
-        # Stop gpu monitoring if needed
         gpu_metrics = gpu_monitor.stop_and_collect() if gpu_monitor is not None else None
-        # Check if generation had the right number of tokens
+
+        # Retrieve timestamps and results in a way that allows similar post-processing
         input_tokens = self.inputs["input_ids"].size(-1)
-        batch_size, output_tokens = outputs.shape
-        new_tokens = output_tokens - input_tokens
-        if new_tokens != max_new_tokens:
-            raise RuntimeError(f"Generated {new_tokens} tokens, expected {max_new_tokens}")
+        if use_continuous_batching:
+            timestamps = [result.timestamps for result in results.values()]
+            results = torch.tensor([result.generated_tokens for result in results.values()])
+        else:
+            timestamps = [streamer.timestamps[1:]]  # skip the first timestamp because it's the input tokens
+            results = results[:, input_tokens:]
+
+        # Check if generation had the right number of tokens
+        if results.size(-1) != max_new_tokens:
+            raise RuntimeError(f"Generated {results.size(-1)} tokens, expected {max_new_tokens}")
+
         # Decode outputs
-        decoded_output = self.tokenizer.decode(outputs[0, input_tokens:], skip_special_tokens=True)
-        shape_and_decoded_output = f"{tuple(outputs.shape)} | {decoded_output}"
-        # Compute intermediate quantities
+        decoded_output = self.tokenizer.decode(results[0], skip_special_tokens=True)
+        shape_and_decoded_output = f"{tuple(results.shape)} | {decoded_output}"
+
+        # Compute metrics
         e2e_latency = wall_time_1 - wall_time_0
-        token_generation_times = [t - wall_time_0 for t in streamer.timestamps[1:]]
-        return e2e_latency, token_generation_times, shape_and_decoded_output, gpu_metrics
+        timestamps = torch.tensor(timestamps).sub(wall_time_0).tolist()
+        return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
@@ -339,12 +330,6 @@ class BenchmarkRunner:
 
         n_configs = len(benchmark_configs)
         for i, config in enumerate(benchmark_configs):
-            # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
-            if config.attn_implementation == "sdpa" and config.sdpa_backend is None:
-                default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
-                self.logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
-                config.sdpa_backend = default_backend
-
             # Skip if already run
             if config.hash in all_results:
                 self.logger.info(f"Skipping duplicate config {config.name} for model {model_id} ({i + 1}/{n_configs})")
@@ -368,21 +353,27 @@ class BenchmarkRunner:
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp)
 
+        if len(all_results) < 1:
+            raise RuntimeError("No benchmark was run successfully")
+
         if pretty_print_summary:
             print()
             print("=" * 100)
             print(f"Finished benchmarks in {time.perf_counter() - start_time:.2f} seconds")
             print(f"Total number of benchmarks: {len(all_results)}")
-            if len(all_results) > 0:
-                print("First run metadata:")
-                first_key = list(all_results.keys())[0]
-                first_metadata = all_results[first_key]["metadata"].to_dict()
-                hardware_info = first_metadata.pop("hardware_info")
-                pretty_print_dict(first_metadata | hardware_info, tabs=1)
+            print("First run metadata:")
+            first_key = list(all_results.keys())[0]
+            first_metadata = all_results[first_key]["metadata"].to_dict()
+            hardware_info = first_metadata.pop("hardware_info")
+            pretty_print_dict(first_metadata | hardware_info, tabs=1)
             for result in all_results.values():
                 print("=" * 100)
                 print(f"Config: {result['config'].infer_name(compact=False)}\n")
-                result["measurements"].pprint(batch_size=result["config"].batch_size, tabs=1)
+                result["measurements"].pprint(
+                    batch_size=result["config"].batch_size,
+                    num_generated_tokens=result["config"].num_tokens_to_generate,
+                    tabs=1,
+                )
             print("=" * 100)
 
         return (timestamp, all_results)
@@ -421,36 +412,38 @@ class BenchmarkRunner:
                 "PUSH_TO_HUB_TOKEN is not set, cannot push results to the Hub. When setting dataset_id, please also set the PUSH_TO_HUB_TOKEN environment variable."
             )
 
+        api = HfApi()
         n_results = len(results)
-        self.logger.info(f"Pushing {n_results} results to: {dataset_id}")
-        rows = []
-        for cfg_hash, entry in results.items():
-            row = {
-                "benchmark_config_hash": cfg_hash,
-                "config": entry["config"].to_dict(),
-                "measurements": entry["measurements"].to_dict(),
-                "metadata": entry["metadata"].to_dict(),
-            }
-            rows.append(row)
+        for summarized in [False, True]:
+            self.logger.info(f"Pushing {n_results} results to: {dataset_id} with {summarized = }")
+            rows = []
+            for cfg_hash, entry in results.items():
+                row = {
+                    "benchmark_config_hash": cfg_hash,
+                    "config": entry["config"].to_dict(),
+                    "measurements": entry["measurements"].to_dict(summarized=summarized),
+                    "metadata": entry["metadata"].to_dict(),
+                }
+                rows.append(row)
 
-        ds = Dataset.from_list(rows)
-        with tempfile.TemporaryDirectory() as tmp:
-            jsonl_path = os.path.join(tmp, "data.jsonl")
-            with open(jsonl_path, "w") as f:
-                json_lines = []
-                for ex in ds:
-                    json_lines.append(json.dumps(ex, ensure_ascii=False))
-                f.write("\n".join(json_lines))
+            ds = Dataset.from_list(rows)
+            with tempfile.TemporaryDirectory() as tmp:
+                file_name = "summarized_results" if summarized else "full_results"
+                jsonl_path = os.path.join(tmp, f"{file_name}.jsonl")
+                with open(jsonl_path, "w") as f:
+                    json_lines = []
+                    for ex in ds:
+                        json_lines.append(json.dumps(ex, ensure_ascii=False))
+                    f.write("\n".join(json_lines))
 
-            api = HfApi()
-            # NOTE: we expect the repository to already exist
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
-            file_name = f"benchmark_run_{timestamp}.jsonl"
-            api.upload_file(
-                path_or_fileobj=jsonl_path,
-                path_in_repo=file_name,
-                repo_id=dataset_id,
-                repo_type="dataset",
-                token=PUSH_TO_HUB_TOKEN,
-            )
-        self.logger.info(f"Succesfully uploaded results to: {dataset_id}")
+                # NOTE: we expect the repository to already exist
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
+                file_name = file_name + "/" + f"benchmark_run_{timestamp}.jsonl"
+                api.upload_file(
+                    path_or_fileobj=jsonl_path,
+                    path_in_repo=file_name,
+                    repo_id=dataset_id,
+                    repo_type="dataset",
+                    token=PUSH_TO_HUB_TOKEN,
+                )
+                self.logger.info(f"Successfully uploaded results to: {dataset_id} with {summarized = }")
