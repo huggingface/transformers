@@ -39,4 +39,4 @@ jobs:
 
       - name: Set PR number
         id: set_pr_number
-        run: echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+        run: echo "PR_NUMBER=42575" >> "$GITHUB_OUTPUT"
