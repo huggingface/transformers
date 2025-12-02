@@ -454,7 +454,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 if any(streamer.finished_flags):
                     break
 
-            # Report generation progress
             if monitor_progress is not None:
                 current_steps = torch.full((batch_size,), step, dtype=torch.long, device=input_ids.device)
                 current_steps[finished_tags] = completion_steps[finished_tags]
@@ -550,7 +549,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     if streamer is not None:
                         streamer.end(new_eos_idx_list)
 
-                    # Report immediate completion
                     if monitor_progress is not None:
                         current_steps = torch.full((batch_size,), step + 1, dtype=torch.long, device=input_ids.device)
                         current_steps[finished_tags] = max_step_per_sample[finished_tags]
@@ -685,10 +683,17 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 scaled_latent = speech_latent / self.speech_scaling_factor.to(
                     speech_latent.device
                 ) - self.speech_bias_factor.to(speech_latent.device)
+                if len(diffusion_indices) != batch_size:
+                    # pad non-diffusion samples with zeros
+                    padded_latent = torch.zeros(batch_size, scaled_latent.shape[1], scaled_latent.shape[2]).to(
+                        scaled_latent.device
+                    )
+                    padded_latent[diffusion_indices] = scaled_latent
+                else:
+                    padded_latent = scaled_latent
                 audio_output = self.acoustic_tokenizer.decode(
-                    scaled_latent.to(self.acoustic_tokenizer.device),
+                    padded_latent.to(self.acoustic_tokenizer.device),
                     padding_cache=acoustic_cache,
-                    batch_mask=diffusion_indices.to(self.acoustic_tokenizer.device),
                     use_cache=self.config.use_cache,
                 )
                 audio_chunk = audio_output.audio
@@ -697,9 +702,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 # Store and stream audio
                 for i, sample_idx in enumerate(diffusion_indices):
                     idx = sample_idx.item()
-                    if not finished_tags[idx]:
-                        audio_chunks[idx].append(audio_chunk[i])
-
+                    audio_chunks[idx].append(audio_chunk[i])
                 if streamer is not None:
                     streamer.put(audio_chunk, diffusion_indices)
 
@@ -707,10 +710,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 semantic_outputs = self.semantic_tokenizer.encode(
                     audio_chunk,
                     padding_cache=semantic_cache,
-                    batch_mask=diffusion_indices,
                     use_cache=self.config.use_cache,
                 )
-                semantic_features = semantic_outputs.latents
+                semantic_features = semantic_outputs.latents[diffusion_indices]
                 semantic_cache = semantic_outputs.padding_cache
 
                 # Combine features for next input

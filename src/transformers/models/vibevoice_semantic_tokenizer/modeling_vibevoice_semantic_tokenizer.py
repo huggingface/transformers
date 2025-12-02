@@ -81,64 +81,63 @@ class VibeVoiceEncoderFeedForward(nn.Module):
 
 class VibeVoiceConv1dCache:
     """
-    Similar to Mimi's Cache: https://github.com/huggingface/transformers/blob/cad7eeeb5e8a173f8d7d746ccdb6ef670ffe6be4/src/transformers/models/mimi/modeling_mimi.py#L76
-    But with `batch_mask` support for selective cache updates.
-
-    Original (uses unique key per layer and sample): https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L174
+    Cache class for maintaining convolution states across layers to support streaming.
     """
 
-    def __init__(self, num_layers: int):
-        self.cache = [None] * num_layers
-
-    def update(
+    def __init__(
         self,
-        layer_idx: int,
-        context: int,
-        hidden_states: torch.Tensor,
-        batch_mask: Optional[torch.Tensor] = None,
+        num_layers: int,
+        per_layer_padding: list[int],
+        per_layer_in_channels: list[int],
     ):
+        # ensure correct number of layers for each arg
+        from_args_num_layers = {len(per_layer_padding), len(per_layer_in_channels)}
+        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
+            raise ValueError(
+                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding` and `per_layer_in_channels`"
+            )
+        self.per_layer_padding = per_layer_padding
+        self.per_layer_in_channels = per_layer_in_channels
+        self.per_layer_is_init = [True] * num_layers
+
+        self.padding_cache = [None] * num_layers
+
+    def update(self, hidden_states: torch.Tensor, layer_idx: int, is_transpose: bool = False):
         """
         Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-        Similar to Mimi's update method.
 
         Parameters:
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
             hidden_states (`torch.Tensor`):
                 The hidden states to be partially cached.
-            batch_mask (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Indices of samples to update cache for.
-            context (`int`):
-                The amount of context for this layer.
-
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            is_transpose (`bool`):
+                Whether the layer is a ConvTranspose1d layer.
         Returns:
-            `torch.Tensor`, the current padding cache for the specified samples.
+            `torch.Tensor` or `None`, the current padding cache.
         """
-        batch_size, channels, _ = hidden_states.shape
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding = self.per_layer_padding[layer_idx]
+        in_channels = self.per_layer_in_channels[layer_idx]
 
-        if batch_mask is None:
-            batch_mask = torch.arange(batch_size, device=hidden_states.device)
-        else:
-            if len(batch_mask) != batch_size:
-                raise ValueError("batch_mask length must match batch size")
+        current_cache = self.padding_cache[layer_idx]
+        if current_cache is None:
+            if is_transpose:
+                # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L471
+                current_cache = torch.zeros(batch_size, in_channels, 0, device=device, dtype=dtype)
+            else:
+                current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
 
-        existing_cache = self.cache[layer_idx]
-        if existing_cache is None:
-            current_cache = torch.zeros(
-                batch_size, channels, max(context, 0), device=hidden_states.device, dtype=hidden_states.dtype
-            )
-        else:
-            current_cache = existing_cache[batch_mask]
-
-        # Update the cache with padded input (otherwise not enough context):
+        # Update the cache with padded input, to ensure enough context:
         # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L345
         input_with_context = torch.cat([current_cache, hidden_states], dim=-1)
-        if context > 0:
-            new_cache = input_with_context[..., -context:]
-            if existing_cache is None:
-                self.cache[layer_idx] = new_cache
+        if padding > 0:
+            if input_with_context.shape[-1] >= padding:
+                new_cache = input_with_context[:, :, -padding:]
             else:
-                self.cache[layer_idx][batch_mask] = new_cache
+                new_cache = input_with_context
+            self.padding_cache[layer_idx] = new_cache
+
         return current_cache
 
 
@@ -173,7 +172,6 @@ class VibeVoiceCausalConv1d(nn.Module):
         self,
         hidden_states: torch.Tensor,
         padding_cache: Optional[VibeVoiceConv1dCache] = None,
-        batch_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
@@ -181,7 +179,7 @@ class VibeVoiceCausalConv1d(nn.Module):
         """
 
         if padding_cache is not None:
-            layer_padding = padding_cache.update(self.layer_idx, self.causal_padding, hidden_states, batch_mask)
+            layer_padding = padding_cache.update(hidden_states, self.layer_idx)
         else:
             # non-streaming mode: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L365
             layer_padding = torch.zeros(
@@ -234,10 +232,10 @@ class VibeVoiceConvNext1dLayer(nn.Module):
             layer_idx=layer_idx,
         )
 
-    def forward(self, hidden_states, padding_cache=None, batch_mask=None):
+    def forward(self, hidden_states, padding_cache=None):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.transpose(1, 2)).transpose(1, 2)
-        hidden_states = self.mixer(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
+        hidden_states = self.mixer(hidden_states, padding_cache=padding_cache)
         hidden_states = hidden_states * self.gamma.unsqueeze(-1)
         # (ebezzam) original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
         # as mentioned above, drop_path is not used and the VibeVoice authors don't use the `forward` method but a custom
@@ -307,14 +305,27 @@ class VibeVoiceSemanticTokenizerEncoder(nn.Module):
             bias=config.bias,
             layer_idx=layer_idx,
         )
-        self.num_layers = layer_idx + 1
 
-    def forward(self, hidden_states, padding_cache=None, batch_mask=None):
+        # store parameters for cache creation
+        self.num_layers = layer_idx + 1
+        self.per_layer_padding = []
+        self.per_layer_in_channels = []
+        for downsample_layer in self.downsample_layers:
+            self.per_layer_padding.append(downsample_layer.causal_padding)
+            self.per_layer_in_channels.append(downsample_layer.conv.in_channels)
+        for stage in self.stages:
+            for block in stage:
+                self.per_layer_padding.append(block.mixer.causal_padding)
+                self.per_layer_in_channels.append(block.mixer.conv.in_channels)
+        self.per_layer_padding.append(self.head.causal_padding)
+        self.per_layer_in_channels.append(self.head.conv.in_channels)
+
+    def forward(self, hidden_states, padding_cache=None):
         for layer_idx, downsample_layer in enumerate(self.downsample_layers):
-            hidden_states = downsample_layer(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
+            hidden_states = downsample_layer(hidden_states, padding_cache=padding_cache)
             for block in self.stages[layer_idx]:
-                hidden_states = block(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
-        hidden_states = self.head(hidden_states, padding_cache=padding_cache, batch_mask=batch_mask)
+                hidden_states = block(hidden_states, padding_cache=padding_cache)
+        hidden_states = self.head(hidden_states, padding_cache=padding_cache)
         return hidden_states.permute(0, 2, 1)
 
 
@@ -343,29 +354,27 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
 
     def __init__(self, config):
         super().__init__(config)
-
         self.encoder = VibeVoiceSemanticTokenizerEncoder(config)
-
-        # Initialize weights
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
-    def encode(self, audio, padding_cache=None, batch_mask=None, use_cache=None):
+    def encode(self, audio, padding_cache=None, use_cache=None):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representations.
         padding_cache (`VibeVoiceConv1dCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers.
-        batch_mask (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Indices identifying each sample in the batch for cache management.
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         """
         if use_cache and padding_cache is None:
-            padding_cache = VibeVoiceConv1dCache(num_layers=self.encoder.num_layers)
-
-        latents = self.encoder(audio, padding_cache=padding_cache, batch_mask=batch_mask)
+            padding_cache = VibeVoiceConv1dCache(
+                num_layers=self.encoder.num_layers,
+                per_layer_padding=self.encoder.per_layer_padding,
+                per_layer_in_channels=self.encoder.per_layer_in_channels,
+            )
+        latents = self.encoder(audio, padding_cache=padding_cache)
 
         return VibeVoiceSemanticTokenizerOutput(
             latents=latents,
@@ -374,18 +383,16 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, audio, padding_cache=None, batch_mask=None, use_cache=None):
+    def forward(self, audio, padding_cache=None, use_cache=None):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representations.
         padding_cache (`VibeVoiceConv1dCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers.
-        batch_mask (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Indices identifying each sample in the batch for cache management.
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         """
-        return self.encode(audio, padding_cache=padding_cache, batch_mask=batch_mask, use_cache=use_cache)
+        return self.encode(audio, padding_cache=padding_cache, use_cache=use_cache)
 
 
 __all__ = ["VibeVoiceSemanticTokenizerModel"]
