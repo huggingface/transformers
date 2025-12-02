@@ -961,17 +961,13 @@ class EmbeddingAccessMixin:
 
     _input_embed_layer = "embed_tokens"  # default layer that holds input embeddings.
 
-    def get_input_embeddings(self) -> nn.Module:
+    def _get_input_embeddings_no_raise(self) -> Optional[nn.Module]:
         """
-        Returns the model's input embeddings.
-
-        Returns:
-            `nn.Module`: A torch module mapping vocabulary to hidden states.
+        Internal helper mirroring `get_input_embeddings` but returning `None`
+        instead of raising when no embeddings are exposed.
         """
-
         # 1) Check if the model has an attribute named 'embed_tokens' (the standard input embedding layer
         #  for most NLP models), and if so, return it.
-
         name = getattr(self, "_input_embed_layer", "embed_tokens")
 
         if (default_embedding := getattr(self, name, None)) is not None:
@@ -980,23 +976,39 @@ class EmbeddingAccessMixin:
         if hasattr(self, "embeddings") and hasattr(self.embeddings, name):
             return getattr(self.embeddings, name)
         # 3) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
-
         if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
             return self.model.embed_tokens
-
-        # 4) vanilla decoder‑only architectures
-        elif hasattr(self, "embed_tokens"):
+        # 4) vanilla decoder-only architectures
+        if hasattr(self, "embed_tokens"):
             return self.embed_tokens
-        else:
-            base_model = getattr(self, "base_model_prefix", None)
-            if base_model is not None:
-                base_model = getattr(self, base_model, None)
-                if base_model is not None and base_model is not self:
-                    return base_model.get_input_embeddings()
+
+        base_model = getattr(self, "base_model_prefix", None)
+        if base_model is not None:
+            base_model = getattr(self, base_model, None)
+            if (
+                base_model is not None
+                and base_model is not self
+                and hasattr(base_model, "_get_input_embeddings_no_raise")
+            ):
+                return base_model._get_input_embeddings_no_raise()
+
+        return None
+
+    def get_input_embeddings(self) -> nn.Module:
+        """
+        Returns the model's input embeddings.
+
+        Returns:
+            `nn.Module`: A torch module mapping vocabulary to hidden states.
+        """
+
+        embeddings = self._get_input_embeddings_no_raise()
+        if embeddings is None:
             raise NotImplementedError(
                 f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
                 "please override in the subclass."
             )
+        return embeddings
 
     def set_input_embeddings(self, value: nn.Module):
         """Fallback setter that handles **~70%** of models in the code-base.
@@ -1987,12 +1999,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         seen_modules = set()
 
         for module in self.modules():
-            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+            if not isinstance(module, PreTrainedModel):
                 continue
 
-            input_embeddings = module.get_input_embeddings()
+            if hasattr(module, "_get_input_embeddings_no_raise"):
+                input_embeddings = module._get_input_embeddings_no_raise()
+            else:
+                input_embeddings = None
 
-            if input_embeddings is None:
+            if input_embeddings is None or not hasattr(input_embeddings, "register_forward_hook"):
                 continue
 
             embedding_id = id(input_embeddings)

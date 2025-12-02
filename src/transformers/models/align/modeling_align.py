@@ -976,6 +976,7 @@ class AlignVisionModel(AlignPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
+    _input_embed_layer = "convolution"
 
     def __init__(self, config: AlignVisionConfig):
         super().__init__(config)
@@ -993,9 +994,6 @@ class AlignVisionModel(AlignPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.convolution
 
     @can_return_tuple
     @auto_docstring

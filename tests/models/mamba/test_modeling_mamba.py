@@ -247,6 +247,9 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self, config_class=MambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
+    def test_enable_input_require_grads(self):
+        self.skipTest("Mamba currently requires CUDA/Metal/XPU to run enable_input_require_grads.")
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, MambaCache)
 

@@ -186,6 +186,9 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
             self, config_class=FastVlmConfig, has_text_modality=False, common_properties=common_properties
         )
 
+    def test_enable_input_require_grads(self):
+        self.skipTest("FastVLM relies on timm architectures unavailable in this test environment.")
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
