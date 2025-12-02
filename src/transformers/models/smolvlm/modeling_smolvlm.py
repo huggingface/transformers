@@ -544,9 +544,8 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         nb_values_per_image = pixel_values.shape[1:].numel()
         real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
 
-        if not any(real_images_inds):
-            # no images, leave one empty image.
-            real_images_inds[0] = True
+        # If no images, leave one empty image.
+        real_images_inds[0] |= ~torch.any(real_images_inds)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
