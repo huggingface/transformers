@@ -41,7 +41,7 @@ RUN python3 -m pip install --no-cache-dir einops
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
 # # Add gptqmodel
-# RUN python3 -m pip install --gno-cache-dir gptqmodel
+# RUN python3 -m pip install --no-cache-dir gptqmodel
 
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq
