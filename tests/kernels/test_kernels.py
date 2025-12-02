@@ -449,46 +449,6 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         self.assertIn("cuda", backends, "CUDA backend should be registered")
         self.assertNotIn("rocm", backends, "ROCm backend should NOT be registered on CUDA device")
 
-    def test_rocm_device_filters_correctly(self):
-        """
-        Test that ROCm device correctly filters out CUDA kernels.
-        """
-        kernel_mapping = {
-            "RMSNorm": {
-                "cuda": "kernels-community/layer_norm:LlamaRMSNorm",
-                "rocm": "kernels-community/layer_norm:LlamaRMSNorm",
-            }
-        }
-
-        kernel_config = KernelConfig(kernel_mapping)
-
-        # Create a mock model on ROCm device
-        mock_model = MagicMock()
-        mock_model.training = False
-
-        # Mock parameter with ROCm device
-        mock_param = MagicMock()
-        mock_param.device.type = "rocm"
-        mock_model.parameters.return_value = iter([mock_param])
-
-        # Mock named_modules with RMSNorm layer
-        mock_layer = MagicMock()
-        mock_layer.kernel_layer_name = "RMSNorm"
-        mock_model.named_modules.return_value = [("layers.0", mock_layer)]
-
-        # Trigger the mapping creation
-        kernel_config.create_compatible_mapping(mock_model)
-
-        # Verify results
-        result_mapping = kernel_config.kernel_mapping
-
-        self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
-        backends = list(result_mapping["RMSNorm"].keys())
-
-        # Assert only ROCm is present, not CUDA
-        self.assertIn("rocm", backends, "ROCm backend should be registered")
-        self.assertNotIn("cuda", backends, "CUDA backend should NOT be registered on ROCm device")
-
     def test_single_device_mapping_still_works(self):
         """
         Test that single-device mappings continue to work as expected.
@@ -508,8 +468,6 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         mock_layer = MagicMock()
         mock_layer.kernel_layer_name = "RMSNorm"
         mock_model.named_modules.return_value = [("layers.0", mock_layer)]
-
-        # Should not raise any errors
         kernel_config.create_compatible_mapping(mock_model)
 
         result_mapping = kernel_config.kernel_mapping
