@@ -818,7 +818,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 class IdeficsPreTrainedModel(PreTrainedModel):
     config: IdeficsConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
@@ -930,7 +930,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
     def freeze_vision_layers(self, module_exceptions=[]):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1111,7 +1111,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def tie_weights(self, missing_keys=None):
+    def tie_weights(self, **kwargs):
         """
         Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of
         IdeficsDecoupledLinear and IdeficsDecoupledEmbedding.

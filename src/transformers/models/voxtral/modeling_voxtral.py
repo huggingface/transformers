@@ -220,7 +220,7 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
 class VoxtralPreTrainedModel(PreTrainedModel):
     config: VoxtralConfig
     base_model_prefix = "model"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
     _skip_keys_device_placement = "past_key_values"
@@ -293,7 +293,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_features,
