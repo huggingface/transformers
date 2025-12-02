@@ -185,7 +185,7 @@ def _w8a8_block_fp8_matmul_per_tensor(
     GROUP_SIZE_M: tl.constexpr,
 ):
     """Triton-accelerated function used to perform linear operations (dot
-    product) on input tensors `A` and `B` with block-wise quantization, and
+    product) on input tensors `A` and `B` with per-tensor quantization, and
     store the result in output tensor `C`.
     """
 
@@ -252,8 +252,11 @@ def w8a8_block_fp8_matmul_triton(
     Returns:
         torch.Tensor: The result of matmul.
     """
-    assert len(block_size) == 2
-    block_n, block_k = block_size[0], block_size[1]
+    if block_size is None:
+        block_n, block_k = 128, 128
+    else:
+        assert len(block_size) == 2
+        block_n, block_k = block_size[0], block_size[1]
 
     # if we have per-tensor quantization, we use 128x128 block size for tiled matmul multiplication
     if block_n == B.shape[-2] and block_k == B.shape[-1]:
@@ -466,7 +469,6 @@ class FP8Linear(nn.Linear):
                     qinput = (input / scale).to(torch.float8_e4m3fn)
                 else:
                     raise NotImplementedError("Not supported")
-                # TODO: fix this later to use the triton kernel
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
                     weight,
