@@ -5,18 +5,18 @@
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class VideoPrismConfig(PretrainedConfig):
+class VideoPrismConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VideoPrismModel`]. It is used to instantiate a VideoPrism
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the VideoPrism
     [google/videoprism-b-16x2-kinetics400](https://huggingface.co/google/videoprism-b-16x2-kinetics400) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         image_size (`int`, *optional*, defaults to 224):
@@ -94,7 +94,6 @@ class VideoPrismConfig(PretrainedConfig):
         num_labels=1000,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -110,6 +109,8 @@ class VideoPrismConfig(PretrainedConfig):
         self.tubelet_size = tubelet_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+
+        super().__init__(**kwargs)
         self.num_spatial_layers = num_spatial_layers
         self.num_temporal_layers = num_temporal_layers
         self._attn_implementation = _attn_implementation

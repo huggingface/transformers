@@ -35,7 +35,7 @@ class VideoPrismConfig(VivitConfig):
         self,
         image_size=288,
         num_frames=16,    # ? embeds are made using 16 frames for base and 8 frames for large model size 
-        tubelet_size=[1, 18, 18],  
+        tubelet_size=[1, 18, 18],
         num_channels=3,
         hidden_size=768,   # ? 1024 for large
         num_spatial_layers=12,     # ? 24
@@ -125,7 +125,7 @@ class VideoPrismTokenizer(T5Tokenizer):
 
 
 class VideoPrismTokenizerFast(T5TokenizerFast):
-    pass
+    
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
@@ -263,7 +263,7 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
         batch_size, num_frames, num_channels, height, width = pixel_values_videos.shape
         if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):   # ! need to decide on this
             raise ValueError(
-                f"Image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                f"Image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]}). Set interpolate_pos_encoding=True to automatically resize the model position embeddings."
             )
         # permute to (batch_size, num_channels, num_frames, height, width)
         pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)  # ? (B, C=3, T=16, H=288, W=288)
@@ -309,8 +309,8 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
 
         dim = embeddings.shape[-1]
 
-        new_height = height // self.patch_size[0]
-        new_width = width // self.patch_size[1]
+        num_row_patches = height // self.patch_size[0]  #? height / 18
+        num_col_patches = width // self.patch_size[1]    #? width / 18
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = self.position_embeddings.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -318,7 +318,7 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
 
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            size=(new_height, new_width),
+            size=(num_row_patches, num_col_patches),
             mode="bilinear",
             antialias=True,  # ? set to True by default in jax.image.resize
         )
@@ -330,11 +330,11 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
         
         b, t, c, h, w = pixel_values_videos.shape
         assert h == w, "Input image height and width must be the same"  # ! requirement from the original repo
-        embeddings = self.patch_embeddings(pixel_values_videos)
+        embeddings = self.patch_embeddings(pixel_values_videos, interpolate_pos_encoding)  # ? (B * T, 256, 768)
         
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)  #! fix it
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, h, w)  #! fix it
         else:
             embeddings = embeddings + self.position_embeddings
         
@@ -362,30 +362,25 @@ class VideoPrismTemporalEmbeddings(VivitEmbeddings):
         """
         Interpolates the embedding to the target sequence length
         """
-        num_patches = embeddings.shape[1]
-        num_positions = self.position_embeddings.shape[1]
+        target_emb_length = embeddings.shape[1]
+        source_emb_length = self.position_embeddings.shape[1]
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions:
+        if not torch.jit.is_tracing() and target_emb_length == source_emb_length:
             return self.position_embeddings
 
-        patch_pos_embed = self.position_embeddings
-
+        source_emb = self.position_embeddings
         dim = embeddings.shape[-1]
-
-        patch_pos_embed = patch_pos_embed.reshape(1, 1, -1, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        source_emb = source_emb.unsqueeze(1)
+        source_emb = nn.functional.interpolate(
+            source_emb,  # ? (1, 1, 16, 768)
+            size=(target_emb_length, dim),
+            mode="bilinear",
+            antialias=True,
+        )
         
-        patch_pos_embed = nn.functional.interpolate(
-                patch_pos_embed,                   # ? (1, 768, 1, 16)
-                size=(1, num_patches),
-                mode="bilinear",
-                antialias=True,
-            )
-       
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim )
+        return source_emb.squeeze(1)
 
-        return patch_pos_embed
 
     def forward(self, pixel_values_videos: torch.Tensor, input_shape, interpolate_pos_encoding: bool = False):
         if input_shape is not None:
@@ -467,8 +462,8 @@ class VideoPrismEncoder(VivitEncoder):
 
     def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask if head_mask is not None else None
-            hidden_states = layer_module(hidden_states, layer_head_mask)
+            # layer_head_mask = head_mask if head_mask is not None else None
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -517,7 +512,7 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
     def forward(
         self,
         pixel_values_videos: Optional[torch.FloatTensor] = None,   # ? (B, T=16, C=3, H=288, W=288)
-        interpolate_pos_encoding: bool = False,  #! unused at the moment
+        interpolate_pos_encoding: bool = False,
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
 
 
@@ -526,12 +521,12 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
 
         input_shape = pixel_values_videos.shape  # ? (B, T=16, C=3, H=288, W=288)
 
-        spatial_embeds = self.spatial_embeddings(pixel_values_videos)  # ? embeds has shape (B * T, 256, 768); embedding for each frame
+        spatial_embeds = self.spatial_embeddings(pixel_values_videos, interpolate_pos_encoding)  # ? embeds has shape (B * T, 256, 768); embedding for each frame
         spatial_encoder_outputs: BaseModelOutput = self.spatial_encoder(hidden_states=spatial_embeds)  # ? shape (B * T, 256, 768)
         spatial_sequence_output = spatial_encoder_outputs.last_hidden_state
         features = self.layernorm1(spatial_sequence_output)  # ? shape (B * T, 256, 768)
 
-        temporal_embeds = self.temporal_embeddings(features, input_shape)  # ? input shape (B * T, 256, 768) -> output shape (B * T, 256, 768)
+        temporal_embeds = self.temporal_embeddings(features, input_shape, interpolate_pos_encoding)  # ? input shape (B * T, 256, 768) -> output shape (B * T, 256, 768)
         temporal_encoder_outputs: BaseModelOutput = self.temporal_encoder(hidden_states=temporal_embeds) # ? shape (B * 256, T=16, 768)
         temporal_sequence_output = temporal_encoder_outputs.last_hidden_state
         features = self.layernorm2(temporal_sequence_output)  # ? shape is (256, 16, 768)
