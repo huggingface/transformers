@@ -193,7 +193,7 @@ class Ministral3Config(PreTrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            ignore_keys_at_rope_validation={"llama_4_scaling_beta"},
+            ignore_keys_at_rope_validation={"llama_4_scaling_beta", "max_position_embeddings"},
             **kwargs,
         )
 
