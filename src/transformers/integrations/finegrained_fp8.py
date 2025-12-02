@@ -157,6 +157,7 @@ def _w8a8_block_fp8_matmul(
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     tl.store(c_ptrs, c, mask=c_mask)
 
+
 @triton.jit
 def _w8a8_block_fp8_matmul_per_tensor(
     # Pointers to inputs and output
@@ -206,14 +207,11 @@ def _w8a8_block_fp8_matmul_per_tensor(
     a_ptrs = A + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
     b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
     scale_a = tl.load(As)
-    scale_b = tl.load(Bs)   
+    scale_b = tl.load(Bs)
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
         a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
         b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-
-        k_start = k * BLOCK_SIZE_K
-        offs_ks = k_start // group_k
 
         accumulator += tl.dot(a, b) * scale_a * scale_b
         a_ptrs += BLOCK_SIZE_K * stride_ak
@@ -231,6 +229,7 @@ def _w8a8_block_fp8_matmul_per_tensor(
     c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     tl.store(c_ptrs, c, mask=c_mask)
+
 
 def w8a8_block_fp8_matmul_triton(
     A: torch.Tensor,
@@ -291,6 +290,7 @@ def w8a8_block_fp8_matmul_triton(
 
     def grid(META):
         return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
+
     if As.numel() == 1 and Bs.numel() == 1:
         _w8a8_block_fp8_matmul_per_tensor[grid](
             A,
