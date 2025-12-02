@@ -631,6 +631,12 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.patch_embedding
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.embeddings.patch_embedding = value
+
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
