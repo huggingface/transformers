@@ -51,16 +51,6 @@ class FbgemmFp8Quantize(ConversionOps):
 
         module, tensor_name = get_module_from_name(model, target_key)
 
-        # Sanity checks
-        if isinstance(module, FbgemmFp8Linear):
-            if tensor_name == "weight" and value.dtype == torch.float8_e4m3fn:
-                raise ValueError("Expect unquantized weights but got a quantized weight")
-            if tensor_name == "weight_scale":
-                raise ValueError("Expect unquantized weights but got a weight_scale")
-        if isinstance(module, FbgemmFp8Llama4TextExperts):
-            if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
-                raise ValueError("Expect unquantized weights but got a quantized weight_scale")
-
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if tensor_name == "gate_up_proj":
                 # Process each expert separately
@@ -231,7 +221,6 @@ def replace_with_fbgemm_fp8_linear(
     modules_to_not_convert=None,
     quantization_config=None,
     pre_quantized=False,
-    config=None,
     tp_plan=None,
 ):
     """
@@ -248,10 +237,6 @@ def replace_with_fbgemm_fp8_linear(
         modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `FP8Linear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`list[`str`]`, *optional*):
-            An array to track the current key of the recursion. This is used to check whether the current key (part of
-            it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
-            `disk`).
     """
 
     has_been_replaced = False
@@ -264,10 +249,11 @@ def replace_with_fbgemm_fp8_linear(
         new_module = None
         with init_empty_weights(include_buffers=True):
             if module.__class__.__name__ == "Llama4TextExperts":
-                if tp_plan is not None:
-                    tp_key = re.sub(r"\d+", "*", f"{module_name}.down_proj_scale")
-                    tp_plan[tp_key] = None
-                text_config = getattr(config, "text_config", config)
+                # TODO: make sure tp works later
+                # if tp_plan is not None:
+                #     tp_key = re.sub(r"\d+", "*", f"{module_name}.down_proj_scale")
+                #     tp_plan[tp_key] = None
+                text_config = getattr(model.config, "text_config", model.config)
                 new_module = FbgemmFp8Llama4TextExperts(text_config or model.config)
             elif isinstance(module, nn.Linear):
                 new_module = FbgemmFp8Linear(
