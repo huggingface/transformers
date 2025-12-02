@@ -321,8 +321,6 @@ class FP8Linear(nn.Linear):
         self.activation_scheme = activation_scheme
 
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
-        scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
-        scale_in_features = (in_features + self.block_size[1] - 1) // self.block_size[1]
 
         if self.block_size is None:
             self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
