@@ -16,7 +16,6 @@
 from dataclasses import dataclass
 from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -41,21 +40,21 @@ class VibeVoiceAcousticTokenizerConfig(VibeVoiceSemanticTokenizerConfig):
     acoustic tokenizer of [VibeVoice-1.5B](https://hf.co/microsoft/VibeVoice-1.5B).
 
     Args:
-        channels (`int`, *optional*, defaults to `1`):
+        channels (`int`, *optional*, defaults to 1):
             Number of input channels.
-        hidden_size (`int`, *optional*, defaults to `64`):
+        hidden_size (`int`, *optional*, defaults to 64):
             Dimensionality of latent representations.
-        kernel_size (`int`, *optional*, defaults to `7`):
+        kernel_size (`int`, *optional*, defaults to 7):
             Kernel size for convolutional layers.
-        rms_norm_eps (`float`, *optional*, defaults to `1e-5`):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             Epsilon value for RMSNorm layers.
         bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in convolution and feed-forward layers.
-        layer_scale_init_value (`float`, *optional*, defaults to `1e-6`):
+        layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
             Initial value for layer scaling.
-        weight_init_value (`float`, *optional*, defaults to `1e-2`):
+        weight_init_value (`float`, *optional*, defaults to 0.01):
             Standard deviation for weight initialization.
-        n_filters (`int`, *optional*, defaults to `32`):
+        n_filters (`int`, *optional*, defaults to 32):
             Number of filters in initial convolutional layer, and doubles after each downsampling.
         downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 2, 4, 5, 5, 8]`):
             Downsampling ratios for each layer.
@@ -63,13 +62,26 @@ class VibeVoiceAcousticTokenizerConfig(VibeVoiceSemanticTokenizerConfig):
             Number of ConvNeXt blocks at each stage.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             Activation function to use.
-        ffn_expansion (`int`, *optional*, defaults to `4`):
+        ffn_expansion (`int`, *optional*, defaults to 4):
             Expansion factor for feed-forward networks.
-        vae_std (`float`, *optional*, defaults to `0.5`):
+        vae_std (`float`, *optional*, defaults to 0.5):
             Standard deviation used during VAE sampling.
-        vae_scaling_factor (`float`, *optional*, defaults to `0.8`):
+        vae_scaling_factor (`float`, *optional*, defaults to 0.8):
             Scaling factor applied to VAE standard deviation. (Hardcoded in original implementation.)
-    """
+    Example:
+
+    ```python
+    >>> from transformers import VibeVoiceAcousticTokenizerModel, VibeVoiceAcousticTokenizerConfig
+
+    >>> # Initializing a VibeVoice Acoustic Tokenizer configuration
+    >>> configuration = VibeVoiceAcousticTokenizerConfig()
+
+    >>> # Initializing a model (with random weights)
+    >>> model = VibeVoiceAcousticTokenizerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "vibevoice_acoustic_tokenizer"
 
@@ -110,10 +122,6 @@ class VibeVoiceAcousticTokenizerConfig(VibeVoiceSemanticTokenizerConfig):
         # scaling moved here in case future implementations modify `vae_std` but keep internal scaling
         self.vae_std = vae_std
         self.vae_scaling_factor = vae_scaling_factor
-
-    @property
-    def hop_length(self) -> int:
-        return np.prod(self.downsampling_ratios)
 
     @property
     def upsampling_ratios(self):

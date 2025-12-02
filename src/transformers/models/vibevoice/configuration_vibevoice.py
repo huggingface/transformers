@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""VibeVoice model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -26,10 +25,8 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VibeVoiceDiffusionHead`]. It is used to instantiate a
     VibeVoice Diffusion Head according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the VibeVoice
-    architecture.
-
-    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+    configuration with the defaults will yield a similar configuration to that of the diffusion head of
+    [VibeVoice-1.5B](https://hf.co/microsoft/VibeVoice-1.5B).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -41,7 +38,7 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
             Number of layers in the diffusion head.
         head_ffn_ratio (`int`, *optional*, defaults to 3):
             The ratio of the hidden size to the intermediate size in the diffusion head.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the RMSNorm layers.
         latent_size (`int`, *optional*, defaults to 64):
             Dimensionality of the latent representation.
