@@ -27,8 +27,8 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -160,6 +160,7 @@ class T5LayerFF(nn.Module):
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
 
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -187,6 +188,7 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
 
 class T5Attention(nn.Module):
     def __init__(
@@ -586,6 +588,10 @@ class T5PreTrainedModel(PreTrainedModel):
     config: T5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _supports_attention_backend = True
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
     _can_compile_fullgraph = True
 
     _no_split_modules = ["T5Block"]
