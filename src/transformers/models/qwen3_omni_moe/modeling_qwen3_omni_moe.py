@@ -84,7 +84,7 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
             init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
-            init.normal_(module.router.weight, mean=0.0, std=std)
+            init.normal_(module.gate.weight, mean=0.0, std=std)
 
 
 def _get_feat_extract_output_lengths(input_lengths):
@@ -686,10 +686,10 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         self._requires_grad = False
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
+        return self.conv2d1
 
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
+    def set_input_embeddings(self, value):
+        self.conv2d1 = value
 
     def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
         # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
@@ -1113,7 +1113,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
-        device = grid_thw.device
+        device = self.pos_embed.weight.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
@@ -1338,22 +1338,21 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        num_experts = top_k_weights.shape[1]
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == num_experts:
+            if expert_idx == self.num_experts:
                 continue
-            _, token_idx = torch.where(expert_mask[expert_idx])
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, expert_idx, None]
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
@@ -1376,20 +1375,20 @@ class Qwen3OmniMoeThinkerTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 class Qwen3OmniMoeThinkerTextSparseMoeBlock(nn.Module):
     def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__()
         self.experts = Qwen3OmniMoeThinkerTextExperts(config)
-        self.router = Qwen3OmniMoeThinkerTextTopKRouter(config)
+        self.gate = Qwen3OmniMoeThinkerTextTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        routing_weights, selected_experts = self.router(hidden_states_reshaped)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -1599,7 +1598,7 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, layer_name="mlp.router", index=0),
+        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
     }
@@ -1669,7 +1668,7 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -2558,7 +2557,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -2767,22 +2766,21 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        num_experts = top_k_weights.shape[1]
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == num_experts:
+            if expert_idx == self.num_experts:
                 continue
-            _, token_idx = torch.where(expert_mask[expert_idx])
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, expert_idx, None]
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
@@ -2805,8 +2803,8 @@ class Qwen3OmniMoeTalkerTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
@@ -2823,7 +2821,7 @@ class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
         expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
@@ -2914,7 +2912,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -3569,7 +3567,7 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

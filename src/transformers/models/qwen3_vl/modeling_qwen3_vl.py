@@ -673,7 +673,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
-        device = grid_thw.device
+        device = self.pos_embed.weight.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
@@ -810,7 +810,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1130,7 +1130,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         return special_image_mask, special_video_mask
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1322,7 +1322,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,

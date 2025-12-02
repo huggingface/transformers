@@ -899,7 +899,7 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
             init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
-            init.normal_(module.router.weight, mean=0.0, std=std)
+            init.normal_(module.gate.weight, mean=0.0, std=std)
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
@@ -1193,6 +1193,12 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         self.proj2 = nn.Linear(config.d_model, config.output_dim)
         self.n_window_infer = self.config.n_window_infer
         self.conv_chunksize = self.config.conv_chunksize
+
+    def get_input_embeddings(self):
+        return self.conv2d1
+
+    def set_input_embeddings(self, value):
+        self.conv2d1 = value
 
     def forward(
         self,
@@ -1643,7 +1649,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     def get_input_embeddings(self):
         return self.codec_embedding
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

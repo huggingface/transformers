@@ -2423,7 +2423,9 @@ class ModelTesterMixin:
                 max_memory = {0: max_size, "cpu": max_size}
 
                 # This doesn't error out as it's in safetensors and doesn't need an offload folder
-                new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
                 torch.manual_seed(0)
@@ -3372,8 +3374,10 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
+        if not cls._supports_flash_attn:
+            self.skipTest(f"{cls.__name__} does not support Flash Attention 2")
 
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
             "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
