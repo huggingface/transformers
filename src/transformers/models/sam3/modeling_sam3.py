@@ -14,9 +14,8 @@
 # limitations under the License.
 
 
-import collections.abc
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -40,7 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam3 import (
@@ -52,6 +51,9 @@ from .configuration_sam3 import (
     Sam3VisionConfig,
     Sam3ViTConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -123,8 +125,8 @@ class Sam3DETRDecoderOutput(ModelOutput):
         Decoder hidden states from all layers.
     reference_boxes (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, 4)`):
         Predicted reference boxes from all decoder layers in (cx, cy, w, h) format.
-    presence_logits (`torch.FloatTensor` of shape `(num_layers, batch_size)`, *optional*):
-        Presence logits from all decoder layers (None if using instance queries).
+    presence_logits (`torch.FloatTensor` of shape `(num_layers, batch_size, 1)`):
+        Presence logits from all decoder layers indicating object presence confidence.
     hidden_states (`tuple[torch.FloatTensor]`, *optional*):
         Tuple of hidden states from all decoder layers.
     attentions (`tuple[torch.FloatTensor]`, *optional*):
@@ -133,7 +135,7 @@ class Sam3DETRDecoderOutput(ModelOutput):
 
     intermediate_hidden_states: torch.FloatTensor = None
     reference_boxes: torch.FloatTensor = None
-    presence_logits: Optional[torch.FloatTensor] = None
+    presence_logits: torch.FloatTensor = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -372,6 +374,19 @@ class Sam3Attention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
+        if (
+            "flash" in self.config._attn_implementation
+            and attention_mask is not None
+            and attention_mask.dtype != torch.bool
+        ):
+            # Relative position bias tensors are represented as float masks and are incompatible with Flash Attention
+            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
+            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+            logger.warning_once(
+                "Sam3Attention: falling back to SDPA for relative-position cross-attention because "
+                "Flash Attention does not support additive bias masks."
+            )
+
         attn_output, attn_weights = attention_interface(
             self,
             query,
@@ -531,8 +546,8 @@ class Sam3ViTPatchEmbeddings(nn.Module):
         image_size, patch_size = config.pretrain_image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
@@ -1253,7 +1268,7 @@ class Sam3DetrEncoderLayer(nn.Module):
         vision_feats: Tensor,
         prompt_feats: Tensor,
         vision_pos_encoding: Tensor,
-        prompt_mask: Tensor,
+        prompt_cross_attn_mask: Optional[Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         """
@@ -1263,7 +1278,7 @@ class Sam3DetrEncoderLayer(nn.Module):
             vision_feats: Vision features [batch_size, vision_len, hidden_size] (main hidden states)
             prompt_feats: Text prompt features [batch_size, text_len, hidden_size]
             vision_pos_encoding: Position encoding for vision [batch_size, vision_len, hidden_size]
-            prompt_mask: Padding mask for prompts [batch_size, text_len] where True=valid, False=padding
+            prompt_cross_attn_mask: Cross-attention mask for prompt features
 
         Returns:
             Updated vision features [batch_size, vision_len, hidden_size]
@@ -1283,15 +1298,6 @@ class Sam3DetrEncoderLayer(nn.Module):
         # Cross-attention: vision queries attend to text/prompt features
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
-
-        prompt_cross_attn_mask = None
-        if prompt_mask is not None:
-            prompt_cross_attn_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=hidden_states,
-                attention_mask=prompt_mask,
-                encoder_hidden_states=prompt_feats,
-            )
 
         hidden_states, _ = self.cross_attn(
             query=hidden_states,
@@ -1412,13 +1418,22 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             spatial_shapes,
         ) = self._prepare_multilevel_features(vision_features, vision_pos_embeds)
 
+        prompt_cross_attn_mask = None
+        if text_mask is not None:
+            prompt_cross_attn_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=features_flattened,
+                attention_mask=text_mask,
+                encoder_hidden_states=text_features,
+            )
+
         hidden_states = features_flattened
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
                 prompt_feats=text_features,
                 vision_pos_encoding=pos_embeds_flattened,
-                prompt_mask=text_mask,
+                prompt_cross_attn_mask=prompt_cross_attn_mask,
                 **kwargs,
             )
         return Sam3DETREncoderOutput(
@@ -1484,31 +1499,27 @@ class Sam3DetrDecoderLayer(nn.Module):
         text_features: torch.Tensor,
         vision_features: torch.Tensor,
         vision_pos_encoding: torch.Tensor,
-        text_mask: Optional[torch.Tensor] = None,
+        text_cross_attn_mask: Optional[torch.Tensor] = None,
         vision_cross_attn_mask: Optional[torch.Tensor] = None,
-        presence_token: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> torch.Tensor:
         """
         Forward pass for decoder layer.
 
         Args:
-            hidden_states: Query features [batch_size, num_queries, hidden_size]
+            hidden_states: Query features [batch_size, num_queries + 1, hidden_size] (includes presence token at position 0)
             query_pos: Query position embeddings [batch_size, num_queries, hidden_size]
             text_features: Text features [batch_size, seq_len, hidden_size]
             vision_features: Vision features [batch_size, height*width, hidden_size]
             vision_pos_encoding: Vision position encoding [batch_size, height*width, hidden_size]
-            text_mask: Text padding mask [batch_size, seq_len] where True=valid, False=padding
-            vision_cross_attn_mask: Vision cross-attention mask [batch_size, num_heads, num_queries, height*width]
-            presence_token: Optional presence token [batch_size, 1, hidden_size]
+            text_cross_attn_mask: Text cross-attention mask
+            vision_cross_attn_mask: Vision cross-attention mask, already expanded for presence token
 
         Returns:
-            Tuple of (updated hidden states, updated presence token)
+            Updated hidden states (including presence token at position 0)
         """
-        # Concatenate presence token if provided
-        if presence_token is not None:
-            hidden_states = torch.cat([presence_token, hidden_states], dim=1)
-            query_pos = torch.cat([torch.zeros_like(presence_token), query_pos], dim=1)
+        # Prepend zeros to query_pos for presence token
+        query_pos = F.pad(query_pos, (0, 0, 1, 0), mode="constant", value=0)
 
         # Self-attention with query position encoding
         residual = hidden_states
@@ -1527,15 +1538,6 @@ class Sam3DetrDecoderLayer(nn.Module):
         residual = hidden_states
         query_with_pos = hidden_states + query_pos
 
-        text_cross_attn_mask = None
-        if text_mask is not None:
-            text_cross_attn_mask = create_bidirectional_mask(
-                config=self.config,
-                input_embeds=hidden_states,
-                attention_mask=text_mask,
-                encoder_hidden_states=text_features,
-            )
-
         attn_output, _ = self.text_cross_attn(
             query=query_with_pos,
             key=text_features,
@@ -1546,20 +1548,6 @@ class Sam3DetrDecoderLayer(nn.Module):
         hidden_states = residual + self.text_cross_attn_dropout(attn_output)
         hidden_states = self.text_cross_attn_layer_norm(hidden_states)
 
-        # Expand vision cross-attention mask for presence token if needed
-        combined_vision_mask = vision_cross_attn_mask
-        if presence_token is not None and combined_vision_mask is not None:
-            batch_size, num_heads = combined_vision_mask.shape[:2]
-            presence_mask = torch.zeros(
-                batch_size,
-                num_heads,
-                1,
-                combined_vision_mask.shape[-1],
-                device=combined_vision_mask.device,
-                dtype=combined_vision_mask.dtype,
-            )
-            combined_vision_mask = torch.cat([presence_mask, combined_vision_mask], dim=2)
-
         # Vision cross-attention: queries attend to vision features (with RPB)
         residual = hidden_states
         query_with_pos = hidden_states + query_pos
@@ -1568,7 +1556,7 @@ class Sam3DetrDecoderLayer(nn.Module):
             query=query_with_pos,
             key=key_with_pos,
             value=vision_features,
-            attention_mask=combined_vision_mask,
+            attention_mask=vision_cross_attn_mask,
             **kwargs,
         )
         hidden_states = residual + self.vision_cross_attn_dropout(attn_output)
@@ -1580,13 +1568,7 @@ class Sam3DetrDecoderLayer(nn.Module):
         hidden_states = residual + self.mlp_dropout(hidden_states)
         hidden_states = self.mlp_layer_norm(hidden_states)
 
-        # Extract presence token if it was added
-        presence_token_out = None
-        if presence_token is not None:
-            presence_token_out = hidden_states[:, :1]
-            hidden_states = hidden_states[:, 1:]
-
-        return hidden_states, presence_token_out
+        return hidden_states
 
 
 class Sam3DetrDecoder(Sam3PreTrainedModel):
@@ -1715,10 +1697,22 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         """
         batch_size = vision_features.shape[0]
 
-        hidden_states = self.query_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        query_embeds = self.query_embed.weight.unsqueeze(0).expand(batch_size, -1, -1)
         reference_boxes = self.reference_points.weight.unsqueeze(0).expand(batch_size, -1, -1)
         reference_boxes = reference_boxes.sigmoid()
         presence_token = self.presence_token.weight.unsqueeze(0).expand(batch_size, -1, -1)
+
+        # Concatenate presence token with query embeddings
+        hidden_states = torch.cat([presence_token, query_embeds], dim=1)
+
+        text_cross_attn_mask = None
+        if text_mask is not None:
+            text_cross_attn_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=text_mask,
+                encoder_hidden_states=text_features,
+            )
 
         intermediate_outputs = []
         intermediate_boxes = [reference_boxes]
@@ -1734,43 +1728,45 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
             vision_cross_attn_mask = None
             if spatial_shapes is not None and spatial_shapes.shape[0] == 1:
                 spatial_shape = (spatial_shapes[0, 0], spatial_shapes[0, 1])
-                vision_cross_attn_mask = self._get_rpb_matrix(reference_boxes, spatial_shape)
+                rpb_matrix = self._get_rpb_matrix(reference_boxes, spatial_shape)
+                # Prepend zeros row for presence token (it attends to all vision tokens equally)
+                vision_cross_attn_mask = F.pad(rpb_matrix, (0, 0, 1, 0), mode="constant", value=0)
 
-            hidden_states, presence_token = layer(
+            hidden_states = layer(
                 hidden_states,
                 query_pos=query_pos,
                 text_features=text_features,
                 vision_features=vision_features,
                 vision_pos_encoding=vision_pos_encoding,
-                text_mask=text_mask,
+                text_cross_attn_mask=text_cross_attn_mask,
                 vision_cross_attn_mask=vision_cross_attn_mask,
-                presence_token=presence_token,
                 **kwargs,
             )
 
+            # Extract query hidden states (without presence token) for box refinement
+            query_hidden_states = hidden_states[:, 1:]
+
             # Box refinement: predict delta and update reference boxes
             reference_boxes_before_sigmoid = inverse_sigmoid(reference_boxes)
-            delta_boxes = self.box_head(self.output_layer_norm(hidden_states))
+            delta_boxes = self.box_head(self.output_layer_norm(query_hidden_states))
             new_reference_boxes = (delta_boxes + reference_boxes_before_sigmoid).sigmoid()
             reference_boxes = new_reference_boxes.detach()
 
-            intermediate_outputs.append(self.output_layer_norm(hidden_states))
+            intermediate_outputs.append(self.output_layer_norm(query_hidden_states))
             intermediate_boxes.append(new_reference_boxes)
 
             # Process presence token
-            if presence_token is not None:
-                presence_logits = self.presence_head(self.presence_layer_norm(presence_token)).squeeze(-1)
-                presence_logits = presence_logits.clamp(
-                    min=-self.clamp_presence_logit_max_val, max=self.clamp_presence_logit_max_val
-                )
-                intermediate_presence_logits.append(presence_logits)
+            presence_hidden = hidden_states[:, :1]
+            presence_logits = self.presence_head(self.presence_layer_norm(presence_hidden)).squeeze(-1)
+            presence_logits = presence_logits.clamp(
+                min=-self.clamp_presence_logit_max_val, max=self.clamp_presence_logit_max_val
+            )
+            intermediate_presence_logits.append(presence_logits)
 
         # Stack outputs from all layers
         intermediate_outputs = torch.stack(intermediate_outputs)
         intermediate_boxes = torch.stack(intermediate_boxes[:-1])
-        intermediate_presence_logits = (
-            torch.stack(intermediate_presence_logits) if intermediate_presence_logits else None
-        )
+        intermediate_presence_logits = torch.stack(intermediate_presence_logits)
 
         return Sam3DETRDecoderOutput(
             intermediate_hidden_states=intermediate_outputs,
