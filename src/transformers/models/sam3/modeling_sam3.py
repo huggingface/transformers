@@ -375,16 +375,16 @@ class Sam3Attention(nn.Module):
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         if (
-            self.config._attn_implementation == "flash_attention_2"
+            "flash" in self.config._attn_implementation
             and attention_mask is not None
             and attention_mask.dtype != torch.bool
         ):
-            # Relative position bias tensors are represented as float masks and are incompatible with Flash Attention 2.
-            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA2.
+            # Relative position bias tensors are represented as float masks and are incompatible with Flash Attention
+            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
             attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
             logger.warning_once(
                 "Sam3Attention: falling back to SDPA for relative-position cross-attention because "
-                "Flash Attention 2 does not support additive bias masks."
+                "Flash Attention does not support additive bias masks."
             )
 
         attn_output, attn_weights = attention_interface(
@@ -1703,7 +1703,6 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         presence_token = self.presence_token.weight.unsqueeze(0).expand(batch_size, -1, -1)
 
         # Concatenate presence token with query embeddings
-        # hidden_states[:, 0] = presence token, hidden_states[:, 1:] = query embeddings
         hidden_states = torch.cat([presence_token, query_embeds], dim=1)
 
         text_cross_attn_mask = None
@@ -2086,7 +2085,9 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
-    _checkpoint_conversion_mapping = {"detector_model.": ""}
+    _checkpoint_conversion_mapping = {
+        r"detector_model.(.+)": r"\1"  # the regex allows to remove the prefix, and add it back in revert mode
+    }
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",
