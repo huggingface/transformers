@@ -621,8 +621,10 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) < 2:
-            # case where we only got weights
-            return input_dict
+            # case where we only got weights, need to check for "weight$"
+            return {
+                full_layer_name: input_dict["weight$"]
+            }
 
         quantized = input_dict["weight$"][0]
         scales = input_dict["weight_scale_inv"][0]
