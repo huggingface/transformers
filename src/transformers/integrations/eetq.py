@@ -34,7 +34,6 @@ class EetqQuantize(ConversionOps):
     def convert(
         self, input_dict: dict[str, list[torch.Tensor]], full_layer_name: str | None = None, **kwargs
     ) -> dict[str, torch.Tensor]:
-        print(input_dict)
         _, value = tuple(input_dict.items())[0]
         value = value[0]
 
@@ -75,12 +74,13 @@ class EetqLinearMMFunction(torch.autograd.Function):
 class EetqLinear(nn.Module):
     def __init__(self, in_features, out_features, dtype=torch.int8, bias=False):
         super().__init__()
-        self.register_buffer("weight", torch.zeros((in_features, out_features), dtype=dtype))
+        self.weight = nn.Parameter(torch.zeros((in_features, out_features), dtype=dtype))
+
         if bias:
-            self.register_buffer("bias", torch.zeros((out_features), dtype=torch.float16))
+            self.bias = nn.Parameter(torch.zeros((out_features), dtype=torch.float16))
         else:
             self.bias = None
-        self.register_buffer("weight_scales", torch.zeros((out_features), dtype=torch.float16))
+        self.weight_scales = nn.Parameter(torch.zeros((out_features), dtype=torch.float16))
 
     def forward(self, input):
         output = EetqLinearMMFunction.apply(input, self.weight, self.weight_scales, self.bias)
