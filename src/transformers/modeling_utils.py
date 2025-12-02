@@ -1976,13 +1976,44 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
 
-        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        hooks = []
+        seen_modules = set()
+
+        for module in self.modules():
+            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+                continue
+
+            input_embeddings = module.get_input_embeddings()
+
+            if input_embeddings is None:
+                continue
+
+            embedding_id = id(input_embeddings)
+            if embedding_id in seen_modules:
+                continue
+
+            seen_modules.add(embedding_id)
+            hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+
+        self._require_grads_hooks = hooks
+        if hooks:
+            # for BC
+            self._require_grads_hook = hooks[0]
 
     def disable_input_require_grads(self):
         """
         Removes the `_require_grads_hook`.
         """
-        self._require_grads_hook.remove()
+        hooks = getattr(self, "_require_grads_hooks", None)
+        if not hooks:
+            return
+
+        for hook in hooks:
+            hook.remove()
+
+        self._require_grads_hooks = []
+        if hasattr(self, "_require_grads_hook"):
+            del self._require_grads_hook
 
     def get_encoder(self, modality: Optional[str] = None):
         """

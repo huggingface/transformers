@@ -38,8 +38,15 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
-        if not (torch.cuda.is_available() or is_torch_xpu_available()):
-            raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
+        if (not (torch.cuda.is_available() or is_torch_xpu_available())) and not self.quantization_config.dequantize:
+            if self.pre_quantized:
+                logger.warning_once(
+                    "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
+                )
+                self.quantization_config.dequantize = True
+                return
+            else:
+                raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
 
         if torch.cuda.is_available():
             compute_capability = torch.cuda.get_device_capability()
@@ -158,16 +165,15 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
-        # takes 2 fucking seconds
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        # while this one is 81ms :)
         model = replace_with_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
+            pre_quantized=self.pre_quantized,
         )
 
         model.config.quantization_config = self.quantization_config
@@ -231,3 +237,19 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import Fp8Quantize
 
         return Fp8Quantize(self)
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained_fp8 import Fp8Dequantize
+
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return [
+                # either use the dollar sign, or permute the source patterns to start matching against the scales first
+                # We also collect the activation scales, they will not be used
+                WeightConverter(
+                    source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
+                    target_patterns="weight",
+                    operations=[Fp8Dequantize(self)],
+                )
+            ]
+        return []
