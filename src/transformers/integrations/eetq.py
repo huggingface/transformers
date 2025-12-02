@@ -26,11 +26,14 @@ if is_accelerate_available():
 
 logger = logging.get_logger(__name__)
 
+
 class EetqQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: dict[str, list[torch.Tensor]], full_layer_name: str | None = None, **kwargs) -> dict[str, torch.Tensor]:
+    def convert(
+        self, input_dict: dict[str, list[torch.Tensor]], full_layer_name: str | None = None, **kwargs
+    ) -> dict[str, torch.Tensor]:
         print(input_dict)
         _, value = tuple(input_dict.items())[0]
         value = value[0]
@@ -42,18 +45,12 @@ class EetqQuantize(ConversionOps):
         int8_weight = int8_weight.to(value_device)
         scales = scales.to(value_device)
 
-        return {full_layer_name: int8_weight,
-                f"{full_layer_name}_scales": scales}
+        return {full_layer_name: int8_weight, f"{full_layer_name}_scales": scales}
+
 
 class EetqLinearMMFunction(torch.autograd.Function):
     @staticmethod
-    def forward(
-        ctx,
-        x,
-        weight,
-        scales,
-        bias=None
-    ):
+    def forward(ctx, x, weight, scales, bias=None):
         # The forward pass can use ctx.
         ctx.save_for_backward(x, weight, scales, bias)
         output = eetq_kernels_hub.w8_a16_gemm(x, weight, scales)
@@ -70,11 +67,10 @@ class EetqLinearMMFunction(torch.autograd.Function):
 
         if ctx.needs_input_grad[0]:
             # 2D matrix multiplication, unsqueeze to 3D
-            grad_input = grad_output.squeeze(0).matmul(
-                weight.transpose(0, 1)
-            ).unsqueeze(0)
+            grad_input = grad_output.squeeze(0).matmul(weight.transpose(0, 1)).unsqueeze(0)
 
         return grad_input, None, None, None
+
 
 class EetqLinear(nn.Module):
     def __init__(self, in_features, out_features, dtype=torch.int8, bias=False):
@@ -91,7 +87,9 @@ class EetqLinear(nn.Module):
         return output
 
 
-def replace_with_eetq_linear(model:torch.nn.Module, modules_to_not_convert: list[str] | None = None, pre_quantized=False):
+def replace_with_eetq_linear(
+    model: torch.nn.Module, modules_to_not_convert: list[str] | None = None, pre_quantized=False
+):
     """
     A helper function to replace all `torch.nn.Linear` modules by `EetqLinear` modules.
     The function will be run recursively and replace all `torch.nn.Linear` modules except for the `modules_to_not_convert` that should
@@ -123,13 +121,10 @@ def replace_with_eetq_linear(model:torch.nn.Module, modules_to_not_convert: list
         with init_empty_weights():
             if isinstance(module, nn.Linear):
                 new_module = EetqLinear(
-                    module.in_features,
-                    module.out_features,
-                    bias = module.bias is not None,
-                    **module_kwargs)
+                    module.in_features, module.out_features, bias=module.bias is not None, **module_kwargs
+                )
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
-
 
     if not has_been_replaced:
         logger.warning(

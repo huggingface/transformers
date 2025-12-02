@@ -38,6 +38,7 @@ if is_optimum_quanto_available():
 
     from transformers.integrations.quanto import replace_with_quanto_layers
 
+
 @require_optimum_quanto
 @require_accelerate
 class QuantoTestIntegration(unittest.TestCase):
@@ -185,13 +186,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         """
         # Test the type of the quantized layer
         self.assertTrue(isinstance(self.quantized_model.model.layers[0].self_attn.k_proj, QModuleMixin))
-        self.assertTrue(
-            isinstance(self.quantized_model.model.layers[0].self_attn.k_proj.weight, QTensor)
-        )
+        self.assertTrue(isinstance(self.quantized_model.model.layers[0].self_attn.k_proj.weight, QTensor))
         if self.weights == "int4":
-            self.assertTrue(
-                isinstance(self.quantized_model.model.layers[0].self_attn.k_proj.weight, QBitsTensor)
-            )
+            self.assertTrue(isinstance(self.quantized_model.model.layers[0].self_attn.k_proj.weight, QBitsTensor))
 
         # check that the lm_head was indeed not quantized, just like bnb
         self.assertTrue(
@@ -204,9 +201,7 @@ class QuantoQuantizationTest(unittest.TestCase):
                 self.device_map,
             )
             self.quantized_model.to(0)
-        self.assertEqual(
-            self.quantized_model.model.layers[0].self_attn.k_proj.weight._data.device.type, torch_device
-        )
+        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.weight._data.device.type, torch_device)
 
     def test_serialization_bin(self):
         """
@@ -215,9 +210,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
-            self.assertIn(
-                "The model is quantized with quanto and is not serializable", str(e.exception)
-            )
+            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
 
     def test_serialization_safetensors(self):
         """
@@ -226,9 +219,7 @@ class QuantoQuantizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             with self.assertRaises(ValueError) as e:
                 self.quantized_model.save_pretrained(tmpdirname)
-            self.assertIn(
-                "The model is quantized with quanto and is not serializable", str(e.exception)
-            )
+            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
 
     def check_same_model(self, model1, model2):
         d0 = dict(model1.named_parameters())
@@ -256,9 +247,12 @@ class QuantoQuantizationTest(unittest.TestCase):
         self.check_same_model(model, self.quantized_model)
         self.check_inference_correctness(model, device=torch_device)
 
+
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
     EXPECTED_OUTPUTS = "Hello my name is joe and i am a little girl\n\n"
     weights = "int4"
+
+
 @require_torch_accelerator
 class QuantoQuantizationActivationTest(unittest.TestCase):
     def test_quantize_activation(self):

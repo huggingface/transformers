@@ -47,7 +47,6 @@ class EetqHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-
         if not is_kernels_available():
             raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
 
@@ -108,7 +107,9 @@ class EetqHfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        model = replace_with_eetq_linear(model,modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized)
+        model = replace_with_eetq_linear(
+            model, modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized
+        )
 
         model.config.quantization_config = self.quantization_config
 
@@ -121,4 +122,5 @@ class EetqHfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations.eetq import EetqQuantize
+
         return EetqQuantize(self)

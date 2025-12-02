@@ -58,7 +58,11 @@ class QuantoHfQuantizer(HfQuantizer):
             )
         device_map = kwargs.get("device_map")
         if device_map is not None:
-            if isinstance(device_map, dict) and len(device_map) >= 2 and ("cpu" in device_map.values() or "disk" in device_map.values()):
+            if (
+                isinstance(device_map, dict)
+                and len(device_map) >= 2
+                and ("cpu" in device_map.values() or "disk" in device_map.values())
+            ):
                 raise ValueError(
                     "You are attempting to load an model with a device_map that contains a CPU or disk device."
                     "This is not supported with quanto when the model is quantized on the fly. "
@@ -120,4 +124,5 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations.quanto import QuantoQuantize
+
         return QuantoQuantize(self)

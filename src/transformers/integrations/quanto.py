@@ -23,15 +23,24 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+
 class QuantoQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: dict[str, list[torch.Tensor]], model: torch.nn.Module | None = None, full_layer_name: str | None = None, missing_keys: list[str] | None = None,  **kwargs) -> dict[str, torch.Tensor]:
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        missing_keys: list[str] | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
         _, value = tuple(input_dict.items())[0]
         value = value[0]
 
         from ..modeling_utils import _load_parameter_into_model
+
         _load_parameter_into_model(model, full_layer_name, value)
         module, _ = get_module_from_name(model, full_layer_name)
         module.freeze()
@@ -42,6 +51,7 @@ class QuantoQuantize(ConversionOps):
         missing_keys.discard(f"{module_name}.input_scale")
         missing_keys.discard(f"{module_name}.output_scale")
         return {full_layer_name: module.weight}
+
 
 def replace_with_quanto_layers(
     model,
@@ -75,13 +85,13 @@ def replace_with_quanto_layers(
             new_module = None
             if isinstance(module, nn.Linear):
                 new_module = QLinear(
-                        in_features=module.in_features,
-                        out_features=module.out_features,
-                        bias=module.bias is not None,
-                        dtype=module.weight.dtype,
-                        weights=w_mapping[quantization_config.weights],
-                        activations=a_mapping[quantization_config.activations],
-                    )
+                    in_features=module.in_features,
+                    out_features=module.out_features,
+                    bias=module.bias is not None,
+                    dtype=module.weight.dtype,
+                    weights=w_mapping[quantization_config.weights],
+                    activations=a_mapping[quantization_config.activations],
+                )
             elif isinstance(module, torch.nn.LayerNorm) and quantization_config.activations is not None:
                 new_module = QLayerNorm(
                     module.normalized_shape,
