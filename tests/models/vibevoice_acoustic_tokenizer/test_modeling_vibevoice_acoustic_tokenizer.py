@@ -152,7 +152,7 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["audio", "padding_cache", "batch_mask", "use_cache", "sample"]
+            expected_arg_names = ["audio", "padding_cache", "use_cache", "sample"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip("VibeVoiceAcousticTokenizerModel does not have `inputs_embeds` logic")
