@@ -74,13 +74,12 @@ class EetqLinearMMFunction(torch.autograd.Function):
 class EetqLinear(nn.Module):
     def __init__(self, in_features, out_features, dtype=torch.int8, bias=False):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros((in_features, out_features), dtype=dtype))
-
+        self.weight = nn.Parameter(torch.empty((in_features, out_features), dtype=dtype), requires_grad=False)
+        self.weight_scales = nn.Parameter(torch.empty((out_features), dtype=torch.float16))
         if bias:
-            self.bias = nn.Parameter(torch.zeros((out_features), dtype=torch.float16))
+            self.bias = nn.Parameter(torch.empty((out_features), dtype=torch.float16))
         else:
             self.bias = None
-        self.weight_scales = nn.Parameter(torch.zeros((out_features), dtype=torch.float16))
 
     def forward(self, input):
         output = EetqLinearMMFunction.apply(input, self.weight, self.weight_scales, self.bias)
