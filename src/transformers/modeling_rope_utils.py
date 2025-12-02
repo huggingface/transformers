@@ -735,6 +735,7 @@ class RotaryEmbeddingConfigMixin:
             "beta_slow",
             "mscale",
             "mscale_all_dim",
+            "truncate",
         }
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
