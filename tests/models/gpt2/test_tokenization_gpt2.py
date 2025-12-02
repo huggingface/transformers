@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import AutoTokenizer, GPT2Tokenizer
-from transformers.testing_utils import require_jinja, require_tiktoken, require_tokenizers
+from transformers.testing_utils import require_tiktoken, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

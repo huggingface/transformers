@@ -17,7 +17,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers import TokenizersBackend
-from transformers.testing_utils import require_jinja, require_tokenizers, slow
+from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -128,7 +128,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_tokens = list(map(tokenizer.encode, input_text))
         predicted_text = [tokenizer.decode(x, clean_up_tokenization_spaces=False) for x in output_tokens]
         self.assertListEqual(predicted_text, input_text)
-
 
     def test_add_prefix_space_fast(self):
         tokenizer_w_prefix = self.get_tokenizer(add_prefix_space=True)

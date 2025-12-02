@@ -73,7 +73,6 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
-
     @require_jinja
     def test_tokenization_for_tool_use(self):
         tokenizer = self.get_tokenizer()

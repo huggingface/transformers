@@ -21,4 +21,3 @@ class BlenderbotTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # The issue is that when you have a sequence with leading spaces, splitting it
         # with .split() loses the leading spaces, so the tokenization results differ
         pass
-
