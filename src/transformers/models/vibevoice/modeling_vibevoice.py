@@ -162,7 +162,7 @@ class HeadLayer(nn.Module):
 class FinalLayer(nn.Module):
     def __init__(self, config, output_size, ffn_ratio=2):
         super().__init__()
-        # Inline RMS normalization since there is no weight scaling
+        # Inline RMS normalization since there is no weight scaling (unlike `VibeVoiceRMSNorm`)
         self.norm_eps = config.rms_norm_eps
         self.ffn_ratio = ffn_ratio
         self.linear_1 = nn.Linear(config.hidden_size, ffn_ratio * config.hidden_size, bias=False)
@@ -182,8 +182,6 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     config: VibeVoiceConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    # TODO (ebezzam) check below
-    # original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice.py#L69
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
@@ -192,18 +190,6 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            std = getattr(self.config, "initializer_range", 0.02)
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            std = getattr(self.config, "initializer_range", 0.02)
-            nn.init.normal_(module.weight, mean=0.0, std=std)
-        elif isinstance(module, VibeVoiceRMSNorm):
-            nn.init.ones_(module.weight)
 
 
 @auto_docstring(
@@ -226,12 +212,7 @@ class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
 
         self.post_init()
 
-    def forward(
-        self,
-        noisy_images,
-        timesteps,
-        condition,
-    ):
+    def forward(self, noisy_images, timesteps, condition):
         """
         Forward pass of the prediction head.
 
@@ -287,7 +268,6 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             config.semantic_hidden_size, config.text_config.hidden_size
         )
         self.diffusion_head = AutoModel.from_config(config.diffusion_head_config)
-        # TODO (ebezzam) cleaner way? Register scaling factors as buffers - use 1D tensors for FSDP compatibility
         self.register_buffer("speech_scaling_factor", torch.tensor(1.0))
         self.register_buffer("speech_bias_factor", torch.tensor(0.0))
         self.post_init()
