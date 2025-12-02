@@ -24,6 +24,7 @@ from parameterized import parameterized
 
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.testing_utils import (
+    record_expectations,
     require_torch,
     require_vision,
     slow,
@@ -670,6 +671,7 @@ def prepare_img():
 @require_vision
 @require_torch
 class CLIPModelIntegrationTest(unittest.TestCase):
+    @record_expectations(pairs=[("actual_logits", "expected_logits")])
     @slow
     def test_inference(self):
         model_name = "openai/clip-vit-base-patch32"
@@ -695,10 +697,13 @@ class CLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        actual_logits = outputs.logits_per_image.detach().cpu()
 
-        torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
+        expected_logits = torch.tensor([[24.570053100585938, 19.304885864257812]])  # fmt: off
 
+        torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-3, atol=1e-3)
+
+    @record_expectations(pairs=[("actual_slice", "expected_slice")])
     @slow
     def test_inference_interpolate_pos_encoding(self):
         # CLIP models have an `interpolate_pos_encoding` argument in their forward method,
@@ -728,10 +733,8 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
-        ).to(torch_device)
+        actual_slice = outputs.vision_model_output.last_hidden_state[0, :3, :3].detach().cpu()
 
-        torch.testing.assert_close(
-            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=6e-3, atol=4e-4
-        )
+        expected_slice = torch.tensor([[-0.15380290150642395, 0.0321517139673233, -0.32353174686431885], [0.2893178462982178, 0.11354223638772964, -0.5707830190658569], [0.046103253960609436, 0.15403859317302704, -0.6017531156539917]])  # fmt: off
+
+        torch.testing.assert_close(actual_slice, expected_slice, rtol=6e-3, atol=4e-4)

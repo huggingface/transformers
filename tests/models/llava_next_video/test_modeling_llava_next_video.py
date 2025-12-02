@@ -32,6 +32,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    record_expectations,
     require_bitsandbytes,
     require_torch,
     slow,
@@ -348,13 +349,13 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @record_expectations(pairs=[("decoded_text", "expected_decoded_text")])
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt")
@@ -365,24 +366,25 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
+        decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
+
+        # Auto-updated when running with UPDATE_EXPECTATIONS=1
         expected_decoded_text = Expectations(
             {
-                ("cuda", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems",
+                ("cuda", (7, 5)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems",
                 ("xpu", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems",
-                ("rocm", (9, 5)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and adorable behavior of the young child. The child is seen reading a book, but instead of turning the pages like one would typically do, they",
-            }
-        ).get_expectation()  # fmt: off
+                ("rocm", (9, 5)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and adorable behavior of the young child. The child is seen reading a book, but instead of turning the pages like one would typically do, they",("cuda", (8, 6)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems"
+            }).get_expectation()  # fmt: off
 
-        decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(decoded_text, expected_decoded_text)
 
+    @record_expectations(pairs=[("decoded_text", "expected_decoded_text")])
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(
@@ -395,24 +397,23 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
+        # Auto-updated when running with UPDATE_EXPECTATIONS=1
         expected_decoded_text = Expectations(
             {
-                ("xpu", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a",
-                ("cuda", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a",
-                ("rocm", (9, 5)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and adorable behavior of the young child. The",
-            }
-        ).get_expectation()  # fmt: off
-        EXPECTED_DECODED_TEXT = [expected_decoded_text, expected_decoded_text]
+                ("xpu", None): ["USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a", "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a"],
+                ("cuda", None): ["USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a", "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a"],
+                ("rocm", (9, 5)): ["USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and adorable behavior of the young child. The", "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and adorable behavior of the young child. The"],
+            }).get_expectation()  # fmt: off
 
-        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
+        self.assertEqual(decoded_text, expected_decoded_text)
 
+    @record_expectations(pairs=[("decoded_text", "expected_decoded_text")])
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test_batch_different_vision_types(self):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(
@@ -431,16 +432,17 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = Expectations(
+        decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
+
+        # Auto-updated when running with UPDATE_EXPECTATIONS=1
+        expected_decoded_text = Expectations(
             {
                 ("xpu", None): 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a machine learning model\'s performance on a task, likely related to natural language processing or text understanding. It shows a scatter plot with two axes, one labeled "BLIP-2"',
                 ("rocm", (9, 5)): "USER: \nWhat is shown in this image? ASSISTANT: The image displays a chart that appears to be a comparison of different models or versions of a machine learning (ML) model, likely a neural network, based on their performance on a task or dataset. The chart is a scatter plot with axes labeled",
                 ("cuda", None): 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a machine learning model\'s performance on a task, likely related to natural language processing or text understanding. It shows a scatter plot with two axes, one labeled "BLIP-2"',
-            }
-        ).get_expectation()  # fmt: off
+            }).get_expectation()  # fmt: off
 
-        decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
-        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
+        self.assertEqual(decoded_text, expected_decoded_text)
 
     @slow
     @require_bitsandbytes
@@ -448,7 +450,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs_batched = self.processor(
