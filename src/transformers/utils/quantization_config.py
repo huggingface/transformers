@@ -27,8 +27,6 @@ from typing import Any, Optional, Union
 
 from packaging import version
 
-from transformers.utils.import_utils import is_gptqmodel_available
-
 from ..utils import (
     is_compressed_tensors_available,
     is_hqq_available,
@@ -66,10 +64,12 @@ class QuantizationMethod(str, Enum):
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
 
+
 class AwqFormat(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
     GEMV_FAST = "gemv_fast"
+
 
 class AwqBackend(str, Enum):
     LEGACY_AWQ = "autoawq"
@@ -844,7 +844,6 @@ class AwqConfig(GPTQConfig):
         super().__init__(bits=bits, group_size=group_size, backend=backend, format=format, **kwargs)
         self.quant_method = QuantizationMethod.AWQ
 
-
     def post_init(self):
         r"""
         Safety checker that arguments are correct
@@ -857,7 +856,7 @@ class AwqConfig(GPTQConfig):
             raise ValueError(
                 f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.GEMV_FAST] - not recognized version {self.format}"
             )
-        
+
         if self.backend == AwqBackend.LLMAWQ:
             # Only cuda device can run this function
             if not (torch.cuda.is_available() or torch.xpu.is_available()):
@@ -879,6 +878,7 @@ class AwqConfig(GPTQConfig):
         # Compatible with legacy field: version
         config_dict["version"] = self.format
         return config_dict
+
 
 @dataclass
 class AqlmConfig(QuantizationConfigMixin):

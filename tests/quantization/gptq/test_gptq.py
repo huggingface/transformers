@@ -179,8 +179,8 @@ class GPTQTest(unittest.TestCase):
         if not is_gptqmodel_available():
             self.skipTest("gptqmodel not available")
 
-        from gptqmodel.utils.importer import hf_select_quant_linear_v2
         from gptqmodel.quantization import METHOD
+        from gptqmodel.utils.importer import hf_select_quant_linear_v2
 
         if hasattr(self.config, "quantization_config"):
             checkpoint_format = self.config.quantization_config.get("checkpoint_format")

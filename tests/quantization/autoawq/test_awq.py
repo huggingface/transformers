@@ -16,21 +16,16 @@ import gc
 import tempfile
 import unittest
 
-import pytest
-
 from gptqmodel import BACKEND
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
-    get_device_properties,
     require_accelerate,
     require_gptqmodel,
-    require_flash_attn,
-    require_intel_extension_for_pytorch,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -154,6 +149,7 @@ class AwqTest(unittest.TestCase):
         """
         from gptqmodel.nn_modules.qlinear.gemm_awq import AwqGEMMQuantLinear
         from gptqmodel.nn_modules.qlinear.gemv_awq import AwqGEMVQuantLinear
+
         from transformers.integrations.awq import replace_with_awq_linear
 
         model_id = "facebook/opt-350m"
@@ -289,6 +285,7 @@ class AwqTest(unittest.TestCase):
         output = quantized_model.generate(dummy_input, max_new_tokens=10)
         self.assertTrue((EXPECTED_OUTPUT == output).all())
 
+
 @slow
 @require_torch_accelerator
 @require_gptqmodel
@@ -298,8 +295,6 @@ class AwqScaleTest(unittest.TestCase):
 
     def test_load_quantized_model(self):
         from gptqmodel.quantization.awq.modules.act import ScaledActivation
-
-
 
         """
         Simple test that checks if the scales have been replaced in the quantized model

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
 from ..utils.quantization_config import AwqBackend
 
+
 if is_torch_available():
     import torch
 
@@ -88,6 +89,7 @@ class AwqQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             from gptqmodel.utils.model import hf_gptqmodel_post_init
+
             model = hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
         # if self.quantization_config.version == AWQLinearVersion.IPEX:

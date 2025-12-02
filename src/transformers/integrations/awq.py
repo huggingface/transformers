@@ -13,16 +13,8 @@
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
 
-import importlib
-
-from packaging import version
-
-from ..activations import ACT2FN
-from ..modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ..modeling_utils import PreTrainedModel
 from ..utils import is_gptqmodel_available, is_llm_awq_available, is_torch_available, logging
 from ..utils.quantization_config import (
-    AwqConfig,
     AwqBackend,
 )
 
@@ -102,8 +94,9 @@ def replace_with_awq_linear(
         )
 
     if backend != AwqBackend.LLMAWQ:
-        from gptqmodel.utils.importer import hf_select_quant_linear_v2
         from gptqmodel.quantization import METHOD
+        from gptqmodel.utils.importer import hf_select_quant_linear_v2
+
         target_cls = hf_select_quant_linear_v2(
             bits=quantization_config.bits,
             group_size=quantization_config.group_size,
