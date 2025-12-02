@@ -67,7 +67,7 @@ jobs:
   init_comment_with_url:
     name: Init Comment on PR
     runs-on: ubuntu-22.04
-    needs: [check-timestamps]
+    needs: [get-pr-number, check-timestamps]
     permissions:
       pull-requests: write
     steps:
