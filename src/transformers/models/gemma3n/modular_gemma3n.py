@@ -2200,7 +2200,9 @@ class Gemma3nModel(PaliGemmaModel):
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
         self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, return_dict: bool = False
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Projects the last hidden state from the vision model into language model space.
 
@@ -2213,9 +2215,7 @@ class Gemma3nModel(PaliGemmaModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values, do_pooling=False, return_dict=True
-        )
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, return_dict=True)
         last_hidden_state = vision_outputs.last_hidden_state
         # Convert from (batch, channels, height, width) to (batch, height * width, channels) where:
         # height == width and height * width == Gemma3nConfig.vision_soft_tokens_per_image.

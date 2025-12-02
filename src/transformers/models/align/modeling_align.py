@@ -1138,7 +1138,9 @@ class AlignModel(AlignPreTrainedModel):
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, return_dict: bool = False
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         return_dict (`bool`, *optional*, default to `False`):
             Whether to return a `ModelOutput` instead of a pooled embedding.

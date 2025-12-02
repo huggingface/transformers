@@ -277,7 +277,9 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         return output
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, high_res_pixel_values: torch.FloatTensor, return_dict: bool = False):
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, high_res_pixel_values: torch.FloatTensor, return_dict: bool = False
+    ):
         vision_encodings = self.get_low_res_image_features(pixel_values)
         high_res_vision_encodings = self.get_high_res_image_features(high_res_pixel_values)
         image_features = self.aligner(vision_encodings, high_res_vision_encodings)

@@ -567,7 +567,10 @@ class Idefics3Model(Idefics3PreTrainedModel):
         return inputs_embeds
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None, return_dict: bool = False
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.

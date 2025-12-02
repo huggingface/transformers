@@ -1482,7 +1482,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        return_attentions: Optional[bool] = False, # TODO: @Tom neatly deprecate this 
+        return_attentions: Optional[bool] = False,  # TODO: @Tom neatly deprecate this
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: bool = False,
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:

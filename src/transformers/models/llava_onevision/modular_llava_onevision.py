@@ -45,8 +45,8 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,

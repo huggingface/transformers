@@ -2138,7 +2138,6 @@ class Sam3Model(Sam3PreTrainedModel):
         return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
-
         r"""
         return_dict (`bool`, *optional*, default to `False`):
             Whether to return a `ModelOutput` instead of a pooled embedding.
@@ -2168,9 +2167,7 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> outputs = model(pixel_values=img_inputs.pixel_values, text_embeds=text_embeds)
         ```
         """
-        text_features = self.text_encoder(
-            input_ids=input_ids, attention_mask=attention_mask, **kwargs
-        )
+        text_features = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         last_hidden_state = text_features.last_hidden_state
         text_features = self.text_projection(last_hidden_state)
 
