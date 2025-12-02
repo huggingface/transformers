@@ -258,6 +258,7 @@ def w8a8_block_fp8_matmul_triton(
     assert len(block_size) == 2
     block_n, block_k = block_size[0], block_size[1]
 
+    # if we have per-tensor quantization, we use 128x128 block size for tiled matmul multiplication
     if block_n == B.shape[-2] and block_k == B.shape[-1]:
         block_n = 128
         block_k = 128
