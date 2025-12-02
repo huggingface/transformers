@@ -651,12 +651,15 @@ class RotaryEmbeddingConfigMixin:
         """
         # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
         rope_theta = getattr(self, "rope_theta", None)
+        partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = self.rope_parameters
 
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
         if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
+            if partial_rotary_factor is not None:
+                rope_parameters["partial_rotary_factor"] = partial_rotary_factor
 
             # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
             if rope_parameters["rope_type"] in ["llama3", "yarn", "longrope"]:
@@ -673,6 +676,9 @@ class RotaryEmbeddingConfigMixin:
             for layer_type in set(self.layer_types):
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
+                if partial_rotary_factor is not None:
+                    rope_parameters[layer_type]["partial_rotary_factor"] = partial_rotary_factor
+
                 if rope_parameters[layer_type]["rope_type"] in ["llama3", "yarn", "longrope"]:
                     self.rope_parameters[layer_type].setdefault(
                         "original_max_position_embeddings", self.max_position_embeddings
