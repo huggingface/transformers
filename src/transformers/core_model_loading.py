@@ -360,28 +360,22 @@ class ModulelistSplitAndDecouple(ConversionOps):
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
-        #self.reverse_op = ModulelistSplitAndFuse
 
     @torch.no_grad()
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
         config,
+        **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
-        # TODO: check how reverse ops interacts here
-        layer_name_prefix = full_layer_name.removesuffix(
-            target_keys[0]
-        )  # full layer name is based on first best match
-        decoupled_layer_names = [layer_name_prefix + key for key in target_keys]
-
-        fused_modules = len(target_keys)
-        split_tensors = [value[key].chunk(fused_modules, dim=self.concat_dim) for key in value.keys()]
+        # TODO: check how reverse ops interacts here --> input_dict == prev result, target == source
+        fused_modules = len(target_patterns)
+        split_tensors = [input_dict[key].chunk(fused_modules, dim=self.concat_dim) for key in input_dict.keys()]
 
         decoupled = {}
-        for idx, key in enumerate(decoupled_layer_names):
+        for idx, key in enumerate(target_patterns):
             tensor_groups = [
                 list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors
             ]
@@ -389,14 +383,20 @@ class ModulelistSplitAndDecouple(ConversionOps):
 
         return decoupled
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ModulelistSplitAndFuse(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+
 
 class Transpose(ConversionOps):
     """
-    TODO
+    Transposes the given tensor along dim0 and dim1, e.g. when going
+    from `nn.Parameter` to `nn.Linear`.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, dim0: int = 0, dim1: int = 1):
+        self.dim0 = dim0
+        self.dim1 = dim1
 
     @torch.no_grad()
     def convert(
@@ -408,15 +408,22 @@ class Transpose(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         if len(input_dict) != len(target_patterns):
-            raise ValueError()
+            raise ValueError(
+                f"Transpose conversion can only happen on each key ({len(input_dict)}) "
+                f"and should match exact one target ({len(target_patterns)})."
+            )
 
         output: dict[str, list[torch.Tensor]] = {}
         for key, target_pattern in zip(input_dict.keys(), target_patterns):
             tensor = input_dict.get(key, [])
             if len(tensor) != 1:
-                raise ValueError()
-            output[target_pattern] = torch.transpose(tensor[0], dim0=0, dim1=1)  # TODO: dims
+                raise ValueError(f"Transpose conversion requires exactly one tensor, found {len(tensor)}.")
+            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1)
         return output
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Transpose(dim0=self.dim1, dim1=self.dim0)
 
 
 @dataclass(slots=True)
@@ -556,6 +563,13 @@ class WeightRenaming(WeightTransform):
         return collected_tensors, misc
 
 
+# List of classes that are known to be able to use m:n
+_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
+    ModulelistSplitAndFuse,
+    ModulelistSplitAndDecouple,
+)
+
+
 @dataclass(slots=True)
 class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
@@ -563,7 +577,11 @@ class WeightConverter(WeightTransform):
     def __post_init__(self):
         WeightTransform.__post_init__(self)
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            logger.warning_once("Many-to-many conversions are risky; use at your own risk.")
+            # We allow many-to-many only if we use an internal operation that can handle it
+            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+                raise ValueError(
+                    f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
+                )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
