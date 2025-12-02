@@ -906,6 +906,21 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
+    def test_enable_input_require_grads(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            if not hasattr(model, "get_input_embeddings"):
+                continue
+            try:
+                model.enable_input_require_grads()
+            except NotImplementedError as error:
+                self.fail(
+                    f"enable_input_require_grads raised NotImplementedError for {model_class.__name__}: {error}"
+                )
+            finally:
+                model.disable_input_require_grads()
+
     def test_can_init_all_missing_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
