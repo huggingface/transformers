@@ -16,6 +16,7 @@
 Processor class for IDEFICS2.
 """
 
+import re
 from itertools import accumulate
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -188,11 +189,14 @@ class Idefics2Processor(ProcessorMixin):
                 image_str = image_str * 5
 
             prompt_strings = []
+            closing_fake_pattern = re.compile(rf"{re.escape(fake_image_token)}(?=[^\s<])")
             for sample in text:
                 n_images_in_text.append(sample.count(image_token))
                 sample = sample.replace(image_token, image_str)
                 # Remove any double fake tokens if images are adjacent
                 sample = sample.replace(f"{fake_image_token}{fake_image_token}", f"{fake_image_token}")
+                # Ensure words attached directly after the closing fake token remain word-boundary aligned
+                sample = closing_fake_pattern.sub(f"{fake_image_token} ", sample)
                 prompt_strings.append(sample)
 
             text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])

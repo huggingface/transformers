@@ -12,19 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
-from transformers import GemmaTokenizer, PaliGemmaProcessor
+from transformers import PaliGemmaProcessor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_vision_available():
-    from transformers import SiglipImageProcessor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -34,21 +28,23 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PaliGemmaProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-        image_processor.image_seq_length = 0  # TODO: raushan fix me in #37342
-        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        image_processor = image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor.image_seq_length = 0
+        return image_processor
 
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        tokenizer = tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        return tokenizer
 
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
+
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -100,25 +96,25 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image = self.prepare_image_inputs()
 
-        out_noimage = processor(text=text_no_image, images=image, return_tensors="np")
-        out_singlimage = processor(text=text_single_image, images=image, return_tensors="np")
+        out_noimage = processor(text=text_no_image, images=image, return_tensors="pt")
+        out_singlimage = processor(text=text_single_image, images=image, return_tensors="pt")
         for k in out_noimage:
             self.assertTrue(out_noimage[k].tolist() == out_singlimage[k].tolist())
 
-        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="np")
-        out_noimage = processor(text=text_no_image, images=[[image, image]], return_tensors="np")
+        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="pt")
+        out_noimage = processor(text=text_no_image, images=[[image, image]], return_tensors="pt")
 
         # We can't be sure what is users intention, whether user want "one text + two images" or user forgot to add the second text
         with self.assertRaises(ValueError):
-            out_noimage = processor(text=text_no_image, images=[image, image], return_tensors="np")
+            out_noimage = processor(text=text_no_image, images=[image, image], return_tensors="pt")
 
         for k in out_noimage:
             self.assertTrue(out_noimage[k].tolist() == out_multiimages[k].tolist())
 
         text_batched = ["Dummy text!", "Dummy text!"]
         text_batched_with_image = ["<image>Dummy text!", "<image>Dummy text!"]
-        out_images = processor(text=text_batched_with_image, images=[image, image], return_tensors="np")
-        out_noimage_nested = processor(text=text_batched, images=[[image], [image]], return_tensors="np")
-        out_noimage = processor(text=text_batched, images=[image, image], return_tensors="np")
+        out_images = processor(text=text_batched_with_image, images=[image, image], return_tensors="pt")
+        out_noimage_nested = processor(text=text_batched, images=[[image], [image]], return_tensors="pt")
+        out_noimage = processor(text=text_batched, images=[image, image], return_tensors="pt")
         for k in out_noimage:
             self.assertTrue(out_noimage[k].tolist() == out_images[k].tolist() == out_noimage_nested[k].tolist())

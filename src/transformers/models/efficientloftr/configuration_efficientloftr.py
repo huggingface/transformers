@@ -14,7 +14,6 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
 class EfficientLoFTRConfig(PreTrainedConfig):
@@ -67,12 +66,9 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         fine_kernel_size (`int`, *optional*, defaults to 8):
             Kernel size used for the fine feature matching
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-        partial_rotary_factor (`float`, *optional*, defaults to 4.0):
-            Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
-            the whole hidden_size, so this factor is used to compensate.
+            The epsilon used by the batch normalization layers
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         fine_matching_slice_dim (`int`, *optional*, defaults to 8):
@@ -121,7 +117,6 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
-        partial_rotary_factor: float = 4.0,
         rope_parameters: Optional[dict] = None,
         fine_matching_slice_dim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
@@ -176,16 +171,9 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         self.fine_matching_regress_temperature = fine_matching_regress_temperature
 
         self.num_key_value_heads = num_attention_heads
-        self.partial_rotary_factor = partial_rotary_factor
         self.initializer_range = initializer_range
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 4.0)  # assign default for BC
 
         super().__init__(**kwargs)
 
