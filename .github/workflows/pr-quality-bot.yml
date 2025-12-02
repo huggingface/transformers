@@ -6,7 +6,8 @@ on:
       - created
     branches-ignore:
       - main
-  pull_request:
+  # pull_request:
+  push:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
   cancel-in-progress: true
