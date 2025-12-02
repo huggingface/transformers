@@ -770,7 +770,10 @@ class GPTQConfig(QuantizationConfigMixin):
                 )
 
     def to_dict(self) -> dict[str, Any]:
-        return super().to_dict()
+        config_dict = super().to_dict()
+        # Compatible with legacy field: checkpoint_format
+        config_dict["checkpoint_format"] = self.format
+        return config_dict
 
     def to_dict_optimum(self):
         """
