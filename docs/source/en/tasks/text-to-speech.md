@@ -50,11 +50,6 @@ You can also do conversational TTS, here is an example with Dia:
 >>> output = pipe(text)
 ```
 
-```python
->>> from IPython.display import Audio
->>> Audio(output["audio"], rate=output["sampling_rate"])
-```
-
 You can also do voice cloning with CSM:
 
 ```python
@@ -78,11 +73,6 @@ You can also do voice cloning with CSM:
 ...     {"role": "0", "content": [{"type": "text", "text": "How much money can you spend?"}]},
 ... ]
 >>> output = pipe(conversation)
-```
-
-```python
->>> from IPython.display import Audio
->>> Audio(output["audio"], rate=output["sampling_rate"])
 ```
 
 For more examples on what CSM and other pretrained TTS models can do, refer to our
