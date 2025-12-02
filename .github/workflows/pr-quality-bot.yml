@@ -77,3 +77,21 @@ jobs:
       - name: Check commits
         run: |
           git log -n 3
+
+      - name: Comment on PR with workflow run link
+        id: init_comment
+        env:
+          prNumber: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const prNumber = parseInt(process.env.prNumber, 10);
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+
+            const { data: botComment } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `Quality fix is beginning .... [View the workflow run here](${runUrl}).`
+            });
+            core.setOutput('comment_id', botComment.id);
