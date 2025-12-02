@@ -908,9 +908,7 @@ def convert_and_load_state_dict_in_model(
 
                 # Cleanup the tensors
                 mapping.reset()
-            except Exception as e :
-                print(e)
-                raise e
+            except SkipLayer:
                 continue
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)

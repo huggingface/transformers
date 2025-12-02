@@ -20,8 +20,8 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, EetqCo
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
-    require_torch_gpu,
     require_kernels,
+    require_torch_gpu,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -95,8 +95,8 @@ class EetqTest(unittest.TestCase):
         """
         Simple test that checks if the quantized model has been converted properly
         """
-        from transformers.integrations.eetq import EetqLinear
         from transformers.integrations import replace_with_eetq_linear
+        from transformers.integrations.eetq import EetqLinear
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")

@@ -19,7 +19,7 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_torch_available, is_kernels_available, logging
+from ..utils import is_accelerate_available, is_kernels_available, is_torch_available, logging
 from .quantizers_utils import get_module_from_name
 
 
@@ -47,10 +47,10 @@ class EetqHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        
+
         if not is_kernels_available():
             raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
-             
+
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
 
@@ -122,25 +122,3 @@ class EetqHfQuantizer(HfQuantizer):
     def get_quantize_ops(self):
         from ..integrations.eetq import EetqQuantize
         return EetqQuantize(self)
-    
-    # def get_conversion_ops(self):
-    #     from ..integrations.bitsandbytes import Bnb4bitDeserialize
-
-    #     if self.pre_quantized:
-    #         return [
-    #             WeightConverter(
-    #                 source_patterns=[
-    #                     "weight.nested_absmax",
-    #                     "weight.nested_quant_map",
-    #                     "weight.quant_map",
-    #                     "weight.absmax",
-    #                     "weight.quant_state.bitsandbytes__nf4",
-    #                     "weight.quant_state.bitsandbytes__fp4",
-    #                     "weight",
-    #                 ],
-    #                 target_patterns="weight",
-    #                 operations=[Bnb4bitDeserialize(self)],
-    #             )
-    #         ]
-    #     return []
-
