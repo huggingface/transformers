@@ -13,8 +13,11 @@
 # limitations under the License.
 
 from ..activations import ACT2FN
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
 
+from typing import Optional
 
 if is_torch_available():
     import torch
@@ -29,18 +32,79 @@ if is_fbgemm_gpu_available():
 logger = logging.get_logger(__name__)
 
 
+class FbgemmFp8Quantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
+        module, tensor_name = get_module_from_name(model, target_key)
+
+        # Sanity checks
+        if isinstance(module, FbgemmFp8Linear):
+            if tensor_name == "weight" and value.dtype == torch.float8_e4m3fn:
+                raise ValueError("Expect unquantized weights but got a quantized weight")
+            if tensor_name == "weight_scale":
+                raise ValueError("Expect unquantized weights but got a weight_scale")
+        if isinstance(module, FbgemmFp8Llama4TextExperts):
+            if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
+                raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+
+        if isinstance(module, FbgemmFp8Llama4TextExperts):
+            if tensor_name == "gate_up_proj":
+                # Process each expert separately
+                # Transpose the second and third dimension
+                transposed_param = value.transpose(1, 2)
+
+                # Reshape to 2D for quantization
+                original_shape = transposed_param.shape
+                flattened_param = transposed_param.reshape(-1, original_shape[-1])
+
+                # Quantize using per row instead of per column
+                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+
+                # Reshape back to original dimensions
+                new_value = new_value_flat.reshape(original_shape)
+                new_value = new_value.transpose(1, 2)
+                weight_scale = weight_scale_flat.reshape(original_shape[0], 1, original_shape[1])
+            elif tensor_name == "down_proj":
+                # Process each expert separately
+                # Transpose the weights for proper quantization
+                transposed_param = value.transpose(1, 2)
+
+                # Reshape to 2D for quantization
+                original_shape = transposed_param.shape
+                flattened_param = transposed_param.reshape(-1, original_shape[-1])
+
+                # Quantize using per column
+                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+
+                # Reshape back to original dimensions
+                new_value = new_value_flat.reshape(original_shape)
+                new_value = new_value.transpose(1, 2)
+                weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
+        else:
+            new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(value)
+            weight_scale = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1))
+
+        return {target_key: torch.nn.Parameter(new_value),
+                f"{target_key}_scale": weight_scale}
+
 class FbgemmFp8Linear(torch.nn.Linear):
-    def __init__(self, in_features, out_features, bias, weight_dtype=torch.float32):
+    def __init__(self, in_features, out_features, bias, dtype=torch.float8_e4m3fn):
         super().__init__(in_features, out_features, bias)
         self.in_features = in_features
         self.out_features = out_features
 
-        self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=torch.float8_e4m3fn))
-        self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=weight_dtype))
+        self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=dtype))
+        self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
         self.register_buffer("input_scale_ub", torch.zeros([1], dtype=torch.float), persistent=False)
 
         if bias:
-            self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=weight_dtype))
+            self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=torch.float32))
         else:
             self.bias = None
 
@@ -177,7 +241,7 @@ def _replace_with_fbgemm_fp8_linear(
 
     for name, module in model.named_children():
         current_key_name.append(name)
-
+        module_kwargs = {} if pre_quantized else {"dtype": None}
         if (isinstance(module, nn.Linear)) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             current_key_name_str = ".".join(current_key_name)
@@ -191,6 +255,7 @@ def _replace_with_fbgemm_fp8_linear(
                         in_features,
                         out_features,
                         module.bias is not None,
+                        **module_kwargs
                     )
                     has_been_replaced = True
 
