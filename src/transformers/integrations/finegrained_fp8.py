@@ -316,10 +316,8 @@ class FP8Linear(nn.Linear):
     ):
         super().__init__(in_features, out_features)
 
-        # If block size, is not passed, it means that we are doing per-tensor quantization
-        if block_size is not None:
-            self.block_size = block_size
-
+        # If block size is None, it means that we are doing per-tensor quantization
+        self.block_size = block_size
         self.activation_scheme = activation_scheme
 
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
