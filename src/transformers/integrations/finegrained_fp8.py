@@ -621,6 +621,19 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) < 2:
+            # in case of no scales, the weights are not quantized, so we return the weights as is
+            return {
+                full_layer_name: input_dict["weight$"][0]
+                if isinstance(input_dict["weight$"], list)
+                else input_dict["weight$"]
+            }
+        quantized = input_dict["weight$"][0] if isinstance(input_dict["weight$"], list) else input_dict["weight$"]
+        scales = (
+            input_dict["weight_scale_inv"][0]
+            if isinstance(input_dict["weight_scale_inv"], list)
+            else input_dict["weight_scale_inv"]
+        )
+        if len(input_dict) < 2:
             # case where we only got weights, need to check for "weight$"
             return {full_layer_name: input_dict["weight$"]}
 
@@ -631,7 +644,7 @@ class Fp8Dequantize(ConversionOps):
         block_size = self.hf_quantizer.quantization_config.weight_block_size
         if block_size is None:
             block_size = (quantized.shape[-2], quantized.shape[-1])
-
+        
         block_m, block_n = block_size
 
         if rows % block_m != 0 or cols % block_n != 0:
