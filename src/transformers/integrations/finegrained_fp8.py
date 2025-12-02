@@ -686,7 +686,7 @@ class Fp8Dequantize(ConversionOps):
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        if len(input_dict) != 2:
+        if len(input_dict) < 2:
             # in case of no scales, the weights are not quantized, so we return the weights as is
             return {
                 full_layer_name: input_dict["weight$"][0]
@@ -702,15 +702,18 @@ class Fp8Dequantize(ConversionOps):
 
         rows, cols = quantized.shape[-2:]
         block_size = self.hf_quantizer.quantization_config.weight_block_size
+        if block_size is None:
+            block_size = (quantized.shape[-2], quantized.shape[-1])
 
         block_m, block_n = block_size
+
         if rows % block_m != 0 or cols % block_n != 0:
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
             )
-
+        quantized = quantized.to(scales.dtype)
         reshaped = quantized.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
-        expanded_scales = scales.to(torch.float32).reshape(-1, rows // block_m, cols // block_n)
+        expanded_scales = scales.reshape(-1, rows // block_m, cols // block_n)
         expanded_scales = expanded_scales.unsqueeze(-1).unsqueeze(2)
         dequantized = reshaped * expanded_scales
 

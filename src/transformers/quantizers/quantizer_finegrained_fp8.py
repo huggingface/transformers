@@ -246,8 +246,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if self.pre_quantized and self.quantization_config.dequantize:
             return [
                 # either use the dollar sign, or permute the source patterns to start matching against the scales first
+                # We also collect the activation scales, they will not be used
                 WeightConverter(
-                    source_patterns=["weight$", "weight_scale_inv"],
+                    source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
                     target_patterns="weight",
                     operations=[Fp8Dequantize(self)],
                 )
