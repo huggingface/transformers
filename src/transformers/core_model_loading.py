@@ -303,7 +303,6 @@ class ModulelistSplitAndFuse(ConversionOps):
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
-        self.reverse_op = ModulelistSplitAndDecouple
 
     def split_list_into_chunks(self, tensor_list: list[torch.Tensor], chunks: int = 2):
         split_size = math.ceil(len(tensor_list) / chunks)  # best effort split size
@@ -312,30 +311,29 @@ class ModulelistSplitAndFuse(ConversionOps):
     @torch.no_grad()
     def convert(
         self,
-        value: dict[str, list[torch.Tensor]],
-        source_keys: list[str],
-        target_keys: list[str],
-        full_layer_name: str,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
         config,
+        **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
-        layer_name_prefix = full_layer_name.removesuffix(
-            target_keys[0]
-        )  # full layer name is based on first best match
-        split_layer_names = [layer_name_prefix + key for key in target_keys]
-
         split_and_fused = defaultdict(list)
-        for key in value.keys():
-            tensors = value.get(key, [])
+        for key in input_dict.keys():
+            tensors = input_dict.get(key, [])
 
-            split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(split_layer_names))
+            split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(target_patterns))
             stacked_tensors = (torch.stack(tensor_group, dim=self.stack_dim) for tensor_group in split_tensor_lists)
             for idx, tensor_group in enumerate(stacked_tensors):
-                split_and_fused[split_layer_names[idx]].append(tensor_group)
+                split_and_fused[target_patterns[idx]].append(tensor_group)
 
         for k, v in split_and_fused.items():
             split_and_fused[k] = torch.cat(v, dim=self.concat_dim)
 
         return split_and_fused
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ModulelistSplitAndDecouple(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
 class ModulelistSplitAndDecouple(ConversionOps):
@@ -362,7 +360,7 @@ class ModulelistSplitAndDecouple(ConversionOps):
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
-        self.reverse_op = ModulelistSplitAndFuse
+        #self.reverse_op = ModulelistSplitAndFuse
 
     @torch.no_grad()
     def convert(
@@ -390,6 +388,35 @@ class ModulelistSplitAndDecouple(ConversionOps):
             decoupled[key] = list(chain.from_iterable(tensor_groups))
 
         return decoupled
+
+
+class Transpose(ConversionOps):
+    """
+    TODO
+    """
+
+    def __init__(self):
+        pass
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        if len(input_dict) != len(target_patterns):
+            raise ValueError()
+
+        output: dict[str, list[torch.Tensor]] = {}
+        for key, target_pattern in zip(input_dict.keys(), target_patterns):
+            tensor = input_dict.get(key, [])
+            if len(tensor) != 1:
+                raise ValueError()
+            output[target_pattern] = torch.transpose(tensor[0], dim0=0, dim1=1)  # TODO: dims
+        return output
 
 
 @dataclass(slots=True)

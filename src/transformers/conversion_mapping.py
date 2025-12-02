@@ -23,6 +23,7 @@ from .core_model_loading import (
     Concatenate,
     MergeModulelist,
     ModulelistSplitAndFuse,
+    Transpose,
     WeightConverter,
     WeightRenaming,
 )
@@ -126,15 +127,23 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("^model.norm", "model.language_model.norm"),
             WeightRenaming("^model.embed_tokens", "model.language_model.embed_tokens"),
             WeightRenaming("^model.layers", "model.language_model.layers"),
-            WeightRenaming("mlp.gate.weight", "mlp.text_moe.gate.weight"),
-            WeightRenaming("mlp.gate.weight_1", "mlp.vision_moe.gate.weight"),
+            WeightConverter(
+                source_patterns="mlp.gate.weight_1",
+                target_patterns="mlp.vision_moe.gate.weight",
+                operations=[Transpose()]  # Linear to Parameter
+            ),
+            WeightConverter(
+                source_patterns="mlp.gate.weight",
+                target_patterns="mlp.text_moe.gate.weight",
+                operations=[Transpose()]
+            ),
             WeightConverter(
                 source_patterns=["mlp.moe_statics.e_score_correction_bias"],
                 target_patterns=[
                     "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
                     "mlp.vision_moe.gate.moe_statics.e_score_correction_bias",
                 ],
-                operations=[Chunk(dim=0, chunks=2)],
+                operations=[Chunk(dim=0)],
             ),
             WeightConverter(
                 source_patterns=["experts.*.down_proj.weight"],
