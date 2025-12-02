@@ -45,7 +45,7 @@ class FbgemmFp8Quantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
-        value = value[0] if isinstance(value, list) else value
+        value = value[0]
 
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
