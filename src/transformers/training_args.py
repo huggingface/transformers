@@ -1045,6 +1045,20 @@ class TrainingArguments:
             )
         },
     )
+
+    max_eval_batches: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Maximum number of batches to use for evaluation. "
+                "If None, all batches in the eval dataset will be used. "
+                "Useful for speeding up evaluation on large datasets."
+            )
+        },
+    )
+
+
+    
     dataloader_num_workers: int = field(
         default=0,
         metadata={
