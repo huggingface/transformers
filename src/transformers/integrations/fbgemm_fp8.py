@@ -20,6 +20,7 @@ from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
 
+
 if is_torch_available():
     import torch
     from torch import nn
@@ -38,12 +39,16 @@ class FbgemmFp8Quantize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def convert(
-        self, input_dict: dict[str, torch.Tensor | list[torch.Tensor]], model: Optional[torch.nn.Module] = None, **kwargs
+        self,
+        input_dict: dict[str, torch.Tensor | list[torch.Tensor]],
+        model: Optional[torch.nn.Module] = None,
+        **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
 
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
+
         module, tensor_name = get_module_from_name(model, target_key)
 
         # Sanity checks
@@ -93,8 +98,8 @@ class FbgemmFp8Quantize(ConversionOps):
             new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(value)
             weight_scale = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1))
 
-        return {target_key: torch.nn.Parameter(new_value),
-                f"{target_key}_scale": weight_scale}
+        return {target_key: torch.nn.Parameter(new_value), f"{target_key}_scale": weight_scale}
+
 
 class FbgemmFp8Linear(torch.nn.Linear):
     def __init__(self, in_features, out_features, bias, dtype=torch.float8_e4m3fn):

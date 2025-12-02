@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
-
-
 import gc
 import tempfile
 import unittest
+from typing import Any
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FbgemmFp8Config, OPTForCausalLM
 from transformers.testing_utils import (
@@ -74,9 +72,12 @@ class FbgemmFp8Test(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 9
 
-    EXPECTED_OUTPUT = set[Any](["What are we having for dinner?\nI'm having a steak and a salad",
-                                "What are we having for dinner? I don’t know. What are we having"
-                    ])
+    EXPECTED_OUTPUT = set[Any](
+        [
+            "What are we having for dinner?\nI'm having a steak and a salad",
+            "What are we having for dinner? I don’t know. What are we having",
+        ]
+    )
 
     device_map = "cuda"
 
@@ -165,7 +166,9 @@ class FbgemmFp8Test(unittest.TestCase):
         with init_empty_weights():
             model = OPTForCausalLM(config)
         quantization_config = FbgemmFp8Config(modules_to_not_convert=["fc1"])
-        model = replace_with_fbgemm_fp8_linear(model, modules_to_not_convert=["fc1"],quantization_config=quantization_config)
+        model = replace_with_fbgemm_fp8_linear(
+            model, modules_to_not_convert=["fc1"], quantization_config=quantization_config
+        )
         nb_fbgemm_linear = 0
         for module in model.modules():
             if isinstance(module, FbgemmFp8Linear):
