@@ -2742,7 +2742,7 @@ class TrainingArguments:
                         fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
-            fsdp_plugin_args["fsdp_version"] = self.fsdp_config.get("fsdp_version", 1)
+            fsdp_plugin_args["fsdp_version"] = self.fsdp_config.get("version", 1)
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
             fsdp_plugin_args["forward_prefetch"] = str_to_bool(str(self.fsdp_config.get("forward_prefetch", "false")).lower())
