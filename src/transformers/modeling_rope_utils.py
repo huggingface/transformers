@@ -657,21 +657,24 @@ class RotaryEmbeddingConfigMixin:
         if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
+
+            # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
+            if rope_parameters["rope_type"] in ["llama3", "yarn", "longrope"]:
+                if hasattr(self, "original_max_position_embeddings"):
+                    # NOTE: Phi3 (and potentially other models) save `original_max_position_embeddings` field
+                    # containing the pretrained value outside rope parameters. This is an exception case where we
+                    # give priority to `self.original_max_position_embeddings
+                    self.rope_parameters["original_max_position_embeddings"] = self.original_max_position_embeddings
+                else:
+                    self.rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
+
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
             for layer_type in self.layer_types:
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
-
-        # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
-        rope_type = rope_parameters["rope_type"]
-        if rope_type in ["llama3", "yarn", "longrope"]:
-            if hasattr(self, "original_max_position_embeddings"):
-                # NOTE: Phi3 (and potentially other models) save `original_max_position_embeddings` field
-                # containing the pretrained value outside rope parameters
-                self.rope_parameters["original_max_position_embeddings"] = self.original_max_position_embeddings
-            else:
-                self.rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
+                if rope_parameters[layer_type]["rope_type"] in ["llama3", "yarn", "longrope"]:
+                    self.rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
 
         self.rope_parameters = rope_parameters
 
