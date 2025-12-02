@@ -4445,7 +4445,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
-        else:
+        elif not is_quantized:
             self.initialize_weights()
 
     def _adjust_missing_and_unexpected_keys(
