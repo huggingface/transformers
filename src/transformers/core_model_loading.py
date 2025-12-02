@@ -372,7 +372,8 @@ class ModulelistSplitAndDecouple(ConversionOps):
     ) -> dict[str, list[torch.Tensor]]:
         # TODO: check how reverse ops interacts here --> input_dict == prev result, target == source
         fused_modules = len(target_patterns)
-        split_tensors = [input_dict[key].chunk(fused_modules, dim=self.concat_dim) for key in input_dict.keys()]
+        # TODO: why do we need the 0 index
+        split_tensors = [input_dict[key][0].chunk(fused_modules, dim=self.concat_dim) for key in input_dict.keys()]
 
         decoupled = {}
         for idx, key in enumerate(target_patterns):
@@ -380,6 +381,8 @@ class ModulelistSplitAndDecouple(ConversionOps):
                 list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors
             ]
             decoupled[key] = list(chain.from_iterable(tensor_groups))
+
+        # TODO: we need to inverse here to explicit target names, i.e. instead of * map to the digits 0..n
 
         return decoupled
 
