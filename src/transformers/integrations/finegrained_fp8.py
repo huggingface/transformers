@@ -315,19 +315,19 @@ class FP8Linear(nn.Linear):
         activation_scheme="dynamic",
     ):
         super().__init__(in_features, out_features)
-        
+
         # If block size, is not pased, it means that we are doing per-tensor quantization
         if block_size is not None:
             self.block_size = block_size
         else:
             self.block_size = (out_features, in_features)
-            
+
         self.activation_scheme = activation_scheme
 
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
         scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
         scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-        
+
         if scale_out_features * scale_in_features == 1:
             self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         else:
@@ -497,7 +497,7 @@ def replace_with_fp8_linear(
     """Helper function to replace model layers with FP8 versions."""
     if quantization_config.dequantize:
         return model
-    
+
     has_been_replaced = False
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -522,7 +522,7 @@ def replace_with_fp8_linear(
             if new_module is not None:
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
-                
+
     if not has_been_replaced:
         logger.warning(
             "You are loading your model using fp8 but no linear modules were found in your model."
@@ -622,9 +622,7 @@ class Fp8Dequantize(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) < 2:
             # case where we only got weights, need to check for "weight$"
-            return {
-                full_layer_name: input_dict["weight$"]
-            }
+            return {full_layer_name: input_dict["weight$"]}
 
         quantized = input_dict["weight$"][0]
         scales = input_dict["weight_scale_inv"][0]
@@ -649,4 +647,3 @@ class Fp8Dequantize(ConversionOps):
         return {
             full_layer_name: dequantized.reshape(quantized.shape),
         }
-    
