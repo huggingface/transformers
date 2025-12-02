@@ -106,7 +106,7 @@ class Chunk(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
@@ -134,7 +134,7 @@ class Concatenate(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
@@ -175,7 +175,7 @@ class MergeModulelist(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
@@ -211,7 +211,7 @@ class SplitModulelist(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
@@ -260,7 +260,7 @@ class PermuteForRope(ConversionOps):
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
         return tensor
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],

@@ -623,7 +623,7 @@ class ContinuousBatchProcessor:
         self.scheduler.waiting_requests_order.clear()
 
     @traced
-    @torch.no_grad
+    @torch.no_grad()
     def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
         """Perform a single generation step."""
 
