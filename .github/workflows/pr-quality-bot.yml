@@ -1,0 +1,77 @@
+name: PR comment GitHub CI
+
+on:
+  issue_comment:
+    types:
+      - created
+    branches-ignore:
+      - main
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
+  cancel-in-progress: true
+permissions: read-all
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  CUDA_VISIBLE_DEVICES: 0,1
+
+
+jobs:
+  get-pr-number:
+    name: Get PR number
+    # if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    uses: ./.github/workflows/get-pr-number.yml
+
+  get-pr-info:
+    name: Get PR commit SHA
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+
+  check-timestamps:
+    name: Check timestamps (security check)
+    runs-on: ubuntu-22.04
+    needs: get-pr-info
+    outputs:
+      PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+      PR_MERGE_SHA: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+    steps:
+      - name: Verify `merge_commit` timestamp is older than the issue comment timestamp
+        env:
+          COMMENT_DATE: ${{ github.event.comment.created_at }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+        run: |
+            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+            echo "COMMENT_DATE: $COMMENT_DATE"
+            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+              exit -1;
+            fi
+
+  run-quality:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, get-pr-info, check-timestamps]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Instead of checking out the base repo, use the contributor's repo name
+          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+          # You may need fetch-depth: 0 for being able to push
+          fetch-depth: "0"
+
+      - name: Check commits
+        run: |
+          git log -n 3
