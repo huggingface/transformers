@@ -96,31 +96,6 @@ class EetqHfQuantizer(HfQuantizer):
                 return True
         return False
 
-    def create_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        target_device: "torch.device",
-        **kwargs,
-    ):
-        from eetq import EetqLinear, quantize_and_preprocess_weights
-
-        module, tensor_name = get_module_from_name(model, param_name)
-        new_value, weight_scale = quantize_and_preprocess_weights(param_value)
-
-        # Samity check
-        if isinstance(module, EetqLinear):
-            if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.int8:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
-            else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
-
-        module._buffers[tensor_name] = new_value.to(target_device)
-        module.register("weight_scales", weight_scale.to(target_device))
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -133,12 +108,7 @@ class EetqHfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        model = replace_with_eetq_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
-        )
+        model = replace_with_eetq_linear(model,modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized)
 
         model.config.quantization_config = self.quantization_config
 
@@ -152,3 +122,25 @@ class EetqHfQuantizer(HfQuantizer):
     def get_quantize_ops(self):
         from ..integrations.eetq import EetqQuantize
         return EetqQuantize(self)
+    
+    # def get_conversion_ops(self):
+    #     from ..integrations.bitsandbytes import Bnb4bitDeserialize
+
+    #     if self.pre_quantized:
+    #         return [
+    #             WeightConverter(
+    #                 source_patterns=[
+    #                     "weight.nested_absmax",
+    #                     "weight.nested_quant_map",
+    #                     "weight.quant_map",
+    #                     "weight.absmax",
+    #                     "weight.quant_state.bitsandbytes__nf4",
+    #                     "weight.quant_state.bitsandbytes__fp4",
+    #                     "weight",
+    #                 ],
+    #                 target_patterns="weight",
+    #                 operations=[Bnb4bitDeserialize(self)],
+    #             )
+    #         ]
+    #     return []
+
