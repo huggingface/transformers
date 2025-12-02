@@ -874,6 +874,11 @@ class AwqConfig(GPTQConfig):
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
         return loading_attributes_dict
 
+    def to_dict(self) -> dict[str, Any]:
+        config_dict = super().to_dict()
+        # Compatible with legacy field: version
+        config_dict["version"] = self.format
+        return config_dict
 
 @dataclass
 class AqlmConfig(QuantizationConfigMixin):
