@@ -704,7 +704,7 @@ class Fp8Dequantize(ConversionOps):
         block_size = self.hf_quantizer.quantization_config.weight_block_size
         if block_size is None:
             block_size = (quantized.shape[-2], quantized.shape[-1])
-        
+
         block_m, block_n = block_size
 
         if rows % block_m != 0 or cols % block_n != 0:
