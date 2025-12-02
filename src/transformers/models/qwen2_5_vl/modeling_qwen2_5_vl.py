@@ -1307,7 +1307,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
                 position_ids = position_ids + delta.to(position_ids.device)
 
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
