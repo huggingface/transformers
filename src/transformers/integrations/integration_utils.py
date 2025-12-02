@@ -1658,7 +1658,9 @@ class NeptuneCallback(TrainerCallback):
 
     def on_init_end(self, args, state, control, **kwargs):
         self._volatile_checkpoints_dir = None
-        if self._log_checkpoints and args.save_total_limit is not None:
+        # Support both new separate limits and legacy save_total_limit
+        limit = args.save_checkpoint_limit or args.save_total_limit
+        if self._log_checkpoints and limit is not None:
             self._volatile_checkpoints_dir = tempfile.TemporaryDirectory().name
 
         if self._log_checkpoints == "best" and not args.load_best_model_at_end:
@@ -1985,7 +1987,9 @@ class ClearMLCallback(TrainerCallback):
                 auto_delete_file=False,
             )
             self._checkpoints_saved.append(output_model)
-            while args.save_total_limit and args.save_total_limit < len(self._checkpoints_saved):
+            # Determine which limit to respect
+            limit = args.save_checkpoint_limit or args.save_total_limit
+            while limit and limit < len(self._checkpoints_saved):
                 try:
                     self._clearml.model.Model.remove(
                         self._checkpoints_saved[0],
@@ -1995,7 +1999,7 @@ class ClearMLCallback(TrainerCallback):
                     )
                 except Exception as e:
                     logger.warning(
-                        f"Could not remove checkpoint `{self._checkpoints_saved[0].name}` after going over the `save_total_limit`. Error is: {e}"
+                        f"Could not remove checkpoint `{self._checkpoints_saved[0].name}` after going over the checkpoint limit. Error is: {e}"
                     )
                     break
                 self._checkpoints_saved = self._checkpoints_saved[1:]

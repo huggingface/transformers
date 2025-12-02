@@ -4192,29 +4192,81 @@ class Trainer:
         return checkpoints_sorted
 
     def _rotate_checkpoints(self, use_mtime=False, output_dir=None) -> None:
-        if self.args.save_total_limit is None or self.args.save_total_limit <= 0:
+        # --- BACKWARD COMPATIBILITY: Original save_total_limit logic ---
+        if self.args.save_total_limit is not None and self.args.save_total_limit > 0:
+            # Check if we should delete older checkpoint(s)
+            checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
+            if len(checkpoints_sorted) <= self.args.save_total_limit:
+                return
+
+            # If save_total_limit=1 with load_best_model_at_end=True, we could end up deleting the last checkpoint, which
+            # we don't do to allow resuming.
+            save_total_limit = self.args.save_total_limit
+            if (
+                self.state.best_model_checkpoint is not None
+                and self.args.save_total_limit == 1
+                and checkpoints_sorted[-1] != self.state.best_model_checkpoint
+            ):
+                save_total_limit = 2
+
+            number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
+            checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
+            for checkpoint in checkpoints_to_be_deleted:
+                logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
+                shutil.rmtree(checkpoint, ignore_errors=True)
+            return  # Exit after handling save_total_limit
+
+        # --- NEW FUNCTIONALITY: Separate limits for checkpoints and model weights ---
+        ckpt_limit = self.args.save_checkpoint_limit
+        model_limit = self.args.save_model_limit
+
+        # If neither new limit is set, nothing to do
+        if not any([(ckpt_limit and ckpt_limit > 0), (model_limit and model_limit > 0)]):
             return
 
-        # Check if we should delete older checkpoint(s)
         checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
-        if len(checkpoints_sorted) <= self.args.save_total_limit:
+        if not checkpoints_sorted:
             return
 
-        # If save_total_limit=1 with load_best_model_at_end=True, we could end up deleting the last checkpoint, which
-        # we don't do to allow resuming.
-        save_total_limit = self.args.save_total_limit
-        if (
-            self.state.best_model_checkpoint is not None
-            and self.args.save_total_limit == 1
-            and checkpoints_sorted[-1] != self.state.best_model_checkpoint
-        ):
-            save_total_limit = 2
+        # Delete old model weight files FIRST (before deleting checkpoint directories)
+        if model_limit and model_limit > 0:
+            model_files = []
+            for ckpt in checkpoints_sorted:
+                if not os.path.exists(ckpt):
+                    continue
+                try:
+                    for f in os.listdir(ckpt):
+                        is_pytorch_model = f.startswith("pytorch_model") and (".bin" in f)
+                        is_safetensors = f == "model.safetensors" or (
+                            f.startswith("model-") and f.endswith(".safetensors")
+                        )
 
-        number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - save_total_limit)
-        checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
-        for checkpoint in checkpoints_to_be_deleted:
-            logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-            shutil.rmtree(checkpoint, ignore_errors=True)
+                        if is_pytorch_model or is_safetensors:
+                            model_files.append(os.path.join(ckpt, f))
+                except (OSError, FileNotFoundError):
+                    continue
+
+            if not model_files:
+                return
+            # Delete oldest model files if over limit
+            if len(model_files) > model_limit:
+                num_to_delete = len(model_files) - model_limit
+                for model_path in model_files[:num_to_delete]:
+                    if os.path.exists(model_path):
+                        logger.info(f"Deleting model weights [{model_path}] due to save_model_limit")
+                        try:
+                            os.remove(model_path)
+                        except Exception as e:
+                            logger.warning(f"Failed to delete {model_path}: {e}")
+
+        # Delete old full checkpoint directories
+        if ckpt_limit and ckpt_limit > 0:
+            if len(checkpoints_sorted) > ckpt_limit:
+                num_to_delete = len(checkpoints_sorted) - ckpt_limit
+                checkpoints_to_delete = checkpoints_sorted[:num_to_delete]
+                for ckpt in checkpoints_to_delete:
+                    logger.info(f"Deleting full checkpoint [{ckpt}] due to save_checkpoint_limit")
+                    shutil.rmtree(ckpt, ignore_errors=True)
 
     def evaluate(
         self,
