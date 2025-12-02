@@ -300,7 +300,7 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     @classmethod
     def get_model(cls):
-        if not hasattr(cls, "model") or cls.model is None:
+        if cls.model is None:
             cls.model = Glm4vMoeForConditionalGeneration.from_pretrained(
                 "zai-org/GLM-4.5V", dtype="auto", device_map="auto"
             )
