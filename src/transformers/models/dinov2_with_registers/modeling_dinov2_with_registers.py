@@ -421,7 +421,7 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     config: Dinov2WithRegistersConfig
     base_model_prefix = "dinov2_with_registers"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2WithRegistersLayer"]
     _supports_sdpa = True
@@ -583,7 +583,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
     def get_input_embeddings(self) -> Dinov2WithRegistersPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
