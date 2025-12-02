@@ -344,7 +344,7 @@ class ServeCompletionsMixin:
             "model": "Qwen/Qwen2.5-0.5B-Instruct",
             "messages": [{"role": "user", "content": 'Please only answer with "Hi."'}],
             "stream": True,
-            "max_tokens": 300,
+            "max_tokens": 30,
         }
 
         all_payloads = self.run_server(request)

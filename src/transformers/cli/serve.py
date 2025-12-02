@@ -823,9 +823,12 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )["input_ids"][0]
+        try:
+            inputs = processor.apply_chat_template(
+                req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
+            ).to(model.device)["input_ids"][0]
+        except IndexError:
+            raise
 
         def stream_chat_completion(request_id, decode_stream):
             from ..generation.continuous_batching import RequestStatus
@@ -1287,7 +1290,9 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
+        inputs = processor.apply_chat_template(
+            inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        )["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
@@ -1591,7 +1596,9 @@ class Serve:
         else:
             raise ValueError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
+        inputs = processor.apply_chat_template(
+            inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        )["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
