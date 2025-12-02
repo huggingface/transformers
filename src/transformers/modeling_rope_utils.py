@@ -670,11 +670,13 @@ class RotaryEmbeddingConfigMixin:
 
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
-            for layer_type in self.layer_types:
+            for layer_type in set(self.layer_types):
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
                 if rope_parameters[layer_type]["rope_type"] in ["llama3", "yarn", "longrope"]:
-                    self.rope_parameters.setdefault("original_max_position_embeddings", self.max_position_embeddings)
+                    self.rope_parameters[layer_type].setdefault(
+                        "original_max_position_embeddings", self.max_position_embeddings
+                    )
 
         self.rope_parameters = rope_parameters
 
