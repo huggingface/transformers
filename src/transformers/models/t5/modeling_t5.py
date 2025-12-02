@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     DUMMY_INPUTS,
@@ -378,7 +378,9 @@ class T5Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            logger.warning_once(
+                "T5 "T5 uses relative position bias; SDPA/FlashAttention not supported. Falling back to eager."
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
