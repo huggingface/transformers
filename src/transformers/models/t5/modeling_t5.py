@@ -379,7 +379,7 @@ class T5Attention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             logger.warning_once(
-                "T5 uses relative position bias; SDPA/FlashAttention not supported. Falling back to eager."
+                "T5 uses relative position bias; SDPA/FlashAttention not supported, fall back to eager."
             )
 
         attn_output, attn_weights = attention_interface(
