@@ -1205,6 +1205,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
+        **kwargs,
     ):
         aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
@@ -2431,6 +2432,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
 
     def _get_talker_user_parts(
         self, im_start_index, segment_end_index, multimodal_mask, thinker_hidden, thinker_embed
+        **kwargs,
     ):
         user_talker_part = torch.empty(
             (1, segment_end_index - im_start_index, self.config.talker_config.text_config.hidden_size),

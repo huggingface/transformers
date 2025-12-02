@@ -1333,6 +1333,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         audio_embed_sizes=None,
         audio_attention_mask=None,
         audio_projection_mode="speech",
+        **kwargs,
     ) -> torch.FloatTensor:
         with torch.no_grad():
             positions_tuple = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=True)

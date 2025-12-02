@@ -704,6 +704,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         patch_input: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutput:
         """
         Parameters:
@@ -1092,6 +1093,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PatchTSTModelOutput]:
         r"""
         Parameters:
@@ -1228,6 +1230,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PatchTSTForPretrainingOutput]:
         r"""
         Parameters:
@@ -1387,6 +1390,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PatchTSTForClassificationOutput]:
         r"""
         past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
@@ -1594,6 +1598,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PatchTSTForPredictionOutput]:
         r"""
         Parameters:
@@ -1840,6 +1845,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PatchTSTForRegressionOutput]:
         r"""
         past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):

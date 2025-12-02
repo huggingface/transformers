@@ -471,6 +471,7 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
     @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -549,6 +550,7 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

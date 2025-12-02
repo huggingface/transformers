@@ -716,6 +716,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
+        **kwargs,
     ):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
@@ -3810,6 +3811,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
 
     def _get_talker_user_parts(
         self, im_start_index, segment_end_index, multimodal_mask, thinker_hidden, thinker_embed
+        **kwargs,
     ):
         user_talker_part = torch.empty(
             (1, segment_end_index - im_start_index, self.config.talker_config.text_config.hidden_size),

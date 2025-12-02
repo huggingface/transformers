@@ -290,6 +290,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+        **kwargs,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
@@ -396,6 +397,7 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:

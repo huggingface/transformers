@@ -1316,6 +1316,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         """
         Args:
@@ -1505,6 +1506,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], OmDetTurboObjectDetectionOutput]:
         r"""
         classes_input_ids (`torch.LongTensor` of shape `(total_classes (>= batch_size), sequence_length)`):

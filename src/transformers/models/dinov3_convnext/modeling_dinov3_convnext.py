@@ -215,6 +215,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None
+        **kwargs,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 
