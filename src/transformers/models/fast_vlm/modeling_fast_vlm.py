@@ -59,7 +59,7 @@ class FastVlmMultiModalProjector(nn.Module):
 class FastVlmPreTrainedModel(PreTrainedModel):
     config: FastVlmConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -195,12 +195,11 @@ class FastVlmModel(FastVlmPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, FastVlmModelOutputWithPast]:
         r"""
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone. Only "full" supported.
-
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
             corresponding indices will be concatenated to form the vision features. Only -1 supported.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone. Only "full" supported.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -335,17 +334,15 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, FastVlmCausalLMOutputWithPast]:
         r"""
+        vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
+            corresponding indices will be concatenated to form the vision features. Only -1 supported.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone. Only "full" supported.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone. Only "full" supported.
-
-        vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
-            corresponding indices will be concatenated to form the vision features. Only -1 supported.
 
         Example:
 
