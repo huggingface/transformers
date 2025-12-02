@@ -186,12 +186,29 @@ def w8a8_block_fp8_matmul_triton(
 
     assert A.shape[-1] == B.shape[-1]
 
+    if not isinstance(As, torch.Tensor):
+        As = torch.tensor(As, device=A.device, dtype=torch.float32)
+    if As.numel() == 1:
+        target_shape = A.shape[:-1] + (triton.cdiv(A.shape[-1], block_k),)
+        if As.dim() == 0:
+            As = As.unsqueeze(0)
+        As = As.view([1] * len(target_shape)).expand(target_shape)
+
     assert A.shape[:-1] == As.shape[:-1] and A.is_contiguous()
     assert triton.cdiv(A.shape[-1], block_k) == As.shape[-1]
     M = A.numel() // A.shape[-1]
 
-    assert B.ndim == 2 and B.is_contiguous() and Bs.ndim == 2
+    assert B.ndim == 2 and B.is_contiguous()
     N, K = B.shape
+    if not isinstance(Bs, torch.Tensor):
+        Bs = torch.tensor(Bs, device=B.device, dtype=torch.float32)
+    if Bs.numel() == 1:
+        target_shape = (triton.cdiv(N, block_n), triton.cdiv(K, block_k))
+        if Bs.dim() == 0:
+            Bs = Bs.unsqueeze(0)
+        Bs = Bs.view([1] * len(target_shape)).expand(target_shape)
+
+    assert Bs.ndim == 2
     assert triton.cdiv(N, block_n) == Bs.shape[0], f"{N}, {block_n}, {Bs.shape}"
     assert triton.cdiv(K, block_k) == Bs.shape[1], f"{K}, {block_k}, {Bs.shape}"
 
@@ -373,18 +390,14 @@ class FP8Linear(nn.Linear):
                 else:
                     raise NotImplementedError("Not supported")
                 # TODO: fix this later to use the triton kernel
-                if self.activation_scheme == "static":
-                    output = F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), None) * scale_inv * scale
-                    output = output.to(input.dtype)
-                else:
-                    output = w8a8_block_fp8_matmul_triton(
-                        qinput,
-                        weight,
-                        scale,
-                        scale_inv,
-                        self.block_size,
-                        output_dtype=input.dtype,
-                    )
+                output = w8a8_block_fp8_matmul_triton(
+                    qinput,
+                    weight,
+                    scale,
+                    scale_inv,
+                    self.block_size,
+                    output_dtype=input.dtype,
+                )
 
             # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
