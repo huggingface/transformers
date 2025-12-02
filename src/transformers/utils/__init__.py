@@ -109,6 +109,7 @@ from .import_utils import (
     check_torch_load_is_safe,
     check_with,
     direct_transformers_import,
+    enable_tf32,
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
