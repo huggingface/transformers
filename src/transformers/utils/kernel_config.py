@@ -208,6 +208,7 @@ class KernelConfig(PushToHubMixin):
         from kernels import Mode
 
         compatible_mapping = {}
+        current_device = infer_device(model)
         for layer_name, kernel in self.kernel_mapping.items():
             # Infer Mode: use Mode.TRAINING if model is training, else use Mode.INFERENCE
             mode = Mode.TRAINING if model.training else Mode.INFERENCE
@@ -216,10 +217,11 @@ class KernelConfig(PushToHubMixin):
 
             if isinstance(kernel, str):
                 repo_name = kernel
-                device = infer_device(model)
-                add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
+                add_to_mapping(layer_name, current_device, repo_name, mode, compatible_mapping)
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():
+                    if device != current_device:
+                        continue
                     add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
 
         self.kernel_mapping = compatible_mapping
