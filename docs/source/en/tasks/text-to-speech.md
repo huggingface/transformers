@@ -22,9 +22,8 @@ Text-to-speech (TTS) is the task of creating natural-sounding speech from text, 
 languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as [Dia](../model_doc/dia), [CSM](../model_doc/csm),
 [Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits) and [SpeechT5](../model_doc/speecht5).
 
-You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`). Some models, like Dia,
-can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music.
-Here's an example of how you would use the `"text-to-speech"` pipeline with CSM:
+You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`).
+Here's an example of how you would use the `"text-to-speech"` pipeline with [CSM](https://huggingface.co/sesame/csm-1b):
 
 ```python
 >>> from transformers import pipeline
@@ -38,16 +37,6 @@ Here's a code snippet you can use to listen to the resulting audio in a notebook
 ```python
 >>> from IPython.display import Audio
 >>> Audio(output["audio"], rate=output["sampling_rate"])
-```
-
-You can also do conversational TTS, here is an example with Dia:
-
-```python
->>> from transformers import pipeline
-
->>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626")
->>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
->>> output = pipe(text)
 ```
 
 You can also do voice cloning with CSM:
@@ -73,6 +62,16 @@ You can also do voice cloning with CSM:
 ...     {"role": "0", "content": [{"type": "text", "text": "How much money can you spend?"}]},
 ... ]
 >>> output = pipe(conversation)
+```
+
+You can also do conversational TTS, here is an example with Dia:
+
+```python
+>>> from transformers import pipeline
+
+>>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626")
+>>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
+>>> output = pipe(text)
 ```
 
 For more examples on what CSM and other pretrained TTS models can do, refer to our
