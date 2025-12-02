@@ -633,6 +633,7 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
+
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(

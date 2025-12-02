@@ -915,9 +915,7 @@ class ModelTesterMixin:
             try:
                 model.enable_input_require_grads()
             except NotImplementedError as error:
-                self.fail(
-                    f"enable_input_require_grads raised NotImplementedError for {model_class.__name__}: {error}"
-                )
+                self.fail(f"enable_input_require_grads raised NotImplementedError for {model_class.__name__}: {error}")
             finally:
                 model.disable_input_require_grads()
 
