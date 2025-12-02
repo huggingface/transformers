@@ -15,7 +15,6 @@
 """Ernie4.5-VL model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
 class Ernie4_5_VLVisionConfig(PreTrainedConfig):
@@ -157,6 +156,7 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_text"
     base_config_key = "text_config"
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
+    default_theta = 500_000.0
 
     def __init__(
         self,
@@ -199,8 +199,6 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.rope_parameters = rope_parameters
-        standardize_rope_params(self)
-        rope_config_validation(self, ignore_keys={"mrope_section"})
         self.moe_intermediate_size = moe_intermediate_size
         if self.moe_intermediate_size is None:
             self.moe_intermediate_size = [1536, 512]
@@ -214,7 +212,7 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope"}, **kwargs)
 
 
 class Ernie4_5_VLConfig(PreTrainedConfig):
