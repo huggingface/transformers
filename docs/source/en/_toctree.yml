@@ -1030,6 +1030,8 @@
         title: Emu3
       - local: model_doc/evolla
         title: Evolla
+      - local: model_doc/fast_vlm
+        title: FastVLM
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/florence2
