@@ -316,7 +316,7 @@ class FP8Linear(nn.Linear):
     ):
         super().__init__(in_features, out_features)
 
-        # If block size, is not pased, it means that we are doing per-tensor quantization
+        # If block size, is not passed, it means that we are doing per-tensor quantization
         if block_size is not None:
             self.block_size = block_size
         else:
