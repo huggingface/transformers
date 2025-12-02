@@ -2729,7 +2729,6 @@ class TrainingArguments:
             )
 
             fsdp_plugin_args = {}
-            # Handle basic FSDP options from command-line flags
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # Set deprecated sharding_strategy from CLI (plugin maps to reshard_after_forward)
