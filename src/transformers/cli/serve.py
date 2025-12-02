@@ -36,7 +36,7 @@ from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
 
 import transformers
-from transformers import BitsAndBytesConfig, GenerationConfig
+from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, PreTrainedTokenizerBase
 from transformers.utils.import_utils import (
     is_fastapi_available,
     is_librosa_available,
@@ -841,8 +841,13 @@ class Serve:
 
                     if result.status == RequestStatus.FINISHED:
                         generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
-                        final_token_is_eos = result == tokenizer.eos_token
-                        reason = "length" if (generated_all_tokens and not final_token_is_eos) else "stop"
+
+                        # If the tokenizer has an eos_token, we can have a more robust check.
+                        if hasattr(tokenizer, "eos_token"):
+                            final_token_is_eos = result == tokenizer.eos_token
+                            generated_all_tokens = generated_all_tokens and not final_token_is_eos
+
+                        reason = "length" if generated_all_tokens else "stop"
 
                         yield self.build_chat_completion_chunk(
                             request_id,
@@ -921,7 +926,11 @@ class Serve:
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
-    def get_model_modality(model: "PreTrainedModel") -> Modality:
+    def get_model_modality(model: "PreTrainedModel", processor=None) -> Modality:
+        if processor is not None:
+            if isinstance(processor, PreTrainedTokenizerBase):
+                return Modality.LLM
+
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
@@ -1011,7 +1020,7 @@ class Serve:
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        modality = self.get_model_modality(model)
+        modality = self.get_model_modality(model, processor=processor)
         processor_inputs = self.get_processor_inputs_from_inbound_messages(messages, modality)
 
         # ====== TOOL PREPROCESSING LOGIC ======
@@ -1184,8 +1193,14 @@ class Serve:
                         )
 
                 generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
-                final_token_is_eos = result == streamer.tokenizer.eos_token
-                reason = "length" if (generated_all_tokens and not final_token_is_eos) else "stop"
+
+                # If the tokenizer has an eos_token, we can have a more robust check.
+                if hasattr(streamer.tokenizer, "eos_token"):
+                    final_token_is_eos = result == streamer.tokenizer.eos_token
+                    generated_all_tokens = generated_all_tokens and not final_token_is_eos
+
+                reason = "length" if generated_all_tokens else "stop"
+
                 yield self.build_chat_completion_chunk(_request_id, finish_reason=reason, model=model_id_and_revision)
 
                 thread.join()
@@ -1775,11 +1790,22 @@ class Serve:
         else:
             model_id, revision = model_id_and_revision, "main"
 
-        data_processor = AutoProcessor.from_pretrained(
-            model_id,
-            revision=revision,
-            trust_remote_code=self.trust_remote_code,
-        )
+        try:
+            data_processor = AutoProcessor.from_pretrained(
+                model_id,
+                revision=revision,
+                trust_remote_code=self.trust_remote_code,
+            )
+        except OSError:
+            try:
+                data_processor = AutoTokenizer.from_pretrained(
+                    model_id,
+                    revision=revision,
+                    trust_remote_code=self.trust_remote_code,
+                )
+            except OSError:
+                raise OSError("Failed to load processor with `AutoProcessor` and `AutoTokenizer`.")
+
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
