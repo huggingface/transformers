@@ -2746,12 +2746,20 @@ class TrainingArguments:
             fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             if fsdp_version == 2:
-                fsdp_plugin_args["reshard_after_forward"] = str_to_bool(str(self.fsdp_config.get("reshard_after_forward", "false")).lower())
+                fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
+                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                )
             else:
-                fsdp_plugin_args["forward_prefetch"] = str_to_bool(str(self.fsdp_config.get("forward_prefetch", "false")).lower())
+                fsdp_plugin_args["forward_prefetch"] = str_to_bool(
+                    str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+                )
                 fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
-                fsdp_plugin_args["reshard_after_forward"] = str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
-                fsdp_plugin_args["use_orig_params"] = str_to_bool(str(self.fsdp_config.get("use_orig_params", "true")).lower())
+                fsdp_plugin_args["reshard_after_forward"] = str(
+                    self.fsdp_config.get("reshard_after_forward", "false")
+                ).lower()
+                fsdp_plugin_args["use_orig_params"] = str_to_bool(
+                    str(self.fsdp_config.get("use_orig_params", "true")).lower()
+                )
 
             sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
             cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
