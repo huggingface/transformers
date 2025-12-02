@@ -44,7 +44,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _checkpoint_conversion_mapping = {
         "model.language_model.model": "model.model.language_model",
         "model.vision_tower": "model.model.vision_tower",
@@ -69,15 +69,6 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.model.language_model.set_output_embeddings(new_embeddings)
-
-    def set_decoder(self, decoder):
-        self.model.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.language_model.get_decoder()
-
-    def tie_weights(self):
-        return self.model.language_model.tie_weights()
 
     @auto_docstring
     def forward(

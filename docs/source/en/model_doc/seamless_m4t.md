@@ -61,7 +61,7 @@ Here is how to use the processor to process text and audio:
 >>> audio_sample = next(iter(dataset))["audio"]
 
 >>> # now, process it
->>> audio_inputs = processor(audios=audio_sample["array"], return_tensors="pt")
+>>> audio_inputs = processor(audio=audio_sample["array"], return_tensors="pt")
 
 >>> # now, process some English test as well
 >>> text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
@@ -176,9 +176,7 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] SeamlessM4TTokenizer
     - __call__
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## SeamlessM4TTokenizerFast

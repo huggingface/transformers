@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4.1V model."""
+"""Testing suite for the PyTorch GLM-4.5V model."""
 
 import copy
 import unittest
@@ -294,7 +294,9 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
-    model = None
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
 
     @classmethod
     def get_model(cls):

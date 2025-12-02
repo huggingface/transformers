@@ -47,7 +47,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config: VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -101,6 +101,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
+
+        self.post_init()
 
     @filter_out_non_signature_kwargs()
     @auto_docstring

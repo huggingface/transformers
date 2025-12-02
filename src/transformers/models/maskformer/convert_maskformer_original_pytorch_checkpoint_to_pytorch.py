@@ -548,7 +548,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
         checkpoints: list[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
-            logger.info(f"💪 Converting {checkpoint.stem}")
+            logger.info(f"Converting {checkpoint.stem}")
             # find associated config file
             config: Path = config_dir / checkpoint.parents[0].stem / "swin" / f"{checkpoint.stem}.yaml"
 
@@ -607,7 +607,7 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, image_pro
             "The segmentation image is not the same."
         )
 
-        logger.info("✅ Test passed!")
+        logger.info("Test passed!")
 
 
 def get_name(checkpoint_file: Path):
@@ -715,18 +715,10 @@ if __name__ == "__main__":
         test(original_model, mask_former_for_instance_segmentation, image_processor)
 
         model_name = get_name(checkpoint_file)
-        logger.info(f"🪄 Saving {model_name}")
+        logger.info(f"Saving {model_name}")
 
         image_processor.save_pretrained(save_directory / model_name)
         mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
 
-        image_processor.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        mask_former_for_instance_segmentation.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        image_processor.push_to_hub(repo_id=model_name)
+        mask_former_for_instance_segmentation.push_to_hub(repo_id=model_name)

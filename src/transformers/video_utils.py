@@ -106,6 +106,13 @@ class VideoMetadata(Mapping):
             raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
         return [frame_idx / self.fps for frame_idx in self.frames_indices]
 
+    @property
+    def sampled_fps(self) -> float:
+        "FPS of the sampled video."
+        if self.frames_indices is None or self.total_num_frames is None or self.fps is None:
+            return self.fps or 24
+        return len(self.frames_indices) / self.total_num_frames * self.fps
+
     def update(self, dictionary):
         for key, value in dictionary.items():
             if hasattr(self, key):
@@ -372,8 +379,8 @@ def read_video_opencv(
         height=int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         width=int(video.get(cv2.CAP_PROP_FRAME_WIDTH)),
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     index = 0
     frames = []
     while video.isOpened():
@@ -486,8 +493,8 @@ def read_video_pyav(
         height=container.streams.video[0].height,
         width=container.streams.video[0].width,
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     frames = []
     container.seek(0)
     end_index = indices[-1]
@@ -548,7 +555,6 @@ def read_video_torchvision(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-
     video = video[indices].contiguous()
     metadata.update(
         {
@@ -588,6 +594,8 @@ def read_video_torchcodec(
     requires_backends(read_video_torchcodec, ["torchcodec"])
     from torchcodec.decoders import VideoDecoder
 
+    # VideoDecoder expects a string for device, default to "cpu" if None
+
     decoder = VideoDecoder(
         video_path,
         # Interestingly `exact` mode takes less than approximate when we load the whole video
@@ -596,16 +604,18 @@ def read_video_torchcodec(
         num_ffmpeg_threads=0,
         device=kwargs.get("device", "cpu"),
     )
+    total_num_frames = decoder.metadata.num_frames
+    video_fps = decoder.metadata.average_fps
     metadata = VideoMetadata(
-        total_num_frames=decoder.metadata.num_frames,
-        fps=decoder.metadata.average_fps,
+        total_num_frames=total_num_frames,
+        fps=video_fps,
         duration=decoder.metadata.duration_seconds,
         video_backend="torchcodec",
         height=decoder.metadata.height,
         width=decoder.metadata.width,
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     video = decoder.get_frames_at(indices=indices).data.contiguous()
     metadata.frames_indices = indices
     return video, metadata
