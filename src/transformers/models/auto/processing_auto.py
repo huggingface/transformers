@@ -22,6 +22,7 @@ from collections import OrderedDict
 # Build the list of all feature extractors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
@@ -309,6 +310,18 @@ class AutoProcessor:
                 )
                 if preprocessor_config_file is not None:
                     config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
+                        pretrained_model_name_or_path, **kwargs
+                    )
+                    processor_class = config_dict.get("processor_class", None)
+                    if "AutoProcessor" in config_dict.get("auto_map", {}):
+                        processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+            # Saved as feature extractor
+            if preprocessor_config_file is None:
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
+                )
+                if preprocessor_config_file is not None and processor_class is None:
+                    config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
                         pretrained_model_name_or_path, **kwargs
                     )
                     processor_class = config_dict.get("processor_class", None)
