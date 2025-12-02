@@ -165,16 +165,15 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
-        # takes 2 fucking seconds
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        # while this one is 81ms :)
         model = replace_with_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
+            pre_quantized=self.pre_quantized,
         )
 
         model.config.quantization_config = self.quantization_config
