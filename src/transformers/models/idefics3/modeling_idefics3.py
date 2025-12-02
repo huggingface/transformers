@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -567,8 +567,8 @@ class Idefics3Model(Idefics3PreTrainedModel):
         return inputs_embeds
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
-    ):
+        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None, return_dict: bool = False
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -577,6 +577,8 @@ class Idefics3Model(Idefics3PreTrainedModel):
                 The tensors corresponding to the input images.
             pixel_attention_mask (`torch.LongTensor`, *optional*):
                 The attention mask indicating padded regions in the image.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
@@ -606,11 +608,18 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         # Get sequence from the vision encoder
         image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-        image_hidden_states.last_hidden_state
+        image_hidden_states = image_hidden_states.last_hidden_state
 
         # Modality projection & resampling
-        image_hidden_states = self.connector(image_hidden_states.last_hidden_state)
-        return image_hidden_states
+        image_features = self.connector(image_hidden_states)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_hidden_states,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     @can_return_tuple
     @auto_docstring(

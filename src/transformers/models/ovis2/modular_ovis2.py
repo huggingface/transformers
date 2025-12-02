@@ -249,6 +249,7 @@ class Ovis2Model(LlavaModel):
         ).to(image_features.device)
         visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
+        # NOTE: @Tom Not easily converted to the standard format
         return image_features, visual_indicator_features
 
     @can_return_tuple

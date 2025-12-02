@@ -23,7 +23,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -152,6 +152,7 @@ class LlavaModel(LlavaPreTrainedModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        return_dict: bool = False,
         **kwargs,
     ):
         """
@@ -209,6 +210,13 @@ class LlavaModel(LlavaPreTrainedModel):
             image_features = torch.split(image_features.squeeze(0), split_sizes)
         else:
             image_features = list(image_features)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     def get_placeholder_mask(

@@ -1125,6 +1125,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
+        # NOTE: @Tom Not easily converted to the standard format
         return image_embeds
 
     def get_placeholder_mask(

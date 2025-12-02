@@ -1389,6 +1389,7 @@ class Emu3Model(Emu3PreTrainedModel):
         ]
         image_features = self.get_input_embeddings()(image_tokens)
         image_features = torch.split(image_features, split_sizes)
+        # NOTE: @Tom Not easily converted to the standard format
         return image_features
 
     @torch.no_grad()

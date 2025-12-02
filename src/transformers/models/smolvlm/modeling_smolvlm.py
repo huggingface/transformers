@@ -32,7 +32,7 @@ from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -519,7 +519,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
     def get_image_features(
         self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
-    ):
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 

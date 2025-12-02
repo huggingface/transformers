@@ -1482,9 +1482,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        return_attentions: Optional[bool] = False,
+        return_attentions: Optional[bool] = False, # TODO: @Tom neatly deprecate this 
         interpolate_pos_encoding: Optional[bool] = False,
-    ):
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -1495,6 +1496,8 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
                 Whether to return `projection_attentions` or not.
             interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
                 Whether to interpolate positional embeddings or not.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         vision_model_output = self.vision_model(
             pixel_values=pixel_values,
@@ -1506,8 +1509,13 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
-        if return_attentions:
-            return image_embeds, projection_attentions
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_model_output.last_hidden_state,
+                pooler_output=image_embeds,
+                attentions=projection_attentions,  # TODO: @Tom does this match expectations?
+            )
+
         return image_embeds
 
     @can_return_tuple

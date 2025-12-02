@@ -1269,7 +1269,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.FloatTensor:
+    def get_image_features(self, pixel_values: torch.Tensor, return_dict: bool = False) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -1295,6 +1295,13 @@ class GroupViTModel(GroupViTPreTrainedModel):
         ```"""
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values)
         image_features = self.visual_projection(vision_outputs.pooler_output)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     @auto_docstring

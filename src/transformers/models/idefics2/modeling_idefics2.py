@@ -28,7 +28,7 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -822,8 +822,8 @@ class Idefics2Model(Idefics2PreTrainedModel):
         return inputs_embeds
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
-    ):
+        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None, return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -832,6 +832,8 @@ class Idefics2Model(Idefics2PreTrainedModel):
                 The tensors corresponding to the input images.
             pixel_attention_mask (`torch.LongTensor`, *optional*):
                 The attention mask indicating padded regions in the image.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
@@ -863,11 +865,18 @@ class Idefics2Model(Idefics2PreTrainedModel):
         image_hidden_states = image_hidden_states.last_hidden_state
 
         # Modality projection & resampling
-        image_hidden_states = self.connector(
+        image_features = self.connector(
             image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
         )
-        image_hidden_states = image_hidden_states.view(-1, image_hidden_states.shape[-1])
-        return image_hidden_states
+        image_features = image_features.view(-1, image_features.shape[-1])
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_hidden_states,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     @can_return_tuple
     @auto_docstring(
@@ -986,9 +995,9 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         self.model.text_model.set_input_embeddings(value)
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
-    ):
-        return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
+        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None, return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+        return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, return_dict=return_dict)
 
     @can_return_tuple
     @auto_docstring

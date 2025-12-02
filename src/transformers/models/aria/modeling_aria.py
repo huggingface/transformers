@@ -33,7 +33,12 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    ModelOutput,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -918,8 +923,9 @@ class AriaModel(AriaPreTrainedModel):
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.FloatTensor] = None,
         vision_feature_layer: int = -1,
-    ):
-        """
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+        r"""
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
@@ -931,6 +937,9 @@ class AriaModel(AriaPreTrainedModel):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -948,6 +957,13 @@ class AriaModel(AriaPreTrainedModel):
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     def get_placeholder_mask(
@@ -1077,11 +1093,13 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.FloatTensor] = None,
         vision_feature_layer: int = -1,
+        return_dict: bool = False,
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             vision_feature_layer=vision_feature_layer,
+            return_dict=return_dict,
         )
 
     @can_return_tuple

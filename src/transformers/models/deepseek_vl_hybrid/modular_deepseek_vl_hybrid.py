@@ -43,6 +43,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
@@ -276,11 +277,18 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         return output
 
-    def get_image_features(self, pixel_values, high_res_pixel_values):
+    def get_image_features(self, pixel_values: torch.FloatTensor, high_res_pixel_values: torch.FloatTensor, return_dict: bool = False):
         vision_encodings = self.get_low_res_image_features(pixel_values)
         high_res_vision_encodings = self.get_high_res_image_features(high_res_pixel_values)
-        images_embeds = self.aligner(vision_encodings, high_res_vision_encodings)
-        return images_embeds
+        image_features = self.aligner(vision_encodings, high_res_vision_encodings)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_encodings,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)

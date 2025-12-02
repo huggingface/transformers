@@ -128,6 +128,7 @@ class FuyuModel(FuyuPreTrainedModel):
             self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
             for patch in pixel_values
         ]
+        # NOTE: @Tom Not easily converted to the standard format
         return patch_embeddings
 
     def get_placeholder_mask(

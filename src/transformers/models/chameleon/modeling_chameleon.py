@@ -28,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -853,7 +853,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
+    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
         """
         Tokenizes images into discrete tokens with VQGAN module and embeds
         them with text embeddings layer
@@ -861,10 +861,21 @@ class ChameleonModel(ChameleonPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         image_tokens = self.get_image_tokens(pixel_values)
-        vision_embeddings = self.get_input_embeddings()(image_tokens)
-        return vision_embeddings
+        image_embeddings = self.get_input_embeddings()(image_tokens)
+        image_features = image_embeddings.mean(dim=1)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_embeddings,
+                pooler_output=image_features,
+            )
+
+        # NOTE: @Tom Not easily converted to the standard format, this one breaks backward compatibility
+        return image_features
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -926,7 +937,8 @@ class ChameleonModel(ChameleonPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
+            image_tokens = self.get_image_tokens(pixel_values)
+            image_embeds = self.get_input_embeddings()(image_tokens)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1022,8 +1034,8 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
 
-    def get_image_features(self, pixel_values):
-        return self.model.get_image_features(pixel_values)
+    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
+        return self.model.get_image_features(pixel_values, return_dict=return_dict)
 
     @can_return_tuple
     @auto_docstring

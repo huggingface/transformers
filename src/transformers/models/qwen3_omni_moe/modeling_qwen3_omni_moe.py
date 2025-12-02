@@ -42,6 +42,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -1924,7 +1925,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
         return video_embeds
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
+    ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -1936,6 +1942,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_embeds,
+                # pooler_output=image_features,  # NOTE: @Tom no pooled embeddings here
+            )
+
+        # NOTE: @Tom Not easily converted to the standard format
         return image_embeds
 
     def get_audio_features(

@@ -25,7 +25,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -941,6 +941,7 @@ class Emu3Model(Emu3PreTrainedModel):
         ]
         image_features = self.get_input_embeddings()(image_tokens)
         image_features = torch.split(image_features, split_sizes)
+        # NOTE: @Tom Not easily converted to the standard format
         return image_features
 
     @torch.no_grad()

@@ -497,8 +497,9 @@ class InternVLModel(LlavaModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        return_dict: bool = False,
         **kwargs,
-    ):
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -507,6 +508,9 @@ class InternVLModel(LlavaModel):
                The tensors corresponding to the input images.
             vision_feature_layer (`int` or `list[int]`):
                 Layer index or list of layer indices to extract features from.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
         """
@@ -521,10 +525,11 @@ class InternVLModel(LlavaModel):
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
+        vision_outputs = self.vision_tower(pixel_values=pixel_values)
         if vision_feature_layer == -1:
-            vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
+            vision_features = vision_outputs.last_hidden_state
         else:
-            vision_features = self.vision_model(pixel_values=pixel_values).hidden_states[vision_feature_layer]
+            vision_features = vision_outputs.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
             vision_features = vision_features[:, 1:, :]
 
@@ -544,6 +549,13 @@ class InternVLModel(LlavaModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=vision_features,
+            )
+
         return vision_features
 
     @can_return_tuple
