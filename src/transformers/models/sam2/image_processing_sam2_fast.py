@@ -463,11 +463,9 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         pixel_values = self._preprocess(images, **images_kwargs)
-        reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
             "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -493,6 +491,14 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             data["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
+    ) -> "torch.Tensor":
+        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def generate_crop_boxes(
         self,
@@ -694,17 +700,6 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
                 Threshold for NMS (Non Maximum Suppression) algorithm.
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
-
-    def pad_image(self):
-        raise NotImplementedError("No pad_image for SAM 2.")
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> "torch.Tensor":
-        return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
 
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """

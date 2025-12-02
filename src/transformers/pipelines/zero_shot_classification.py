@@ -1,9 +1,8 @@
 import inspect
-from typing import Union
 
 import numpy as np
 
-from ..tokenization_utils import TruncationStrategy
+from ..tokenization_python import TruncationStrategy
 from ..utils import add_end_docstrings, logging
 from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
@@ -165,7 +164,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        sequences: Union[str, list[str]],
+        sequences: str | list[str],
         *args,
         **kwargs,
     ):

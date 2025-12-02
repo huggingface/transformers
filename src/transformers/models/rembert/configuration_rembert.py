@@ -14,11 +14,7 @@
 # limitations under the License.
 """RemBERT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -39,7 +35,7 @@ class RemBertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 250300):
             Vocabulary size of the RemBERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`RemBertModel`] or [`TFRemBertModel`]. Vocabulary size of the model.
+            `inputs_ids` passed when calling [`RemBertModel`]. Vocabulary size of the model.
             Defines the different tokens that can be represented by the *inputs_ids* passed to the forward method of
             [`RemBertModel`].
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -67,7 +63,7 @@ class RemBertConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`RemBertModel`] or [`TFRemBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`RemBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -139,24 +135,4 @@ class RemBertConfig(PreTrainedConfig):
         self.tie_word_embeddings = False
 
 
-class RemBertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-
-__all__ = ["RemBertConfig", "RemBertOnnxConfig"]
+__all__ = ["RemBertConfig"]

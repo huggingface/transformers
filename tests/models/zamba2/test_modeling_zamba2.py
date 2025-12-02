@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -292,7 +291,6 @@ class Zamba2ModelTester:
 
 @require_torch
 class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torchscript = False
     all_model_classes = (
         (
             Zamba2Model,
@@ -460,7 +458,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         return config, input_ids, input_mask
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow

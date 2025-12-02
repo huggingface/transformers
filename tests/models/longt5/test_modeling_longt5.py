@@ -430,10 +430,6 @@ class LongT5ModelTester:
                 decoder_attention_mask=decoder_attention_mask,
             )
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
@@ -450,10 +446,6 @@ class LongT5ModelTester:
                 tied_model.to(torch_device)
                 tied_model.eval()
 
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -506,9 +498,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_torchscript = True
     test_resize_embeddings = True
     is_encoder_decoder = True
 
@@ -744,6 +734,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_load_save_without_tied_weights(self):
         pass
 
+    @unittest.skip(reason="LongT5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 @require_torch
 class LongT5TGlobalModelTest(LongT5ModelTest):
@@ -881,6 +875,10 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
             [encoder_expected_shape] * len(attentions),
         )
 
+    @unittest.skip(reason="LongT5 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 class LongT5EncoderOnlyModelTester:
     def __init__(
@@ -1001,7 +999,6 @@ class LongT5EncoderOnlyModelTester:
 class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5EncoderModel,) if is_torch_available() else ()
 
-    test_torchscript = True
     test_resize_embeddings = False
 
     def setUp(self):

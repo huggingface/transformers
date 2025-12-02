@@ -13,18 +13,19 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
-class Lfm2MoeConfig(PretrainedConfig):
+class Lfm2MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Lfm2MoeModel`]. It is used to instantiate a LFM2 Moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LFM2-8B-A1B model.
     e.g. [LiquidAI/LFM2-8B-A1B](https://huggingface.co/LiquidAI/LFM2-8B-A1B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -47,10 +48,14 @@ class Lfm2MoeConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         max_position_embeddings (`int`, *optional*, defaults to 128000):
             The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -100,6 +105,7 @@ class Lfm2MoeConfig(PretrainedConfig):
 
     model_type = "lfm2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -112,8 +118,9 @@ class Lfm2MoeConfig(PretrainedConfig):
         bos_token_id: int = 1,
         eos_token_id: int = 2,
         tie_word_embeddings: bool = True,
-        rope_theta: float = 1000000.0,
+        rope_parameters: RopeParameters = None,
         max_position_embeddings: int = 128_000,
+        initializer_range: float = 0.02,
         use_cache: bool = True,
         norm_eps: float = 0.00001,
         num_attention_heads: int = 32,
@@ -133,8 +140,8 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
-        self.rope_theta = rope_theta
         self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.norm_eps = norm_eps
 
@@ -155,7 +162,9 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
         self.layer_types = layer_types
+        self.initializer_range = initializer_range
 
+        self.rope_parameters = rope_parameters
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(
             pad_token_id=pad_token_id,

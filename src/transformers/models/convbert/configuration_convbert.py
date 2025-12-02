@@ -14,11 +14,7 @@
 # limitations under the License.
 """ConvBERT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -39,7 +35,7 @@ class ConvBertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the ConvBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`ConvBertModel`] or [`TFConvBertModel`].
+            the `inputs_ids` passed when calling [`ConvBertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -59,7 +55,7 @@ class ConvBertConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`ConvBertModel`] or [`TFConvBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`ConvBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -140,21 +136,4 @@ class ConvBertConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
-class ConvBertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["ConvBertConfig", "ConvBertOnnxConfig"]
+__all__ = ["ConvBertConfig"]

@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
@@ -28,6 +29,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
     GraniteMoeSharedAttention,
@@ -35,6 +37,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
+    GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
     eager_attention_forward,
 )
@@ -102,6 +105,14 @@ class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
         super().__init__(config)
 
 
+class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
+    pass
+
+
+class GraniteMoeHybridMoE(GraniteMoeSharedMoE):
+    pass
+
+
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -116,6 +127,9 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
 
+        # Allow non-MoE (dense)
+        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
+
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
 
@@ -127,6 +141,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -147,6 +162,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -169,14 +185,15 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
 
 
 class GraniteMoeHybridModel(GraniteMoeSharedModel):
@@ -188,11 +205,12 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         self.embedding_multiplier = config.embedding_multiplier
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -213,6 +231,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
         causal_mask = create_causal_mask(
             self.config,
             inputs_embeds,
@@ -224,6 +245,8 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         # embed positions
         hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
             layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
@@ -234,6 +257,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
         hidden_states = self.norm(hidden_states)
@@ -259,7 +283,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)

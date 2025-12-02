@@ -27,6 +27,7 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -131,6 +132,7 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config: InstructBlipVideoConfig
     base_model_prefix = "blip"
+    input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -146,24 +148,16 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
         "InstructBlipVideoQFormerSelfOutput",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=factor)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, InstructBlipVideoVisionEmbeddings):
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        if isinstance(module, InstructBlipVideoVisionEmbeddings):
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel)):
-            module.query_tokens.data.zero_()
+            init.zeros_(module.query_tokens)
 
 
 # Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> InstructBlipVideo doesn't cast attn weights to fp32
@@ -346,6 +340,7 @@ class InstructBlipVideoEncoder(nn.Module):
 
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "video"
     config: InstructBlipVideoVisionConfig
     _can_record_outputs = {
         "hidden_states": InstructBlipVideoEncoderLayer,
@@ -812,7 +807,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -955,11 +950,6 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""
@@ -1182,16 +1172,14 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     def get_output_embeddings(self) -> nn.Module:
         return self.language_model.get_output_embeddings()
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""

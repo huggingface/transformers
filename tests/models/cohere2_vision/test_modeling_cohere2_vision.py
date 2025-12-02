@@ -153,13 +153,12 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "image-text-to-text": Cohere2VisionForConditionalGeneration,
+            "any-to-any": Cohere2VisionForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
 
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

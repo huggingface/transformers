@@ -20,19 +20,19 @@ import os
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
+from huggingface_hub import create_repo
 from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
     cached_file,
     copy_func,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
 
 
-class PreTrainedConfig(PushToHubMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -167,8 +167,6 @@ class PreTrainedConfig(PushToHubMixin):
 
         > PyTorch specific parameters
 
-        torchscript (`bool`, *optional*, defaults to `False`):
-            Whether or not the model should be used with Torchscript.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
@@ -206,7 +204,6 @@ class PreTrainedConfig(PushToHubMixin):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         return_dict: bool = True,
-        torchscript: bool = False,
         dtype: Optional[Union[str, "torch.dtype"]] = None,
         # Common arguments
         tie_word_embeddings: bool = True,
@@ -265,10 +262,16 @@ class PreTrainedConfig(PushToHubMixin):
 
             dtype = getattr(torch, dtype)
 
+        # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
+        if hasattr(self, "rope_parameters"):
+            ignore_keys_at_rope_validation = kwargs.pop("ignore_keys_at_rope_validation", None)
+            kwargs = self.convert_rope_params_to_dict(
+                ignore_keys_at_rope_validation=ignore_keys_at_rope_validation, **kwargs
+            )
+
         # Attributes common for all models
         self.return_dict = return_dict
         self.output_hidden_states = output_hidden_states
-        self.torchscript = torchscript
         self.dtype = dtype
         self._output_attentions = output_attentions  # has public property
 
@@ -306,10 +309,9 @@ class PreTrainedConfig(PushToHubMixin):
         self.sep_token_id = sep_token_id
         self.decoder_start_token_id = decoder_start_token_id
 
-        # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
-        # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
-        for parameter_name, default_value in self._get_global_generation_defaults().items():
-            setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
+        # Parameters for sequence generation saved in the config are popped instead of loading them.
+        for parameter_name in self._get_global_generation_defaults().keys():
+            kwargs.pop(parameter_name, None)
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
@@ -373,8 +375,7 @@ class PreTrainedConfig(PushToHubMixin):
         """
         `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
         """
-        # If torchscript is set, force `return_dict=False` to avoid jit errors
-        return self.return_dict and not self.torchscript
+        return self.return_dict
 
     @property
     def num_labels(self) -> int:
@@ -395,7 +396,7 @@ class PreTrainedConfig(PushToHubMixin):
         return self._attn_implementation_internal
 
     @_attn_implementation.setter
-    def _attn_implementation(self, value: Optional[Union[str, dict]]):
+    def _attn_implementation(self, value: str | dict | None):
         """We set it recursively on the sub-configs as well"""
         # Set if for current config
         current_attn = getattr(self, "_attn_implementation", None)
@@ -422,7 +423,15 @@ class PreTrainedConfig(PushToHubMixin):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
         self.dtype = value
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    @property
+    def rope_scaling(self):
+        return self.rope_parameters
+
+    @rope_scaling.setter
+    def rope_scaling(self, value):
+        self.rope_parameters = value
+
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
         [`~PreTrainedConfig.from_pretrained`] class method.
@@ -437,21 +446,16 @@ class PreTrainedConfig(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        self._set_token_in_kwargs(kwargs)
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
         non_default_generation_parameters = self._get_non_default_generation_parameters()
         if len(non_default_generation_parameters) > 0:
-            # TODO (joao): this should be an exception if the user has modified the loaded config. See #33886
-            warnings.warn(
+            raise ValueError(
                 "Some non-default generation parameters are set in the model config. These should go into either a) "
                 "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
                 "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
-                "This warning will become an exception in the future."
                 f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
-                UserWarning,
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -459,7 +463,7 @@ class PreTrainedConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
@@ -486,41 +490,14 @@ class PreTrainedConfig(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-    @staticmethod
-    def _set_token_in_kwargs(kwargs, token=None):
-        """Temporary method to deal with `token` and `use_auth_token`.
-
-        This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
-
-        Need to clean up `use_auth_token` in a follow PR.
-        """
-        # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
-        if token is None:
-            token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
-        if token is not None:
-            kwargs["token"] = token
-
     @classmethod
     def from_pretrained(
         cls: type[SpecificPreTrainedConfigType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> SpecificPreTrainedConfigType:
@@ -601,8 +578,6 @@ class PreTrainedConfig(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        cls._set_token_in_kwargs(kwargs, token)
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if cls.base_config_key and cls.base_config_key in config_dict:
             config_dict = config_dict[cls.base_config_key]
@@ -625,7 +600,7 @@ class PreTrainedConfig(PushToHubMixin):
 
     @classmethod
     def get_config_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -639,8 +614,6 @@ class PreTrainedConfig(PushToHubMixin):
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
-        cls._set_token_in_kwargs(kwargs)
-
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -660,7 +633,7 @@ class PreTrainedConfig(PushToHubMixin):
 
     @classmethod
     def _get_config_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -693,9 +666,6 @@ class PreTrainedConfig(PushToHubMixin):
             # Special case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            configuration_file = pretrained_model_name_or_path if gguf_file is None else gguf_file
-            resolved_config_file = download_url(pretrained_model_name_or_path)
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
 
@@ -823,7 +793,7 @@ class PreTrainedConfig(PushToHubMixin):
 
     @classmethod
     def from_json_file(
-        cls: type[SpecificPreTrainedConfigType], json_file: Union[str, os.PathLike]
+        cls: type[SpecificPreTrainedConfigType], json_file: str | os.PathLike
     ) -> SpecificPreTrainedConfigType:
         """
         Instantiates a [`PreTrainedConfig`] from the path to a JSON file of parameters.
@@ -840,7 +810,7 @@ class PreTrainedConfig(PushToHubMixin):
         return cls(**config_dict)
 
     @classmethod
-    def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
+    def _dict_from_json_file(cls, json_file: str | os.PathLike):
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         return json.loads(text)
@@ -906,7 +876,7 @@ class PreTrainedConfig(PushToHubMixin):
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict)
+                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(serializable_config_dict)
@@ -940,7 +910,7 @@ class PreTrainedConfig(PushToHubMixin):
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict)
+                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(output)
@@ -965,7 +935,7 @@ class PreTrainedConfig(PushToHubMixin):
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
+    def to_json_file(self, json_file_path: str | os.PathLike, use_diff: bool = True):
         """
         Save this instance to a JSON file.
 
@@ -1131,40 +1101,18 @@ class PreTrainedConfig(PushToHubMixin):
         non_default_generation_parameters = {}
         decoder_attribute_name = None
 
-        # Some composite models don't have a default config, use their decoder config as a fallback for default values
-        # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
-        if not self.has_no_defaults_at_init:
-            default_config = self.__class__()
-        else:
-            decoder_config = self.get_text_config(decoder=True)
-            if decoder_config is not self:
-                default_config = decoder_config.__class__()
-            else:
-                default_config = None
-
         # If it is a composite model, we want to check the subconfig that will be used for generation
         self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
 
         for parameter_name, default_global_value in self._get_global_generation_defaults().items():
             if hasattr(self_decoder_config, parameter_name):
-                is_default_in_config = is_default_generation_value = None
-                parameter_value = getattr(self_decoder_config, parameter_name)
-                # Three cases in which is okay for the model config to hold generation config parameters:
+                parameter_value = getattr(self_decoder_config, parameter_name, None)
+                # Two cases in which is okay for the model config to hold generation config parameters:
                 # 1. The parameter is set to `None`, effectively delegating its value to the generation config
-                if parameter_value is None:
+                # 2. The parameter is set the global generation defaults
+                if parameter_value is None or parameter_value == default_global_value:
                     continue
-                # 2. If we have a default config, then the instance should hold the same generation defaults
-                if default_config is not None:
-                    is_default_in_config = parameter_value == getattr(default_config, parameter_name)
-                # 3. if we don't have a default config, then the instance should hold the global generation defaults
-                else:
-                    is_default_generation_value = parameter_value == default_global_value
-
-                is_non_default = (is_default_in_config is False) or (
-                    is_default_in_config is None and is_default_generation_value is False
-                )
-                if is_non_default:
-                    non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
+                non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
 
         return non_default_generation_parameters
 

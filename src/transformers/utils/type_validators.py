@@ -1,27 +1,30 @@
 from collections.abc import Sequence
-from typing import Optional, Union
+from typing import Union
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ..video_utils import VideoMetadataType
 from .generic import TensorType
-from .import_utils import is_vision_available
+from .import_utils import is_torch_available, is_vision_available
 
 
 if is_vision_available():
     from ..image_utils import PILImageResampling
 
+if is_torch_available():
+    import torch
 
-def positive_any_number(value: Optional[Union[int, float]] = None):
+
+def positive_any_number(value: int | float | None = None):
     if value is not None and (not isinstance(value, (int, float)) or not value >= 0):
         raise ValueError(f"Value must be a positive integer or floating number, got {value}")
 
 
-def positive_int(value: Optional[int] = None):
+def positive_int(value: int | None = None):
     if value is not None and (not isinstance(value, int) or not value >= 0):
         raise ValueError(f"Value must be a positive integer, got {value}")
 
 
-def padding_validator(value: Optional[Union[bool, str, PaddingStrategy]] = None):
+def padding_validator(value: bool | str | PaddingStrategy | None = None):
     possible_names = ["longest", "max_length", "do_not_pad"]
     if value is None:
         pass
@@ -31,7 +34,7 @@ def padding_validator(value: Optional[Union[bool, str, PaddingStrategy]] = None)
         raise ValueError(f"If padding is a string, the value must be one of {possible_names}")
 
 
-def truncation_validator(value: Optional[Union[bool, str, TruncationStrategy]] = None):
+def truncation_validator(value: bool | str | TruncationStrategy | None = None):
     possible_names = ["only_first", "only_second", "longest_first", "do_not_truncate"]
     if value is None:
         pass
@@ -41,7 +44,7 @@ def truncation_validator(value: Optional[Union[bool, str, TruncationStrategy]] =
         raise ValueError(f"If truncation is a string, value must be one of {possible_names}")
 
 
-def image_size_validator(value: Optional[Union[int, Sequence[int], dict[str, int]]] = None):
+def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = None):
     possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
     if value is None:
         pass
@@ -49,10 +52,17 @@ def image_size_validator(value: Optional[Union[int, Sequence[int], dict[str, int
         raise ValueError(f"Value for size must be a dict with keys {possible_keys} but got size={value}")
 
 
-def device_validator(value: Optional[Union[str, int]] = None):
+def device_validator(value: str | int | None = None):
     possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta"]
     if value is None:
         pass
+    elif is_torch_available() and isinstance(value, torch.device):
+        # Convert torch.device to string for validation
+        device_str = str(value)
+        if device_str.split(":")[0] not in possible_names:
+            raise ValueError(
+                f"If device is a torch.device, the value must be one of {possible_names} but got device={value}"
+            )
     elif isinstance(value, int) and value < 0:
         raise ValueError(
             f"If device is an integer, the value must be a strictly positive integer but got device={value}"
@@ -61,11 +71,11 @@ def device_validator(value: Optional[Union[str, int]] = None):
         raise ValueError(f"If device is an string, the value must be one of {possible_names} but got device={value}")
     elif not isinstance(value, (int, str)):
         raise ValueError(
-            f"Device must be either an integer device ID or a string (e.g., 'cpu', 'cuda:0'), but got device={value}"
+            f"Device must be either an integer device ID, a string (e.g., 'cpu', 'cuda:0'), or a torch.device object, but got device={value}"
         )
 
 
-def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = None):
+def resampling_validator(value: Union[int, "PILImageResampling"] | None = None):
     if value is None:
         pass
     elif isinstance(value, int) and value not in list(range(6)):
@@ -76,7 +86,7 @@ def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = Non
         raise ValueError(f"The resampling should an integer or `PIL.Image.Resampling`, but got resampling={value}")
 
 
-def video_metadata_validator(value: Optional[VideoMetadataType] = None):
+def video_metadata_validator(value: VideoMetadataType | None = None):
     if value is None:
         return
 
@@ -107,7 +117,7 @@ def video_metadata_validator(value: Optional[VideoMetadataType] = None):
             )
 
 
-def tensor_type_validator(value: Optional[Union[str, TensorType]] = None):
+def tensor_type_validator(value: str | TensorType | None = None):
     possible_names = ["pt", "np", "mlx"]
     if value is None:
         pass

@@ -44,7 +44,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...video_utils import VideoInput, make_batched_videos
 from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
 
 
@@ -67,7 +66,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     min_pixels = None
     max_pixels = None
     valid_kwargs = Qwen2VLImageProcessorKwargs
-    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLImageProcessorKwargs]):
         size = kwargs.pop("size", None)
@@ -113,15 +112,13 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Qwen2VLImageProcessorKwargs],
     ) -> BatchFeature:
-        return super().preprocess(images, videos, **kwargs)
+        return super().preprocess(images, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        videos: VideoInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
@@ -134,27 +131,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         """
         # Prepare input images
         batch_feature = BatchFeature()
-        if images is not None:
-            images = self._prepare_image_like_inputs(
-                images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-            )
-            batch_feature = self._preprocess(images, **kwargs)
-        if videos is not None:
-            logger.warning(
-                "`Qwen2VLImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `Qwen2VLVideoProcessor`. "
-            )
-            # Can't change _prepare_images_structure to work with videos because it also needs to work with images.
-            videos = make_batched_videos(videos)
-            videos = [
-                torch.stack(self._prepare_image_like_inputs(video, do_convert_rgb, input_data_format, device))
-                for video in videos
-            ]
-            video_outputs = self._preprocess(videos, **kwargs)
-            batch_feature.update(
-                {"pixel_values_videos": video_outputs.pixel_values, "video_grid_thw": video_outputs.image_grid_thw}
-            )
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        batch_feature = self._preprocess(images, **kwargs)
         return batch_feature
 
     def _preprocess(

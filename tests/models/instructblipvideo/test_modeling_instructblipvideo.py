@@ -153,7 +153,6 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (InstructBlipVideoVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = False
 
@@ -490,11 +489,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
     )
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
-    fx_compatible = False
 
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -535,6 +532,10 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     @unittest.skip(reason="InstructBlipVideoModel does not have input/output embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="InstructBLIP has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_forward_signature(self):

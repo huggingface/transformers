@@ -21,6 +21,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -362,24 +363,14 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     config: ImageGPTConfig
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["ImageGPTBlock"]
 
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, ImageGPTLayerNorm):
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
@@ -387,10 +378,11 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        for name, p in module.named_parameters():
-            if "c_proj" in name and "weight" in name:
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+        if isinstance(module, PreTrainedModel):
+            for name, p in module.named_parameters():
+                if "c_proj" in name and "weight" in name:
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
 
 
 @auto_docstring
@@ -501,9 +493,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + input_shape[-1], device=device
-            )
+            cache_position: torch.Tensor = torch.arange(input_shape[-1], device=device) + past_seen_tokens
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -605,7 +595,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
     """
 )
 class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
     def __init__(self, config: ImageGPTConfig):
         super().__init__(config)
