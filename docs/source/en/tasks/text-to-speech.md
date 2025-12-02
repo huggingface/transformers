@@ -39,7 +39,7 @@ Here's a code snippet you can use to listen to the resulting audio in a notebook
 >>> Audio(output["audio"], rate=output["sampling_rate"])
 ```
 
-You can also do voice cloning with CSM:
+By default, CSM uses a random voice. You can do voice cloning by providing a reference audio as part of a chat template dictionary:
 
 ```python
 >>> import soundfile as sf
@@ -64,7 +64,7 @@ You can also do voice cloning with CSM:
 >>> output = pipe(conversation)
 ```
 
-You can also do conversational TTS, here is an example with Dia:
+Some models, like [Dia](https://huggingface.co/nari-labs/Dia-1.6B-0626), can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music. Below is such an example:
 
 ```python
 >>> from transformers import pipeline
@@ -73,6 +73,8 @@ You can also do conversational TTS, here is an example with Dia:
 >>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
 >>> output = pipe(text)
 ```
+
+Note that Dia also accepts speaker tags such as [S1] and [S2] to generate a conversation between unique voices.
 
 For more examples on what CSM and other pretrained TTS models can do, refer to our
 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models).
