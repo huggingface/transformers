@@ -22,7 +22,7 @@ from typing import Any, Optional, Union
 
 import sentencepiece
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 from ...utils.import_utils import requires
 
