@@ -92,11 +92,6 @@ class AwqQuantizer(HfQuantizer):
 
             model = hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
-        # if self.quantization_config.version == AWQLinearVersion.IPEX:
-        #     from ..integrations import post_init_awq_ipex_modules
-        #
-        #     model = post_init_awq_ipex_modules(model)
-
     def is_serializable(self, safe_serialization=None):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")

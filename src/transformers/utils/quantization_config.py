@@ -804,18 +804,9 @@ class AwqConfig(GPTQConfig):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
-        version (`AWQLinearVersion`, *optional*, defaults to `AWQLinearVersion.GEMM`):
-            The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise,
-            GEMV is better (e.g. < 8 ). GEMM models are compatible with Exllama kernels.
-        backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.GPTQMODEL`):
+        backend (`AwqBackend`, *optional*, defaults to `AwqBackend.AUTO`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
-        do_fuse (`bool`, *optional*, defaults to `False`):
-            Deprecated, Whether to fuse attention and mlp layers together for faster inference
-        fuse_max_seq_len (`int`, *optional*):
-            Deprecated, The Maximum sequence length to generate when using fusing.
-        modules_to_fuse (`dict`, *optional*, default to `None`):
-            Deprecated, Overwrite the natively supported fusing scheme with the one specified by the users.
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
