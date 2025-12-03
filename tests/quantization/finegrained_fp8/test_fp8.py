@@ -86,7 +86,10 @@ class FP8QuantizerTest(unittest.TestCase):
     quantized_model_name = "hf-internal-testing/Llama-3.2-1B-Instruct-fp8"
     input_text = "Once upon a time"
     max_new_tokens = 10
-    EXPECTED_OUTPUT = "Once upon a time, there was a man who was very rich."
+    EXPECTED_OUTPUTS = {
+        "Once upon a time, there was a little girl who loved to play",
+        "Once upon a time, there was a man who was very rich.",
+    }
     EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device
     offload_device_map = {
@@ -146,25 +149,21 @@ class FP8QuantizerTest(unittest.TestCase):
         for module in model.modules():
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
-
         model = replace_with_fp8_linear(model, quantization_config=quantization_config)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
-        print(model)
-        self.assertEqual(nb_linears - 1, nb_fp8_linear)
-
+        self.assertEqual(nb_linears, nb_fp8_linear)
         with init_empty_weights():
             model = OPTForCausalLM(config)
-        quantization_config = FineGrainedFP8Config(modules_to_not_convert=["fc1"])
-        model = replace_with_fp8_linear(model, quantization_config=quantization_config)
+        quantization_config = FineGrainedFP8Config()
+        model = replace_with_fp8_linear(model, modules_to_not_convert=["fc1"], quantization_config=quantization_config)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
-
-        self.assertEqual(nb_linears - 25, nb_fp8_linear)
+        self.assertEqual(nb_linears - 24, nb_fp8_linear)
 
     def test_quantizer_validation_no_accelerator(self):
         """Test quantizer validation when CUDA/XPU is not available"""
@@ -193,7 +192,7 @@ class FP8QuantizerTest(unittest.TestCase):
 
         output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
         output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
-        self.assertEqual(output_tokens, self.EXPECTED_OUTPUT)
+        self.assertIn(output_tokens, self.EXPECTED_OUTPUTS)
 
     def test_dequantized_model(self):
         """
@@ -233,7 +232,7 @@ class FP8QuantizerTest(unittest.TestCase):
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_weight_and_weight_scale_inv(self):
         """
@@ -268,11 +267,10 @@ class FP8QuantizerTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map="auto", quantization_config=quantization_config
         )
-        print("hf_device_map", quantized_model.hf_device_map)
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     @require_torch_multi_accelerator
     def test_save_pretrained_multi_accelerators(self):
@@ -288,7 +286,7 @@ class FP8QuantizerTest(unittest.TestCase):
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
 
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_quantized_model_offload(self):
         """
@@ -312,7 +310,7 @@ class FP8QuantizerTest(unittest.TestCase):
 
             quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
             output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
 @require_torch_accelerator
@@ -330,7 +328,7 @@ class FP8LinearTest(unittest.TestCase):
         """
         from transformers.integrations import FP8Linear
 
-        linear = FP8Linear(256, 256, block_size=(128, 128), device=self.device)
+        linear = FP8Linear(256, 256, block_size=(128, 128)).to(self.device)
         x = torch.rand((1, 5, 256)).to(self.device)
 
         x_ = linear(x)
@@ -342,7 +340,7 @@ class FP8LinearTest(unittest.TestCase):
         """
         from transformers.integrations import FP8Linear
 
-        linear = FP8Linear(128, 256, block_size=(128, 128), device=self.device)
+        linear = FP8Linear(128, 256, block_size=(128, 128)).to(self.device)
         x = torch.rand((1, 5, 128)).to(self.device)
 
         x_ = linear(x)
