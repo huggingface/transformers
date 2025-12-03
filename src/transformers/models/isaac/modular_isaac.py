@@ -136,8 +136,7 @@ from ...models.auto.tokenization_auto import AutoTokenizer
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...tokenization_utils import TensorType
-from ...utils import auto_docstring
+from ...utils import auto_docstring, TensorType
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN

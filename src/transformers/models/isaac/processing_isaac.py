@@ -99,7 +99,7 @@ from perceptron.tensorstream.tensorstream import Event, Stream, TensorStream, Te
 from ...feature_extraction_utils import BatchFeature
 from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import TensorType
+from ...utils import TensorType
 from .configuration_isaac import IsaacConfig
 
 
