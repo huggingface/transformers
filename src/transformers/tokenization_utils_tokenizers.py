@@ -1135,7 +1135,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 elif transformers_version and version.parse(transformers_version) >= version.parse("4.57.3"):
                     return tokenizer
 
-                mistral_config_detected = True
+                # Only set mistral_config_detected if it's actually a Mistral model
+                if transformers_model_type in ["mistral", "mistral3", "voxtral", "ministral", "pixtral"]:
+                    mistral_config_detected = True
 
             if mistral_config_detected or (not is_local and is_base_mistral(pretrained_model_name_or_path)):
                 # Expose the `fix_mistral_regex` flag on the tokenizer when provided, even if no correction is applied.
