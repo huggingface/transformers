@@ -89,7 +89,7 @@ jobs:
         with:
           repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
           ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
-          fetch-depth: "0"
+          fetch-depth: "1"
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -135,7 +135,8 @@ jobs:
         with:
           repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
           ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
-          fetch-depth: "0"
+          fetch-depth: "1"
+          # Need to specify `token` here, so we can push in `Commit and push changes` below.
           token: ${{ secrets.HF_STYLE_BOT_ACTION }}
 
       - name: Download patch
@@ -153,7 +154,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/$HEADREPOFULLNAME.git"
           
           # Apply the patch
           git apply consistency-fixes.patch
