@@ -781,8 +781,12 @@ class SiglipModel(SiglipPreTrainedModel):
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`SiglipTextModel`].
@@ -807,6 +811,9 @@ class SiglipModel(SiglipPreTrainedModel):
             position_ids=position_ids,
         )
         pooled_output = text_outputs.pooler_output
+
+        if return_dict:
+            return text_outputs
 
         return pooled_output
 

@@ -27,7 +27,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -1519,7 +1519,7 @@ class Florence2Model(LlavaModel):
         else:
             return super().get_encoder(modality=modality)
 
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+    def get_image_features(self, pixel_values: torch.Tensor, return_dict: bool = False, **kwargs):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -1529,9 +1529,16 @@ class Florence2Model(LlavaModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_features = self.vision_tower(pixel_values, **kwargs)
-        image_embeds = self.multi_modal_projector(image_features)
-        return image_embeds
+        last_hidden_states = self.vision_tower(pixel_values, **kwargs)
+        image_features = self.multi_modal_projector(last_hidden_states)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_states=last_hidden_states,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     @can_return_tuple
     @auto_docstring

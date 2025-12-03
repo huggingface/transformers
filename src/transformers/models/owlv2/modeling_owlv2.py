@@ -974,12 +974,15 @@ class Owlv2Model(Owlv2PreTrainedModel):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -1000,7 +1003,14 @@ class Owlv2Model(Owlv2PreTrainedModel):
         ```"""
         # Get embeddings for all text queries in all batch samples
         text_outputs: BaseModelOutputWithPooling = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
-        text_features = self.text_projection(text_outputs.pooler_output)
+        pooled_output = text_outputs.pooler_output
+        text_features = self.text_projection(pooled_output)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=text_outputs.last_hidden_state,
+                pooler_output=text_features,
+            )
 
         return text_features
 
@@ -1010,8 +1020,12 @@ class Owlv2Model(Owlv2PreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`Owlv2VisionModel`].
@@ -1037,6 +1051,12 @@ class Owlv2Model(Owlv2PreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
         image_features = self.visual_projection(vision_outputs.pooler_output)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
 
         return image_features
 

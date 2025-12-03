@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
@@ -652,7 +652,7 @@ class Florence2Model(Florence2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+    def get_image_features(self, pixel_values: torch.Tensor, return_dict: bool = False, **kwargs):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -662,9 +662,16 @@ class Florence2Model(Florence2PreTrainedModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_features = self.vision_tower(pixel_values, **kwargs)
-        image_embeds = self.multi_modal_projector(image_features)
-        return image_embeds
+        last_hidden_states = self.vision_tower(pixel_values, **kwargs)
+        image_features = self.multi_modal_projector(last_hidden_states)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_states=last_hidden_states,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

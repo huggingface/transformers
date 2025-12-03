@@ -1216,10 +1216,16 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
-        language_model_inputs = self.language_projection(query_output)
+        image_features = self.language_projection(query_output)
+
+        # NOTE: @Tom backwards incompatibility
         if return_dict:
-            return language_model_inputs, vision_outputs, query_outputs
-        return language_model_inputs
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """

@@ -1095,8 +1095,12 @@ class AlignModel(AlignPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`AlignTextModel`].
@@ -1114,7 +1118,7 @@ class AlignModel(AlignPreTrainedModel):
         >>> with torch.inference_mode():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1124,12 +1128,23 @@ class AlignModel(AlignPreTrainedModel):
         last_hidden_state = text_outputs[0][:, 0, :]
         text_features = self.text_projection(last_hidden_state)
 
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=text_outputs.last_hidden_state,
+                pooler_output=text_features,
+            )
+
         return text_features
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, return_dict: bool = False
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`AlignVisionModel`].
@@ -1151,8 +1166,15 @@ class AlignModel(AlignPreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(pixel_values=pixel_values)
+        vision_outputs: BaseModelOutputWithPoolingAndNoAttention = self.vision_model(pixel_values=pixel_values)
         image_features = vision_outputs.pooler_output
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     @can_return_tuple

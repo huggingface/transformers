@@ -788,8 +788,12 @@ class CLIPModel(CLIPPreTrainedModel):
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`CLIPTextModel`].
@@ -816,6 +820,12 @@ class CLIPModel(CLIPPreTrainedModel):
         pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
 
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=text_outputs.last_hidden_state,
+                pooler_output=text_features,
+            )
+
         return text_features
 
     @filter_out_non_signature_kwargs()
@@ -824,8 +834,12 @@ class CLIPModel(CLIPPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`CLIPVisionModel`].
@@ -854,6 +868,12 @@ class CLIPModel(CLIPPreTrainedModel):
         )
         pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
 
         return image_features
 
