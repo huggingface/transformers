@@ -1069,7 +1069,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
 
             # Compute new reference points
             if self.bbox_embed is not None:
-                new_reference_points_unsigmoid = self.bbox_embed[layer_id](output) + inverse_sigmoid(reference_points)
+                new_reference_points_unsigmoid = self.bbox_embed(output) + inverse_sigmoid(reference_points)
                 new_reference_points = new_reference_points_unsigmoid.sigmoid()
                 reference_points = new_reference_points
                 ref_points.append(new_reference_points)
@@ -1381,12 +1381,6 @@ DINO_DETR_INPUTS_DOCSTRING = r"""
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrModel(DinoDetrPreTrainedModel):
-    _tied_weights_keys = {
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.0",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.1",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.2",
-        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.\d+",
-    }
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _can_record_outputs = {
         "encoder_self_attentions": OutputRecorder(
@@ -1464,14 +1458,12 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         init.constant_(bbox_embed.layers[-1].weight, 0)
         init.constant_(bbox_embed.layers[-1].bias, 0)
 
-        self.bbox_embed = _get_clones(bbox_embed, config.num_decoder_layers, layer_share=True)
-        self.class_embed = _get_clones(class_embed, config.num_decoder_layers, layer_share=True)
-        self.transformer.decoder.bbox_embed = self.bbox_embed
-        self.transformer.decoder.class_embed = self.class_embed
+        self.transformer.decoder.bbox_embed = bbox_embed
+        self.transformer.decoder.class_embed = class_embed
 
         # Adjust embeddings based on two stage approach
-        self.transformer.enc_out_bbox_embed = copy.deepcopy(self.bbox_embed[0])
-        self.transformer.enc_out_class_embed = copy.deepcopy(self.class_embed[0])
+        self.transformer.enc_out_bbox_embed = copy.deepcopy(bbox_embed)
+        self.transformer.enc_out_class_embed = copy.deepcopy(class_embed)
 
         for layer in self.transformer.decoder.layers:
             layer.label_embedding = None
@@ -1599,12 +1591,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
-    _tied_weights_keys = {
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.0",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.1",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.2",
-        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.\d+",
-    }
     _can_record_outputs = {
         "encoder_self_attentions": OutputRecorder(
             DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1
@@ -1709,20 +1695,16 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         outputs_class_list = []
         for (
             layer_reference_points_sigmoid,
-            layer_bbox_embed,
-            layer_cls_embed,
             layer_hidden_states,
         ) in zip(
             reference_points[:-1],
-            self.model.transformer.decoder.bbox_embed,
-            self.model.transformer.decoder.class_embed,
             hidden_states,
         ):
-            layer_outputs_unsigmoid = layer_bbox_embed(layer_hidden_states) + inverse_sigmoid(
+            layer_outputs_unsigmoid = self.model.transformer.decoder.bbox_embed(layer_hidden_states) + inverse_sigmoid(
                 layer_reference_points_sigmoid
             )
             outputs_coord_list.append(layer_outputs_unsigmoid.sigmoid())
-            outputs_class_list.append(layer_cls_embed(layer_hidden_states))
+            outputs_class_list.append(self.model.transformer.decoder.class_embed(layer_hidden_states))
 
         outputs_coord = torch.stack(outputs_coord_list)
         outputs_class = torch.stack(outputs_class_list)
