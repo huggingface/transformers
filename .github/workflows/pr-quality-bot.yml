@@ -102,6 +102,7 @@ jobs:
           ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
           # You may need fetch-depth: 0 for being able to push
           fetch-depth: "0"
+          token: ${{ secrets.HF_STYLE_BOT_ACTION }}
 
       - name: Check commits
         run: |
