@@ -1,5 +1,6 @@
+"""Logging utilities for training CI tests."""
+
 import logging
-import os
 import re
 import sys
 
@@ -13,7 +14,7 @@ class Colors:
     RESET = "\033[0m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
-    
+
     # Foreground colors
     RED = "\033[31m"
     GREEN = "\033[32m"
@@ -22,7 +23,7 @@ class Colors:
     MAGENTA = "\033[35m"
     CYAN = "\033[36m"
     WHITE = "\033[37m"
-    
+
     # Bright variants
     BRIGHT_RED = "\033[91m"
     BRIGHT_GREEN = "\033[92m"
@@ -37,7 +38,7 @@ NUMBER_PATTERN = re.compile(r'(\d[\d,]*\.?\d*%?|\d+\.?\d*[a-zA-Z]*)')
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter that adds colors based on log level and highlights numbers."""
-    
+
     LEVEL_COLORS = {
         logging.DEBUG: Colors.DIM + Colors.CYAN,
         logging.INFO: Colors.WHITE,  # Default white for INFO, numbers get green
@@ -45,31 +46,31 @@ class ColoredFormatter(logging.Formatter):
         logging.ERROR: Colors.BRIGHT_RED,
         logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
     }
-    
+
     def __init__(self, fmt: str = None, datefmt: str = None):
         super().__init__(fmt, datefmt)
-    
+
     def _highlight_numbers(self, text: str) -> str:
         """Highlight numbers in green within the text."""
         return NUMBER_PATTERN.sub(
             f"{Colors.BRIGHT_GREEN}\\1{Colors.RESET}",
             text
         )
-    
+
     def format(self, record: logging.LogRecord) -> str:
         # Get color for this level
         color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
-        
+
         # Color the level name
         levelname = record.levelname
         colored_levelname = f"{color}{levelname:8}{Colors.RESET}"
-        
+
         # Color the timestamp
         colored_time = f"{Colors.DIM}{self.formatTime(record, self.datefmt)}{Colors.RESET}"
-        
+
         # Color the logger name
         colored_name = f"{Colors.BLUE}{record.name}{Colors.RESET}"
-        
+
         # Get message and highlight numbers in green
         message = record.getMessage()
         if record.levelno == logging.INFO:
@@ -78,7 +79,7 @@ class ColoredFormatter(logging.Formatter):
         else:
             # For other levels: use level color for entire message
             colored_message = f"{color}{message}{Colors.RESET}"
-        
+
         return f"{colored_time} - {colored_name} - {colored_levelname} - {colored_message}"
 
 
@@ -98,7 +99,7 @@ def init_logger() -> None:
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
-    
+
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
