@@ -1107,30 +1107,14 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             bias=False,
             partially_freeze=config.freeze_lm_head,
         )
+        if config.additional_vocab_size > 0:
+            self._tied_weights_keys = {
+                "lm_head.weight": "model.embed_tokens.weight",
+                "lm_head.additional_fc.weight": "model.embed_tokens.additional_embedding.weight",
+            }
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def tie_weights(self, **kwargs):
-        """
-        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of
-        IdeficsDecoupledLinear and IdeficsDecoupledEmbedding.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
-
-        if getattr(self.config, "tie_word_embeddings", True):
-            output_embeddings.weight = input_embeddings.weight
-            if input_embeddings.num_additional_embeddings > 0:
-                assert output_embeddings.out_additional_features == input_embeddings.num_additional_embeddings
-                output_embeddings.additional_fc.weight = input_embeddings.additional_embedding.weight
-
-        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
-            output_embeddings.out_features = input_embeddings.num_embeddings
-            if hasattr(output_embeddings, "out_additional_features") and hasattr(
-                input_embeddings, "num_additional_embeddings"
-            ):
-                output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
 
     @can_return_tuple
     @auto_docstring
