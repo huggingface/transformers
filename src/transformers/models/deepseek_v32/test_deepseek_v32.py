@@ -277,6 +277,7 @@ def test_kv_cache():
     except Exception as e:
         print(f"  ✗ KV cache test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -482,7 +483,7 @@ def test_mscale_single_application():
         # Check 2: Attention softmax_scale should include mscale^2
         attn = model.model.layers[0].self_attn
         qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim  # 32 + 16 = 48
-        base_scale = qk_head_dim ** -0.5
+        base_scale = qk_head_dim**-0.5
         mscale_adjustment = 0.1 * mscale * math.log(factor) + 1.0
         expected_scale = base_scale * mscale_adjustment * mscale_adjustment
 
@@ -495,6 +496,7 @@ def test_mscale_single_application():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -530,7 +532,7 @@ def test_indexer_relu_order():
             # Set weight projection to have one negative and one positive weight per position
             indexer.weights_proj.weight.zero_()
             indexer.weights_proj.weight[0, :] = -1.0  # Head 0: negative weight
-            indexer.weights_proj.weight[1, :] = 1.0   # Head 1: positive weight
+            indexer.weights_proj.weight[1, :] = 1.0  # Head 1: positive weight
 
         # Create simple test input
         batch_size, seq_len = 1, 4
@@ -557,6 +559,7 @@ def test_indexer_relu_order():
 
         # We can verify the implementation by checking the indexer forward code
         import inspect
+
         source = inspect.getsource(indexer.forward)
 
         # Check that relu comes before weight multiplication
@@ -572,6 +575,7 @@ def test_indexer_relu_order():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -632,6 +636,7 @@ def test_mlp_float32_precision():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -692,6 +697,7 @@ def test_rope_interleaved_vs_non_interleaved():
 
         # Verify interleaved uses complex multiplication (view_as_complex pattern)
         import inspect
+
         source = inspect.getsource(apply_rotary_pos_emb_interleaved)
         if "view_as_complex" in source:
             print("  ✓ Interleaved RoPE uses complex multiplication (correct)")
@@ -710,6 +716,7 @@ def test_rope_interleaved_vs_non_interleaved():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -788,6 +795,7 @@ def test_dense_vs_moe_layers():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -820,7 +828,9 @@ def test_mla_dimension_splits():
         q_out_dim = attn.q_b_proj.out_features
         expected_q_dim = config.num_attention_heads * (config.qk_nope_head_dim + config.qk_rope_head_dim)
         if q_out_dim == expected_q_dim:
-            print(f"  ✓ Q projection: {q_out_dim} = {config.num_attention_heads} heads × {config.qk_nope_head_dim + config.qk_rope_head_dim} head_dim")
+            print(
+                f"  ✓ Q projection: {q_out_dim} = {config.num_attention_heads} heads × {config.qk_nope_head_dim + config.qk_rope_head_dim} head_dim"
+            )
         else:
             print(f"  ✗ Q projection: {q_out_dim} != expected {expected_q_dim}")
             return False
@@ -829,7 +839,9 @@ def test_mla_dimension_splits():
         kv_out_dim = attn.kv_b_proj.out_features
         expected_kv_dim = config.num_attention_heads * (config.qk_nope_head_dim + config.v_head_dim)
         if kv_out_dim == expected_kv_dim:
-            print(f"  ✓ KV projection: {kv_out_dim} = {config.num_attention_heads} heads × {config.qk_nope_head_dim + config.v_head_dim} (k_nope + v)")
+            print(
+                f"  ✓ KV projection: {kv_out_dim} = {config.num_attention_heads} heads × {config.qk_nope_head_dim + config.v_head_dim} (k_nope + v)"
+            )
         else:
             print(f"  ✗ KV projection: {kv_out_dim} != expected {expected_kv_dim}")
             return False
@@ -838,7 +850,9 @@ def test_mla_dimension_splits():
         kva_out_dim = attn.kv_a_proj_with_mqa.out_features
         expected_kva_dim = config.kv_lora_rank + config.qk_rope_head_dim
         if kva_out_dim == expected_kva_dim:
-            print(f"  ✓ KV-A projection: {kva_out_dim} = {config.kv_lora_rank} (lora) + {config.qk_rope_head_dim} (rope)")
+            print(
+                f"  ✓ KV-A projection: {kva_out_dim} = {config.kv_lora_rank} (lora) + {config.qk_rope_head_dim} (rope)"
+            )
         else:
             print(f"  ✗ KV-A projection: {kva_out_dim} != expected {expected_kva_dim}")
             return False
@@ -846,7 +860,9 @@ def test_mla_dimension_splits():
         # Verify total head dimension matches attention scale
         qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
         if attn.qk_head_dim == qk_head_dim:
-            print(f"  ✓ qk_head_dim: {qk_head_dim} = {config.qk_nope_head_dim} (nope) + {config.qk_rope_head_dim} (rope)")
+            print(
+                f"  ✓ qk_head_dim: {qk_head_dim} = {config.qk_nope_head_dim} (nope) + {config.qk_rope_head_dim} (rope)"
+            )
         else:
             print("  ✗ qk_head_dim mismatch")
             return False
@@ -854,6 +870,7 @@ def test_mla_dimension_splits():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -877,7 +894,7 @@ def test_gradient_flow():
 
     # Test with multiple input cases for stability
     test_cases = [
-        (42, 1, 8),    # seed, batch_size, seq_len
+        (42, 1, 8),  # seed, batch_size, seq_len
         (123, 2, 16),
         (456, 1, 32),
         (789, 4, 8),
@@ -919,13 +936,9 @@ def test_gradient_flow():
             # Note: Indexer gradients are NOT expected because topk().indices is not differentiable.
             # Note: MoE expert gradients may not exist for all experts if that expert wasn't selected.
             # We only check gate and shared experts which always receive gradients.
-            if hasattr(model.model.layers[1].mlp, 'experts'):
-                components_to_check.append(
-                    ("moe_gate", model.model.layers[1].mlp.gate.weight)
-                )
-                components_to_check.append(
-                    ("moe_shared", model.model.layers[1].mlp.shared_experts.gate_proj.weight)
-                )
+            if hasattr(model.model.layers[1].mlp, "experts"):
+                components_to_check.append(("moe_gate", model.model.layers[1].mlp.gate.weight))
+                components_to_check.append(("moe_shared", model.model.layers[1].mlp.shared_experts.gate_proj.weight))
 
             for name, param in components_to_check:
                 if param.grad is None or param.grad.abs().sum() == 0:
@@ -938,6 +951,7 @@ def test_gradient_flow():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1013,6 +1027,7 @@ def test_sparse_attention_mask():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1037,7 +1052,7 @@ def test_attention_output_sensitivity():
 
     # Test with multiple input cases for stability
     test_cases = [
-        (111, 1, 8),   # seed, batch_size, seq_len
+        (111, 1, 8),  # seed, batch_size, seq_len
         (222, 2, 16),
         (333, 1, 32),
     ]
@@ -1100,6 +1115,7 @@ def test_attention_output_sensitivity():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1175,6 +1191,7 @@ def test_rope_affects_position_sensitivity():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1248,6 +1265,7 @@ def test_moe_expert_diversity():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1319,6 +1337,7 @@ def test_indexer_selects_different_tokens():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1402,6 +1421,7 @@ def test_causal_masking():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1427,7 +1447,7 @@ def test_gate_routing_correctness():
 
     # Test with multiple input cases
     test_cases = [
-        (999, 2, 8),   # seed, batch_size, seq_len
+        (999, 2, 8),  # seed, batch_size, seq_len
         (111, 4, 16),
         (222, 1, 32),
         (333, 8, 4),
@@ -1474,6 +1494,7 @@ def test_gate_routing_correctness():
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
