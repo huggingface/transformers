@@ -61,10 +61,9 @@ def get_keys_to_not_convert(model):
         for name, module in model.named_modules()
         if output_emb_module is not None and id(module) == id(output_emb_module)
     }
-    candidates = tied_keys | last_module_key | output_emb_keys
+    modules_to_not_convert = tied_keys | last_module_key | output_emb_keys
 
-    modules_to_not_convert = {name.replace(suffix, "") for name in candidates for suffix in [".weight", ".bias"]}
-    return modules_to_not_convert
+    return list(modules_to_not_convert)
 
 
 class HfQuantizer(ABC):
