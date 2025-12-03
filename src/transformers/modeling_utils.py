@@ -1768,7 +1768,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If FA not installed, do not fail but use kernels instead
         requested_original_flash_attn = attn_implementation is not None and (
-            attn_implementation.removeprefix("paged|") == "flash_attention_2" or attn_implementation.removeprefix("paged|") == "flash_attention_3"
+            attn_implementation.removeprefix("paged|") == "flash_attention_2"
+            or attn_implementation.removeprefix("paged|") == "flash_attention_3"
         )
         if (
             requested_original_flash_attn
