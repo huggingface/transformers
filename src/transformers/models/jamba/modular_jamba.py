@@ -616,6 +616,9 @@ class JambaPreTrainedModel(PreTrainedModel):
             A = A.expand(module.intermediate_size, -1).contiguous()
             init.copy_(module.A_log, torch.log(A))
             init.ones_(module.D)
+        elif isinstance(module, JambaExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -638,7 +641,7 @@ class JambaModel(JambaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

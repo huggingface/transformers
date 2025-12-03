@@ -348,8 +348,9 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         if isinstance(module, LongcatFlashTopkRouter):
             init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LongcatFlashExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+            if module.gate_up_proj is not None:
+                init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+                init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class LongcatFlashModel(DeepseekV3Model):
@@ -393,8 +394,8 @@ class LongcatFlashModel(DeepseekV3Model):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             )
 
         if position_ids is None:

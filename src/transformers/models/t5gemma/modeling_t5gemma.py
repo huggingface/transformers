@@ -29,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -162,6 +163,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -263,6 +265,7 @@ class T5GemmaSelfAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
@@ -338,6 +341,7 @@ class T5GemmaCrossAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
 
         if config.cross_attention_hidden_size is None:
@@ -682,7 +686,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -776,7 +780,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -884,9 +888,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
         self.decoder = T5GemmaDecoder(config.decoder)
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
@@ -1013,12 +1014,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     @can_return_tuple
     @auto_docstring
