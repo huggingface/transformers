@@ -25,19 +25,12 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
 
-class InternS1ImagesKwargs(ImagesKwargs, total=False):
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
-
-
 class InternS1ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: InternS1ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
@@ -46,7 +39,9 @@ class InternS1ProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "crop_to_patches": True,
         },
-        "videos_kwargs": {},
+        "videos_kwargs": {
+            "return_tensors": "pt",
+        },
     }
 
 
@@ -68,11 +63,6 @@ class InternS1Processor(ProcessorMixin):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
@@ -138,10 +128,10 @@ class InternS1Processor(ProcessorMixin):
                     # Get the slice of patches corresponding to the current video
                     # Here we need to account for both the multiple video frames and the potential multiple patches per frame
                     # As of now, InternS1 only supports one patch per frame, but we keep the code flexible for future updates
-                    current_patch_index = video_patch_indices[video_index - 1] if video_index > 0 else 0
-                    end_patch_index = video_patch_indices[video_index]
-                    start_index = video_num_patches_indices[current_patch_index] if video_index > 0 else 0
-                    end_index = video_num_patches_indices[end_patch_index - 1]
+                    current_patch_index = video_patch_indices[video_index]
+                    end_patch_index = video_patch_indices[video_index + 1]
+                    start_index = video_num_patches_indices[current_patch_index]
+                    end_index = video_num_patches_indices[end_patch_index]
                     image_video_patches.append(video_pixel_values[start_index:end_index])
                     # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
                     num_patches = list(video_num_patches[current_patch_index:end_patch_index])
@@ -163,7 +153,6 @@ class InternS1Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[InternS1ProcessorKwargs],
     ) -> BatchFeature:
@@ -171,7 +160,7 @@ class InternS1Processor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
         is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
-        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
+        `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
         GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
@@ -186,10 +175,8 @@ class InternS1Processor(ProcessorMixin):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -214,13 +201,8 @@ class InternS1Processor(ProcessorMixin):
 
         # Process images and videos separately, as videos don't support crop_to_patches
         image_num_patches = []
-        video_num_patches = []
-        image_videos_inputs = {}
         image_pixel_values = None
-        video_pixel_values = None
         image_num_patches_indices = np.array([0])
-        video_patch_indices = np.array([0])
-        video_num_patches_indices = np.array([0])
         if images is not None:
             images = self.image_processor.fetch_images(images)
             images = make_flat_list_of_images(images)
@@ -228,17 +210,29 @@ class InternS1Processor(ProcessorMixin):
             image_num_patches = image_inputs.pop("num_patches")
             image_pixel_values = image_inputs.pop("pixel_values")
             image_num_patches_indices = np.cumsum(image_num_patches)
+
+        video_num_patches = []  # per frame
+        video_pixel_values = None
+        video_patch_indices = np.array([0])
+        video_num_patches_indices = np.array([0])
         if videos is not None:
-            video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_kwargs = output_kwargs["videos_kwargs"]
+            video_inputs = self.video_processor(videos=videos, **video_kwargs)
             video_pixel_values = video_inputs.pop("pixel_values_videos")
 
-            # Obtain per frame information first and then flatten to (BS * T, ...)
-            num_frames_per_video = [len(video) for video in video_pixel_values]
-            video_num_patches = [1 for frames in num_frames_per_video for _ in range(frames)]
-            video_patch_indices = np.cumsum(num_frames_per_video)
-            video_num_patches_indices = np.cumsum(video_num_patches)
+            batch_size, num_frames, *_ = video_pixel_values.shape
+            num_frames_per_video = np.full(batch_size, num_frames)
+            num_frames = sum(num_frames_per_video)  # total
+            video_patch_indices = np.empty(batch_size + 1, int)
+            video_patch_indices[0] = 0
+            video_patch_indices[1:] = np.cumsum(num_frames_per_video)
+            video_num_patches = [1] * num_frames
+            video_num_patches_indices = np.empty(num_frames + 1, int)
+            video_num_patches_indices[0] = 0
+            video_num_patches_indices[1:] = np.cumsum(video_num_patches)
             video_pixel_values = video_pixel_values.flatten(0, 1)
 
+        image_videos_inputs = {}
         if images is not None or videos is not None:
             text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
                 text,
