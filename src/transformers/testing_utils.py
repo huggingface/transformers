@@ -117,6 +117,7 @@ from .utils import (
     is_lomo_available,
     is_mistral_common_available,
     is_natten_available,
+    is_numba_available,
     is_nltk_available,
     is_onnx_available,
     is_openai_available,
@@ -1384,6 +1385,13 @@ def require_pyctcdecode(test_case):
     Decorator marking a test that requires pyctcdecode
     """
     return unittest.skipUnless(is_pyctcdecode_available(), "test requires pyctcdecode")(test_case)
+
+
+def require_numba(test_case):
+    """
+    Decorator marking a test that requires numba
+    """
+    return unittest.skipUnless(is_numba_available(), "test requires numba")(test_case)
 
 
 def require_librosa(test_case):
