@@ -931,22 +931,27 @@ class ModelTesterMixin:
             if not getattr(model_class, "supports_gradient_checkpointing", False):
                 continue
 
-            if getattr(model_class, "main_input_name", "input_ids") != "input_ids":
-                continue
-
             model = model_class(copy.deepcopy(config))
             try:
-                embeddings = model.get_input_embeddings()
+                embeddings_module = model.get_input_embeddings()
             except NotImplementedError:
                 continue
-            if embeddings is None or not hasattr(embeddings, "weight"):
+            if embeddings_module is None:
+                continue
+
+            embedding_param = getattr(embeddings_module, "weight", None)
+            if embedding_param is None and isinstance(embeddings_module, (tuple, list)):
+                for candidate in embeddings_module:
+                    if hasattr(candidate, "weight"):
+                        embedding_param = candidate.weight
+                        break
+            if embedding_param is None or not isinstance(embedding_param, torch.Tensor):
                 continue
 
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
             model.to(torch_device)
             model.train()
-
-            embeddings.weight.requires_grad_(True)
 
             torch.manual_seed(0)
             outputs = model(**inputs)
@@ -959,8 +964,12 @@ class ModelTesterMixin:
             loss = loss_tensor.sum()
             loss.backward()
 
-            baseline_grad = embeddings.weight.grad
-            if baseline_grad is None or baseline_grad.abs().sum().item() == 0:
+            baseline_grad = embedding_param.grad
+            if (
+                baseline_grad is None
+                or baseline_grad.abs().sum().item() == 0
+                or not torch.isfinite(baseline_grad).all()
+            ):
                 model.zero_grad(set_to_none=True)
                 continue
 
@@ -979,10 +988,14 @@ class ModelTesterMixin:
             loss = loss_tensor.sum()
             loss.backward()
 
-            grad_after_gc = embeddings.weight.grad
+            grad_after_gc = embedding_param.grad
             self.assertIsNotNone(
                 grad_after_gc,
                 f"{model_class.__name__} should produce embedding gradients when gradient checkpointing is enabled.",
+            )
+            self.assertTrue(
+                torch.isfinite(grad_after_gc).all(),
+                f"{model_class.__name__} produced non-finite gradients with gradient checkpointing enabled.",
             )
             self.assertGreater(
                 grad_after_gc.abs().sum().item(),
