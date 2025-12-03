@@ -23,6 +23,7 @@ Key innovations:
 - Hadamard transform for efficient indexer computation
 - Sigmoid scoring with noaux_tc routing for MoE
 """
+
 import math
 from typing import Optional, Union
 
@@ -40,7 +41,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
 
 
 # =============================================================================
@@ -307,62 +307,33 @@ class DeepseekV32Config(PretrainedConfig):
 # =============================================================================
 
 
-def apply_rotary_pos_emb_interleaved(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
+def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor, interleaved: bool = True) -> torch.Tensor:
     """
-    Applies rotary position embeddings using complex multiplication (interleaved format).
+    Applies rotary positional embeddings using complex multiplication.
 
-    This matches the reference DeepSeek implementation which treats adjacent pairs
-    of elements as complex numbers: [r0, i0, r1, i1, ...] -> [z0, z1, ...]
-
-    Reference: model.py:404-425 (apply_rotary_emb with interleaved=True)
+    This exactly matches the reference DeepSeek-V3.2 implementation (model.py lines 422-442).
 
     Args:
-        x: Input tensor [..., head_dim] where head_dim has interleaved real/imaginary pairs
-        freqs_cis: Complex frequencies [seq_len, head_dim // 2] as complex tensor
+        x: Input tensor [..., head_dim]
+        freqs_cis: Precomputed complex exponentials [seq_len, head_dim // 2]
+        interleaved: If True, input is in interleaved format [r0, i0, r1, i1, ...]
+                     If False, input is in non-interleaved format [r0, r1, ..., i0, i1, ...]
 
     Returns:
         Rotated tensor with same shape as input
     """
     dtype = x.dtype
-    # View as complex: [..., head_dim] -> [..., head_dim // 2] as complex
-    x_complex = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
-    # Apply rotation via complex multiplication
-    # freqs_cis needs to be broadcast to match x dimensions
-    y = torch.view_as_real(x_complex * freqs_cis).flatten(-2)
-    return y.to(dtype)
-
-
-def apply_rotary_pos_emb_non_interleaved(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
-    """
-    Applies rotary position embedding using non-interleaved format.
-    Used specifically in the indexer (following reference implementation).
-
-    Non-interleaved format: first half is real, second half is imaginary
-    (e.g., [r0, r1, ..., i0, i1, ...] instead of [r0, i0, r1, i1, ...]).
-
-    Reference: model.py:404-425 with interleaved=False
-
-    Args:
-        x: Input tensor with shape [..., head_dim] where first half is real, second half is imaginary
-        freqs_cis: Complex frequencies tensor
-
-    Returns:
-        Rotated tensor with same shape as input, in non-interleaved format
-    """
-    dtype = x.dtype
     shape = x.shape
-
-    # Non-interleaved: first half is real, second half is imaginary
-    # Convert to interleaved format first: [r0, r1, ..., i0, i1, ...] -> [r0, i0, r1, i1, ...]
-    x = x.view(*shape[:-1], 2, -1).transpose(-1, -2).contiguous()
-
-    # Now apply rotation using complex multiplication (same as interleaved)
-    x_complex = torch.view_as_complex(x.float().reshape(*shape[:-1], -1, 2))
-    y = torch.view_as_real(x_complex * freqs_cis).flatten(-2)
-
-    # Convert back to non-interleaved format: [r0, i0, r1, i1, ...] -> [r0, r1, ..., i0, i1, ...]
-    y = torch.cat([y[..., 0::2], y[..., 1::2]], dim=-1)
-
+    if not interleaved:
+        # Convert non-interleaved to interleaved: [r0, r1, ..., i0, i1, ...] -> [r0, i0, r1, i1, ...]
+        x = x.view(*shape[:-1], 2, -1).transpose(-1, -2).contiguous()
+    # View as complex and apply rotation via complex multiplication
+    x = torch.view_as_complex(x.float().view(*shape[:-1], -1, 2))
+    freqs_cis = freqs_cis.view(1, x.size(1), 1, x.size(-1))
+    y = torch.view_as_real(x * freqs_cis).flatten(3)
+    if not interleaved:
+        # Convert back to non-interleaved: [r0, i0, r1, i1, ...] -> [r0, r1, ..., i0, i1, ...]
+        y = torch.cat([y[..., 0::2], y[..., 1::2]], dim=-1)
     return y.to(dtype)
 
 
@@ -420,9 +391,8 @@ class DeepseekV32RotaryEmbedding(nn.Module):
     """
     Rotary position embedding with YaRN support for extended context.
 
-    Outputs complex frequencies (freqs_cis) for use with complex multiplication RoPE.
-
-    Reference: model.py:324-402 (precompute_freqs_cis)
+    Outputs complex frequencies (freqs_cis) for use with complex multiplication RoPE,
+    exactly matching the reference DeepSeek-V3.2 implementation.
     """
 
     def __init__(self, config: DeepseekV32Config, device=None):
@@ -445,8 +415,7 @@ class DeepseekV32RotaryEmbedding(nn.Module):
     def _compute_yarn_inv_freq(self, device):
         """
         Compute YaRN-adjusted inverse frequencies for extended context.
-
-        Reference: model.py:324-402 (precompute_freqs_cis)
+        Matches reference model.py lines 341-419 (precompute_freqs_cis).
         """
         if self.rope_scaling is None:
             return self.inv_freq.to(device)
@@ -493,10 +462,8 @@ class DeepseekV32RotaryEmbedding(nn.Module):
             position_ids: Position indices [batch_size, seq_len]
 
         Returns:
-            freqs_cis: Complex frequencies tensor [batch_size, seq_len, head_dim // 2]
-                       as complex64 dtype for use with torch.view_as_complex
-
-        Reference: model.py:392-401 - freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
+            freqs_cis: Complex frequencies tensor [seq_len, head_dim // 2]
+                       for use with apply_rotary_emb
         """
         # Use YaRN frequencies if rope_scaling is configured
         if self.rope_scaling is not None and self.rope_scaling.get("type") == "yarn":
@@ -504,23 +471,20 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         else:
             inv_freq = self.inv_freq.to(x.device)
 
-        # Compute frequencies: freqs[i] = position * inv_freq[i]
-        # inv_freq shape: [dim // 2]
-        # position_ids shape: [batch_size, seq_len]
-        # Result shape: [batch_size, seq_len, dim // 2]
+        # Get sequence length from position_ids
+        seq_len = position_ids.shape[-1]
+        # For simplicity, use sequential positions (matching reference precompute_freqs_cis)
+        # The reference computes freqs_cis once for max_seq_len and indexes into it
+        t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
+        # Add offset for cached positions
+        if position_ids.numel() > 0:
+            start_pos = position_ids[0, 0].item() if position_ids.dim() > 1 else position_ids[0].item()
+            t = t + start_pos
 
-        # Force float32 for precision in trigonometric operations
-        device_type = x.device.type
-        with torch.autocast(device_type=device_type, enabled=False):
-            # Outer product: position_ids @ inv_freq
-            # position_ids: [batch_size, seq_len] -> [batch_size, seq_len, 1]
-            # inv_freq: [dim // 2] -> [1, 1, dim // 2]
-            freqs = position_ids.unsqueeze(-1).float() * inv_freq.unsqueeze(0).unsqueeze(0)
-            # freqs shape: [batch_size, seq_len, dim // 2]
-
-            # Convert to complex exponential: e^(i * freqs) = cos(freqs) + i*sin(freqs)
-            # torch.polar(abs, angle) creates complex number with abs * e^(i*angle)
-            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
+        # Compute frequencies: outer product of positions and inv_freq
+        freqs = torch.outer(t, inv_freq)
+        # Convert to complex exponentials: e^(i * freqs)
+        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
 
         return freqs_cis
 
@@ -678,7 +642,9 @@ class DeepseekV32MoE(nn.Module):
         self.experts = nn.ModuleList([DeepseekV32Expert(config) for _ in range(config.n_routed_experts)])
 
         # Shared experts (always active)
-        self.shared_experts = DeepseekV32MLP(config, intermediate_size=config.n_shared_experts * config.moe_intermediate_size)
+        self.shared_experts = DeepseekV32MLP(
+            config, intermediate_size=config.n_shared_experts * config.moe_intermediate_size
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -725,7 +691,6 @@ class DeepseekV32Indexer(nn.Module):
     and selects top-k tokens for sparse attention.
 
     Key differences from main attention:
-    - Uses non-interleaved RoPE
     - Single-head keys (broadcast to multi-head queries)
     - Applies Hadamard transform for efficiency
     """
@@ -766,52 +731,54 @@ class DeepseekV32Indexer(nn.Module):
         """
         Compute top-k token indices for sparse attention.
 
+        Exactly matches reference model.py lines 482-519 (Indexer.forward).
+
         Args:
             hidden_states: [batch_size, seq_len, hidden_size]
             q_compressed: [batch_size, seq_len, q_lora_rank] - compressed Q from main attention
-            freqs_cis: Complex RoPE frequencies [batch_size, seq_len, rope_dim // 2]
+            freqs_cis: Complex RoPE frequencies [seq_len, rope_dim // 2]
             attention_mask: Optional mask for causal attention
             k_cache: Optional cached keys from previous positions
 
         Returns:
             topk_indices: [batch_size, seq_len, topk] - indices of selected tokens
             k_states: [batch_size, seq_len, head_dim] - keys to cache
-
-        Reference: model.py:456-487
         """
         batch_size, seq_len, _ = hidden_states.shape
 
         # Project queries from compressed representation
+        # Reference: model.py lines 487-488
         q_states = self.wq_b(q_compressed)
         q_states = q_states.view(batch_size, seq_len, self.num_heads, self.head_dim)
 
-        # Split Q into RoPE and non-RoPE parts
-        # Reference: model.py:461 - q_pe, q_nope = torch.split(q, [rope_dim, head_dim - rope_dim])
+        # Split Q into RoPE and non-RoPE parts (note: rope FIRST, unlike main attention)
+        # Reference: model.py line 489
         q_pe = q_states[..., : self.qk_rope_head_dim]
         q_nope = q_states[..., self.qk_rope_head_dim :]
 
-        # Apply non-interleaved RoPE to Q
-        # Reference: model.py:463 - apply_rotary_emb(q_pe, freqs_cis, False)
-        # freqs_cis needs to be broadcast to [B, S, H, rope_dim // 2]
-        freqs_cis_expanded = freqs_cis.unsqueeze(2)  # [B, S, 1, rope_dim // 2]
-        q_pe = apply_rotary_pos_emb_non_interleaved(q_pe, freqs_cis_expanded)
-        q_states = torch.cat([q_pe, q_nope], dim=-1)
+        # Apply RoPE to Q (interleaved=False for indexer!)
+        # Reference: model.py lines 490-492
+        q_pe = apply_rotary_emb(q_pe, freqs_cis, interleaved=False)
 
         # Project and normalize keys (single-head)
-        # Reference: model.py:465-466
+        # Reference: model.py lines 493-494
         k_states = self.k_norm(self.wk(hidden_states))
 
         # Split K into RoPE and non-RoPE parts
+        # Reference: model.py line 495
         k_pe = k_states[..., : self.qk_rope_head_dim]
         k_nope = k_states[..., self.qk_rope_head_dim :]
 
-        # Apply non-interleaved RoPE to K (single-head, add head dimension temporarily)
-        # Reference: model.py:469 - apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis, False).squeeze(2)
-        k_pe = apply_rotary_pos_emb_non_interleaved(k_pe.unsqueeze(2), freqs_cis_expanded).squeeze(2)
+        # Apply RoPE to K (single-head, add head dim temporarily, interleaved=False)
+        # Reference: model.py lines 496-498
+        k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis, interleaved=False).squeeze(2)
+
+        # Combine rope and nope parts
+        # Reference: model.py lines 492, 498
+        q_states = torch.cat([q_pe, q_nope], dim=-1)
         k_states = torch.cat([k_pe, k_nope], dim=-1)
 
         # Apply Hadamard transform (optional optimization)
-        # Reference: model.py:471-472
         q_states = hadamard_transform_activation(q_states)
         k_states = hadamard_transform_activation(k_states)
 
@@ -822,12 +789,10 @@ class DeepseekV32Indexer(nn.Module):
             k_full = k_states
 
         # Compute head weights
-        # Reference: model.py:477 - weights = self.weights_proj(x.float()) * n_heads ** -0.5
         head_weights = F.linear(hidden_states.float(), self.weights_proj.weight.float()) * (self.num_heads**-0.5)
 
         # Compute attention scores: q @ k^T
         # q_states: [B, S, H, D], k_full: [B, T, D]
-        # Reference: model.py:479 (fp8_index does this internally)
         scores = torch.einsum("bshd,btd->bsht", q_states.float(), k_full.float()) * self.softmax_scale
 
         # Apply ReLU then head weights per formula: I_{t,s} = Σ_j w^I_{t,j} · ReLU(q^I_{t,j} · k^I_s)
@@ -843,7 +808,6 @@ class DeepseekV32Indexer(nn.Module):
             index_scores = index_scores + attention_mask
 
         # Select top-k
-        # Reference: model.py:482
         T = index_scores.shape[-1]
         topk = min(self.index_topk, T)
         topk_indices = index_scores.topk(topk, dim=-1).indices
@@ -925,9 +889,11 @@ class DeepseekV32Attention(nn.Module):
         """
         Forward pass for MLA attention with DSA.
 
+        Exactly matches reference model.py lines 594-661 (MLA.forward).
+
         Args:
             hidden_states: [batch_size, seq_len, hidden_size]
-            position_embeddings: freqs_cis from rotary embedding [batch_size, seq_len, rope_dim // 2]
+            position_embeddings: freqs_cis complex tensor [seq_len, rope_dim // 2]
             attention_mask: Causal mask [batch_size, 1, seq_len, total_len]
             past_key_value: KV cache
             output_attentions: Whether to output attention weights
@@ -937,45 +903,42 @@ class DeepseekV32Attention(nn.Module):
             attn_output: [batch_size, seq_len, hidden_size]
             attn_weights: Optional attention weights
             past_key_value: Updated cache
-
-        Reference: model.py:544-608 (MLA.forward)
         """
         batch_size, seq_len, _ = hidden_states.shape
         freqs_cis = position_embeddings
 
         # Q path: compress -> normalize -> project
-        # Reference: model.py:559-561
+        # Reference: model.py lines 609-611
         q_compressed = self.q_a_layernorm(self.q_a_proj(hidden_states))
         q_states = self.q_b_proj(q_compressed)
         q_states = q_states.view(batch_size, seq_len, self.num_heads, self.qk_head_dim)
 
         # Split Q into nope and rope parts
-        # Reference: model.py:562 - q_nope, q_pe = torch.split(q, [qk_nope_head_dim, qk_rope_head_dim])
+        # Reference: model.py line 612
         q_nope, q_pe = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-        # Apply RoPE to Q rope part (interleaved format)
-        # Reference: model.py:563 - q_pe = apply_rotary_emb(q_pe, freqs_cis)
-        freqs_cis_expanded = freqs_cis.unsqueeze(2)  # [B, S, 1, rope_dim // 2]
-        q_pe = apply_rotary_pos_emb_interleaved(q_pe, freqs_cis_expanded)
+        # Apply RoPE to Q (interleaved=True, default)
+        # Reference: model.py line 613
+        q_pe = apply_rotary_emb(q_pe, freqs_cis, interleaved=True)
 
         # KV path: project -> split -> normalize
-        # Reference: model.py:564-566
+        # Reference: model.py lines 614-616
         kv_all = self.kv_a_proj_with_mqa(hidden_states)
         kv_compressed, k_pe = torch.split(kv_all, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         kv_compressed = self.kv_a_layernorm(kv_compressed)
 
-        # Apply RoPE to K rope part (single-head, then broadcast)
-        # Reference: model.py:567 - k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis)
-        k_pe = apply_rotary_pos_emb_interleaved(k_pe.unsqueeze(2), freqs_cis_expanded)
+        # Apply RoPE to K (single-head, interleaved=True)
+        # Reference: model.py line 617
+        k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis, interleaved=True)
 
         # Project KV to full dimensions
-        # Reference: model.py:575-577
+        # Reference: model.py lines 625-627
         kv_proj = self.kv_b_proj(kv_compressed)
         kv_proj = kv_proj.view(batch_size, seq_len, self.num_heads, self.qk_nope_head_dim + self.v_head_dim)
         k_nope, v_states = torch.split(kv_proj, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         # Combine Q and K
-        # Reference: model.py:574, 578
+        # Reference: model.py lines 624, 628
         q_states = torch.cat([q_nope, q_pe], dim=-1)  # [B, S, H, qk_head_dim]
         k_states = torch.cat([k_nope, k_pe.expand(-1, -1, self.num_heads, -1)], dim=-1)  # [B, S, H, qk_head_dim]
 
@@ -986,12 +949,11 @@ class DeepseekV32Attention(nn.Module):
 
         # Update cache
         if past_key_value is not None:
-            # Cache stores (kv_compressed, k_rope) for efficient decode
             cache_kwargs = {"cache_position": cache_position}
             k_states, v_states = past_key_value.update(k_states, v_states, self.layer_idx, cache_kwargs)
 
         # Compute attention scores
-        # Reference: model.py:579
+        # Reference: model.py line 629
         attn_weights = torch.matmul(q_states.float(), k_states.float().transpose(-1, -2)) * self.softmax_scale
 
         # Apply causal mask
@@ -1000,32 +962,37 @@ class DeepseekV32Attention(nn.Module):
             attn_weights = attn_weights + causal_mask
 
         # Apply sparse attention via indexer (during prefill with full mask)
-        # Reference: model.py:582-585
+        # Reference: model.py lines 631-637
         if seq_len > 1:
             # Get top-k indices from indexer
             topk_indices, _ = self.indexer(
-                hidden_states, q_compressed, freqs_cis, attention_mask.squeeze(1) if attention_mask is not None else None
+                hidden_states,
+                q_compressed,
+                freqs_cis,
+                attention_mask.squeeze(1) if attention_mask is not None else None,
             )
 
             # Build sparse mask
-            # Reference: model.py:583-585
             index_mask = torch.full(
-                (batch_size, seq_len, k_states.shape[-2]), float("-inf"), device=hidden_states.device, dtype=attn_weights.dtype
+                (batch_size, seq_len, k_states.shape[-2]),
+                float("-inf"),
+                device=hidden_states.device,
+                dtype=attn_weights.dtype,
             )
             index_mask.scatter_(-1, topk_indices, 0.0)
             attn_weights = attn_weights + index_mask.unsqueeze(1)
 
         # Softmax and dropout
-        # Reference: model.py:587
+        # Reference: model.py line 639
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q_states.dtype)
         attn_weights = F.dropout(attn_weights, p=self.attention_dropout, training=self.training)
 
         # Compute output
-        # Reference: model.py:588
+        # Reference: model.py line 640
         attn_output = torch.matmul(attn_weights, v_states)
 
         # Reshape and project output
-        # Reference: model.py:606
+        # Reference: model.py line 660
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(batch_size, seq_len, -1)
         attn_output = self.o_proj(attn_output)
@@ -1090,7 +1057,7 @@ class DeepseekV32DecoderLayer(nn.Module):
             output_attentions: Whether to output attention weights
             use_cache: Whether to use KV cache
             cache_position: Cache position indices
-            position_embeddings: freqs_cis from rotary embedding [batch_size, seq_len, rope_dim // 2]
+            position_embeddings: freqs_cis complex tensor [seq_len, rope_dim // 2]
 
         Returns:
             hidden_states: Output hidden states
@@ -1244,9 +1211,7 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device
-            )
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
