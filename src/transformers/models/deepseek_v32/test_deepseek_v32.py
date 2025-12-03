@@ -523,9 +523,9 @@ def test_indexer_relu_order():
 
         with torch.no_grad():
             # Set weight projection to have one negative and one positive weight per position
-            indexer.weight_proj.weight.zero_()
-            indexer.weight_proj.weight[0, :] = -1.0  # Head 0: negative weight
-            indexer.weight_proj.weight[1, :] = 1.0   # Head 1: positive weight
+            indexer.weights_proj.weight.zero_()
+            indexer.weights_proj.weight[0, :] = -1.0  # Head 0: negative weight
+            indexer.weights_proj.weight[1, :] = 1.0   # Head 1: positive weight
 
         # Create simple test input
         batch_size, seq_len = 1, 4

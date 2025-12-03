@@ -864,6 +864,9 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    # Ignore MTP (Multi-Token Prediction) layer weights stored as layer 61 in checkpoint
+    # MTP is only used for speculative decoding, not needed for standard inference
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61\..*"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
