@@ -85,7 +85,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .modeling_flash_attention_utils import lazy_import_flash_attention
+from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
@@ -1765,11 +1765,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         applicable_attn_implementation = attn_implementation
 
         is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
-        actual_attn_impl = attn_implementation.split("|", 1)[1] if is_paged else attn_implementation
+        actual_attn_implementation = attn_implementation.split("|", 1)[1] if is_paged else attn_implementation
 
         # If FA not installed, do not fail but use kernels instead
-        requested_original_flash_attn = actual_attn_impl is not None and (
-            actual_attn_impl == "flash_attention_2" or actual_attn_impl == "flash_attention_3"
+        requested_original_flash_attn = actual_attn_implementation is not None and (
+            actual_attn_implementation == "flash_attention_2" or actual_attn_implementation == "flash_attention_3"
         )
         if (
             requested_original_flash_attn
@@ -1778,7 +1778,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            if actual_attn_impl.endswith("2"):
+            if actual_attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn2"
                 if is_torch_xpu_available():
                     # On XPU, kernels library is the native implementation
@@ -1787,10 +1787,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
+            if is_paged:
+                applicable_attn_implementation = f"paged|{applicable_attn_implementation}"
+
         if is_kernel(applicable_attn_implementation):
             try:
                 # preload flash attention here to allow compile with fullgraph
-                lazy_import_flash_attention(applicable_attn_implementation)
+                if is_paged:
+                    lazy_import_paged_flash_attention(applicable_attn_implementation)
+                else:
+                    lazy_import_flash_attention(applicable_attn_implementation)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -1801,7 +1807,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except Exception as e:
                 # raise the proper exception for requested flash attention
                 if requested_original_flash_attn:
-                    if actual_attn_impl.endswith("2"):
+                    if actual_attn_implementation.endswith("2"):
                         self._flash_attn_2_can_dispatch()
                     else:
                         self._flash_attn_3_can_dispatch()
