@@ -319,9 +319,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "VaultGemmaConfig": ["tie_word_embeddings"],
     "GemmaConfig": ["tie_word_embeddings"],
     "CsmConfig": ["tie_codebooks_embeddings"],
-	"LayoutXLMConfig": True,
+    "LayoutXLMConfig": True,
     "DeepseekV2Config": ["norm_topk_prob"],
-	"LwDetrConfig": [
+    "LwDetrConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
         "class_cost",
