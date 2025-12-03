@@ -725,6 +725,7 @@ class TorchAoSerializationTest(unittest.TestCase):
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
+
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
                 tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization
             )

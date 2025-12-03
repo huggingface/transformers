@@ -244,8 +244,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         # check if the param_name is not in self.modules_to_not_convert
         if any(key + "." in param_name or key == param_name for key in self.modules_to_not_convert):
             return False
-        elif any(param_name.endswith(f":{x}") for x in self.full_ao_keys):
-            return True
 
         # we only quantize the weight of nn.Linear and nn.Embedding
         module, tensor_name = get_module_from_name(model, param_name)
@@ -540,8 +538,17 @@ class TorchAoHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             return [
                 WeightConverter(
-                    source_patterns=["*_weight_*"],
-                    target_patterns="*weight",
+                    # TODO: incr flexibility by generalizing the source patterns to match the format of "_weight_"
+                    # note that the matching logic is greedy, so for ex, if _weight_scale is before _weight_scale_and_zero in this list, it will match _weight_scale always (this is incorrect)
+                    # thus, the order of source_patterns is intentional
+                    source_patterns=[
+                        "_weight_qdata",
+                        "_weight_scale_and_zero",
+                        "_weight_scale",
+                        "_weight_zero_point",
+                        "_weight_act_pre_scale",
+                    ],
+                    target_patterns="weight",
                     operations=[TorchAoDeserialize(self)],
                 ),
             ]

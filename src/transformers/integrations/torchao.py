@@ -215,6 +215,20 @@ class TorchAoDeserialize(ConversionOps):
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        """
+        Consolidates tensor subclass components before reconstructing the object
+
+        For example:
+            input_dict: {
+                "_weight_qdata": torch.Tensor,
+                "_weight_scale": torch.Tensor,
+            }
+            full_layer_name: "model.layers.0.self_attn.k_proj"
+
+            Given this, we reconstruct a Float8Tensor instance using the qdata and scale
+            and return it as a dictionary with the full_layer_name as the key and the recovered
+            Float8Tensor instance as the value.
+        """
         is_unsafe_serialization = "_weight_" not in list(input_dict.keys())[0]
 
         param_data = {}
