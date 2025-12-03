@@ -450,14 +450,25 @@ Hey how are you doing"""  # noqa: W293
 
             # Convert added_tokens list to added_tokens_decoder dict format
             # This matches the format used by from_pretrained() from tokenizer_config.json
-            tokenizer_from_extractor = self.tokenizer_class(
-                vocab=vocab_scores,
-                merges=merges,
-                do_lower_case=False,
-                keep_accents=True,
-                added_tokens_decoder=added_tokens_decoder,
-                **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
-            )
+            try:
+                tokenizer_from_extractor = self.tokenizer_class(
+                    vocab=vocab_scores,
+                    merges=merges,
+                    do_lower_case=False,
+                    keep_accents=True,
+                    added_tokens_decoder=added_tokens_decoder,
+                    **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
+                )
+            except TypeError:
+                # Fallback if vocab_scores not supported
+                tokenizer_from_extractor = self.tokenizer_class(
+                    vocab=vocab_ids,
+                    merges=merges,
+                    do_lower_case=False,
+                    keep_accents=True,
+                    added_tokens_decoder=added_tokens_decoder,
+                    **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
+                )
 
             return tokenizer_from_extractor
         except (TypeError, Exception):
