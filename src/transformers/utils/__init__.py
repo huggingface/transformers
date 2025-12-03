@@ -167,6 +167,7 @@ from .import_utils import (
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
+    is_numba_available,
     is_nltk_available,
     is_num2words_available,
     is_onnx_available,
