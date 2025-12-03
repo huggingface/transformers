@@ -1,7 +1,6 @@
 """Logging utilities for training CI tests."""
 
 import logging
-import re
 import sys
 
 logger = logging.getLogger()
@@ -32,16 +31,12 @@ class Colors:
     BRIGHT_CYAN = "\033[96m"
 
 
-# Regex to match numbers (integers, floats, percentages, with optional commas)
-NUMBER_PATTERN = re.compile(r'(\d[\d,]*\.?\d*%?|\d+\.?\d*[a-zA-Z]*)')
-
-
 class ColoredFormatter(logging.Formatter):
-    """Custom formatter that adds colors based on log level and highlights numbers."""
+    """Custom formatter that adds colors based on log level."""
 
     LEVEL_COLORS = {
         logging.DEBUG: Colors.DIM + Colors.CYAN,
-        logging.INFO: Colors.WHITE,  # Default white for INFO, numbers get green
+        logging.INFO: Colors.WHITE,
         logging.WARNING: Colors.BRIGHT_YELLOW,
         logging.ERROR: Colors.BRIGHT_RED,
         logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
@@ -50,14 +45,22 @@ class ColoredFormatter(logging.Formatter):
     def __init__(self, fmt: str = None, datefmt: str = None):
         super().__init__(fmt, datefmt)
 
-    def _highlight_numbers(self, text: str) -> str:
-        """Highlight numbers in green within the text."""
-        return NUMBER_PATTERN.sub(
-            f"{Colors.BRIGHT_GREEN}\\1{Colors.RESET}",
-            text
-        )
+    # Loggers that should be dimmed (less important/verbose)
+    DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
 
     def format(self, record: logging.LogRecord) -> str:
+        # Check if this logger should be dimmed
+        is_dimmed = record.name in self.DIMMED_LOGGERS
+
+        if is_dimmed:
+            # Dim the entire log line for httpx and similar
+            timestamp = self.formatTime(record, self.datefmt)
+            message = record.getMessage()
+            return (
+                f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - "
+                f"{message}{Colors.RESET}"
+            )
+
         # Get color for this level
         color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
 
@@ -71,16 +74,10 @@ class ColoredFormatter(logging.Formatter):
         # Color the logger name
         colored_name = f"{Colors.BLUE}{record.name}{Colors.RESET}"
 
-        # Get message and highlight numbers in green
+        # Get message (no number highlighting)
         message = record.getMessage()
-        if record.levelno == logging.INFO:
-            # For INFO: white text with green numbers
-            colored_message = self._highlight_numbers(message)
-        else:
-            # For other levels: use level color for entire message
-            colored_message = f"{color}{message}{Colors.RESET}"
 
-        return f"{colored_time} - {colored_name} - {colored_levelname} - {colored_message}"
+        return f"{colored_time} - {colored_name} - {colored_levelname} - {message}"
 
 
 def init_logger() -> None:
