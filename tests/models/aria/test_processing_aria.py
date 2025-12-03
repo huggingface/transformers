@@ -265,7 +265,7 @@ And who is that?<|im_end|>
             tokenize=True,
             return_dict=True,
             max_image_size=980,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
 
