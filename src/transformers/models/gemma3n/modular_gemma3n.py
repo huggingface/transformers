@@ -1881,6 +1881,10 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
     config: Gemma3nConfig
     input_modalities = ("image", "text", "audio")
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": Gemma3nTextDecoderLayer,
+        "attentions": Gemma3nTextAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
