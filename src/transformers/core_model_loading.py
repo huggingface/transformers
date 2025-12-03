@@ -433,6 +433,7 @@ class WeightTransform:
     source_patterns: Union[str, list[str]] = field(init=True)
     target_patterns: Union[str, list[str]] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
+    allow_recursive_renaming: bool = field(init=True, default=True)
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
@@ -492,18 +493,27 @@ class WeightTransform:
         match_object = self.compiled_sources.search(source_key)
         if match_object is None:
             return source_key, None
+
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
         if r"\1" in replacement:
             # The index of the internal group we need to replace is the index of the matched named group as it comes
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
         renamed_key = source_key.replace(match_object.group(0), replacement)
+
+        # If desired, renamings that result in recursive parts (e.g. `model.model`) can be disabled
+        # See `ernie4_5_vl` for a specific example that would result in `model <-> language_model` recursion
+        renamed_key_parts = renamed_key.split(".")
+        if not self.allow_recursive_renaming and any(
+            renamed_key_parts[i] == renamed_key_parts[i + 1] for i in range(len(renamed_key_parts) - 1)
+        ):
+            return source_key, None
 
         return renamed_key, source_pattern_that_matched
 

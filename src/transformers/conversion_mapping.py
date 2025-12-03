@@ -115,27 +115,27 @@ def _build_checkpoint_conversion_mapping():
         ],
         "ernie4_5_vl": [
             # vision
-            WeightRenaming("^vision_model", "model.vision_tower"),
+            WeightRenaming("vision_model", "vision_tower"),
             # resampler
-            WeightRenaming("resampler_model.spatial_linear.0", "resampler_model.spatial_linear.fc1"),
-            WeightRenaming("resampler_model.spatial_linear.2", "resampler_model.spatial_linear.fc2"),
-            WeightRenaming("resampler_model.spatial_linear.3", "resampler_model.spatial_linear.ln"),
-            WeightRenaming("resampler_model.temporal_linear.0", "resampler_model.temporal_linear.fc1"),
-            WeightRenaming("resampler_model.temporal_linear.2", "resampler_model.temporal_linear.fc2"),
-            WeightRenaming("resampler_model.temporal_linear.3", "resampler_model.temporal_linear.ln"),
+            WeightRenaming("spatial_linear.0", "spatial_linear.fc1"),
+            WeightRenaming("spatial_linear.2", "spatial_linear.fc2"),
+            WeightRenaming("spatial_linear.3", "spatial_linear.ln"),
+            WeightRenaming("temporal_linear.0", "temporal_linear.fc1"),
+            WeightRenaming("temporal_linear.2", "temporal_linear.fc2"),
+            WeightRenaming("temporal_linear.3", "temporal_linear.ln"),
             # language model
-            WeightRenaming("^model.norm", "model.language_model.norm"),
-            WeightRenaming("^model.embed_tokens", "model.language_model.embed_tokens"),
-            WeightRenaming("^model.layers", "model.language_model.layers"),
+            WeightRenaming("model.norm", "model.language_model.norm", allow_recursive_renaming=False),
+            WeightRenaming("embed_tokens", "language_model.embed_tokens", allow_recursive_renaming=False),
+            WeightRenaming("layers", "language_model.layers", allow_recursive_renaming=False),
             WeightConverter(
                 source_patterns="mlp.gate.weight_1",
                 target_patterns="mlp.vision_moe.gate.weight",
-                operations=[Transpose(dim0=0, dim1=1)]
+                operations=[Transpose(dim0=0, dim1=1)],
             ),
             WeightConverter(
                 source_patterns="mlp.gate.weight",
                 target_patterns="mlp.text_moe.gate.weight",
-                operations=[Transpose(dim0=0, dim1=1)]
+                operations=[Transpose(dim0=0, dim1=1)],
             ),
             WeightConverter(
                 source_patterns=["mlp.moe_statics.e_score_correction_bias"],
