@@ -1026,11 +1026,6 @@ def is_gptqmodel_available() -> bool:
 
 
 @lru_cache
-def is_eetq_available() -> bool:
-    return _is_package_available("eetq")
-
-
-@lru_cache
 def is_fbgemm_gpu_available() -> bool:
     return _is_package_available("fbgemm_gpu")
 
