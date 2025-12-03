@@ -18,7 +18,7 @@ import re
 
 import numpy as np
 
-from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin
 from ...utils import is_torch_available, is_torchaudio_available
 from ...utils.import_utils import requires
 
@@ -101,39 +101,89 @@ class YuEProcessor(ProcessorMixin):
         genre_tags=None,
         audio=None,
         return_tensors=None,
-        **kwargs: Unpack[YuEProcessorKwargs],
-    ):  # return_tensors="pt",
+        **kwargs,
+    ):
         output_kwargs = self._merge_kwargs(YuEProcessorKwargs, **kwargs)
+        text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
 
-        if lyrics_segments is None and text is None:
-            raise ValueError("Either `lyrics_segments` or `text` must be provided.")
+        batch_lyrics_segments, batch_genre_tags = self._normalize_inputs(text, lyrics_segments, genre_tags)
+        batch_main_prompts = [
+            self._build_main_prompt(segments, genres)
+            for segments, genres in zip(batch_lyrics_segments, batch_genre_tags)
+        ]
 
-        # TODO : I should check that passed text has [chorus] [verse] tokens
-        if lyrics_segments is None:
-            lyrics_segments = self._split_lyrics_into_segments(text)
-
-        # TODO : same thing check lyrics_segments has [chorus] [verse] tokens
-        full_lyrics = "\n".join(lyrics_segments)
-
-        main_prompt = f"""Generate music from the given lyrics segment by segment.
-                        [Genre] {genre_tags}
-                        {full_lyrics}"""
+        text_kwargs.pop("return_tensors", None)
 
         # tokenize main prompt with genre and full lyrics (this is head_ids)
-        head_prompt_ids = self.tokenizer(main_prompt, **output_kwargs["text_kwargs"])["input_ids"]
+        tokenizer_output = self.tokenizer(batch_main_prompts, **text_kwargs)
+        head_prompt_ids = tokenizer_output["input_ids"]
+        head_attention_mask = tokenizer_output["attention_mask"]
 
         if audio is not None and self.audio_tokenizer is not None:
             head_prompt_ids = self._process_audio_prompt(head_prompt_ids, audio, audio_kwargs)
 
-        # head_prompt_ids is used only in begenining tokenize each segment individually, they are used in the generation loop inside the stage 1 model
-        lyrics_segments_ids = [
-            self.tokenizer(segment, **output_kwargs["text_kwargs"])["input_ids"] for segment in lyrics_segments
-        ]
+        # batching segments so that lyrics_segments_ids shape is (batch_size, max_num_segments, max_segment_length)
+        # so that the stage 1 generation loop can iterate over lyrics_segments_ids[:, segment_idx, :]
+        # to support batched generation seamlessly
 
-        return BatchFeature(
-            {"head_prompt_ids": head_prompt_ids, "lyrics_segments_ids": lyrics_segments_ids}
-        )  # ,  tensor_type=None)
+        # max_num_segments is the max number of segments in the batch.
+        batch_size = len(batch_lyrics_segments)
+        max_num_segments = max(len(segment) for segment in batch_lyrics_segments)
+        segment_token_ids = []
+        max_segment_length = 0
+
+        for segment_position in range(max_num_segments):
+            # build the list of segment texts at this position for each sample
+            segments_at_position = []
+            for i in range(batch_size):
+                if segment_position < len(batch_lyrics_segments[i]):
+                    segments_at_position.append(batch_lyrics_segments[i][segment_position])
+                else:
+                    segments_at_position.append("")
+
+            tokenized = self.tokenizer(segments_at_position, **text_kwargs)
+            ids_per_batch = tokenized["input_ids"]
+
+            # making sure missing segments are represented as empty lists
+            for sample_idx, segment_text in enumerate(segments_at_position):
+                if not segment_text:
+                    ids_per_batch[sample_idx] = []
+
+            max_len_seg = max(len(ids) for ids in ids_per_batch) if ids_per_batch else 0
+            max_segment_length = max(max_segment_length, max_len_seg)
+            segment_token_ids.append(ids_per_batch)
+
+        # pad to (batch_size, max_num_segments, max_segment_length), missing segments have all pad
+        lyrics_segments_ids = []
+        lyrics_attention_mask = []
+
+        for batch_idx in range(batch_size):
+            sample_segment_ids = []
+            sample_segment_mask = []
+
+            for segment_idx in range(max_num_segments):
+                ids = segment_token_ids[segment_idx][batch_idx]
+                if not ids:
+                    # filling missing segments with padding values
+                    sample_segment_ids.append([self.tokenizer.pad_token_id] * max_segment_length)
+                    sample_segment_mask.append([0] * max_segment_length)
+                else:
+                    pad_len = max_segment_length - len(ids)
+                    sample_segment_ids.append(ids + [self.tokenizer.pad_token_id] * pad_len)
+                    sample_segment_mask.append([1] * len(ids) + [0] * pad_len)
+
+            lyrics_segments_ids.append(sample_segment_ids)
+            lyrics_attention_mask.append(sample_segment_mask)
+
+        data = {
+            "head_prompt_ids": torch.tensor(head_prompt_ids),
+            "head_attention_mask": torch.tensor(head_attention_mask),
+            "lyrics_segments_ids": torch.tensor(lyrics_segments_ids),
+            "lyrics_attention_mask": torch.tensor(lyrics_attention_mask),
+        }
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     @staticmethod
     def _split_lyrics_into_segments(lyrics):
@@ -142,6 +192,52 @@ class YuEProcessor(ProcessorMixin):
         segments = re.findall(pattern, lyrics, re.DOTALL)
         structured_lyrics = [f"[{seg[0]}]\n{seg[1].strip()}\n\n" for seg in segments]
         return structured_lyrics
+
+    @staticmethod
+    def _build_main_prompt(segments, genres):
+        genres = ", ".join(genres) if genres else ""
+        full_lyrics = "\n".join(segments)
+        return f"Generate music from the given lyrics segment by segment.\n[Genre] {genres}\n{full_lyrics}"
+
+    def _normalize_inputs(self, text, lyrics_segments, genre_tags):
+        if text is None and lyrics_segments is None:
+            raise ValueError("Either `lyrics_segments` or `text` must be provided.")
+
+        if text is not None:
+            if isinstance(text, str):
+                lyrics_segments = [self._split_lyrics_into_segments(text)]
+            elif isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text):
+                lyrics_segments = [self._split_lyrics_into_segments(t) for t in text]
+            else:
+                raise ValueError("Invalid input `text`. Please provide a string or a list of strings")
+
+        if lyrics_segments is not None:
+            if isinstance(lyrics_segments, list):
+                if isinstance(lyrics_segments[0], str):
+                    lyrics_segments = [lyrics_segments]
+
+                elif all(isinstance(segment_list, list) for segment_list in lyrics_segments):
+                    lyrics_segments = [list(segment_list) for segment_list in lyrics_segments]
+            else:
+                raise ValueError(
+                    "Invalid input lyrics_segments. Please provide a list of strings or a list of list of strings as batch"
+                )
+
+        if genre_tags is not None:
+            if isinstance(genre_tags, str):
+                genre_tags = [[genre_tags]]
+            elif isinstance(genre_tags, (list, tuple)) and all(isinstance(tag, str) for tag in genre_tags):
+                genre_tags = [list(genre_tags)]
+            elif isinstance(genre_tags, (list, tuple)) and all(
+                isinstance(tags, (list, tuple)) and all(isinstance(tag, str) for tag in tags) for tags in genre_tags
+            ):
+                genre_tags = [list(tags) for tags in genre_tags]
+        else:
+            raise ValueError(
+                "Please provide `genre_tags`, it must be str, a list of strings or a list of list of strings as batch"
+            )
+
+        return lyrics_segments, genre_tags
 
     def _process_audio_prompt(self, text_ids, audio, audio_kwargs):
         target_sample_rate = audio_kwargs.pop("sample_rate", None)
