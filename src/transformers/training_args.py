@@ -1261,9 +1261,7 @@ class TrainingArguments:
     )
     resume_from_checkpoint: str | None = field(
         default=None,
-        metadata={
-            "help": "The path to a folder with a valid checkpoint for your model."
-        },
+        metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
     hub_model_id: str | None = field(
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
