@@ -172,7 +172,7 @@ if __name__ == "__main__":
 
     # Model parameters
     parser.add_argument("--sliding-window", type=int, default=0)
-    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn2", help="Attention implementation")
+    parser.add_argument("--attn", type=str, default=None, help="Attention implementation")
 
     # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
@@ -196,6 +196,18 @@ if __name__ == "__main__":
     parser.add_argument("--output-file", type=str, default=None)
 
     args = parser.parse_args()
+
+    # Choose attention implementation
+    if args.attn is None:
+        if args.compile:
+            args.attn = "kernels-community/flash-attn3@fake-ops-return-probs"
+            logger.warning(
+                "No attention implementation was provided and compile is enabled. Using experimental kernel: "
+                "kernels-community/flash-attn3@fake-ops-return-probs because compile is not supported on main. Change "
+                "this when main supports it." # TODO: cf comment
+            )
+        else:
+            args.attn = "kernels-community/flash-attn3"
 
     # Create model
     model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
