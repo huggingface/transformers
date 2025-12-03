@@ -123,3 +123,31 @@ jobs:
         run: |
           python utils/check_copies.py --fix_and_overwrite
           echo "ok!"
+
+      - name: Commit and push changes
+        id: commit_and_push
+        env:
+          HEADREPOFULLNAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          HEADREF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
+          PRNUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          GITHUB_TOKEN: ${{ secrets.HF_STYLE_BOT_ACTION }}
+        run: |
+          echo "HEADREPOFULLNAME: $HEADREPOFULLNAME, HEADREF: $HEADREF"
+          # Configure git with the Actions bot user
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Make sure your 'origin' remote is set to the contributor's fork
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/$HEADREPOFULLNAME.git"
+
+          # If there are changes after running style/quality, commit them
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "Apply style fixes"
+            # Push to the original contributor's forked branch
+            git push origin HEAD:$HEADREF
+            echo "changes_pushed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes to commit."
+            echo "changes_pushed=false" >> $GITHUB_OUTPUT
+          fi
