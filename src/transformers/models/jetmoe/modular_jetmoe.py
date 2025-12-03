@@ -429,7 +429,7 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
     config: JetMoeConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -460,7 +460,7 @@ class JetMoeModel(MixtralModel):
         self._attn_implementation = config._attn_implementation
         self.norm = JetMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

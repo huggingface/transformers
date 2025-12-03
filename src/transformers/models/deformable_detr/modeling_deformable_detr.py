@@ -919,7 +919,7 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
     config: DeformableDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = [
         r"DeformableDetrConvEncoder",
@@ -1358,9 +1358,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             self.reference_points = nn.Linear(config.d_model, 2)
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
