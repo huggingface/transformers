@@ -234,8 +234,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        if "_weight_" in param_name:
-            return True
         if self.pre_quantized:
             return False
         if self.quantization_config.quant_type == "autoquant":

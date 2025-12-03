@@ -210,6 +210,7 @@ class TorchAoDeserialize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str] | None = None,
         model: Optional[torch.nn.Module] = None,
         full_layer_name: str | None = None,
         missing_keys=None,
@@ -223,13 +224,13 @@ class TorchAoDeserialize(ConversionOps):
                 "_weight_qdata": torch.Tensor,
                 "_weight_scale": torch.Tensor,
             }
-            full_layer_name: "model.layers.0.self_attn.k_proj"
+            full_layer_name: "model.layers.0.self_attn.k_proj.weight"
 
             Given this, we reconstruct a Float8Tensor instance using the qdata and scale
             and return it as a dictionary with the full_layer_name as the key and the recovered
             Float8Tensor instance as the value.
         """
-        is_unsafe_serialization = "_weight_" not in list(input_dict.keys())[0]
+        is_unsafe_serialization = list(input_dict.keys())[0] not in source_patterns
 
         param_data = {}
         layer_name = ".".join(full_layer_name.split(".")[:-1])
@@ -240,7 +241,10 @@ class TorchAoDeserialize(ConversionOps):
                 weight = input_dict["weight"]
         else:
             for suffix in input_dict.keys():
-                assert len(input_dict[suffix]) == 1
+                if len(input_dict[suffix]) != 1:
+                    raise ValueError(
+                        f"Expected a single tensor for {suffix} but got {len(input_dict[suffix])} tensors instead"
+                    )
                 param_data[f"{layer_name}.{suffix}"] = input_dict[suffix][0]
 
         # If it's unsafe-serialized (i.e. not safetensors), no need for anything
