@@ -87,7 +87,7 @@ class TestOverfitTraining(unittest.TestCase):
         # Configuration
         # ============================================================
         model_name = "hf-internal-testing/tiny-random-Qwen2MoeForCausalLM"
-        total_steps = 200
+        total_steps = 250
         batch_size = 2
         learning_rate = 1e-3
         seq_length = 64
@@ -275,6 +275,39 @@ class TestOverfitTraining(unittest.TestCase):
         logger.info(f"  final_grad_norm: {final_grad_norm:.4f}")
         logger.info(f"  grad_norm_reduction: {grad_norm_reduction:.1f}%")
 
+        # ============================================================
+        # Generation Test
+        # ============================================================
+        logger.info("-" * 70)
+        logger.info(f"{Colors.BOLD}Testing generation{Colors.RESET}")
+
+        model.eval()
+        # Use first few tokens as prompt
+        prompt_tokens = tokenizer.encode(TRAINING_SENTENCE, add_special_tokens=False)[:1]
+        prompt_ids = torch.tensor([prompt_tokens], dtype=torch.long)
+        
+        logger.info(f"Prompt: {tokenizer.decode(prompt_tokens)!r}")
+        
+        with torch.no_grad():
+            generated_ids = model.generate(
+                prompt_ids,
+                max_new_tokens=len(tokenizer.encode(TRAINING_SENTENCE, add_special_tokens=False)) - len(prompt_tokens),
+                do_sample=False,
+                pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+            )
+        
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        
+        # Show comparison with colors
+        generation_matches = generated_text == TRAINING_SENTENCE
+        if generation_matches:
+            logger.info(f"Generated: {Colors.GREEN}{generated_text!r}{Colors.RESET}")
+            logger.info(f"Expected:  {Colors.GREEN}{TRAINING_SENTENCE!r}{Colors.RESET}")
+            logger.info(f"{Colors.GREEN}✓ Generation matches!{Colors.RESET}")
+        else:
+            logger.info(f"Generated: {Colors.RED}{generated_text!r}{Colors.RESET}")
+            logger.info(f"Expected:  {Colors.GREEN}{TRAINING_SENTENCE!r}{Colors.RESET}")
+            logger.info(f"{Colors.RED}✗ Generation mismatch!{Colors.RESET}")
 
         # ============================================================
         # Assertions
@@ -291,10 +324,17 @@ class TestOverfitTraining(unittest.TestCase):
 
         # Assert grad_norm decreased significantly
         self.assertLess(
-            final_grad_norm, initial_grad_norm * 0.02,
-            f"Expected grad_norm to decrease by at least 98%, got {grad_norm_reduction:.1f}%"
+            final_grad_norm, initial_grad_norm * 0.01,
+            f"Expected grad_norm to decrease by at least 99%, got {grad_norm_reduction:.1f}%"
         )
-        logger.info("✓ Grad norm decreased by more than 98%")
+        logger.info("✓ Grad norm decreased by more than 99%")
+
+        # Assert generation matches training sentence
+        self.assertEqual(
+            generated_text, TRAINING_SENTENCE,
+            f"Expected model to generate '{TRAINING_SENTENCE}', got '{generated_text}'"
+        )
+        logger.info("✓ Generated text matches training sentence")
 
 if __name__ == "__main__":
     init_logger()
