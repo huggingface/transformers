@@ -226,6 +226,12 @@ class DeepseekV32Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        # Ensure rope_scaling values are floats (config.json may have integers)
+        if rope_scaling is not None:
+            rope_scaling = dict(rope_scaling)  # Make a copy to avoid mutating input
+            for key in ("factor", "beta_fast", "beta_slow", "mscale", "mscale_all_dim"):
+                if key in rope_scaling and rope_scaling[key] is not None:
+                    rope_scaling[key] = float(rope_scaling[key])
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
