@@ -177,6 +177,15 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
         model.config.quantization_config = self.quantization_config
+    
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            self.remove_quantization_config(model)
+        # clean cache due to triton ops
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        elif torch.xpu.is_available():
+            torch.xpu.empty_cache()
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import FP8Linear
