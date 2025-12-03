@@ -68,6 +68,8 @@ jobs:
     name: Init Comment on PR
     runs-on: ubuntu-22.04
     needs: [get-pr-number, check-timestamps]
+    outputs:
+       comment_id: ${{ steps.init_comment.outputs.comment_id }}
     permissions:
       pull-requests: write
     steps:
@@ -154,3 +156,28 @@ jobs:
             echo "No changes to commit."
             echo "changes_pushed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Prepare final comment message
+        id: prepare_final_comment
+        run: |
+          if [ "${{ steps.commit_and_push.outputs.changes_pushed }}" = 'true' ]; then
+            echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
+          else
+            echo "final_comment=Repo. Consistency fix runs successfully without any file modified." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR
+        uses: actions/github-script@v6
+        env:
+          prNumber: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        with:
+          script: |
+            const prNumber = parseInt(process.env.prNumber, 10);
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ needs.init_comment_with_url.outputs.comment_id }},
+              body: `${{ steps.prepare_final_comment.outputs.final_comment }}`
+            });
