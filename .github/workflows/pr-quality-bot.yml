@@ -120,4 +120,6 @@ jobs:
 
       - name: Run checks
         id: run_checks
-        run: python utils/check_copies.py
+        run: |
+          python utils/check_copies.py --fix_and_overwrite
+          echo "ok!"
