@@ -192,6 +192,7 @@ jobs:
 
       - name: Prepare final comment message
         id: prepare_final_comment
+        if: needs.init_comment_with_url.result == 'success'
         run: |
           if [ "${{ needs.run-repo-consistency-checks.outputs.changes_detected }}" = 'true' ]; then
             echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
@@ -200,6 +201,7 @@ jobs:
           fi
 
       - name: Comment on PR
+        if: needs.init_comment_with_url.result == 'success'
         uses: actions/github-script@v6
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
