@@ -23,6 +23,7 @@ import importlib
 import inspect
 import json
 import logging
+import math
 import multiprocessing
 import os
 import re
@@ -4253,9 +4254,13 @@ class ExpectationUpdater(cst.CSTTransformer):
         elif isinstance(value, int):
             return cst.Integer(str(value))
         elif isinstance(value, float):
-            # Use repr() for float to get proper Python literal format
-            # This handles special cases like inf, -inf, nan correctly
-            return cst.parse_expression(repr(value))
+            # Round to 4 decimal places (1e-4 precision) for cleaner output
+            # Keep special values (inf, -inf, nan) as-is
+            if math.isnan(value) or math.isinf(value):
+                return cst.parse_expression(repr(value))
+            else:
+                rounded = round(value, 4)
+                return cst.parse_expression(repr(rounded))
         elif isinstance(value, list):
             return self._list_to_cst(value)
         elif isinstance(value, dict):

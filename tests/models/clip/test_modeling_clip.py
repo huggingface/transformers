@@ -699,7 +699,7 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
         actual_logits = outputs.logits_per_image.detach().cpu()
 
-        expected_logits = torch.tensor([[24.570053100585938, 19.304885864257812]])  # fmt: off
+        expected_logits = torch.tensor([[24.5701, 19.3049]])  # fmt: off
 
         torch.testing.assert_close(actual_logits, expected_logits, rtol=1e-3, atol=1e-3)
 
@@ -735,6 +735,6 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
         actual_slice = outputs.vision_model_output.last_hidden_state[0, :3, :3].detach().cpu()
 
-        expected_slice = torch.tensor([[-0.15380290150642395, 0.0321517139673233, -0.32353174686431885], [0.2893178462982178, 0.11354223638772964, -0.5707830190658569], [0.046103253960609436, 0.15403859317302704, -0.6017531156539917]])  # fmt: off
+        expected_slice = torch.tensor([[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.154, -0.6018]])  # fmt: off
 
         torch.testing.assert_close(actual_slice, expected_slice, rtol=6e-3, atol=4e-4)
