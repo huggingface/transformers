@@ -598,4 +598,4 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         return VibeVoiceAcousticTokenizerDecoderOutput(audio=audio, padding_cache=padding_cache)
 
 
-__all__ = ["VibeVoiceAcousticTokenizerModel"]
+__all__ = ["VibeVoiceAcousticTokenizerModel", "VibeVoiceAcousticTokenizerPreTrainedModel"]

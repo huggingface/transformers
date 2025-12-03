@@ -392,4 +392,8 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceSemanticTokenizerModel):
         )
 
 
-__all__ = ["VibeVoiceAcousticTokenizerConfig", "VibeVoiceAcousticTokenizerModel"]
+__all__ = [
+    "VibeVoiceAcousticTokenizerConfig",
+    "VibeVoiceAcousticTokenizerModel",
+    "VibeVoiceAcousticTokenizerPreTrainedModel",
+]

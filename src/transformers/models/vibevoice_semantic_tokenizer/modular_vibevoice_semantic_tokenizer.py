@@ -372,4 +372,4 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel)
         return self.encode(audio, padding_cache=padding_cache, use_cache=use_cache)
 
 
-__all__ = ["VibeVoiceSemanticTokenizerModel"]
+__all__ = ["VibeVoiceSemanticTokenizerModel", "VibeVoiceSemanticTokenizerPreTrainedModel"]
