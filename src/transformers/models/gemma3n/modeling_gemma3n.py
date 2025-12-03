@@ -39,12 +39,10 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -1379,8 +1377,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -1390,14 +1386,12 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         active_prediction_normed = self.input_layernorm(active_prediction)
         laurel_output = self.laurel(active_prediction_normed)
 
-        attn, self_attn_weights = self.self_attn(
+        attn, _ = self.self_attn(
             hidden_states=active_prediction_normed,
             attention_mask=attention_mask,
             position_ids=position_ids,
             position_embeddings=position_embeddings,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1426,12 +1420,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         first_prediction = self.post_per_layer_input_norm(first_prediction)
         corrected_predictions[1:] += first_prediction
 
-        outputs = (corrected_predictions,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return corrected_predictions
 
 
 class Gemma3nMLP(nn.Module):
@@ -1741,7 +1730,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1752,8 +1741,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -1761,20 +1748,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         per_layer_inputs (torch.Tensor, *optional*, defaults to None):
             Pre-computed per-layer embeddings. If None, they are derived from input_ids if provided.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1782,16 +1757,12 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         per_layer_inputs = self.project_per_layer_inputs(inputs_embeds, per_layer_inputs)
 
-        if use_cache and past_key_values is None and not self.training:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
-            )
+            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
@@ -1835,38 +1806,20 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
             causal_mask = causal_mask_mapping[decoder_layer.attention_type]
             per_layer_input = per_layer_inputs[:, :, decoder_layer.layer_idx, :]
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings[decoder_layer.attention_type],
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-        # add hidden states from the last decoder layer (but before reprojecting to stay consistent with layer output)
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         # Per-layer inputs to single output
         target_magnitude = torch.mean(hidden_states[0] ** 2, dim=-1, keepdim=True) ** 0.5
@@ -1887,8 +1840,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
     def get_per_layer_inputs(self, input_ids: torch.LongTensor) -> torch.Tensor:

@@ -489,7 +489,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             batch_size, seq_length = inputs_embeds.shape[:2]
 
         # Handle past_key_values and cache setup
-        if use_cache and past_key_values is None and not self.training:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
@@ -527,13 +527,12 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
                 past_key_values=past_key_values,
-                use_cache=use_cache,
                 cache_position=cache_position,
                 position_ids=position_ids,
                 **kwargs,
