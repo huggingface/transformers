@@ -848,6 +848,12 @@ class AwqConfig(GPTQConfig):
                 f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.GEMV_FAST] - not recognized version {self.format}"
             )
 
+        if self.backend not in AwqBackend.__members__.values():
+            raise ValueError(
+                f"Invalid backend '{self.backend}'. Must be one of: "
+                f"{[b.value for b in AwqBackend]}"
+            )
+
         if self.backend == AwqBackend.LLMAWQ:
             # Only cuda device can run this function
             if not (torch.cuda.is_available() or torch.xpu.is_available()):
@@ -866,6 +872,7 @@ class AwqConfig(GPTQConfig):
 
     def to_dict(self) -> dict[str, Any]:
         config_dict = super().to_dict()
+        config_dict.pop("checkpoint_format")
         # Compatible with legacy field: version
         config_dict["version"] = self.format
         return config_dict

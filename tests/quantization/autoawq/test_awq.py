@@ -16,8 +16,6 @@ import gc
 import tempfile
 import unittest
 
-from gptqmodel import BACKEND
-
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -27,10 +25,10 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
-    torch_device,
+    torch_device, get_device_properties,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
-
+from transformers.utils.quantization_config import AwqBackend
 
 if is_torch_available():
     import torch
@@ -41,38 +39,39 @@ if is_accelerate_available():
 
 @require_torch_accelerator
 class AwqConfigTest(unittest.TestCase):
-    # def test_wrong_backend(self):
-    #     """
-    #     Simple test that checks if a user passes a wrong backend an error is raised
-    #     """
-    #     # This should work fine
-    #     _ = AwqConfig(bits=4)
-    #
-    #     with self.assertRaises(ValueError):
-    #         AwqConfig(bits=4, backend="")
-    #
-    #     # These should work fine
-    #     _ = AwqConfig(bits=4, version="GEMM")
-    #     _ = AwqConfig(bits=4, version="gemm")
-    #
-    #     with self.assertRaises(ValueError):
-    #         AwqConfig(bits=4, backend="unexisting-backend")
-    #
-    #     # Only cuda and xpu devices can run this function
-    #     support_llm_awq = False
-    #     device_type, major, _ = get_device_properties()
-    #     if device_type == "cuda" and major >= 8:
-    #         support_llm_awq = True
-    #     elif device_type == "xpu":
-    #         support_llm_awq = True
-    #
-    #     if support_llm_awq:
-    #         # LLMAWQ should work on an A100
-    #         AwqConfig(bits=4, backend="llm-awq")
-    #     else:
-    #         # LLMAWQ does not work on a T4
-    #         with self.assertRaises(ValueError):
-    #             AwqConfig(bits=4, backend="llm-awq")
+
+    def test_wrong_backend(self):
+        """
+        Simple test that checks if a user passes a wrong backend an error is raised
+        """
+        # This should work fine
+        _ = AwqConfig(bits=4)
+
+        with self.assertRaises(ValueError):
+            AwqConfig(bits=4, backend="")
+
+        # These should work fine
+        _ = AwqConfig(bits=4, version="GEMM")
+        _ = AwqConfig(bits=4, version="gemm")
+
+        with self.assertRaises(ValueError):
+            AwqConfig(bits=4, backend="unexisting-backend")
+
+        # Only cuda and xpu devices can run this function
+        support_llm_awq = False
+        device_type, major, _ = get_device_properties()
+        if device_type == "cuda" and major >= 8:
+            support_llm_awq = True
+        elif device_type == "xpu":
+            support_llm_awq = True
+
+        if support_llm_awq:
+            # LLMAWQ should work on an A100
+            AwqConfig(bits=4, backend="llm-awq")
+        else:
+            # LLMAWQ does not work on a T4
+            with self.assertRaises(ValueError):
+                AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):
         """
@@ -82,13 +81,18 @@ class AwqConfigTest(unittest.TestCase):
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:
-            self.assertEqual(getattr(quantization_config, key), config_to_dict[key])
+            if key == "version":
+                # "version" is legacy filed.
+                # It will be written in to_dict() for compatibility, but AwqConfig will not have this field.
+                self.assertFalse(hasattr(quantization_config, key))
+            else:
+                self.assertEqual(getattr(quantization_config, key), config_to_dict[key])
 
     def test_from_dict(self):
         """
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
-        dict = {"bits": 2, "zero_point": False, "backend": "autoawq"}
+        dict = {"bits": 2, "zero_point": False, "backend": "auto"}
         quantization_config = AwqConfig.from_dict(dict)
 
         self.assertEqual(dict["bits"], quantization_config.bits)
@@ -220,7 +224,7 @@ class AwqTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        quantization_config = AwqConfig(backend=BACKEND.EXLLAMA_V1)
+        quantization_config = AwqConfig(backend=AwqBackend.EXLLAMA_V1)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, quantization_config=quantization_config, device_map=torch_device
         )
@@ -305,28 +309,28 @@ class AwqScaleTest(unittest.TestCase):
         self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
 
 
-# @slow
-# @require_gptqmodel
-# @require_accelerate
-# class AwqIPEXTest(unittest.TestCase):
-#     def test_quantized_model_ipex(self):
-#         """
-#         Simple test that checks if the quantized model is working properly with ipex backend
-#         """
-#         quantization_config = AwqConfig(version="ipex")
-#
-#         model = AutoModelForCausalLM.from_pretrained(
-#             "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
-#             quantization_config=quantization_config,
-#             device_map="cpu",
-#         )
-#         tokenizer = AutoTokenizer.from_pretrained("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ")
-#         input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
-#         pad_token_id = tokenizer.eos_token_id
-#         output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=pad_token_id)
-#         print(tokenizer.decode(output[0], skip_special_tokens=True))
-#
-#         expected_output = (
-#             "How to make a cake with a round tin?\nHow to make a cake with a round tin?\n1. Preheat the oven to 180°"
-#         )
-#         self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
+@slow
+@require_gptqmodel
+@require_accelerate
+class AwqTorchFusedTest(unittest.TestCase):
+    def test_quantized_model_torch_fused(self):
+        """
+        Simple test that checks if the quantized model is working properly with torch_fused backend
+        """
+        quantization_config = AwqConfig(backend=AwqBackend.TORCH_FUSED_AWQ)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
+            quantization_config=quantization_config,
+            device_map="cpu",
+        )
+        tokenizer = AutoTokenizer.from_pretrained("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ")
+        input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
+        pad_token_id = tokenizer.eos_token_id
+        output = model.generate(input_ids, do_sample=False, max_length=20, pad_token_id=pad_token_id)
+        print(tokenizer.decode(output[0], skip_special_tokens=True))
+
+        expected_output = (
+            "How to make a cake with a round tin?\nHow to make a cake with a round tin?\n1. Preheat the oven to 180°"
+        )
+        self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), expected_output)

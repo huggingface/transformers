@@ -108,6 +108,7 @@ def replace_with_awq_linear(
             zero_point=quantization_config.zero_point,
             pack=False,
         )
+        print("target_cls", quantization_config.backend, target_cls)
     else:
         from awq.quantize.qmodule import WQLinear
 
