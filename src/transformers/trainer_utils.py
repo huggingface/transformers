@@ -924,7 +924,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     shard_files = list(set(index["weight_map"].values()))
 
     # If strict=True, error before loading any of the state dicts.
-    # TODO: Here, update the weigth map with the config.dynamic_weight_conversion
+    # TODO: Here, update the weight map with the config.dynamic_weight_conversion
     loaded_keys = index["weight_map"].keys()
     model_keys = model.state_dict().keys()
     missing_keys = [key for key in model_keys if key not in loaded_keys]
