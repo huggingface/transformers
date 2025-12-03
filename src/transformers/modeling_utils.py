@@ -1765,11 +1765,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         applicable_attn_implementation = attn_implementation
 
         is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
-        actual_attn_implementation = attn_implementation.split("|", 1)[1] if is_paged else attn_implementation
 
         # If FA not installed, do not fail but use kernels instead
-        requested_original_flash_attn = actual_attn_implementation is not None and (
-            actual_attn_implementation == "flash_attention_2" or actual_attn_implementation == "flash_attention_3"
+        requested_original_flash_attn = attn_implementation is not None and (
+            attn_implementation.removeprefix("paged|") == "flash_attention_2" or attn_implementation.removeprefix("paged|") == "flash_attention_3"
         )
         if (
             requested_original_flash_attn
@@ -1778,7 +1777,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            if actual_attn_implementation.endswith("2"):
+            if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn2"
                 if is_torch_xpu_available():
                     # On XPU, kernels library is the native implementation
@@ -1807,7 +1806,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except Exception as e:
                 # raise the proper exception for requested flash attention
                 if requested_original_flash_attn:
-                    if actual_attn_implementation.endswith("2"):
+                    if attn_implementation.endswith("2"):
                         self._flash_attn_2_can_dispatch()
                     else:
                         self._flash_attn_3_can_dispatch()
