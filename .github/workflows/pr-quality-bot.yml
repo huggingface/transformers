@@ -126,6 +126,8 @@ jobs:
 
       - name: Commit and push changes
         id: commit_and_push
+        permissions:
+          pull-requests: write
         env:
           HEADREPOFULLNAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
           HEADREF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
