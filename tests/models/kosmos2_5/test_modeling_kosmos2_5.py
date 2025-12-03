@@ -533,13 +533,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def run_example(self, prompt, image, model, processor):
         inputs = processor(text=prompt, images=image, return_tensors="pt")
@@ -662,7 +655,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         # Test 2: Markdown prompt
         prompt = "<md>"
         generated_ids, generated_text_md = self.run_example(prompt, image, model, processor)
-        # A10 gives the 1st one, but A100 gives the 2nd one - using assertIn for this variance
         expected_text_md = Expectations(
             {
                 ("cuda", None): ["- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n"],

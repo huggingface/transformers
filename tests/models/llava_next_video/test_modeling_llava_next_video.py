@@ -368,12 +368,11 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=40)
         decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
 
-        # Auto-updated when running with UPDATE_EXPECTATIONS=1
         expected_decoded_text = Expectations(
             {
                 ("cuda", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems",
                 ("xpu", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems",
-                ("rocm", (9, 5)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and adorable behavior of the young child. The child is seen reading a book, but instead of turning the pages like one would typically do, they",("cuda", (8, 6)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems"
+                ("rocm", (9, 5)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and adorable behavior of the young child. The child is seen reading a book, but instead of turning the pages like one would typically do, they",
             }).get_expectation()  # fmt: off
 
         self.assertEqual(decoded_text, expected_decoded_text)
@@ -397,7 +396,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         decoded_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        # Auto-updated when running with UPDATE_EXPECTATIONS=1
         expected_decoded_text = Expectations(
             {
                 ("xpu", None): ["USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a", "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a"],
@@ -434,7 +432,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
         decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
 
-        # Auto-updated when running with UPDATE_EXPECTATIONS=1
         expected_decoded_text = Expectations(
             {
                 ("xpu", None): 'USER: \nWhat is shown in this image? ASSISTANT: The image appears to be a graphical representation of a machine learning model\'s performance on a task, likely related to natural language processing or text understanding. It shows a scatter plot with two axes, one labeled "BLIP-2"',
