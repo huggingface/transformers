@@ -258,6 +258,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         cfg_scale = kwargs.pop("cfg_scale", None)
         n_diffusion_steps = kwargs.pop("n_diffusion_steps", None)
         monitor_progress = kwargs.pop("monitor_progress", None)
+        input_features = kwargs.pop("input_features", None)
+        input_features_mask = kwargs.pop("input_features_mask", None)
 
         # Call the base class method to load from default generation_config.json
         generation_config, model_kwargs = super()._prepare_generation_config(
@@ -308,6 +310,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         if not hasattr(generation_config, "n_diffusion_steps"):
             raise ValueError("n_diffusion_steps must be provided for VibeVoice generation.")
         generation_config.monitor_progress = monitor_progress
+        if input_features is not None:
+            model_kwargs["input_features"] = input_features
+        if input_features_mask is not None:
+            model_kwargs["input_features_mask"] = input_features_mask
 
         return generation_config, model_kwargs
 

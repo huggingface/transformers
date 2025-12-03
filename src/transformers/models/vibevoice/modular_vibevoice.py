@@ -278,10 +278,22 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
+        input_features_mask: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features, input_features_mask)
+
+            # replace text-audio token placeholders with audio embeddings
+            audio_token_mask = (input_ids == self.config.speech_diffusion_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
+
         return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
 
 
@@ -298,6 +310,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         super().__init__(config)
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        if not getattr(self.config.text_config, "tie_word_embeddings", False):
+            # Don't tie weights if the text config specifies not to, i.e. 7B model
+            self._tied_weights_keys = {}
         self.post_init()
 
     @property
@@ -352,10 +367,16 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, slice] = 0,
+        input_features: Optional[torch.FloatTensor] = None,
+        input_features_mask: Optional[torch.BoolTensor] = None,
         acoustic_loss_mask: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, VibeVoiceCausalLMOutputWithPast]:
         r"""
+        input_features (`torch.FloatTensor`, *optional*):
+                Input features for voice cloning or speech understanding.
+        input_features_mask (`torch.BoolTensor`, *optional*):
+            Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
             Mask to compute diffusion loss only on specific acoustic tokens. Diffusion loss calculation is not supported yet.
         """
@@ -363,6 +384,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         outputs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
             **kwargs,
         )
 

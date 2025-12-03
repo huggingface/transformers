@@ -27,14 +27,9 @@ from transformers import (
 )
 from transformers.audio_utils import load_audio_librosa
 from transformers.testing_utils import cleanup, is_torch_available, require_torch, slow, torch_device
-from transformers.utils.import_utils import is_datasets_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
-
-
-if is_datasets_available():
-    from huggingface_hub import snapshot_download
 
 
 if is_torch_available():
@@ -317,14 +312,11 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
         expected_encoder = torch.tensor(expected_results["encoder"]).to(dtype)
         expected_decoder = torch.tensor(expected_results["decoder"]).to(dtype)
 
-        # Download example files
-        example_files_repo = "bezzam/vibevoice_samples"
-        audio_fn = ["voices/en-Alice_woman.wav", "voices/en-Frank_man.wav"]
-        repo_dir = snapshot_download(
-            repo_id=example_files_repo,
-            repo_type="dataset",
-        )
-        audio_paths = [f"{repo_dir}/{fn}" for fn in audio_fn]
+        # Prepare inputs
+        audio_paths = [
+            "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+            "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+        ]
         audio_arrays = [load_audio_librosa(path, sampling_rate=self.sampling_rate) for path in audio_paths]
 
         # apply model and compare

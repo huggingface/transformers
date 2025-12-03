@@ -29,7 +29,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerModel`]. It is used to
     instantiate a VibeVoice acoustic tokenizer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    acoustic tokenizer of [VibeVoice-1.5B](https://hf.co/microsoft/VibeVoice-1.5B).
+    acoustic tokenizer of [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B).
 
     Args:
         channels (`int`, *optional*, defaults to 1):

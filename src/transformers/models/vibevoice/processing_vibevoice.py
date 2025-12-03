@@ -105,9 +105,16 @@ class VibeVoiceProcessor(ProcessorMixin):
         **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchFeature:
         """
+        Main method to process text inputs with optional voice samples.
+
+        This method processes text inputs (typically prepared by apply_chat_template) and optional voice samples for
+        voice cloning. It expands speech diffusion tokens based on the actual audio length.
+
         Args:
             text (`str`, `List[str]`):
                 The input text(s) to process, typically prepared by apply_chat_template with speech token placeholders.
+            audio (`List[Union[str, np.ndarray]]`, *optional*):
+                Audio samples for speaker voice cloning. Should match the number of speech token placeholders in text.
             **kwargs:
                 Additional keyword arguments passed to the tokenizer and feature extractor.
 
@@ -135,16 +142,56 @@ class VibeVoiceProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
+        n_audio_in_text = [sample.count(self.speech_diffusion_token) for sample in text]
 
-        data = {}
-        encoding = self.tokenizer(text, **text_kwargs)
-        data.update(encoding)
-
-        # Process audio if provided
+        n_audio = 0
         if audio is not None:
             audio = make_list_of_audio(audio)
-            audio_inputs = self.feature_extractor(audio, **audio_kwargs)
-            data.update(audio_inputs)
+            n_audio = len(audio)
+
+        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
+            if audio is None:
+                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
+            else:
+                raise ValueError(
+                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
+                    f"number of provided audios ({n_audio})."
+                )
+
+        data = {}
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+            data = self.feature_extractor(audio, **audio_kwargs)
+
+            # Create mask for audio tokenizer based on compression ratio
+            padding_masks = data["input_features_mask"]
+            speech_tok_compress_ratio = int(audio_kwargs["pad_to_multiple_of"])
+            num_audio_tokens_list = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
+            input_features_mask = torch.zeros((len(padding_masks), max(num_audio_tokens_list)), dtype=torch.bool)
+            for i, seq_len in enumerate(num_audio_tokens_list):
+                input_features_mask[i, :seq_len] = True
+            data["input_features_mask"] = input_features_mask
+
+            # expand the text to repeat the audio token for the corresponding number of frames
+            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
+            expanded_text = []
+            for sample in text:
+                replace_str = []
+                while self.speech_diffusion_token in sample:
+                    num_speech_tokens = num_audio_tokens_list_copy.pop(0)
+                    expanded_speech_token = self.speech_diffusion_token * num_speech_tokens
+
+                    replace_str.append(expanded_speech_token)
+                    sample = sample.replace(self.speech_diffusion_token, "<placeholder>", 1)
+
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
+                expanded_text.append(sample)
+
+            text = expanded_text
+
+        encoding = self.tokenizer(text, **text_kwargs)
+        data.update(encoding)
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

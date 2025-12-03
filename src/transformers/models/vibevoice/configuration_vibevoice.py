@@ -26,7 +26,7 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VibeVoiceDiffusionHead`]. It is used to instantiate a
     VibeVoice Diffusion Head according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the diffusion head of
-    [VibeVoice-1.5B](https://hf.co/microsoft/VibeVoice-1.5B).
+    [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -46,14 +46,6 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
             The activation function used by the diffusion head.
         frequency_embedding_size (`int`, *optional*, defaults to 256):
             The size of the frequency embedding.
-        ddpm_num_steps (`int`, *optional*, defaults to 1000):
-            The number of diffusion steps used during training.
-        prediction_type (`str`, *optional*, defaults to `"v_prediction"`):
-            The prediction type of the diffusion model. Default is `"v_prediction"`.
-        ddpm_num_inference_steps (`int`, *optional*, defaults to 20):
-            The number of diffusion steps used during inference.
-        ddpm_beta_schedule (`str`, *optional*, defaults to `"squaredcos_cap_v2"`):
-            The beta schedule used by the diffusion model.
 
     ```python
     >>> from transformers import VibeVoiceDiffusionHeadConfig, VibeVoiceDiffusionHead
@@ -79,10 +71,6 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         latent_size=64,
         hidden_act="silu",
         frequency_embedding_size=256,
-        ddpm_num_steps=1000,
-        prediction_type="v_prediction",
-        ddpm_num_inference_steps=20,
-        ddpm_beta_schedule="squaredcos_cap_v2",
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -90,10 +78,6 @@ class VibeVoiceDiffusionHeadConfig(PretrainedConfig):
         self.head_ffn_ratio = head_ffn_ratio
         self.rms_norm_eps = rms_norm_eps
         self.latent_size = latent_size
-        self.prediction_type = prediction_type
-        self.ddpm_num_steps = ddpm_num_steps
-        self.ddpm_num_inference_steps = ddpm_num_inference_steps
-        self.ddpm_beta_schedule = ddpm_beta_schedule
         self.hidden_act = hidden_act
         self.frequency_embedding_size = frequency_embedding_size
 
@@ -111,9 +95,7 @@ class VibeVoiceConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VibeVoiceForConditionalGeneration`]. It is used to instantiate an
     VibeVoice model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VibeVoice-1.5B.
-
-    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+    with the defaults similar to that of [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.

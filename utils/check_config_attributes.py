@@ -315,6 +315,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "CsmConfig": ["tie_codebooks_embeddings"],
     "LayoutXLMConfig": True,
     "DeepseekV2Config": ["norm_topk_prob"],
+    # used in generation
+    "VibeVoiceConfig": ["speech_diffusion_id", "speech_end_id", "speech_start_id"],
 }
 
 
