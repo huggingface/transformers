@@ -88,8 +88,6 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
-    - local: chat_response_parsing
-      title: Response parsing
     title: Chat with models
   - sections:
     - local: serving
@@ -384,6 +382,8 @@
     title: Main Classes
   - sections:
     - sections:
+      - local: model_doc/afmoe
+        title: AFMoE
       - local: model_doc/albert
         title: ALBERT
       - local: model_doc/apertus
@@ -596,6 +596,8 @@
         title: MiniMax
       - local: model_doc/ministral
         title: Ministral
+      - local: model_doc/ministral3
+        title: Ministral3
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
@@ -702,6 +704,8 @@
         title: T5
       - local: model_doc/t5gemma
         title: T5Gemma
+      - local: model_doc/t5gemma2
+        title: T5Gemma2
       - local: model_doc/t5v1.1
         title: T5v1.1
       - local: model_doc/ul2
@@ -1024,6 +1028,8 @@
         title: Emu3
       - local: model_doc/evolla
         title: Evolla
+      - local: model_doc/fast_vlm
+        title: FastVLM
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/florence2

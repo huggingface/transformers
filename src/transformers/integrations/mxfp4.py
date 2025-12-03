@@ -26,10 +26,9 @@ from ..core_model_loading import ConversionOps
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
-import re
 from contextlib import contextmanager
 
-from ..quantizers.quantizers_utils import get_module_from_name
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 
 
 logger = logging.get_logger(__name__)
@@ -436,15 +435,6 @@ def mlp_forward(self, hidden_states):
     return routed_out, router_logits
 
 
-def should_convert_module(current_key_name, patterns):
-    current_key_name_str = ".".join(current_key_name)
-    if not any(
-        re.match(f"{key}\\.", current_key_name_str) or re.match(f"{key}", current_key_name_str) for key in patterns
-    ):
-        return True
-    return False
-
-
 def dequantize(module, param_name, param_value, target_device, dq_param_name, **kwargs):
     from ..integrations.tensor_parallel import shard_and_distribute_module
 
@@ -604,70 +594,28 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
     )
 
 
-def _replace_with_mxfp4_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    has_been_replaced=False,
-    config=None,
-):
-    if current_key_name is None:
-        current_key_name = []
+def replace_with_mxfp4_linear(model, modules_to_not_convert=None, quantization_config=None):
+    if quantization_config.dequantize:
+        return model
 
-    for name, module in model.named_children():
-        current_key_name.append(name)
-        if not should_convert_module(current_key_name, modules_to_not_convert):
-            current_key_name.pop(-1)
+    from kernels import get_kernel
+
+    global triton_kernels_hub
+    triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
+
+    has_been_replaced = False
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
             with init_empty_weights():
-                model._modules[name] = Mxfp4GptOssExperts(config)
+                model.set_submodule(module_name, Mxfp4GptOssExperts(model.config))
                 has_been_replaced = True
         if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:
             from types import MethodType
 
             module.forward = MethodType(mlp_forward, module)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_mxfp4_linear(
-                module,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-                config=config,
-            )
-        current_key_name.pop(-1)
-    return model, has_been_replaced
 
-
-def replace_with_mxfp4_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    quantization_config=None,
-    config=None,
-):
-    if quantization_config.dequantize:
-        return model
-    else:
-        from kernels import get_kernel
-
-        global triton_kernels_hub
-        triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
-
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
-
-    if quantization_config.modules_to_not_convert is not None:
-        modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
-    modules_to_not_convert = list(set(modules_to_not_convert))
-    model, has_been_replaced = _replace_with_mxfp4_linear(
-        model,
-        modules_to_not_convert,
-        current_key_name,
-        quantization_config,
-        config=config,
-    )
     if not has_been_replaced:
         logger.warning(
             "You are loading your model using mixed-precision FP4 quantization but no linear modules were found in your model."
