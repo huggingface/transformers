@@ -75,7 +75,8 @@ class AwqQuantizer(HfQuantizer):
         )
 
         model, has_been_replaced = replace_with_awq_linear(
-            model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert
+            model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert,
+            device_map=kwargs.get("device_map", None),
         )
 
         model = replace_quantization_scales(model, model.config.model_type)
@@ -87,10 +88,9 @@ class AwqQuantizer(HfQuantizer):
             )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
-            from gptqmodel.utils.model import hf_gptqmodel_post_init
+        from gptqmodel.utils.model import hf_gptqmodel_post_init
 
-            model = hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
+        hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
     def is_serializable(self, safe_serialization=None):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:

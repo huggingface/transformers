@@ -864,12 +864,6 @@ class AwqConfig(GPTQConfig):
                 if major < 8:
                     raise ValueError("LLM-AWQ backend is only supported on CUDA GPUs with compute capability >= 8.0")
 
-    def get_loading_attributes(self):
-        attributes_dict = copy.deepcopy(self.__dict__)
-        loading_attributes = ["version"]
-        loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
-        return loading_attributes_dict
-
     def to_dict(self) -> dict[str, Any]:
         config_dict = super().to_dict()
         config_dict.pop("checkpoint_format")

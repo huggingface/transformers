@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
+from typing import Union, Optional
 
 from ..utils import is_gptqmodel_available, is_llm_awq_available, is_torch_available, logging
 from ..utils.quantization_config import (
@@ -61,6 +62,7 @@ def replace_with_awq_linear(
     quantization_config=None,
     current_key_name=None,
     has_been_replaced=False,
+    device_map: Optional[Union[str, dict]] = None,
 ) -> bool:
     """
     Public method that recursively replaces the Linear layers of the given model with AWQ quantized layers.
@@ -104,11 +106,11 @@ def replace_with_awq_linear(
             sym=False,
             format=quantization_config.format,
             backend=quantization_config.backend,
+            device_map=device_map,
             quant_method=METHOD.AWQ,
             zero_point=quantization_config.zero_point,
             pack=False,
         )
-        print("target_cls", quantization_config.backend, target_cls)
     else:
         from awq.quantize.qmodule import WQLinear
 
@@ -157,6 +159,7 @@ def replace_with_awq_linear(
                 current_key_name=current_key_name,
                 quantization_config=quantization_config,
                 has_been_replaced=has_been_replaced,
+                device_map=device_map,
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)

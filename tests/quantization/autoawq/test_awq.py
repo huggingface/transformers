@@ -224,7 +224,7 @@ class AwqTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        quantization_config = AwqConfig(backend=AwqBackend.EXLLAMA_V1)
+        quantization_config = AwqConfig(backend=AwqBackend.EXLLAMA_V2)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, quantization_config=quantization_config, device_map=torch_device
         )
