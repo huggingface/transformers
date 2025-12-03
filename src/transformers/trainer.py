@@ -2428,8 +2428,6 @@ class Trainer:
 
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
-            if hasattr(epoch_dataloader, "set_epoch"):
-                epoch_dataloader.set_epoch(epoch)
 
             steps_in_epoch = (
                 len(epoch_dataloader)
@@ -2445,14 +2443,14 @@ class Trainer:
             if epoch == epochs_trained and resume_from_checkpoint is not None:
                 if steps_trained_in_current_epoch > 0 and not args.ignore_data_skip:
                     epoch_dataloader = skip_first_batches(epoch_dataloader, steps_trained_in_current_epoch)
-                    if hasattr(epoch_dataloader, "set_epoch"):
-                        epoch_dataloader.set_epoch(epoch)
-
                     step = steps_trained_in_current_epoch - 1
                     rng_to_sync = True
                 elif steps_trained_in_current_epoch == 0:
                     self._load_rng_state(resume_from_checkpoint)
 
+            if hasattr(epoch_dataloader, "set_epoch"):
+                epoch_dataloader.set_epoch(epoch)
+            
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = steps_in_epoch % args.gradient_accumulation_steps
