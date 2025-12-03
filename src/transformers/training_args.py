@@ -2779,15 +2779,6 @@ class TrainingArguments:
 
             fsdp_plugin_args["sync_module_states"] = str_to_bool(sync_module_states)
 
-            # HF-to-plugin map
-            if (
-                "transformer_layer_cls_to_wrap" in self.fsdp_config
-                and "transformer_cls_names_to_wrap" not in fsdp_plugin_args
-            ):
-                fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
-                    self.fsdp_config["transformer_layer_cls_to_wrap"]
-                )
-
             # Pull allowed parameters from fsdp_config
             ALLOWED_FSDP_PARAMS = {f.name for f in fields(FullyShardedDataParallelPlugin)}
             for key in ALLOWED_FSDP_PARAMS:
