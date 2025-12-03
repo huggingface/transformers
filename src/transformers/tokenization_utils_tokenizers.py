@@ -110,7 +110,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["vocab"] = tokenizer_json.get("model", {}).get("vocab", None)
             if cls.model is None:
                 local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"])) # TODO just for now
-            if cls.model.__name__ == "Unigram":
+            elif cls.model.__name__ == "Unigram":
                 local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"]))
             elif cls.model.__name__ == "WordLevel":
                 local_kwargs["vocab"] = {token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
