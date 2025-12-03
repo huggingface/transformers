@@ -681,6 +681,7 @@ class DFineDecoder(DFinePreTrainedModel):
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
+        **kwargs,
     ) -> DFineDecoderOutput:
         r"""
         Args:

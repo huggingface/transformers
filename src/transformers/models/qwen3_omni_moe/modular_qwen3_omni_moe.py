@@ -1205,6 +1205,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
+        **kwargs,
     ):
         aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()

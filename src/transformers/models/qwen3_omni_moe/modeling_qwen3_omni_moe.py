@@ -716,6 +716,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
+        **kwargs,
     ):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
