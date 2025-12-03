@@ -100,7 +100,7 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         config.expert_interval = 1
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
         model = Ernie4_5_MoeForCausalLM(config)
         model.to(torch_device)
         model.eval()
