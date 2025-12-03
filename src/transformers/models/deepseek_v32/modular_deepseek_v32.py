@@ -13,12 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Optional, tuple
+from typing import Optional, Tuple, tuple
 
 import torch
 from torch import nn
 
-from ...cache_utils import Cache, DynamicLayer
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+# Optional dependency for Hadamard transform (used in indexer for efficiency)
+try:
+    from fast_hadamard_transform import hadamard_transform
+
+    _hadamard_available = True
+except ImportError:
+    hadamard_transform = None
+    _hadamard_available = False
+
+from ...cache_utils import Cache
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Attention,
@@ -27,29 +41,208 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2ForSequenceClassification,
     DeepseekV2MLP,
     DeepseekV2Model,
-    DeepseekV2MoE,
-    DeepseekV2MoEGate,
+    DeepseekV2Moe,
     DeepseekV2PreTrainedModel,
     DeepseekV2RMSNorm,
     DeepseekV2RotaryEmbedding,
-    apply_rotary_emb,
 )
 
 
+def apply_rotary_pos_emb(x, cos, sin, interleaved=True):
+    """Applies Rotary Position Embedding to a single tensor.
+
+    Args:
+        x: Input tensor of shape [..., dim]
+        cos: Cosine frequencies
+        sin: Sine frequencies
+        interleaved: If True, assumes x has interleaved real/imag pairs (default).
+                     If False, assumes first half is real, second half is imag.
+    """
+    dtype = x.dtype
+    shape = x.shape
+
+    if not interleaved:
+        # Non-interleaved: [r0, r1, ..., i0, i1, ...] -> rearrange for complex view
+        x = x.view(*shape[:-1], 2, -1).transpose(-1, -2).contiguous()
+
+    # Reshape x for complex view: [..., dim] -> [..., dim//2, 2]
+    x_complex = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
+    # Reshape cos/sin to match: [..., dim//2]
+    freqs = torch.complex(cos, sin)  # Create complex frequency tensor
+    # Apply rotation
+    x_rotated = x_complex * freqs
+    # Convert back to real
+    x_out = torch.view_as_real(x_rotated).flatten(-2)
+
+    if not interleaved:
+        # Convert back to non-interleaved format
+        x_out = torch.cat([x_out[..., 0::2], x_out[..., 1::2]], dim=-1)
+
+    return x_out.to(dtype)
+
+
+def act_quant_native(x: torch.Tensor, block_size: int = 128) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Quantize activations to FP8 with per-block scaling using native PyTorch.
+
+    This is a fallback implementation when tilelang kernels are not available.
+    Uses torch.float8_e4m3fn if available (PyTorch 2.1+).
+
+    Args:
+        x: Input tensor of shape [..., N] where N is divisible by block_size
+        block_size: Block size for computing scales (default: 128)
+    Returns:
+        Tuple of (quantized_tensor, scales)
+    """
+    # Check if FP8 is available in this PyTorch version
+    if not hasattr(torch, "float8_e4m3fn"):
+        # PyTorch version doesn't support FP8, return as-is with dummy scales
+        return x, torch.ones(*x.shape[:-1], x.shape[-1] // block_size, device=x.device, dtype=torch.float32)
+
+    original_shape = x.shape
+    N = x.shape[-1]
+    assert N % block_size == 0, f"Last dimension {N} must be divisible by block_size {block_size}"
+
+    # Reshape to [..., N//block_size, block_size]
+    x_blocked = x.view(*original_shape[:-1], N // block_size, block_size)
+
+    # Compute per-block max abs values for scaling
+    fp8_max = 448.0  # Max representable value in float8_e4m3
+    amax = x_blocked.abs().amax(dim=-1).clamp(min=1e-4)  # [..., N//block_size]
+    scales = amax / fp8_max  # [..., N//block_size]
+
+    # Quantize: divide by scale and clamp to FP8 range
+    x_scaled = x_blocked / scales.unsqueeze(-1)
+    x_clamped = x_scaled.clamp(-fp8_max, fp8_max)
+
+    # Cast to FP8
+    x_fp8 = x_clamped.to(torch.float8_e4m3fn).view(original_shape)
+
+    return x_fp8, scales
+
+
+def rotate_activation(x: torch.Tensor) -> torch.Tensor:
+    """Apply Hadamard transform to activations for efficient indexer computation.
+
+    This is an optional optimization used in DeepSeek V3.2's sparse attention indexer.
+    Requires the `fast_hadamard_transform` package. Falls back to identity if unavailable.
+
+    Args:
+        x: Input tensor of any shape, last dimension should be power of 2 for optimal perf.
+    Returns:
+        Hadamard-transformed tensor with same shape, scaled by hidden_size^-0.5
+    """
+    if not _hadamard_available:
+        # Fallback: skip Hadamard transform if library not installed
+        # This may slightly reduce indexer accuracy but allows the model to run
+        return x
+
+    hidden_size = x.size(-1)
+    # Hadamard transform expects bfloat16
+    original_dtype = x.dtype
+    if x.dtype != torch.bfloat16:
+        x = x.to(torch.bfloat16)
+    x = hadamard_transform(x, scale=hidden_size**-0.5)
+    return x.to(original_dtype)
+
+
 class DeepseekV32Config(DeepseekV2Config):
-    def __init__(self, index_n_heads=64, index_head_dim=128, index_topk=2048, **super_kwargs):
+    """DeepSeek V3.2 configuration extending V2 with sparse attention indexer parameters.
+
+    Additional args:
+        index_n_heads (`int`, defaults to 64):
+            Number of attention heads for the sparse attention indexer.
+        index_head_dim (`int`, defaults to 128):
+            Dimension of each indexer attention head.
+        index_topk (`int`, defaults to 2048):
+            Number of top-k tokens to select for sparse attention.
+        use_fp8_indexer (`bool`, defaults to False):
+            Whether to use FP8 quantization in the indexer for efficiency.
+            Note: Requires specialized kernels, currently not implemented in HuggingFace.
+    """
+
+    def __init__(self, index_n_heads=64, index_head_dim=128, index_topk=2048, use_fp8_indexer=False, **super_kwargs):
         super().__init__(**super_kwargs)
         self.index_n_heads = index_n_heads
         self.index_head_dim = index_head_dim
-        self.index_top_k = index_topk
+        self.index_top_k = index_topk  # Note: stored with underscore for consistency with generated config
+        self.use_fp8_indexer = use_fp8_indexer
+
+        if use_fp8_indexer:
+            logger.warning_once(
+                "FP8 indexer is requested but not fully implemented in HuggingFace transformers. "
+                "The indexer will run without FP8 quantization. For optimal performance, use the "
+                "reference DeepSeek implementation with custom tilelang kernels."
+            )
 
 
-class DeepseekV32MoEGate(DeepseekV2MoEGate):
-    pass
+class DeepseekV32Moe(DeepseekV2Moe):
+    """DeepSeek V3.2 MoE with sigmoid scoring and noaux_tc topk method support."""
 
+    def __init__(self, config):
+        super().__init__(config)
+        self.scoring_func = getattr(config, "scoring_func", "softmax")
+        # Add bias for specific model sizes (following reference implementation)
+        if config.hidden_size == 7168:
+            self.gate_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
+        else:
+            self.gate_bias = None
 
-class DeepseekV32MoE(DeepseekV2MoE):
-    pass
+    def route_tokens_to_experts(self, router_logits):
+        batch_size, seq_len, hidden_dim = router_logits.shape
+        router_logits = router_logits.view(-1, hidden_dim)
+
+        # Apply scoring function
+        if self.scoring_func == "softmax":
+            scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+        else:  # sigmoid
+            scores = router_logits.sigmoid()
+
+        original_scores = scores
+
+        # Apply bias if present
+        if self.gate_bias is not None:
+            scores = scores + self.gate_bias
+
+        # Expert selection based on topk_method
+        if self.topk_method == "greedy":
+            topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+        elif self.topk_method in ("group_limited_greedy", "noaux_tc"):
+            # Group-based selection
+            num_tokens = batch_size * seq_len
+            group_scores = scores.view(num_tokens, self.num_group, -1)
+
+            if self.gate_bias is None:
+                group_max = group_scores.amax(dim=-1)
+            else:
+                # Use top-2 sum for group scoring when bias is present
+                group_max = group_scores.topk(2, dim=-1)[0].sum(dim=-1)
+
+            group_idx = torch.topk(group_max, k=self.topk_group, dim=-1, sorted=False)[1]
+
+            # Create mask for selected groups
+            group_mask = torch.zeros_like(group_max, dtype=torch.bool)
+            group_mask.scatter_(1, group_idx, True)
+
+            # Apply mask to scores
+            scores_masked = scores.view(num_tokens, self.num_group, -1)
+            scores_masked = scores_masked.masked_fill(~group_mask.unsqueeze(-1), float("-inf"))
+            scores_masked = scores_masked.view(num_tokens, -1)
+
+            topk_weight, topk_idx = torch.topk(scores_masked, k=self.top_k, dim=-1, sorted=False)
+        else:
+            raise ValueError(f"Unknown topk_method: {self.topk_method}")
+
+        # Get weights from original scores (before bias)
+        topk_weight = original_scores.gather(1, topk_idx)
+
+        # Normalize weights for sigmoid scoring
+        if self.scoring_func == "sigmoid":
+            topk_weight = topk_weight / topk_weight.sum(dim=-1, keepdim=True)
+
+        topk_weight = topk_weight * self.routed_scaling_factor
+        topk_weight = torch.zeros_like(original_scores).scatter_(1, topk_idx, topk_weight)
+
+        return topk_idx, topk_weight
 
 
 class DeepseekV32MLP(DeepseekV2MLP):
@@ -70,12 +263,12 @@ class DeepseekV32Indexer(nn.Module):
         self.config = config
         self.layer_idx = index_layer_idx
 
-        self.hidden_size: int = config.dim
+        self.hidden_size: int = config.hidden_size
         self.num_heads: int = config.index_n_heads
         self.num_local_heads: int = config.index_n_heads  # world_size handling can be added as needed
         self.head_dim: int = config.index_head_dim
         self.qk_rope_head_dim: int = config.qk_rope_head_dim
-        self.index_topk: int = config.index_topk
+        self.index_topk: int = config.index_top_k
         self.q_lora_rank: int = config.q_lora_rank
 
         self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.head_dim, bias=False)
@@ -97,46 +290,48 @@ class DeepseekV32Indexer(nn.Module):
         B, S, _ = hidden_states.shape
         cos, sin = position_embeddings
 
-        # Queries
+        # Queries (use non-interleaved RoPE for indexer, following reference)
         q_states = self.q_b_proj(q_resid)  # [B, S, H*D]
         q_states = q_states.view(B, S, self.num_heads, self.head_dim)  # [B, S, H, D]
         q_rot, q_pass = torch.split(q_states, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        q_rot = apply_rotary_pos_emb(q_rot, cos, sin)  # [B, S, H, rope_D]
+        q_rot = apply_rotary_pos_emb(q_rot, cos, sin, interleaved=False)  # [B, S, H, rope_D]
         q_states = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
 
-        # Keys
+        # Keys (single-head for indexer, use non-interleaved RoPE)
         k = self.k_layernorm(self.k_proj(hidden_states))  # [B, S, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        # MLA uses single-head rope stream, then expands later; keep [B, 1, S, rope_D] here
-        k_rot = k_rot.unsqueeze(1)  # [B, 1, S, rope_D]
-        k_rot = apply_rotary_pos_emb(k_rot, cos, sin)  # [B, 1, S, rope_D]
-        k_states = torch.cat(
-            [
-                k_rot.expand(B, self.num_heads, S, -1),  # expand rope
-                k_pass.view(B, 1, S, -1).expand(B, self.num_heads, S, -1),
-            ],
-            dim=-1,
-        )  # [B, H, S, D]
+        k_rot = apply_rotary_pos_emb(k_rot.unsqueeze(2), cos, sin, interleaved=False).squeeze(2)  # [B, S, rope_D]
+        k_single = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, D]
 
-        # Quantize (per provided utilities)
-        # Update indexer cache (layer idx belongs to the attention layer using this indexer)
-        # We store as: keys = k_fp8 (as [B, 1, S, D] or [B, H, S, D]? We keep [B, 1, S, D] like original)
-        # For compactness, collapse heads to 1 for the indexer (you can keep H if your fp8_index expects it).
-        k_1h = k_states.mean(dim=1, keepdim=True)  # [B, 1, S, D]  (cheap head merge; adjust if needed)
-        past_key_values_index.update(k_1h, self.layer_idx, cache_kwargs={"cache_position": cache_position})
+        # Apply Hadamard transform for efficient indexer computation (optional optimization)
+        q_states = rotate_activation(q_states)
+        k_single = rotate_activation(k_single)
 
-        # Weights per head
+        # Update cache with single-head keys
+        past_key_values_index.update(
+            k_single.unsqueeze(1),  # [B, 1, S, D] for cache format
+            self.layer_idx,
+            cache_kwargs={"cache_position": cache_position}
+        )
+
+        # Head weights: [B, S, H]
         head_weights = self.weight_proj(hidden_states) * (self.num_heads**-0.5)  # [B, S, H]
-        head_weights = head_weights.unsqueeze(-1) * self.softmax_scale  # [B, S, H, *]
 
-        # Build score via provided kernel
-        k_cache_fp8, k_cache_scale = past_key_values_index[self.layer_idx]  # (keys, values)
+        # Get cached keys for full sequence
+        k_cache, _ = past_key_values_index[self.layer_idx]  # [B, 1, T, D]
+        k_cache = k_cache.squeeze(1)  # [B, T, D]
 
-        logits = torch.matmul(k_1h.unsqueeze(1), q_states.transpose(-1, -2))  # [B, M, N, H]
+        # Compute attention scores: q @ k^T
+        # q_states: [B, S, H, D], k_cache: [B, T, D]
+        # Expand k for multi-head: [B, T, D] -> [B, 1, T, D] -> broadcast with [B, S, H, D]
+        # scores[b,s,h,t] = q[b,s,h,:] @ k[b,t,:]
+        scores = torch.einsum("bshd,btd->bsht", q_states.float(), k_cache.float()) * self.softmax_scale
 
-        # ReLU and sum over heads -> [B, M, N]
-        logits.clamp_min_(0)
-        index_scores = logits.sum(dim=-1)  # [B, M, N]
+        # Apply head weights and ReLU, then sum over heads
+        # head_weights: [B, S, H] -> [B, S, H, 1] for broadcasting
+        scores = scores * head_weights.unsqueeze(-1)  # [B, S, H, T]
+        scores = torch.relu(scores)
+        index_scores = scores.sum(dim=2)  # [B, S, T]
 
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
@@ -153,10 +348,17 @@ class DeepseekV32Indexer(nn.Module):
 
 class DeepseekV32Attention(DeepseekV2Attention):
     def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
         self.softmax_scale = self.qk_head_dim**-0.5
-        if config.max_seq_len > config.original_seq_len:
-            mscale = 0.1 * config.mscale * math.log(config.rope_factor) + 1.0
-            self.softmax_scale = self.softmax_scale * mscale * mscale
+
+        # Apply YaRN mscale adjustment if using extended sequence length
+        rope_scaling = config.rope_scaling or {}
+        original_max_pos = rope_scaling.get("original_max_position_embeddings", config.max_position_embeddings)
+        if config.max_position_embeddings > original_max_pos:
+            mscale = rope_scaling.get("mscale", 1.0)
+            rope_factor = rope_scaling.get("factor", 1.0)
+            mscale_adjustment = 0.1 * mscale * math.log(rope_factor) + 1.0
+            self.softmax_scale = self.softmax_scale * mscale_adjustment * mscale_adjustment
 
         self.indexer = DeepseekV32Indexer(config, layer_idx)
 
@@ -226,7 +428,7 @@ class DeepseekV32Attention(DeepseekV2Attention):
 
             # Build scores: [B, H, S, S_total]
             # K layout already [B, H, T, D]
-            scores = (q_states.float() @ k_states.float().transpose(-1, -2)) * self.scaling  # [B, H, S, T]
+            scores = (q_states.float() @ k_states.float().transpose(-1, -2)) * self.softmax_scale  # [B, H, S, T]
 
             # Indexer top-k
             if past_key_values is not None:
@@ -274,7 +476,7 @@ class DeepseekV32Attention(DeepseekV2Attention):
             k_rot_only = pe_full.expand(B, self.num_heads, -1, -1)  # [B,H,T,rope_D]
             scores_rot = torch.matmul(q_rot_only.float(), k_rot_only.float().transpose(-1, -2))  # [B,H,S,T]
 
-            scores = (scores_nope + scores_rot) * self.scaling
+            scores = (scores_nope + scores_rot) * self.softmax_scale
 
             # Indexer top-k (decode)
             topk_idx = self.indexer(
