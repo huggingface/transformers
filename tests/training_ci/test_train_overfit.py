@@ -18,6 +18,7 @@ import gc
 import time
 import unittest
 
+import pytest
 import torch
 
 from transformers import AutoTokenizer, Qwen2MoeForCausalLM
@@ -61,6 +62,7 @@ def create_fixed_batch(
     return {"input_ids": input_ids, "labels": input_ids.clone()}
 
 
+@pytest.mark.training_ci
 @require_torch
 class TestOverfitTraining(unittest.TestCase):
     """Test training loop can overfit on a tiny dataset (CPU only)."""
