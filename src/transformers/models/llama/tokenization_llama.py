@@ -90,7 +90,6 @@ class LlamaTokenizer(TokenizersBackend):
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
     model = BPE
-
     def __init__(
         self,
         vocab: Optional[Union[str, dict, list]] = None,
@@ -116,9 +115,15 @@ class LlamaTokenizer(TokenizersBackend):
                 str(bos_token): 1,
                 str(eos_token): 2,
             }
+
         if merges is None:
-            filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-            self._merges = generate_merges(filtered_vocab)
+            if isinstance(self._vocab, dict):
+                filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
+                self._merges = generate_merges(filtered_vocab)
+            else:
+                self._merges = {}
+        else:
+            self._merges = merges
 
         self._tokenizer = Tokenizer(
             self.model(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)

@@ -97,20 +97,21 @@ class SentencePieceExtractor:
             m.ParseFromString(f.read())
         self.proto = m
 
-    def extract(self, **kwargs) -> tuple[dict[str, int], list[tuple]]:
+    def extract(self,model_type, **kwargs) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
         """
         self.proto.trainer_spec.unk_id
-
-        model_type = self.proto.trainer_spec.model_type
+        if model_type is None:
+            from tokenizers.model import BPE, Unigram
+            model_type = Unigram if self.proto.trainer_spec.model_type == 2 else BPE
         vocab = [(piece.piece, piece.score) for piece in self.proto.pieces]
 
-        if model_type == 1:
+        if model_type.__name__ != "BPE":
             kwargs["unk_id"] = self.proto.trainer_spec.unk_id
             kwargs["vocab"] = vocab
-        elif model_type == 2:
+        else:
             from .tokenization_utils_base import generate_merges
 
             vocab = {word: i for i, (word, score) in enumerate(vocab)}

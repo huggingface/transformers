@@ -37,7 +37,7 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = tokenizer_class.from_pretrained(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         return tokenizer
 

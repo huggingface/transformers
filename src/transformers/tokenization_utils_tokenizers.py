@@ -148,7 +148,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             try:
                 from .convert_slow_tokenizer import SentencePieceExtractor
 
-                local_kwargs = SentencePieceExtractor(vocab_file).extract(**local_kwargs)
+                local_kwargs = SentencePieceExtractor(vocab_file).extract(cls.model, **local_kwargs)
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
                     f"Could not extract SentencePiece model from {vocab_file} using sentencepiece library due to {e}. "
