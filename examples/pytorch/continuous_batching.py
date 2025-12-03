@@ -250,7 +250,8 @@ if __name__ == "__main__":
                 question = prefix + "\n\n" + question
         messages.append({"role": "user", "content": question})
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
-        batched_inputs.append(inputs["input_ids"])
+        inputs = inputs if isinstance(inputs, list) else inputs["input_ids"]
+        batched_inputs.append(inputs)
 
     # Prepare generation config
     generation_cfg = GenerationConfig(

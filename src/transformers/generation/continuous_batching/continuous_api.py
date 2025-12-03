@@ -818,7 +818,7 @@ class ContinuousBatchingManager:
         - (use_cuda_graph) which is the user choice
         - (num_q_padding_intervals) or (num_kv_padding_intervals) which is used to pad inputs: if it was specified by
             the user, it's probable they want to use cuda graphs so inputs need to be padded
-        - (compile_config): if the compile mode uses its own cudagraphs, we turn off cuda graphs on CB side
+        - (compile_config): if compile is on, turn on cuda graphs unless the compile mode uses its own cudagraphs
         If none of the above criteria are met, we use a default heuristic based on the attention implementation: we turn
         on cuda graphs if and only if no attention mask is needed.
         """
@@ -837,7 +837,7 @@ class ContinuousBatchingManager:
                     f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
                     "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
                 )
-                return False
+            return not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
         # Otherwise we have a default heuristic based on the attention implementation:
         # attention implementations where an attention mask is needed suffer a lot more from the padding associated
         # with cuda graphs, so default is to turn cuda graphs off for those implementations
