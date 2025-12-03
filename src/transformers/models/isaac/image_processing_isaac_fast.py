@@ -97,8 +97,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, PILImageResampling
 from ...processing_utils import Unpack
-from ...tokenization_utils import TensorType
-from ...utils import auto_docstring
+from ...utils import TensorType, auto_docstring
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
