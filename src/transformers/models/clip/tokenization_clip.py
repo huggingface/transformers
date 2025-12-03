@@ -19,6 +19,7 @@ from typing import Optional, Union
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
+from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -80,15 +81,13 @@ class CLIPTokenizer(TokenizersBackend):
             }
         )
 
-        if merges is not None:
-            _merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            _merges = []
+        if merges is None:
+            merges = generate_merges(_vocab)
 
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=_vocab,
-                merges=_merges,
+                merges=merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="</w>",
@@ -116,20 +115,10 @@ class CLIPTokenizer(TokenizersBackend):
 
         self._tokenizer.decoder = decoders.ByteLevel()
 
-        bos_token_id = _vocab.get(str(bos_token), 0)
-        eos_token_id = _vocab.get(str(eos_token), 1)
 
-        self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(eos_token), eos_token_id),
-            cls=(str(bos_token), bos_token_id),
-            add_prefix_space=False,
-            trim_offsets=False,
-        )
 
-        tokenizer_object = self._tokenizer
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -137,8 +126,12 @@ class CLIPTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        if hasattr(self, "_post_init"):
-            self._post_init()
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(str(eos_token), self.eos_token_id),
+            cls=(str(bos_token), self.bos_token_id),
+            add_prefix_space=False,
+            trim_offsets=False,
+        )
 
     def _post_init(self):
         super()._post_init()
