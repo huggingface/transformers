@@ -13,18 +13,6 @@ concurrency:
   cancel-in-progress: true
 permissions: read-all
 
-env:
-  HF_HOME: /mnt/cache
-  TRANSFORMERS_IS_CI: yes
-  OMP_NUM_THREADS: 8
-  MKL_NUM_THREADS: 8
-  RUN_SLOW: yes
-  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
-  # This token is created under the bot `hf-transformers-bot`.
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  TF_FORCE_GPU_ALLOW_GROWTH: true
-  CUDA_VISIBLE_DEVICES: 0,1
-
 
 jobs:
   get-pr-number:
@@ -170,7 +158,8 @@ jobs:
           # Apply the patch
           git apply consistency-fixes.patch
           
-          git add .
+          # Only add updates to tracked files (ignores new untracked files like the patch)
+          git add -u
           git commit -m "Apply repo. consistency fixes"
           git push origin HEAD:$HEADREF
 
