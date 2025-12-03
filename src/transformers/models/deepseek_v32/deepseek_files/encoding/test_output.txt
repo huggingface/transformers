@@ -1,0 +1,112 @@
+<｜begin▁of▁sentence｜>You are a helpful Assistant.
+
+## Tools
+
+You have access to a set of tools you can use to answer the user's question.
+You can invoke functions by writing a "<｜DSML｜function_calls>" block like the following as part of your reply to the user:
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="$FUNCTION_NAME">
+<｜DSML｜parameter name="$PARAMETER_NAME" string="true|false">$PARAMETER_VALUE</｜DSML｜parameter>
+...
+</｜DSML｜invoke>
+<｜DSML｜invoke name="$FUNCTION_NAME2">
+...
+</｜DSML｜invoke>
+</｜DSML｜function_calls>
+
+String and scalar parameters should be specified as is without any escaping or quotes, while lists and objects should use JSON format. The "string" attribute should be set to "true" for string type parameters and "false" for other types (numbers, booleans, arrays, objects).
+
+If the thinking_mode is enabled, then after function results you should strongly consider outputting a thinking block. Here is an example:
+
+<｜DSML｜function_calls>
+...
+</｜DSML｜function_calls>
+
+<function_results>
+...
+</function_results>
+
+<think>...thinking about results</think>
+
+Here are the functions available in JSONSchema format:
+<functions>
+{"name": "get_datetime", "description": "Get the current date and time", "parameters": {"type": "object", "properties": {"timezone": {"type": "string", "description": "The timezone, e.g. Asia/Shanghai, UTC"}}, "required": ["timezone"]}}
+{"name": "get_weather", "description": "Get the weather for a specific date and location", "parameters": {"type": "object", "properties": {"location": {"type": "string", "description": "The city name, e.g. Beijing, Hangzhou"}, "date": {"type": "string", "description": "The date in YYYY-MM-DD format"}}, "required": ["location", "date"]}}
+</functions>
+<｜User｜>明天杭州和北京的天气怎么样？<｜Assistant｜></think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="get_datetime">
+<｜DSML｜parameter name="timezone" string="true">Asia/Shanghai</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls><｜end▁of▁sentence｜>
+
+<function_results>
+<result>{"current_date": "2024-01-15", "current_time": "14:30:00", "timezone": "Asia/Shanghai"}</result>
+</function_results>
+
+</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="get_weather">
+<｜DSML｜parameter name="location" string="true">Hangzhou</｜DSML｜parameter>
+<｜DSML｜parameter name="date" string="true">2024-01-16</｜DSML｜parameter>
+</｜DSML｜invoke>
+<｜DSML｜invoke name="get_weather">
+<｜DSML｜parameter name="location" string="true">Beijing</｜DSML｜parameter>
+<｜DSML｜parameter name="date" string="true">2024-01-16</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls><｜end▁of▁sentence｜>
+
+<function_results>
+<result>{"location": "Hangzhou", "date": "2024-01-16", "temperature_high": "12", "temperature_low": "5", "weather": "多云", "humidity": "65%"}</result>
+<result>{"location": "Beijing", "date": "2024-01-16", "temperature_high": "-2", "temperature_low": "-8", "weather": "晴", "humidity": "30%"}</result>
+</function_results>
+
+</think>根据查询结果，明天（2024年1月16日）的天气情况如下：
+
+**杭州**：
+- 天气：多云
+- 最高温度：12°C
+- 最低温度：5°C
+- 湿度：65%
+
+**北京**：
+- 天气：晴
+- 最高温度：-2°C
+- 最低温度：-8°C
+- 湿度：30%
+
+杭州明天会比较温暖但有些多云，而北京会很冷但是晴天。建议在北京的朋友要注意保暖！<｜end▁of▁sentence｜><｜User｜>谢谢！那后天呢？<｜Assistant｜><think>用户现在问后天的天气，后天是2024-01-17，我可以直接查询（因为已知今天日期）🗓️</think>
+
+<｜DSML｜function_calls>
+<｜DSML｜invoke name="get_weather">
+<｜DSML｜parameter name="location" string="true">Hangzhou</｜DSML｜parameter>
+<｜DSML｜parameter name="date" string="true">2024-01-17</｜DSML｜parameter>
+</｜DSML｜invoke>
+<｜DSML｜invoke name="get_weather">
+<｜DSML｜parameter name="location" string="true">Beijing</｜DSML｜parameter>
+<｜DSML｜parameter name="date" string="true">2024-01-17</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜function_calls><｜end▁of▁sentence｜>
+
+<function_results>
+<result>{"location": "Hangzhou", "date": "2024-01-17", "temperature_high": "15", "temperature_low": "8", "weather": "小雨", "humidity": "80%"}</result>
+<result>{"location": "Beijing", "date": "2024-01-17", "temperature_high": "0", "temperature_low": "-6", "weather": "多云", "humidity": "45%"}</result>
+</function_results>
+
+<think>获取到后天的天气数据，整理回复给用户📝</think>后天（2024年1月17日）的天气情况：
+
+**杭州**：
+- 天气：小雨
+- 最高温度：15°C
+- 最低温度：8°C
+- 湿度：80%
+
+**北京**：
+- 天气：多云
+- 最高温度：0°C
+- 最低温度：-6°C
+- 湿度：45%
+
+杭州后天会有小雨，温度略有回升，记得带伞。北京会稍微暖和一点，但依然很冷，请继续做好保暖措施。<｜end▁of▁sentence｜>

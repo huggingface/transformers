@@ -1,0 +1,149 @@
+{
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_datetime",
+                "description": "Get the current date and time",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "timezone": {
+                            "type": "string",
+                            "description": "The timezone, e.g. Asia/Shanghai, UTC"
+                        }
+                    },
+                    "required": ["timezone"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a specific date and location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city name, e.g. Beijing, Hangzhou"
+                        },
+                        "date": {
+                            "type": "string",
+                            "description": "The date in YYYY-MM-DD format"
+                        }
+                    },
+                    "required": ["location", "date"]
+                }
+            }
+        }
+    ],
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are a helpful Assistant."
+        },
+        {
+            "role": "user",
+            "content": "明天杭州和北京的天气怎么样？"
+        },
+        {
+            "role": "assistant",
+            "reasoning_content": "用户询问明天的天气，我需要先获取当前日期来计算明天的日期📅",
+            "tool_calls": [
+                {
+                    "id": "call_xK9mN3pL2qR8vT5wY6hZ1aB4",
+                    "type": "function",
+                    "function": {
+                        "arguments": "{\"timezone\": \"Asia/Shanghai\"}",
+                        "name": "get_datetime"
+                    }
+                }
+            ]
+        },
+        {
+            "tool_call_id": "call_xK9mN3pL2qR8vT5wY6hZ1aB4",
+            "role": "tool",
+            "content": "{\"current_date\": \"2024-01-15\", \"current_time\": \"14:30:00\", \"timezone\": \"Asia/Shanghai\"}"
+        },
+        {
+            "role": "assistant",
+            "reasoning_content": "现在知道今天是2024-01-15，明天就是2024-01-16。接下来查询杭州和北京明天的天气🌤️",
+            "tool_calls": [
+                {
+                    "id": "call_bN7kR9mX3pQ2wL5vY8jZ4cD6",
+                    "type": "function",
+                    "function": {
+                        "arguments": "{\"location\": \"Hangzhou\", \"date\": \"2024-01-16\"}",
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "id": "call_dP9mL7kX5rT4yN3wZ2hV8eF1",
+                    "type": "function",
+                    "function": {
+                        "arguments": "{\"location\": \"Beijing\", \"date\": \"2024-01-16\"}",
+                        "name": "get_weather"
+                    }
+                }
+            ]
+        },
+        {
+            "tool_call_id": "call_bN7kR9mX3pQ2wL5vY8jZ4cD6",
+            "role": "tool",
+            "content": "{\"location\": \"Hangzhou\", \"date\": \"2024-01-16\", \"temperature_high\": \"12\", \"temperature_low\": \"5\", \"weather\": \"多云\", \"humidity\": \"65%\"}"
+        },
+        {
+            "tool_call_id": "call_dP9mL7kX5rT4yN3wZ2hV8eF1",
+            "role": "tool",
+            "content": "{\"location\": \"Beijing\", \"date\": \"2024-01-16\", \"temperature_high\": \"-2\", \"temperature_low\": \"-8\", \"weather\": \"晴\", \"humidity\": \"30%\"}"
+        },
+        {
+            "role": "assistant",
+            "reasoning_content": "已获取两个城市明天的天气信息，现在整理给用户✨",
+            "content": "根据查询结果，明天（2024年1月16日）的天气情况如下：\n\n**杭州**：\n- 天气：多云\n- 最高温度：12°C\n- 最低温度：5°C\n- 湿度：65%\n\n**北京**：\n- 天气：晴\n- 最高温度：-2°C\n- 最低温度：-8°C\n- 湿度：30%\n\n杭州明天会比较温暖但有些多云，而北京会很冷但是晴天。建议在北京的朋友要注意保暖！"
+        },
+        {
+            "role": "user",
+            "content": "谢谢！那后天呢？"
+        },
+        {
+            "role": "assistant",
+            "reasoning_content": "用户现在问后天的天气，后天是2024-01-17，我可以直接查询（因为已知今天日期）🗓️",
+            "tool_calls": [
+                {
+                    "id": "call_fR3nK8mV7pL4xT2yW9jB5gH3",
+                    "type": "function",
+                    "function": {
+                        "arguments": "{\"location\": \"Hangzhou\", \"date\": \"2024-01-17\"}",
+                        "name": "get_weather"
+                    }
+                },
+                {
+                    "id": "call_hT5pN2kY9rV6zL3wX1mD7jK8",
+                    "type": "function",
+                    "function": {
+                        "arguments": "{\"location\": \"Beijing\", \"date\": \"2024-01-17\"}",
+                        "name": "get_weather"
+                    }
+                }
+            ]
+        },
+        {
+            "tool_call_id": "call_fR3nK8mV7pL4xT2yW9jB5gH3",
+            "role": "tool",
+            "content": "{\"location\": \"Hangzhou\", \"date\": \"2024-01-17\", \"temperature_high\": \"15\", \"temperature_low\": \"8\", \"weather\": \"小雨\", \"humidity\": \"80%\"}"
+        },
+        {
+            "tool_call_id": "call_hT5pN2kY9rV6zL3wX1mD7jK8",
+            "role": "tool",
+            "content": "{\"location\": \"Beijing\", \"date\": \"2024-01-17\", \"temperature_high\": \"0\", \"temperature_low\": \"-6\", \"weather\": \"多云\", \"humidity\": \"45%\"}"
+        },
+        {
+            "role": "assistant",
+            "reasoning_content": "获取到后天的天气数据，整理回复给用户📝",
+            "content": "后天（2024年1月17日）的天气情况：\n\n**杭州**：\n- 天气：小雨\n- 最高温度：15°C\n- 最低温度：8°C\n- 湿度：80%\n\n**北京**：\n- 天气：多云\n- 最高温度：0°C\n- 最低温度：-6°C\n- 湿度：45%\n\n杭州后天会有小雨，温度略有回升，记得带伞。北京会稍微暖和一点，但依然很冷，请继续做好保暖措施。"
+        }
+    ]
+}
