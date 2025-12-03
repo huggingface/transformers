@@ -2,7 +2,7 @@ import argparse
 import os
 import re
 import subprocess
-from datetime import date
+from datetime import date, datetime
 
 from huggingface_hub import paper_info
 
@@ -176,9 +176,11 @@ def replace_paper_links(file_path: str) -> bool:
     return False
 
 
-def insert_dates(model_card_list: list[str]):
+def insert_dates(model_card_list: list[str], check_missing: bool = False, check_incorrect: bool = False):
     """Insert release and commit dates into model cards"""
-
+    pattern = r"\n\*This model was released on (.*) and added to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
+    missing_dates = []
+    incorrect_dates = []
     for model_card in model_card_list:
         if not model_card.endswith(".md"):
             model_card = f"{model_card}.md"
@@ -187,15 +189,35 @@ def insert_dates(model_card_list: list[str]):
             continue
 
         file_path = os.path.join(DOCS_PATH, model_card)
+        if check_missing:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            match = re.search(pattern, content)
+            if not match:
+                missing_dates.append(model_card)
+            continue
+
+        hf_commit_date = get_first_commit_date(model_name=model_card)
+        if check_incorrect:
+            if match:
+                existing_hf_date = match.group(2)  # The existing HF date part
+                if existing_hf_date != hf_commit_date:
+                    # Compare date strings with allowance for +/-1 day difference (dates formatted as "YYYY-MM-DD")
+                    try:
+                        d1 = datetime.strptime(existing_hf_date, "%Y-%m-%d")
+                        d2 = datetime.strptime(hf_commit_date, "%Y-%m-%d")
+                        day_diff = abs((d1 - d2).days)
+                    except Exception:
+                        day_diff = 999  # fallback: always report if unparsable
+
+                    if day_diff > 1:
+                        incorrect_dates.append(model_card)
+            continue
 
         # First replace arxiv paper links with hf paper link if possible
         links_replaced = replace_paper_links(file_path)
         if links_replaced:
             print(f"Updated paper links in {model_card}")
-
-        pattern = (
-            r"\n\*This model was released on (.*) and added to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
-        )
 
         # Check if the copyright disclaimer sections exists, if not, add one with 2025
         with open(file_path, "r", encoding="utf-8") as f:
@@ -209,8 +231,6 @@ def insert_dates(model_card_list: list[str]):
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
             markers = list(re.finditer(r"-->", content))
-
-        hf_commit_date = get_first_commit_date(model_name=model_card)
 
         paper_link = get_paper_link(model_card=model_card, path=file_path)
         release_date = ""
@@ -248,6 +268,8 @@ def insert_dates(model_card_list: list[str]):
                 f.write(content)
             print(f"Added {model_card} release and commit dates.")
 
+    return missing_dates, incorrect_dates
+
 
 def get_all_model_cards():
     """Get all model cards from the docs path"""
@@ -262,33 +284,44 @@ def get_all_model_cards():
     return sorted(model_cards)
 
 
-def main(all=False, auto=True, models=None):
+def main(all=False, models=None, check_only=False):
     if all:
         model_cards = get_all_model_cards()
         print(f"Processing all {len(model_cards)} model cards from docs directory")
-    elif auto:
+        insert_dates(model_cards)
+    elif models:
+        model_cards = models
+        print(f"Processing specified model cards: {model_cards}")
+        insert_dates(model_cards)
+    elif check_only:
+        # Check all model cards for missing dates, check incorrect dates for modified model cards
+        print(f"Checking all {len(get_all_model_cards())} model cards for missing dates...")
+        model_cards_missing = get_all_model_cards()
+        missing_dates, _ = insert_dates(model_cards_missing, check_missing=True, check_incorrect=False)
+        model_cards = get_modified_cards()
+        print(f"Checking {len(model_cards)} modified model cards for incorrect dates...")
+        incorrect_dates, _ = insert_dates(model_cards, check_missing=False, check_incorrect=True)
+        if missing_dates or incorrect_dates:
+            raise ValueError(
+                f"Missing dates or incorrect dates in the following model cards: {' '.join(missing_dates + incorrect_dates)}\n"
+                f"Run `python utils/add_dates.py --models {' '.join([model_card.replace('.md', '') for model_card in missing_dates + incorrect_dates])}` to add the dates."
+            )
+    else:
         model_cards = get_modified_cards()
         if not model_cards:
             print("No modified model cards found.")
             return
         print(f"Processing modified model cards: {model_cards}")
-    else:
-        model_cards = models
-        print(f"Processing specified model cards: {model_cards}")
-
-    insert_dates(model_cards)
+        insert_dates(model_cards)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Add release and commit dates to model cards")
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument(
-        "--auto", action="store_true", help="Automatically process modified model cards from git status"
-    )
     group.add_argument("--models", nargs="+", help="Specify model cards to process (without .md extension)")
     group.add_argument("--all", action="store_true", help="Process all model cards in the docs directory")
+    group.add_argument("--check-only", action="store_true", help="Check if the dates are already present")
 
-    parser.set_defaults(auto=True)
     args = parser.parse_args()
 
-    main(args.all, args.auto, args.models)
+    main(args.all, args.models, args.check_only)

@@ -53,7 +53,7 @@ repo-consistency:
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_docstrings.py
-	python utils/add_dates.py
+	python utils/add_dates.py --check-only
 
 # this target runs checks on all files
 
