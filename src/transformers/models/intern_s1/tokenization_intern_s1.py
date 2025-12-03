@@ -18,14 +18,14 @@ import json
 import os
 import unicodedata
 from abc import ABC, abstractmethod
-from typing import Optional, Union
 from functools import lru_cache
+from typing import Optional, Union
 
 import regex as re
 import sentencepiece as spm
 
+from ...tokenization_python import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken, TextInput
-from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 from ...utils.import_utils import requires
 
@@ -349,7 +349,6 @@ class SmilesCheckModule(InternS1CheckModuleMixin):
 
 
 @lru_cache
-# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -374,7 +373,6 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
-# Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
 def get_pairs(word):
     """
     Return set of symbol pairs in a word.
@@ -519,6 +517,8 @@ class InternS1Tokenizer(PreTrainedTokenizer):
                 f"{self.__class__.__name} does not support `add_prefix_space`, setting it to True has no effect."
             )
 
+        kwargs.setdefault("special_tokens_pattern", "none")
+
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
@@ -538,11 +538,9 @@ class InternS1Tokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_vocab
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -588,8 +586,8 @@ class InternS1Tokenizer(PreTrainedTokenizer):
     def prepare_extra_tokenizers(self, vocab_file: str) -> None:
         """
         Prepare domain-specific tokenizers.
-        
-        Define variables/maps here which guide domain-specific tokenization later.
+
+        Define variables/maps here which guide building domain-specific tokenization.
         """
         # Load extra tokenizers with SentencePiece model
         dir_name = os.path.dirname(vocab_file)
@@ -630,24 +628,22 @@ class InternS1Tokenizer(PreTrainedTokenizer):
         self.ex_all_begin_mapping = self.ex_begin_mapping | self.ex_auto_begin_mapping
         self.ex_all_end_mapping = self.ex_end_mapping | self.ex_auto_end_mapping
 
-        self.decoder.update(
-            {
-                i + self.sp_model_SMILES.offset: self.sp_model_SMILES.id_to_piece(i)
-                for i in range(self.sp_model_SMILES.get_piece_size())
-            }
-        )
-        self.decoder.update(
-            {
-                i + self.sp_model_IUPAC.offset: self.sp_model_IUPAC.id_to_piece(i)
-                for i in range(self.sp_model_IUPAC.get_piece_size())
-            }
-        )
-        self.decoder.update(
-            {
-                i + self.sp_model_FASTA.offset: self.sp_model_FASTA.id_to_piece(i)
-                for i in range(self.sp_model_FASTA.get_piece_size())
-            }
-        )
+        # Update encoder & decoder with extra tokenizers
+        for tokenizer_name, sp_model in [
+            ("SMILES", self.sp_model_SMILES),
+            ("IUPAC", self.sp_model_IUPAC),
+            ("FASTA", self.sp_model_FASTA),
+        ]:
+            self.decoder.update(
+                {i + sp_model.offset: sp_model.id_to_piece(i) for i in range(sp_model.get_piece_size())}
+            )
+            # Not really used, only to fill holes in encoder, to keep methods like `add_tokens` working
+            self.encoder.update(
+                {
+                    f"<|{tokenizer_name}_{sp_model.id_to_piece(i)}|>": i + sp_model.offset
+                    for i in range(sp_model.get_piece_size())
+                }
+            )
 
         # protect-tokens should keep complete temporarily to guide later tokenization
         # it will be segmented later
@@ -678,6 +674,10 @@ class InternS1Tokenizer(PreTrainedTokenizer):
         split_special_tokens = kwargs.pop("split_special_tokens", self.split_special_tokens)
 
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
+
+        if kwargs:
+            # Pop ignored arguments to avoid warning
+            kwargs.pop("return_offsets_mapping", None)
 
         if kwargs:
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
@@ -879,7 +879,6 @@ class InternS1Tokenizer(PreTrainedTokenizer):
         else:
             return self.encoder.get(token, self.encoder.get(self._unk_token))
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
