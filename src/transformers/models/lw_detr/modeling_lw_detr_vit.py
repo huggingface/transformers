@@ -308,7 +308,7 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
     config: LwDetrViTConfig
     base_model_prefix = "lw_detr_vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
     _supports_sdpa = True
