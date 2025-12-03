@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .afmoe import *
     from .aimv2 import *
     from .albert import *
     from .align import *
@@ -126,6 +127,7 @@ if TYPE_CHECKING:
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
+    from .fast_vlm import *
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
@@ -222,6 +224,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .minimax import *
     from .ministral import *
+    from .ministral3 import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
