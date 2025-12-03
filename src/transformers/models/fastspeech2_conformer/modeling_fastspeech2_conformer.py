@@ -1118,6 +1118,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1433,7 +1434,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         waveform.
         """
     )
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         r"""
         spectrogram (`torch.FloatTensor`):
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
@@ -1509,6 +1510,7 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

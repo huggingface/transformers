@@ -998,6 +998,7 @@ class InformerDecoder(InformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -1296,6 +1297,7 @@ class InformerModel(InformerPreTrainedModel):
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqTSModelOutput, tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
@@ -1573,6 +1575,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqTSModelOutput, tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
