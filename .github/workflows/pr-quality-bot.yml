@@ -60,6 +60,40 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - name: Delete existing bot comment if it exists
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER
+            });
+            
+            // Find existing bot comments that start with "Repo. Consistency"
+            const existingComments = comments.filter(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.startsWith('Repo. Consistency')
+            );
+
+            if (existingComments.length > 0) {
+              // Get the most recent comment
+              const mostRecentComment = existingComments
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              
+              console.log(`Deleting most recent comment #${mostRecentComment.id}`);
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: mostRecentComment.id
+              });
+            }
+
       - name: Comment on PR with workflow run link
         id: init_comment
         env:
