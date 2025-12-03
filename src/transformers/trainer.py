@@ -2338,9 +2338,7 @@ class Trainer:
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
-        
-        # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
-        if is_fsdp2:
+            # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
             dist.fsdp.register_fsdp_forward_method(self.model, "generate")
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
