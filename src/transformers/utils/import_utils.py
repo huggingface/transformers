@@ -1308,6 +1308,17 @@ def is_torch_fx_proxy(x):
         return False
 
 
+def is_jax_jitting(x):
+    if not hasattr(x, "jax"):
+        return False
+    try:
+        import jax
+
+        return isinstance(x.jax(), jax.core.Tracer)
+    except Exception:
+        return False
+
+
 def is_jit_tracing() -> bool:
     try:
         import torch
@@ -1333,6 +1344,7 @@ def is_tracing(tensor=None) -> bool:
     _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
+        _is_tracing |= is_jax_jitting(tensor)
     return _is_tracing
 
 
