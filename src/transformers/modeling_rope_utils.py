@@ -657,7 +657,7 @@ class RotaryEmbeddingConfigMixin:
         # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
-        rope_parameters = self.rope_parameters or {}
+        rope_parameters = getattr(self, "rope_parameters", None) or {}
 
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
         if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
@@ -692,14 +692,14 @@ class RotaryEmbeddingConfigMixin:
 
         for rope_parameters in rope_parameters_dict.values():
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
-            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters")
+            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
                 validation_fn(rope_parameters, ignore_keys=ignore_keys)
             else:
                 logger.warning(
-                    f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
+                    f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
