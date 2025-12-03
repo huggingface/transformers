@@ -274,5 +274,10 @@ class DeepseekV32Config(PretrainedConfig):
                 "reference DeepSeek implementation with custom tilelang kernels."
             )
 
+    @property
+    def num_local_experts(self):
+        """Alias for n_routed_experts for compatibility with quantizers (e.g., FP8)."""
+        return self.n_routed_experts
+
 
 __all__ = ["DeepseekV32Config"]
