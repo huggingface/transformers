@@ -919,6 +919,77 @@ class ModelTesterMixin:
             finally:
                 model.disable_input_require_grads()
 
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
+
+        for model_class in self.all_model_classes:
+            if not getattr(model_class, "supports_gradient_checkpointing", False):
+                continue
+
+            if getattr(model_class, "main_input_name", "input_ids") != "input_ids":
+                continue
+
+            model = model_class(copy.deepcopy(config))
+            try:
+                embeddings = model.get_input_embeddings()
+            except NotImplementedError:
+                continue
+            if embeddings is None or not hasattr(embeddings, "weight"):
+                continue
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            model.to(torch_device)
+            model.train()
+
+            embeddings.weight.requires_grad_(True)
+
+            torch.manual_seed(0)
+            outputs = model(**inputs)
+            loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
+            if isinstance(loss_tensor, (tuple, list)):
+                loss_tensor = loss_tensor[0]
+            if loss_tensor is None or not isinstance(loss_tensor, torch.Tensor) or not loss_tensor.requires_grad:
+                model.zero_grad(set_to_none=True)
+                continue
+            loss = loss_tensor.sum()
+            loss.backward()
+
+            baseline_grad = embeddings.weight.grad
+            if baseline_grad is None or baseline_grad.abs().sum().item() == 0:
+                model.zero_grad(set_to_none=True)
+                continue
+
+            model.zero_grad(set_to_none=True)
+            model.gradient_checkpointing_enable()
+            model.enable_input_require_grads()
+
+            torch.manual_seed(0)
+            outputs = model(**inputs)
+            loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
+            if isinstance(loss_tensor, (tuple, list)):
+                loss_tensor = loss_tensor[0]
+            if loss_tensor is None or not isinstance(loss_tensor, torch.Tensor) or not loss_tensor.requires_grad:
+                model.zero_grad(set_to_none=True)
+                continue
+            loss = loss_tensor.sum()
+            loss.backward()
+
+            grad_after_gc = embeddings.weight.grad
+            self.assertIsNotNone(
+                grad_after_gc,
+                f"{model_class.__name__} should produce embedding gradients when gradient checkpointing is enabled.",
+            )
+            self.assertGreater(
+                grad_after_gc.abs().sum().item(),
+                0,
+                f"{model_class.__name__} should keep non-zero embedding gradients with gradient checkpointing enabled.",
+            )
+
     def test_can_init_all_missing_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
