@@ -292,6 +292,7 @@ if __name__ == "__main__":
         generation_cfg.compile_config = CompileConfig(
             fullgraph=True,
             mode="max-autotune-no-cudagraphs",
+            dynamic=True,  # FIXME: if we warmup all graphs, this is not needed anymore
         )
 
     # If we need to compare, we need to generate the reference outputs
