@@ -91,6 +91,8 @@ class Bnb4bitDeserialize(ConversionOps):
             device=weight.device,
             module=module,
         )
+        # need to reset it for fsdpv1 otherwise, we get an error when flattening the tensor.
+        module.dtype = torch.float16 
         module._is_hf_initialized = True
         return {key_weight: new_value}
 
