@@ -204,7 +204,7 @@ if __name__ == "__main__":
             logger.warning(
                 "No attention implementation was provided and compile is enabled. Using experimental kernel: "
                 "kernels-community/flash-attn3@fake-ops-return-probs because compile is not supported on main. Change "
-                "this when main supports it." # TODO: cf comment
+                "this when main supports it."  # TODO: cf comment
             )
         else:
             args.attn = "kernels-community/flash-attn3"
