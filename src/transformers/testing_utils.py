@@ -3738,11 +3738,6 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
-###############################################################################
-# Expectations Recording System
-###############################################################################
-
-
 def record_expectations(pairs=None):
     """
     Decorator that auto-updates hardcoded expectations in the test source file.
@@ -4290,11 +4285,6 @@ class ExpectationUpdater(cst.CSTTransformer):
             )
 
         return cst.Dict(elements=elements)
-
-
-###############################################################################
-# End Expectations Recording System
-###############################################################################
 
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
