@@ -1580,7 +1580,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
         **kwargs,
-        **kwargs,
     ) -> Union[tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`):

@@ -233,7 +233,10 @@ class TextNetModel(TextNetPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[Any, list[Any]], tuple[Any], BaseModelOutputWithPoolingAndNoAttention]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -355,7 +358,10 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[tuple], BackboneOutput]:
         r"""

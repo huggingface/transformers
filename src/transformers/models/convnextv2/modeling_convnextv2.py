@@ -289,7 +289,9 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_hidden_states: Optional[bool] = None,
         **kwargs,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:

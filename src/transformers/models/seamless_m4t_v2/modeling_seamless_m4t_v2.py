@@ -2559,7 +2559,10 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward with SeamlessM4T->SeamlessM4Tv2, spkr_id->speaker_id
     def forward(
-        self, input_ids: torch.LongTensor, speaker_id: torch.Tensor, lang_id: torch.Tensor
+        self,
+        input_ids: torch.LongTensor,
+        speaker_id: torch.Tensor,
+        lang_id: torch.Tensor,
         **kwargs,
     ) -> tuple[torch.Tensor]:
         """

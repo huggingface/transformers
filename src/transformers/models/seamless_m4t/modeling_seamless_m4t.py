@@ -2357,8 +2357,11 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         return input_lengths
 
     def forward(
-        self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor
-        **kwargs,
+        self,
+        input_ids: torch.LongTensor,
+        spkr_id: torch.Tensor,
+        lang_id: torch.Tensor**,
+        kwargs,
     ) -> tuple[torch.Tensor]:
         """
         Args:

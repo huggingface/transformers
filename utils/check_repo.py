@@ -1199,13 +1199,14 @@ def check_deprecated_constant_is_up_to_date():
     if len(message) > 0:
         raise Exception("\n".join(message))
 
+
 def check_models_have_kwargs():
     """
     Checks that all model classes defined in modeling files accept **kwargs in their forward pass.
     Since we ast.parse() here, it might be a good idea to add other tests that inspect modeling code here rather than
     repeatedly ast.parsing() in each test!
     """
-    models_dir = Path(PATH_TO_TRANSFORMERS) /  "models"
+    models_dir = Path(PATH_TO_TRANSFORMERS) / "models"
     failing_classes = []
     for model_dir in models_dir.iterdir():
         if model_dir.name == "deprecated":
@@ -1213,7 +1214,7 @@ def check_models_have_kwargs():
         if model_dir.is_dir() and (modeling_file := list(model_dir.glob("modeling_*.py"))):
             modeling_file = modeling_file[0]
 
-            with open(modeling_file, 'r') as f:
+            with open(modeling_file, "r") as f:
                 tree = ast.parse(f.read())
 
             # Map all classes in the file to their base classes
@@ -1246,16 +1247,19 @@ def check_models_have_kwargs():
                 if class_name not in inherits_from_pretrained:
                     continue
 
-                forward_method = next((n for n in class_def.body if isinstance(n, ast.FunctionDef) and n.name == 'forward'),
-                                      None)
+                forward_method = next(
+                    (n for n in class_def.body if isinstance(n, ast.FunctionDef) and n.name == "forward"), None
+                )
                 if forward_method:
                     # 3. Check for **kwargs (represented as .kwarg in AST)
                     if forward_method.args.kwarg is None:
                         failing_classes.append(class_name)
 
     if failing_classes:
-        raise Exception("The following model classes do not accept **kwargs in their forward() method: \n"
-                        f"{', '.join(failing_classes)}.")
+        raise Exception(
+            "The following model classes do not accept **kwargs in their forward() method: \n"
+            f"{', '.join(failing_classes)}."
+        )
 
 
 def check_repo_quality():

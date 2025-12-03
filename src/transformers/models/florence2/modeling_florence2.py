@@ -667,7 +667,10 @@ class Florence2Model(Florence2PreTrainedModel):
         return image_embeds
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        image_features: torch.FloatTensor,
         **kwargs,
     ):
         """

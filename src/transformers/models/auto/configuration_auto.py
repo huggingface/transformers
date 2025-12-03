@@ -943,7 +943,7 @@ DEPRECATED_MODELS = [
     "tvlt",
     "van",
     "vit_hybrid",
-    "xlm_prophetnet"
+    "xlm_prophetnet",
 ]
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
