@@ -177,7 +177,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
         model.config.quantization_config = self.quantization_config
-    
+
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized and self.quantization_config.dequantize:
             self.remove_quantization_config(model)
