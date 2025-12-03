@@ -33,8 +33,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: get-pr-info
     outputs:
-      PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
-      PR_MERGE_SHA: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+      VERIFIED_PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
     steps:
       - name: Verify `merge_commit` timestamp is older than the issue comment timestamp
         env:
@@ -64,31 +63,31 @@ jobs:
       - name: Comment on PR with workflow run link
         id: init_comment
         env:
-          prNumber: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         uses: actions/github-script@v6
         with:
           script: |
-            const prNumber = parseInt(process.env.prNumber, 10);
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
 
             const { data: botComment } = await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: prNumber,
-              body: `Quality fix is beginning .... [View the workflow run here](${runUrl}).`
+              issue_number: PR_NUMBER,
+              body: `Repo. Consistency fix is beginning .... [View the workflow run here](${runUrl}).`
             });
             core.setOutput('comment_id', botComment.id);
 
-  run-quality-checks:
+  run-repo-consistency-checks:
     runs-on: ubuntu-22.04
-    needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url]
+    needs: [get-pr-info, check-timestamps, init_comment_with_url]
     outputs:
       changes_detected: ${{ steps.run_checks.outputs.changes_detected }}
     steps:
       - uses: actions/checkout@v4
         with:
           repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+          ref: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
           fetch-depth: "1"
 
       - name: Set up Python
@@ -125,31 +124,30 @@ jobs:
 
   commit-and-comment:
     runs-on: ubuntu-22.04
-    needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url, run-quality-checks]
+    needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url, run-repo-consistency-checks]
     if: always()
     permissions:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        if: needs.run-quality-checks.outputs.changes_detected == 'true'
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
         with:
           repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+          ref: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
           fetch-depth: "1"
           # Need to specify `token` here, so we can push in `Commit and push changes` below.
           token: ${{ secrets.HF_STYLE_BOT_ACTION }}
 
       - name: Download patch
-        if: needs.run-quality-checks.outputs.changes_detected == 'true'
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
         uses: actions/download-artifact@v4
         with:
           name: consistency-fixes-patch
 
       - name: Apply patch and push
-        if: needs.run-quality-checks.outputs.changes_detected == 'true'
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
         env:
-          HEADREPOFULLNAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          HEADREF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
+          PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
           GITHUB_TOKEN: ${{ secrets.HF_STYLE_BOT_ACTION }}
         run: |
           git config user.name "github-actions[bot]"
@@ -161,12 +159,12 @@ jobs:
           # Only add updates to tracked files (ignores new untracked files like the patch)
           git add -u
           git commit -m "Apply repo. consistency fixes"
-          git push origin HEAD:$HEADREF
+          git push origin HEAD:$PR_HEAD_REF
 
       - name: Prepare final comment message
         id: prepare_final_comment
         run: |
-          if [ "${{ needs.run-quality-checks.outputs.changes_detected }}" = 'true' ]; then
+          if [ "${{ needs.run-repo-consistency-checks.outputs.changes_detected }}" = 'true' ]; then
             echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
           else
             echo "final_comment=Repo. Consistency fix runs successfully without any file modified." >> $GITHUB_OUTPUT
@@ -175,10 +173,10 @@ jobs:
       - name: Comment on PR
         uses: actions/github-script@v6
         env:
-          prNumber: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         with:
           script: |
-            const prNumber = parseInt(process.env.prNumber, 10);
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
             await github.rest.issues.updateComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
