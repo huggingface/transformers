@@ -466,13 +466,18 @@ def test_mscale_single_application():
     try:
         model = DeepseekV32ForCausalLM(config)
 
-        # Check 1: Rotary embedding should NOT apply mscale
-        rotary_scaling = model.model.rotary_emb.attention_scaling
-        if rotary_scaling != 1.0:
-            print(f"  ✗ Rotary embedding attention_scaling = {rotary_scaling}, expected 1.0")
-            print("    (mscale should only be applied in attention softmax_scale)")
+        # Check 1: Rotary embedding outputs complex frequencies (freqs_cis)
+        # The mscale is NOT applied in the rotary embedding itself
+        rotary_emb = model.model.rotary_emb
+        # Verify it outputs complex tensor (freqs_cis) not (cos, sin)
+        test_input = torch.randn(1, 4, config.hidden_size)
+        position_ids = torch.arange(4).unsqueeze(0)
+        freqs_cis = rotary_emb(test_input, position_ids)
+        if freqs_cis.is_complex():
+            print("  ✓ Rotary embedding outputs complex freqs_cis (correct)")
+        else:
+            print("  ✗ Rotary embedding should output complex freqs_cis")
             return False
-        print("  ✓ Rotary embedding attention_scaling = 1.0 (correct)")
 
         # Check 2: Attention softmax_scale should include mscale^2
         attn = model.model.layers[0].self_attn
@@ -532,12 +537,12 @@ def test_indexer_relu_order():
         hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
         q_compressed = torch.randn(batch_size, seq_len, config.q_lora_rank)
 
-        # Get cos/sin for positions
+        # Get freqs_cis for positions (new API returns complex tensor)
         position_ids = torch.arange(seq_len).unsqueeze(0)
-        cos, sin = model.model.rotary_emb(hidden_states, position_ids)
+        freqs_cis = model.model.rotary_emb(hidden_states, position_ids)
 
         with torch.no_grad():
-            topk_indices, _ = indexer(hidden_states, q_compressed, cos, sin)
+            topk_indices, _ = indexer(hidden_states, q_compressed, freqs_cis)
 
         # The test passes if we get here without error and indices are valid
         if topk_indices.shape == (batch_size, seq_len, min(config.index_topk, seq_len)):
@@ -637,8 +642,8 @@ def test_mlp_float32_precision():
 def test_rope_interleaved_vs_non_interleaved():
     """Test 10: Verify RoPE formats are used correctly.
 
-    - Main attention uses INTERLEAVED RoPE (rotate_half)
-    - Indexer uses NON-INTERLEAVED RoPE (complex multiplication)
+    - Main attention uses INTERLEAVED RoPE (complex multiplication on interleaved format)
+    - Indexer uses NON-INTERLEAVED RoPE (complex multiplication on non-interleaved format)
 
     These produce different results for the same input, so mixing them up
     would cause silent numerical errors.
@@ -648,8 +653,8 @@ def test_rope_interleaved_vs_non_interleaved():
     print("=" * 60)
 
     from transformers.models.deepseek_v32.modeling_deepseek_v32 import (
+        apply_rotary_pos_emb_interleaved,
         apply_rotary_pos_emb_non_interleaved,
-        apply_rotary_pos_emb_single,
     )
 
     try:
@@ -657,19 +662,19 @@ def test_rope_interleaved_vs_non_interleaved():
         batch_size, seq_len, num_heads, head_dim = 1, 4, 2, 16
         x = torch.randn(batch_size, seq_len, num_heads, head_dim)
 
-        # Create cos/sin
-        cos = torch.randn(batch_size, seq_len, head_dim)
-        sin = torch.randn(batch_size, seq_len, head_dim)
+        # Create complex frequencies (freqs_cis)
+        # Shape should be [batch_size, seq_len, head_dim // 2] for complex values
+        freqs = torch.randn(batch_size, seq_len, head_dim // 2)
+        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
+
+        # Expand for heads dimension
+        freqs_cis_expanded = freqs_cis.unsqueeze(2)  # [B, S, 1, D//2]
 
         # Apply interleaved RoPE (main attention)
-        x_interleaved = apply_rotary_pos_emb_single(x, cos, sin, unsqueeze_dim=2)
+        x_interleaved = apply_rotary_pos_emb_interleaved(x, freqs_cis_expanded)
 
-        # Apply non-interleaved RoPE (indexer) - needs half-dim cos/sin
-        cos_half = cos[..., : head_dim // 2]
-        sin_half = sin[..., : head_dim // 2]
-        x_non_interleaved = apply_rotary_pos_emb_non_interleaved(
-            x, cos_half.unsqueeze(2), sin_half.unsqueeze(2)
-        )
+        # Apply non-interleaved RoPE (indexer)
+        x_non_interleaved = apply_rotary_pos_emb_non_interleaved(x, freqs_cis_expanded)
 
         # They should produce DIFFERENT results (if same, something is wrong)
         if not torch.allclose(x_interleaved, x_non_interleaved, atol=1e-5):
@@ -685,21 +690,21 @@ def test_rope_interleaved_vs_non_interleaved():
             print("  ✗ Shape mismatch after RoPE")
             return False
 
-        # Verify interleaved uses rotate_half pattern (check implementation)
+        # Verify interleaved uses complex multiplication (view_as_complex pattern)
         import inspect
-        source = inspect.getsource(apply_rotary_pos_emb_single)
-        if "rotate_half" in source:
-            print("  ✓ Interleaved RoPE uses rotate_half (correct)")
+        source = inspect.getsource(apply_rotary_pos_emb_interleaved)
+        if "view_as_complex" in source:
+            print("  ✓ Interleaved RoPE uses complex multiplication (correct)")
         else:
-            print("  ✗ Interleaved RoPE missing rotate_half")
+            print("  ✗ Interleaved RoPE missing complex multiplication")
             return False
 
-        # Verify non-interleaved uses complex multiplication
+        # Verify non-interleaved does format conversion before complex multiplication
         source = inspect.getsource(apply_rotary_pos_emb_non_interleaved)
-        if "torch.complex" in source:
-            print("  ✓ Non-interleaved RoPE uses complex multiplication (correct)")
+        if "view_as_complex" in source and "transpose" in source:
+            print("  ✓ Non-interleaved RoPE converts format and uses complex multiplication (correct)")
         else:
-            print("  ✗ Non-interleaved RoPE missing complex multiplication")
+            print("  ✗ Non-interleaved RoPE missing format conversion or complex multiplication")
             return False
 
     except Exception as e:
@@ -1279,10 +1284,10 @@ def test_indexer_selects_different_tokens():
         q_compressed = torch.randn(1, seq_len, config.q_lora_rank)
 
         position_ids = torch.arange(seq_len).unsqueeze(0)
-        cos, sin = model.model.rotary_emb(hidden_states, position_ids)
+        freqs_cis = model.model.rotary_emb(hidden_states, position_ids)
 
         with torch.no_grad():
-            topk_indices, _ = indexer(hidden_states, q_compressed, cos, sin)
+            topk_indices, _ = indexer(hidden_states, q_compressed, freqs_cis)
 
         # Check that different query positions select different tokens
         # (at least some variation should exist)
@@ -1303,7 +1308,7 @@ def test_indexer_selects_different_tokens():
         q_compressed2 = torch.randn(1, seq_len, config.q_lora_rank)
 
         with torch.no_grad():
-            topk_indices2, _ = indexer(hidden_states2, q_compressed2, cos, sin)
+            topk_indices2, _ = indexer(hidden_states2, q_compressed2, freqs_cis)
 
         if torch.equal(topk_indices, topk_indices2):
             print("  ✗ Different inputs produce identical selections!")
