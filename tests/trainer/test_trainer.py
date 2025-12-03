@@ -5116,6 +5116,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
         self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
 
+    @require_torch_non_multi_accelerator
     def test_resume_batch_order(self):
         """
         Test that verifies dataloader order is reproducible when resuming from partial checkpoints.
