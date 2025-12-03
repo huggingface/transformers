@@ -90,20 +90,9 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         return inv_freq
 
     def _compute_attention_scaling(self):
-        """Compute YaRN attention scaling factor (mscale)."""
-        if self.rope_scaling is None:
-            return 1.0
-
-        mscale = self.rope_scaling.get("mscale", 1.0)
-        factor = self.rope_scaling.get("factor", 1.0)
-        original_max_pos = self.rope_scaling.get(
-            "original_max_position_embeddings", self.config.max_position_embeddings
-        )
-
-        if self.config.max_position_embeddings > original_max_pos:
-            # Reference: model.py:533-537
-            scaling = 0.1 * mscale * math.log(factor) + 1.0
-            return scaling
+        """YaRN mscale is applied in attention softmax_scale, not in rotary embeddings."""
+        # Note: mscale^2 is applied to softmax_scale in DeepseekV32Attention.__init__()
+        # Applying it here to cos/sin would cause double application (mscale^4 total)
         return 1.0
 
     def _compute_yarn_inv_freq(self, device):
@@ -203,7 +192,8 @@ class DeepseekV32MLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        # Use float32 for intermediate SiLU computation for numerical stability (ref: model.py:643)
+        return self.down_proj((self.act_fn(self.gate_proj(x).float()) * self.up_proj(x).float()).type_as(x))
 
 
 # =============================================================================
@@ -225,7 +215,8 @@ class DeepseekV32Expert(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        # Use float32 for intermediate SiLU computation for numerical stability (ref: model.py:643)
+        return self.down_proj((self.act_fn(self.gate_proj(x).float()) * self.up_proj(x).float()).type_as(x))
 
 
 class DeepseekV32Gate(nn.Module):
@@ -244,7 +235,9 @@ class DeepseekV32Gate(nn.Module):
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
 
-        self.weight = nn.Parameter(torch.empty(config.n_routed_experts, config.hidden_size))
+        self.weight = nn.Parameter(torch.zeros(config.n_routed_experts, config.hidden_size))
+        # Initialize gate weights with small values (kaiming uniform for linear layers)
+        torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         # Add bias for 7168 hidden size (following reference implementation)
         if config.hidden_size == 7168:
             self.bias = nn.Parameter(torch.zeros(config.n_routed_experts))
@@ -311,7 +304,7 @@ class DeepseekV32Gate(nn.Module):
 
         # Normalize weights for sigmoid scoring
         if self.scoring_func == "sigmoid":
-            topk_weight = topk_weight / topk_weight.sum(dim=-1, keepdim=True)
+            topk_weight = topk_weight / (topk_weight.sum(dim=-1, keepdim=True) + 1e-8)
 
         topk_weight = topk_weight * self.routed_scaling_factor
 
@@ -546,9 +539,9 @@ class DeepseekV32Indexer(nn.Module):
         # q_states: [B, S, H, D], k_full: [B, T, D]
         scores = torch.einsum("bshd,btd->bsht", q_states.float(), k_full.float()) * self.softmax_scale
 
-        # Apply head weights and ReLU, then sum over heads
-        scores = scores * head_weights.unsqueeze(-1)
+        # Apply ReLU then head weights per formula: I_{t,s} = Σ_j w^I_{t,j} · ReLU(q^I_{t,j} · k^I_s)
         scores = torch.relu(scores)
+        scores = scores * head_weights.unsqueeze(-1)
         index_scores = scores.sum(dim=2)  # [B, S, T]
 
         # Apply mask
