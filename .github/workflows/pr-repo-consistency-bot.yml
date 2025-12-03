@@ -1,0 +1,218 @@
+name: PR Repo. Consistency Bot
+
+on:
+  issue_comment:
+    types:
+      - created
+    branches-ignore:
+      - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, '@bot /repo') }}
+  cancel-in-progress: true
+permissions: read-all
+
+
+jobs:
+  get-pr-number:
+    name: Get PR number
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille"]'), github.actor) && startsWith(github.event.comment.body, '@bot /repo') }}
+    uses: ./.github/workflows/get-pr-number.yml
+
+  get-pr-info:
+    name: Get PR commit SHA
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+
+  check-timestamps:
+    name: Check timestamps (security check)
+    runs-on: ubuntu-22.04
+    needs: get-pr-info
+    outputs:
+      VERIFIED_PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+    steps:
+      - name: Verify `merge_commit` timestamp is older than the issue comment timestamp
+        env:
+          COMMENT_DATE: ${{ github.event.comment.created_at }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+        run: |
+            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+            echo "COMMENT_DATE: $COMMENT_DATE"
+            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+              exit -1;
+            fi
+
+  init_comment_with_url:
+    name: Init Comment on PR
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, check-timestamps]
+    outputs:
+       comment_id: ${{ steps.init_comment.outputs.comment_id }}
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Delete existing bot comment if it exists
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER
+            });
+            
+            // Find existing bot comments that start with "Repo. Consistency"
+            const existingComments = comments.filter(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.startsWith('Repo. Consistency')
+            );
+
+            if (existingComments.length > 0) {
+              // Get the most recent comment
+              const mostRecentComment = existingComments
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              
+              console.log(`Deleting most recent comment #${mostRecentComment.id}`);
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: mostRecentComment.id
+              });
+            }
+
+      - name: Comment on PR with workflow run link
+        id: init_comment
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+
+            const { data: botComment } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER,
+              body: `Repo. Consistency fix is beginning .... [View the workflow run here](${runUrl}).`
+            });
+            core.setOutput('comment_id', botComment.id);
+
+  run-repo-consistency-checks:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-info, check-timestamps, init_comment_with_url]
+    outputs:
+      changes_detected: ${{ steps.run_checks.outputs.changes_detected }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          ref: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
+          fetch-depth: "1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[quality]"
+          pip install --no-cache-dir --upgrade 'torch' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Run checks
+        id: run_checks
+        run: |
+          python utils/check_copies.py --fix_and_overwrite
+          
+          # Check if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+            # Create a patch file with all changes
+            git diff > consistency-fixes.patch
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload patch
+        if: steps.run_checks.outputs.changes_detected == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: consistency-fixes-patch
+          path: consistency-fixes.patch
+
+  commit-and-comment:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url, run-repo-consistency-checks]
+    if: always()
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
+        with:
+          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          ref: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
+          fetch-depth: "1"
+          # Need to specify `token` here, so we can push in `Commit and push changes` below.
+          token: ${{ secrets.HF_STYLE_BOT_ACTION }}
+
+      - name: Download patch
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: consistency-fixes-patch
+
+      - name: Apply patch and push
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
+        env:
+          PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
+          GITHUB_TOKEN: ${{ secrets.HF_STYLE_BOT_ACTION }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Apply the patch
+          git apply consistency-fixes.patch
+          
+          # Only add updates to tracked files (ignores new untracked files like the patch)
+          git add -u
+          git commit -m "Apply repo. consistency fixes"
+          git push origin HEAD:$PR_HEAD_REF
+
+      - name: Prepare final comment message
+        id: prepare_final_comment
+        if: needs.init_comment_with_url.result == 'success'
+        env:
+          CHANGES_DETECTED: ${{ needs.run-repo-consistency-checks.outputs.changes_detected }}
+        run: |
+          if [ "$CHANGES_DETECTED" = 'true' ]; then
+            echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
+          else
+            echo "final_comment=Repo. Consistency fix runs successfully without any file modified." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR
+        if: needs.init_comment_with_url.result == 'success'
+        uses: actions/github-script@v6
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ needs.init_comment_with_url.outputs.comment_id }},
+              body: `${{ steps.prepare_final_comment.outputs.final_comment }}`
+            });
