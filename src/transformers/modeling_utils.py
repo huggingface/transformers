@@ -4180,7 +4180,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():  # TODO to avaoid this buffer could be added to the ckpt
+            for buffer in model.buffers():  # TODO to avoid this buffer could be added to the ckpt
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
 
