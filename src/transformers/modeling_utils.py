@@ -988,8 +988,7 @@ class EmbeddingAccessMixin:
                 return base_model.get_input_embeddings()
 
         raise NotImplementedError(
-            f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
-            "please override in the subclass."
+            f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
         )
 
     def set_input_embeddings(self, value: nn.Module):
