@@ -2755,7 +2755,7 @@ class TrainingArguments:
                 )
                 fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
                 fsdp_plugin_args["reshard_after_forward"] = str(
-                    self.fsdp_config.get("reshard_after_forward", "false")
+                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
                 ).lower()
                 fsdp_plugin_args["use_orig_params"] = str_to_bool(
                     str(self.fsdp_config.get("use_orig_params", "true")).lower()
