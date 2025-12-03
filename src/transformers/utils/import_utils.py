@@ -1301,11 +1301,20 @@ def is_jit_tracing() -> bool:
         return False
 
 
+def is_cuda_stream_capturing() -> bool:
+    try:
+        import torch
+
+        return torch.cuda.is_current_stream_capturing()
+    except Exception:
+        return False
+
+
 def is_tracing(tensor=None) -> bool:
-    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx or CUDA stream capturing"""
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
-    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
+    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
     return _is_tracing

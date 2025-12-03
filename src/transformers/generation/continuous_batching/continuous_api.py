@@ -29,7 +29,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from ...configuration_utils import PretrainedConfig
-from ...generation.configuration_utils import GenerationConfig
+from ...generation.configuration_utils import CompileConfig, GenerationConfig
 from ...generation.logits_process import LogitsProcessor
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
@@ -45,17 +45,20 @@ generation goes on, there are two dimensions that change:
 - the number of keys/values tokens (KV), which grows as the cache does
 
 To solve this, we slice along those dimensions to fixed lengths. The size of the slices is controlled by the variables
-below: NUM_X_CUDA_GRAPHS means that we create at most NUM_X_CUDA_GRAPHS graphs for the X dimension. So if the maximum
-number of queries tokens is 1000, and NUM_Q_CUDA_GRAPHS is 4, we will slice the number of queries token by intervals of
-1000 / 4 = 250 tokens, ie. to 250, 500, 750 or 1000 queries tokens.
+num_x_padding_intervals: NUM_X_PADDING_INTERVALS means that we create at most NUM_X_PADDING_INTERVALS graphs for the X
+dimension. So if the maximum number of queries tokens is 1000, and NUM_Q_PADDING_INTERVALS is 4, we will slice the
+number of queries token by intervals of 1000 / 4 = 250 tokens, ie. to 250, 500, 750 or 1000 queries tokens.
 
 Smaller slices means more granularity and thus less padding. But since each graph takes up space on the GPU and time to
 create, we don't want to many graphs. And since the size of the KV dimension is the number of queries tokens plus the
 number of tokens cached, dimension of KV is usually much larger than the dimension of Q. So we have more granularity
 for the KV dimension than the query dimension.
+
+This variable used to be called NUM_X_CUDA_GRAPHS, but we renamed it to NUM_X_PADDING_INTERVALS because it is used for
+padding in the case of cuda graphs AND torch.compile.
 """
-NUM_Q_CUDA_GRAPHS = 4
-NUM_KV_CUDA_GRAPHS = 8
+NUM_Q_PADDING_INTERVALS = 4
+NUM_KV_PADDING_INTERVALS = 8
 
 
 def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
@@ -188,6 +191,8 @@ class ContinuousBatchProcessor:
         scheduler: Scheduler,
         manual_eviction: bool,
         use_cuda_graph: bool,
+        q_padding_intervals: int,
+        kv_padding_intervals: int,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -221,7 +226,14 @@ class ContinuousBatchProcessor:
         # Accumulator for batch scheduling
         self.requests_in_batch: list[RequestState] = []
         # Cuda graphs for the generation step
+        self.q_padding_intervals = q_padding_intervals
+        self.kv_padding_intervals = kv_padding_intervals
         self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] | None = {} if use_cuda_graph else None
+        # Compile-related arguments
+        self.compile_config: CompileConfig | None = getattr(generation_config, "compile_config", None)
+        self._forward_process_and_sample_is_compiled = False
+
+        self._pad_inputs = use_cuda_graph or (self.compile_config is not None and not self.compile_config.dynamic)
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -627,28 +639,39 @@ class ContinuousBatchProcessor:
     def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
         """Perform a single generation step."""
 
-        # If cuda graphs are disabled, we just use the actual size
+        # If a compile config is specified, we compile the forward pass once in a wrapper
+        if self.compile_config is not None and not self._forward_process_and_sample_is_compiled:
+            self._forward_process_and_sample = torch.compile(
+                self._forward_process_and_sample,
+                fullgraph=self.compile_config.fullgraph,
+                mode=self.compile_config.mode,
+                dynamic=self.compile_config.dynamic,
+                backend=self.compile_config.backend,
+                options=self.compile_config.options,
+            )
+            self._forward_process_and_sample_is_compiled = True
+
+        # If inputs are static sized, we find the padded sizes of the queries and keys/values
+        if self._pad_inputs:
+            padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, self.q_padding_intervals)
+            max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
+            padded_read_index_size = pad_by_intervals(
+                max_read_index_size - self.max_batch_tokens,
+                self.cache.num_blocks * self.cache.block_size,
+                self.kv_padding_intervals,
+            )
+        else:
+            padded_q, padded_read_index_size = 0, 0
+        # Retrieve the model kwargs with or without padding
+        batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
+
+        # If we are not using cuda graphs, we perform the generation step and return
         if self._graphs is None:
-            batch_data = self.get_model_kwargs()
             self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
             return None
 
-        # Determine the padded size of the queries and keys/values
-        padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, NUM_Q_CUDA_GRAPHS)
-
-        max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
-        padded_read_index_size = pad_by_intervals(
-            max_read_index_size - self.max_batch_tokens,
-            self.cache.num_blocks * self.cache.block_size,
-            NUM_KV_CUDA_GRAPHS,
-        )
-
-        # Get the batch data and the associated graph
-        batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
-
-        graph = self._graphs.get((padded_q, padded_read_index_size))
-
         # If we have a graph that fits, we replay it
+        graph = self._graphs.get((padded_q, padded_read_index_size))
         if graph is not None:
             graph.replay()
             return None
@@ -673,7 +696,6 @@ class ContinuousBatchProcessor:
     ) -> None:
         """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
         function to be easier to trace with OpenTelemetry."""
-        # with torch.no_grad():
         logits = self._model_forward(model, batch_data)
         # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
         probs = self._process_logit(batch_data, logits, logit_processor)
@@ -727,8 +749,8 @@ class ContinuousBatchingManager:
         generation_config: GenerationConfig,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
-        num_q_cuda_graphs: int = 0,
-        num_kv_cuda_graphs: int = 0,
+        num_q_padding_intervals: int = 0,
+        num_kv_padding_intervals: int = 0,
         allow_prefix_sharing: bool = True,
     ) -> None:
         """Initialize the continuous batching manager.
@@ -737,8 +759,8 @@ class ContinuousBatchingManager:
             model: The language model for generation
             generation_config: Configuration for generation parameters
             max_queue_size: Maximum size of the request queue (0 = unlimited)
-            num_q_cuda_graphs: (optional) Number of CUDA graphs to use for the query dimension
-            num_kv_cuda_graphs: (optional) Number of CUDA graphs to use for the keys/values dimension
+            num_q_padding_intervals: (optional) Number of intervals used to pad the query dimension
+            num_kv_padding_intervals: (optional) Number of intervals used to pad the keys/values dimension
             allow_prefix_sharing: (optional) Whether to allow prefix sharing if the model has only full attention layers
         """
         if "paged|" not in model.config._attn_implementation:
@@ -764,37 +786,68 @@ class ContinuousBatchingManager:
         self.model.generation_config.top_p = None
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
-        use_cuda_graph: bool | None = getattr(generation_config, "use_cuda_graph", None)
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: ContinuousBatchProcessor | None = None
-
         self._allow_prefix_sharing = allow_prefix_sharing
 
-        # If a number of cuda graphs was specified for either Q or KV, we activate cuda graphs
-        if num_q_cuda_graphs > 0 or num_kv_cuda_graphs > 0:
-            self.use_cuda_graph = True
-        # If use_cuda_graph is specified, we follow the user's choice
-        elif use_cuda_graph is not None:
-            self.use_cuda_graph = use_cuda_graph
-        # If the use of cuda graphs is not specified, we follow the user's choice, otherwise we have a default heuristic
-        else:
-            # Attention implementations where an attention mask is needed suffer a lot more from the padding associated
-            # with cuda graphs, so default is to turn cuda graphs off for those implementations
-            self.use_cuda_graph = not attn_mask_is_needed(self.model.config)
-            logger.warning(
-                f"No behavior specified for use_cuda_graph, defaulting to {self.use_cuda_graph = } because "
-                f"{self.model.config._attn_implementation = }. If you want to save memory, turn off cuda graphs, but "
-                "they can improve performances."
-            )
+        self.use_cuda_graph = self._decide_use_cuda_graphs(
+            use_cuda_graph=getattr(generation_config, "use_cuda_graph", None),
+            num_q_padding_intervals=num_q_padding_intervals,
+            num_kv_padding_intervals=num_kv_padding_intervals,
+            compile_config=getattr(generation_config, "compile_config", None),
+        )
 
-        # If cuda graphs are activated, we set the number of cuda graphs for Q and KV if not specified
-        if self.use_cuda_graph:
-            self.num_q_cuda_graphs = num_q_cuda_graphs if num_q_cuda_graphs > 0 else NUM_Q_CUDA_GRAPHS
-            self.num_kv_cuda_graphs = num_kv_cuda_graphs if num_kv_cuda_graphs > 0 else NUM_KV_CUDA_GRAPHS
+        # We set the number of padding intervals for Q and KV
+        self.q_padding_intervals = num_q_padding_intervals if num_q_padding_intervals > 0 else NUM_Q_PADDING_INTERVALS
+        self.kv_padding_intervals = (
+            num_kv_padding_intervals if num_kv_padding_intervals > 0 else NUM_KV_PADDING_INTERVALS
+        )
 
         if self.log_prob_generation:
             raise NotImplementedError("log_prob_generation is not supported yet")
+
+    def _decide_use_cuda_graphs(
+        self,
+        use_cuda_graph: bool | None,
+        num_q_padding_intervals: int,
+        num_kv_padding_intervals: int,
+        compile_config: CompileConfig | None,
+    ) -> bool:
+        """Returns whether or not to use cuda graphs for continuous batching, depending on the following criteria:
+        - (use_cuda_graph) which is the user choice
+        - (num_q_padding_intervals) or (num_kv_padding_intervals) which is used to pad inputs: if it was specified by
+            the user, it's probable they want to use cuda graphs so inputs need to be padded
+        - (compile_config): if compile is on, turn on cuda graphs unless the compile mode uses its own cudagraphs
+        If none of the above criteria are met, we use a default heuristic based on the attention implementation: we turn
+        on cuda graphs if and only if no attention mask is needed.
+        """
+        # If use_cuda_graph is specified, we follow the user's choice
+        if use_cuda_graph is not None:
+            return use_cuda_graph
+        # If a number of padding intervals was specified for either Q or KV, we activate cuda graphs
+        if num_q_padding_intervals > 0 or num_kv_padding_intervals > 0:
+            return True
+        # If a compile config was found, turn off cuda graphs if the compile config already uses them
+        if compile_config is not None:
+            options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
+            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
+            if compile_uses_cudagraphs:
+                logger.warning(
+                    f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
+                    "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
+                )
+            return not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
+        # Otherwise we have a default heuristic based on the attention implementation:
+        # attention implementations where an attention mask is needed suffer a lot more from the padding associated
+        # with cuda graphs, so default is to turn cuda graphs off for those implementations
+        use_cuda_graph = not attn_mask_is_needed(self.model.config)
+        logger.warning(
+            f"No behavior specified for use_cuda_graph, defaulting to {use_cuda_graph = } because "
+            f"{self.model.config._attn_implementation = }. If you want to save memory, turn off cuda graphs, but "
+            "they can improve performances."
+        )
+        return use_cuda_graph
 
     @traced
     def start(self) -> None:
@@ -999,6 +1052,8 @@ class ContinuousBatchingManager:
                 scheduler=scheduler(paged_attention_cache, self.manual_eviction),
                 manual_eviction=self.manual_eviction,
                 use_cuda_graph=self.use_cuda_graph,
+                q_padding_intervals=self.q_padding_intervals,
+                kv_padding_intervals=self.kv_padding_intervals,
             )
             self.batch_processor = batch_processor
             self.current_batch = 0
@@ -1024,12 +1079,15 @@ class ContinuousBatchingManager:
         # Debug logging of the current memory usage
         if logger.level <= logging.DEBUG:
             device, total, reserved, allocated = get_device_and_memory_breakdown()
-            logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
+            available_memory = total - max(allocated, reserved)
+            logger.debug(
+                f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
+            )
 
         self._generation_step()
 
         if torch.cuda.is_available():
-            torch.cuda.synchronize()
+            torch.cuda.synchronize()  # FIXME: why is this needed?
         # Processor updates the batch after generation step is truly over
         batch_processor.update_batch()
 
@@ -1099,18 +1157,19 @@ class ContinuousMixin:
         generation_config: GenerationConfig | None = None,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
-        num_q_cuda_graphs: int = 0,
-        num_kv_cuda_graphs: int = 0,
+        num_q_padding_intervals: int = 0,
+        num_kv_padding_intervals: int = 0,
         allow_prefix_sharing: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
         Args:
-            generation_config: Custom generation configuration
+            generation_config: An optional generation configuration, which may contain a CompileConfig object
             manual_eviction: Whether to manually evict requests from the cache
             max_queue_size: Maximum size of the input request queue
-            num_q_cuda_graphs: Number of CUDA graphs to use for the query dimension
-            num_kv_cuda_graphs: Number of CUDA graphs to use for the keys/values dimension
+            num_q_padding_intervals: Number of intervals used to pad the query dimension
+            num_kv_padding_intervals: Number of intervals used to pad the keys/values dimension
+            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
 
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -1132,8 +1191,8 @@ class ContinuousMixin:
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
-            num_q_cuda_graphs=num_q_cuda_graphs,
-            num_kv_cuda_graphs=num_kv_cuda_graphs,
+            num_q_padding_intervals=num_q_padding_intervals,
+            num_kv_padding_intervals=num_kv_padding_intervals,
             allow_prefix_sharing=allow_prefix_sharing,
         )
 
@@ -1144,11 +1203,11 @@ class ContinuousMixin:
         self,
         inputs: list[list[int]],
         generation_config: GenerationConfig | None = None,
-        progress_bar: bool = True,
-        num_q_cuda_graphs: int = 0,
-        num_kv_cuda_graphs: int = 0,
+        num_q_padding_intervals: int = 0,
+        num_kv_padding_intervals: int = 0,
         allow_prefix_sharing: bool = True,
         record_timestamps: bool = False,
+        progress_bar: bool = True,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1156,14 +1215,15 @@ class ContinuousMixin:
         Args:
             inputs: List of input token sequences (prompts)
             generation_config: Optional generation configuration
-            num_q_cuda_graphs: Number of CUDA graphs to use for the query dimension
-            num_kv_cuda_graphs: Number of CUDA graphs to use for the keys/values dimension
+            num_q_padding_intervals: Number of intervals used to pad the query dimension
+            num_kv_padding_intervals: Number of intervals used to pad the keys/values dimension
+            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
+            record_timestamps: If set to true, the requests will have a timestamp for each token generated
+            progress_bar: If set to true, a progress bar will be displayed
             **kwargs: Additional generation parameters
 
         Returns:
-            `list[list[int]]`: A list containing the generated sequences (including prompt tokens
-                                if not handled otherwise) for each input prompt, in the same order.
-                                Returns an empty list `[]` for requests that failed.
+            `dict[str, GenerationOutput]`: a dictionary of request ids to GenerationOutput objects
         """
         if not inputs:
             return {}
@@ -1177,8 +1237,8 @@ class ContinuousMixin:
         with (
             self.continuous_batching_context_manager(
                 generation_config=generation_config,
-                num_q_cuda_graphs=num_q_cuda_graphs,
-                num_kv_cuda_graphs=num_kv_cuda_graphs,
+                num_q_cuda_graphs=num_q_padding_intervals,
+                num_kv_cuda_graphs=num_kv_padding_intervals,
                 allow_prefix_sharing=allow_prefix_sharing,
                 block=True,
                 timeout=5,
