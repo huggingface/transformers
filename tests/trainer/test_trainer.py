@@ -104,7 +104,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
+from transformers.trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    HPSearchBackend,
+    check_target_module_exists,
+    get_last_checkpoint,
+)
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -5110,6 +5115,143 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Trainer saves non-PreTrainedModel models as `model.safetensors` by default if safetensors is available.
         final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
         self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
+
+    @require_torch_non_multi_accelerator
+    def test_resume_batch_order(self):
+        """
+        Test that verifies dataloader order is reproducible when resuming from partial checkpoints.
+        Tests resuming from checkpoint 7 (within epoch 1).
+        """
+
+        # --- Helper classes and functions defined locally for this test ---
+        class DummyDataset(torch.utils.data.Dataset):
+            def __init__(self, size: int = 32):
+                self.size = size
+                self.data = torch.randn((size, 10))
+                self.data[:, 0] = torch.arange(0, size)  # Encode the data order
+                self.labels = torch.randint(0, 10, (size,))
+
+            def __len__(self) -> int:
+                return self.size
+
+            def __getitem__(self, idx: int):
+                return {"input_ids": self.data[idx], "labels": self.labels[idx]}
+
+        class DummyModel(nn.Module):
+            def __init__(self, size: int):
+                super().__init__()
+                self.fc = nn.Linear(10, 10, bias=False)
+                # data_order logs the order of data points seen by the model
+                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+
+            def load_state_dict(self, state_dict, strict=True):
+                # Handle data_order buffer size mismatch during checkpoint loading
+                if "data_order" in state_dict:
+                    saved_data_order = state_dict["data_order"]
+                    if hasattr(self, "data_order") and self.data_order.shape != saved_data_order.shape:
+                        # Resize the buffer to match the saved state
+                        self.data_order = saved_data_order.clone()
+
+                return super().load_state_dict(state_dict, strict=strict)
+
+            def forward(self, input_ids: torch.Tensor, labels: torch.Tensor = None):
+                logits = self.fc(input_ids)
+                loss = None
+                if labels is not None:
+                    loss_fn = nn.CrossEntropyLoss()
+                    loss = loss_fn(logits, labels)
+
+                # Log the data order for verification
+                data_indices = input_ids[:, 0].int()
+                self.data_order = torch.cat([self.data_order, data_indices.detach().clone()])
+
+                return {"loss": loss, "logits": logits}
+
+        # Scenario 1: Run baseline training to completion
+        # 1.1 Run training to completion
+        set_seed(42)
+        train_dataset = DummyDataset(size=10)
+        model_baseline = DummyModel(size=10)
+
+        exp_dir_baseline = self.get_auto_remove_tmp_dir()
+        args_baseline = TrainingArguments(
+            output_dir=str(exp_dir_baseline),
+            seed=42,
+            learning_rate=0.1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=1,
+            save_strategy="steps",
+            save_steps=1,
+            num_train_epochs=3,
+            optim="sgd",
+            disable_tqdm=True,
+            dataloader_num_workers=0,  # Ensures that main process loads the data
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+        )
+
+        trainer_baseline = Trainer(
+            model=model_baseline,
+            args=args_baseline,
+            train_dataset=train_dataset,
+        )
+
+        trainer_baseline.train()
+
+        # 1.2 Get the data order from the last saved checkpoint for the full run
+        last_checkpoint_path = get_last_checkpoint(exp_dir_baseline)
+        last_ckpt_num = int(os.path.basename(last_checkpoint_path).split("-")[1])  # Must be 15
+
+        baseline_state_dict = safetensors.torch.load_file(
+            os.path.join(exp_dir_baseline, f"checkpoint-{last_ckpt_num}", "model.safetensors")
+        )
+        baseline_data_order = baseline_state_dict["data_order"]
+
+        # Scenario 2: Resume training from checkpoint in the middle of the second epoch
+        # 2.1 Resume training from the second batch of epoch 1 (target_ckpt_num = 7)
+        # 1 epoch consists of 10 points, so 5 steps with batch size 2
+        target_ckpt_num = 7
+        checkpoint_path = os.path.join(exp_dir_baseline, f"checkpoint-{target_ckpt_num - 1}")
+
+        set_seed(42)
+        model_resume = DummyModel(size=10)
+
+        exp_dir_resume = self.get_auto_remove_tmp_dir()
+        args_resume = TrainingArguments(
+            output_dir=str(exp_dir_resume),
+            seed=42,
+            learning_rate=0.1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=1,
+            save_strategy="steps",
+            save_steps=1,
+            num_train_epochs=3,
+            optim="sgd",
+            disable_tqdm=True,
+            dataloader_num_workers=0,  # Ensures that main process loads the data
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+        )
+
+        trainer_resume = Trainer(
+            model=model_resume,
+            args=args_resume,
+            train_dataset=train_dataset,
+        )
+
+        trainer_resume.train(resume_from_checkpoint=checkpoint_path)
+
+        # 2.2 Get the data order from the last saved checkpoint for the resumed run
+        resumed_state_dict = safetensors.torch.load_file(
+            os.path.join(exp_dir_resume, f"checkpoint-{last_ckpt_num}", "model.safetensors")
+        )
+        resumed_data_order = resumed_state_dict["data_order"]
+
+        # 3. Compare results: the data order should be identical
+        self.assertTrue(
+            torch.equal(baseline_data_order, resumed_data_order),
+            f"Data order mismatch after checkpoint deletion and resume.\n"
+            f"Baseline: {baseline_data_order}\n"
+            f"Resumed: {resumed_data_order}",
+        )
 
 
 @require_torch
