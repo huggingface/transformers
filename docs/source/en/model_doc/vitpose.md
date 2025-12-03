@@ -36,9 +36,10 @@ import requests
 import numpy as np
 import supervision as sv
 from PIL import Image
-from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation, infer_device
+from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -162,9 +163,10 @@ image_pose_result = pose_results[0]
 - ViTPose++ has 6 different MoE expert heads (COCO validation `0`, AiC `1`, MPII `2`, AP-10K `3`, APT-36K `4`, COCO-WholeBody `5`) which supports 6 different datasets. Pass a specific value corresponding to the dataset to the `dataset_index` to indicate which expert to use.
 
     ```py
-    from transformers import AutoProcessor, VitPoseForPoseEstimation, infer_device
+    from transformers import AutoProcessor, VitPoseForPoseEstimation
+    from accelerate import Accelerator
 
-    device = infer_device()
+    device = Accelerator().device
 
     image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-base")
     model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device=device)
@@ -290,6 +292,12 @@ Refer to resources below to learn more about using ViTPose.
 ## VitPoseImageProcessor
 
 [[autodoc]] VitPoseImageProcessor
+    - preprocess
+    - post_process_pose_estimation
+
+## VitPoseImageProcessorFast
+
+[[autodoc]] VitPoseImageProcessorFast
     - preprocess
     - post_process_pose_estimation
 

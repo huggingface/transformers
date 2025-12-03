@@ -15,9 +15,8 @@
 """Image processor class for MaskFormer."""
 
 import math
-import warnings
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -42,6 +41,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -57,56 +57,30 @@ from ...utils.import_utils import requires
 logger = logging.get_logger(__name__)
 
 
-if TYPE_CHECKING:
-    from transformers import MaskFormerForInstanceSegmentationOutput
-
-
 if is_torch_available():
     import torch
     from torch import nn
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
+class MaskFormerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    ignore_index (`int`, *optional*):
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
+    do_reduce_labels (`bool`, *optional*, defaults to `False`):
+        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
+        The background label will be replaced by `ignore_index`.
+    num_labels (`int`, *optional*):
+        The number of labels in the segmentation map.
     """
-    Computes the output image size given the input image size and the desired output size.
 
-    Args:
-        image_size (`tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
+    size_divisor: int
+    ignore_index: Optional[int]
+    do_reduce_labels: bool
+    num_labels: Optional[int]
 
 
-# Copied from transformers.models.detr.image_processing_detr.max_across_indices
 def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
@@ -446,6 +420,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = MaskFormerImageProcessorKwargs
 
     @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
     def __init__(
@@ -1008,54 +983,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             encoded_inputs["class_labels"] = class_labels
 
         return encoded_inputs
-
-    def post_process_segmentation(
-        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Optional[tuple[int, int]] = None
-    ) -> "torch.Tensor":
-        """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
-        supports PyTorch.
-
-        Args:
-            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`].
-
-            target_size (`tuple[int, int]`, *optional*):
-                If set, the `masks_queries_logits` will be resized to `target_size`.
-
-        Returns:
-            `torch.Tensor`:
-                A tensor of shape (`batch_size, num_class_labels, height, width`).
-        """
-        warnings.warn(
-            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_instance_segmentation`",
-            FutureWarning,
-        )
-
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        if target_size is not None:
-            masks_queries_logits = torch.nn.functional.interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-
-        return segmentation
 
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None

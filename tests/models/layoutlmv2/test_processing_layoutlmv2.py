@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
-import shutil
-import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutlmv2 import LayoutLMv2Processor, LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_pytesseract_available
+from transformers.utils import is_pytesseract_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
+
+if is_torchvision_available():
+    from transformers import LayoutLMv2ImageProcessorFast
 
 if is_pytesseract_available():
     from transformers import LayoutLMv2ImageProcessor
@@ -35,11 +34,19 @@ if is_pytesseract_available():
 @require_pytesseract
 @require_tokenizers
 class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    tokenizer_class = LayoutLMv2Tokenizer
-    rust_tokenizer_class = LayoutLMv2TokenizerFast
     processor_class = LayoutLMv2Processor
 
-    def setUp(self):
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
+            do_resize=True,
+            size=224,
+            apply_ocr=True,
+        )
+
+    @classmethod
+    def _setup_tokenizer(cls):
         vocab_tokens = [
             "[UNK]",
             "[CLS]",
@@ -57,58 +64,26 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "low",
             "lowest",
         ]
-
-        image_processor_map = {
-            "do_resize": True,
-            "size": 224,
-            "apply_ocr": True,
-        }
-
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        self.image_processing_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.image_processing_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(image_processor_map) + "\n")
+        return LayoutLMv2Tokenizer.from_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
+    def test_image_processor_defaults(self):
+        pass
 
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
-
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv2ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    def test_save_load_pretrained_default(self):
-        image_processor = self.get_image_processor()
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(image_processor=image_processor, tokenizer=tokenizer)
-
-            processor.save_pretrained(self.tmpdirname)
-            processor = LayoutLMv2Processor.from_pretrained(self.tmpdirname)
-
-            self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast))
-
-            self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-            self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+    @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
+    def test_processor_with_multiple_inputs(self):
+        pass
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LayoutLMv2Processor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
+        processor = self.get_processor()
         processor.save_pretrained(self.tmpdirname)
 
         # slow tokenizer
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
+        tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
+        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30, use_fast=False)
 
         processor = LayoutLMv2Processor.from_pretrained(
             self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
@@ -121,8 +96,8 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
         # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
+        tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
+        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30)
 
         processor = LayoutLMv2Processor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
@@ -132,7 +107,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutLMv2TokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorFast)
 
     @slow
     def test_overflowing_tokens(self):
@@ -142,13 +117,13 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # set up
         datasets = load_dataset("nielsr/funsd")
-        processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
+        processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", apply_ocr=False)
 
         def preprocess_data(examples):
             images = [image.convert("RGB") for image in examples["image"]]
-            words = examples["words"]
-            boxes = examples["bboxes"]
-            word_labels = examples["ner_tags"]
+            words = list(examples["words"])
+            boxes = list(examples["bboxes"])
+            word_labels = list(examples["ner_tags"])
             encoded_inputs = processor(
                 images,
                 words,

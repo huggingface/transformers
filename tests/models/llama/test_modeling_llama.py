@@ -39,9 +39,6 @@ if is_torch_available():
 
     from transformers import (
         LlamaForCausalLM,
-        LlamaForQuestionAnswering,
-        LlamaForSequenceClassification,
-        LlamaForTokenClassification,
         LlamaModel,
         LlamaTokenizer,
     )
@@ -54,19 +51,6 @@ class LlamaModelTester(CausalLMModelTester):
 
 @require_torch
 class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": LlamaModel,
-            "text-classification": LlamaForSequenceClassification,
-            "text-generation": LlamaForCausalLM,
-            "zero-shot": LlamaForSequenceClassification,
-            "question-answering": LlamaForQuestionAnswering,
-            "token-classification": LlamaForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = LlamaModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -133,7 +117,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             ("xpu", 3): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
             ("cuda", 7): torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]),
             ("cuda", 8): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
-            ("rocm", (9, 4)): torch.tensor([[-6.5094, -4.1329, -4.9754, -3.5042,  0.8082, -2.9443,  1.2830, -3.3539]]),
+            ("rocm", (9, 4)): torch.tensor([[-6.5067, -4.1154, -4.9819, -3.1408,  0.8117, -2.9435,  1.2883, -3.3221]]),
         })
 
         expected_mean = expected_means.get_expectation().to(torch_device)

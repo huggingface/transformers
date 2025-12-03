@@ -17,6 +17,7 @@ import copy
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -44,7 +45,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -87,6 +87,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
         tie_word_embeddings=True,
         is_training=True,
         vision_config=None,
+        rope_parameters=None,
         vision_start_token_id=3,
         image_token_id=4,
         video_token_id=5,
@@ -140,7 +141,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
             "rope_theta": rope_theta,
             "tie_word_embeddings": tie_word_embeddings,
             "vocab_size": vocab_size,
-            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
         }
 
     def get_config(self):
@@ -200,7 +201,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Qwen2_5_VLVisionText2TextModelTester(self)
@@ -208,47 +208,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_text_config(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_config_dict = config.to_dict()
-        base_config = Qwen2_5_VLConfig(**base_config_dict)
-
-        # Trying to get or set text related attributes happens via text config
-        vocab_size = base_config.vocab_size
-        text_vocab_size = base_config.text_config.vocab_size
-        self.assertEqual(vocab_size, text_vocab_size)
-
-        base_config.vocab_size = 55
-        self.assertEqual(base_config.vocab_size, 55)
-        self.assertEqual(base_config.text_config.vocab_size, 55)
-
-        # We can still initialize config from old-format json, i.e. flat structure
-        text_config_dict = base_config_dict.pop("text_config")
-        flat_config_dict = {**text_config_dict, **base_config_dict}
-        config_from_flat_dict = Qwen2_5_VLConfig(**flat_config_dict)
-        config_from_flat_dict.vocab_size = 78
-        self.assertEqual(config_from_flat_dict.vocab_size, 78)
-        self.assertEqual(config_from_flat_dict.text_config.vocab_size, 78)
-
-        # Vision config attributes are NOT force-set via vision config
-        base_config.patch_size = 8
-        self.assertEqual(base_config.patch_size, 8)
-        self.assertNotEqual(base_config.vision_config.patch_size, 8)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -634,6 +593,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
@@ -662,6 +622,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
     @slow
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",

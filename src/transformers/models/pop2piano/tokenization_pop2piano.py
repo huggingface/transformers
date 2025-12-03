@@ -21,7 +21,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
+from ...tokenization_python import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
 from ...utils.import_utils import requires
 
@@ -265,7 +265,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder]) + 1)]
+        note_onsets_ready = [None for i in range(sum(k.endswith("NOTE") for k in self.encoder) + 1)]
         notes = []
         for token_type, number in words:
             if token_type == "TOKEN_SPECIAL":

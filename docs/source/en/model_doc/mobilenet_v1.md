@@ -87,7 +87,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 - Checkpoint names follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`. `1.0` is the depth multiplier and `224` is the image resolution.
 - While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
-- MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
+- MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
 - The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV1Config`].
 
     ```python
@@ -105,11 +105,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 ## MobileNetV1Config
 
 [[autodoc]] MobileNetV1Config
-
-## MobileNetV1FeatureExtractor
-
-[[autodoc]] MobileNetV1FeatureExtractor
-    - preprocess
 
 ## MobileNetV1ImageProcessor
 

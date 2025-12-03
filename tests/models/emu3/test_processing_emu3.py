@@ -13,28 +13,26 @@
 # limitations under the License.
 """Testing suite for the PyTorch emu3 model."""
 
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import Emu3Processor, GPT2TokenizerFast
-from transformers.utils import is_vision_available
+from transformers import Emu3Processor
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import Emu3ImageProcessor
 
 
 class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Emu3Processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = Emu3ImageProcessor(min_pixels=28 * 28, max_pixels=56 * 56)
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(min_pixels=28 * 28, max_pixels=56 * 56)
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         extra_special_tokens = {
             "image_token": "<image>",
             "boi_token": "<|image start|>",
@@ -42,16 +40,10 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_wrapper_token": "<|image token|>",
             "eof_token": "<|extra_201|>",
         }
-        tokenizer = GPT2TokenizerFast.from_pretrained(
-            "openai-community/gpt2", extra_special_tokens=extra_special_tokens
-        )
+        tokenizer = tokenizer_class.from_pretrained("openai-community/gpt2", extra_special_tokens=extra_special_tokens)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        processor = cls.processor_class(
-            image_processor=image_processor, tokenizer=tokenizer, chat_template="dummy_template"
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+        return tokenizer
 
     @staticmethod
     def prepare_processor_dict():

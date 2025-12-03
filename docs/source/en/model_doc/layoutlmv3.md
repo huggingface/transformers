@@ -80,11 +80,6 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 
 [[autodoc]] LayoutLMv3Config
 
-## LayoutLMv3FeatureExtractor
-
-[[autodoc]] LayoutLMv3FeatureExtractor
-    - __call__
-
 ## LayoutLMv3ImageProcessor
 
 [[autodoc]] LayoutLMv3ImageProcessor

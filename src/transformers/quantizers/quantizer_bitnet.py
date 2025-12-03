@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 
@@ -69,13 +69,10 @@ class BitNetHfQuantizer(HfQuantizer):
                     "This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bitnet_linear
@@ -91,7 +88,7 @@ class BitNetHfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 

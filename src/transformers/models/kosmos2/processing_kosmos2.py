@@ -22,7 +22,7 @@ from typing import Optional, Union
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
-from ...tokenization_utils import AddedToken
+from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
 
 
@@ -33,15 +33,17 @@ BboxInput = Union[
     list[list[tuple[float, float, float]]],
 ]
 
+NestedList = list[Union[Optional[int], "NestedList"]]
+
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[list[float]]
-    num_image_tokens: Optional[int]
+    bboxes: Optional[NestedList]  # NOTE: hub validators can't accept `Sequence`
+    num_image_tokens: int
     first_image_token_id: Optional[int]
 
 
 class Kosmos2TextKwargs(TextKwargs, total=False):
-    add_eos_token: Optional[bool]
+    add_eos_token: bool
 
 
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -82,10 +84,6 @@ class Kosmos2Processor(ProcessorMixin):
         num_patch_index_tokens (`int`, *optional*, defaults to 1024):
             The number of tokens that represent patch indices.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         tokenizer.return_token_type_ids = False
@@ -136,8 +134,6 @@ class Kosmos2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         """

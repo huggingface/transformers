@@ -34,6 +34,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 
 
@@ -44,9 +45,18 @@ if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
 
-    from .modeling_efficientloftr import KeypointMatchingOutput
+    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 logger = logging.get_logger(__name__)
+
+
+class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 # Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale
@@ -155,6 +165,7 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = EfficientLoFTRImageProcessorKwargs
 
     def __init__(
         self,
@@ -333,15 +344,15 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
 
     def post_process_keypoint_matching(
         self,
-        outputs: "KeypointMatchingOutput",
+        outputs: "EfficientLoFTRKeypointMatchingOutput",
         target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`EfficientLoFTRKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the

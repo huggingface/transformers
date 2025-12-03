@@ -15,8 +15,6 @@
 Please note that Pop2PianoTokenizer is too far from our usual tokenizers and thus cannot use the TokenizerTesterMixin class.
 """
 
-import os
-import pickle
 import shutil
 import tempfile
 import unittest
@@ -28,7 +26,7 @@ from transformers.testing_utils import (
     require_pretty_midi,
     require_torch,
 )
-from transformers.tokenization_utils import BatchEncoding
+from transformers.tokenization_python import BatchEncoding
 
 
 if is_torch_available():
@@ -223,23 +221,6 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
 
         shutil.rmtree(tmpdirname)
-
-    def test_pickle_tokenizer(self):
-        tmpdirname = tempfile.mkdtemp()
-
-        notes = self.get_input_notes()
-        subwords = self.tokenizer(notes)["token_ids"]
-
-        filename = os.path.join(tmpdirname, "tokenizer.bin")
-        with open(filename, "wb") as handle:
-            pickle.dump(self.tokenizer, handle)
-
-        with open(filename, "rb") as handle:
-            tokenizer_new = pickle.load(handle)
-
-        subwords_loaded = tokenizer_new(notes)["token_ids"]
-
-        self.assertListEqual(subwords, subwords_loaded)
 
     def test_padding_side_in_kwargs(self):
         tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", padding_side="left")

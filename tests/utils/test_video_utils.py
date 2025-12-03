@@ -122,7 +122,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         torch_video = torch.from_numpy(video)
         videos_list = make_batched_videos(torch_video)
         self.assertIsInstance(videos_list, list)
-        self.assertIsInstance(videos_list[0], np.ndarray)
+        self.assertIsInstance(videos_list[0], torch.Tensor)
         self.assertEqual(videos_list[0].shape, (1, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0][0], video))
 

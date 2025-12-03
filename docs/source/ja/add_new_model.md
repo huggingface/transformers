@@ -51,7 +51,7 @@ Hugging Faceチームのメンバーがサポートを提供するので、一�
 
 ### Overview of models
 
-モデルを正常に追加するためには、モデルとその設定、[`PreTrainedModel`]、および[`PretrainedConfig`]の相互作用を理解することが重要です。
+モデルを正常に追加するためには、モデルとその設定、[`PreTrainedModel`]、および[`PreTrainedConfig`]の相互作用を理解することが重要です。
 例示的な目的で、🤗 Transformersに追加するモデルを「BrandNewBert」と呼びます。
 
 以下をご覧ください：
@@ -77,7 +77,7 @@ model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
 model.config  # model has access to its config
 ```
 
-モデルと同様に、設定は[`PretrainedConfig`]から基本的なシリアル化および逆シリアル化の機能を継承しています。注意すべきは、設定とモデルは常に2つの異なる形式にシリアル化されることです - モデルは*pytorch_model.bin*ファイルに、設定は*config.json*ファイルにシリアル化されます。[`~PreTrainedModel.save_pretrained`]を呼び出すと、自動的に[`~PretrainedConfig.save_pretrained`]も呼び出され、モデルと設定の両方が保存されます。
+モデルと同様に、設定は[`PreTrainedConfig`]から基本的なシリアル化および逆シリアル化の機能を継承しています。注意すべきは、設定とモデルは常に2つの異なる形式にシリアル化されることです - モデルは*pytorch_model.bin*ファイルに、設定は*config.json*ファイルにシリアル化されます。[`~PreTrainedModel.save_pretrained`]を呼び出すと、自動的に[`~PreTrainedConfig.save_pretrained`]も呼び出され、モデルと設定の両方が保存されます。
 
 ### Code style
 
@@ -406,16 +406,16 @@ model = BrandNewBertModel(BrandNewBertConfig())
 def _init_weights(self, module):
     """Initialize the weights"""
     if isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
     elif isinstance(module, nn.Embedding):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
     elif isinstance(module, nn.LayerNorm):
-        module.bias.data.zero_()
-        module.weight.data.fill_(1.0)
+        module.bias.zero_()
+        module.weight.fill_(1.0)
 ```
 
 特定のモジュールに特別な初期化が必要な場合、カスタムスキームをさらに持つことができます。たとえば、
@@ -431,9 +431,9 @@ def _init_weights(self, module):
         module.project_hid._is_hf_initialized = True
         module.project_q._is_hf_initialized = True
     elif isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 ```
 
 `_is_hf_initialized`フラグは、サブモジュールを一度だけ初期化することを確実にするために内部で使用されます。

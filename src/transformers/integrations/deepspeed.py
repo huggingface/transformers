@@ -314,13 +314,14 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         # Parameters of module and children will start with prefix. We can exit early if there are none in this
         # state_dict
-        if is_deepspeed_zero3_enabled() and len([key for key in state_dict if key.startswith(prefix)]) > 0:
+        if is_deepspeed_zero3_enabled():
             import deepspeed
 
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in state_dict if k in named_parameters]
+            params_to_gather = [named_parameters[k] for k in named_parameters if k in state_dict]
+
             if len(params_to_gather) > 0:
                 # because zero3 puts placeholders in model params, this context
                 # manager gathers (unpartitions) the params of the current layer, then loads from
@@ -356,11 +357,6 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     optimizer = None
     if "optimizer" in config:
-        if args.adafactor:
-            raise ValueError(
-                "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
-                "Only one optimizer can be configured."
-            )
         optimizer = DummyOptim(params=model_parameters)
     else:
         if hf_deepspeed_config.is_offload():

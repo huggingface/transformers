@@ -13,9 +13,9 @@
 # limitations under the License.
 import logging
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 
@@ -329,7 +329,7 @@ class ChunkSizeTuner:
         if min_chunk_size >= self.max_chunk_size:
             return min_chunk_size
 
-        candidates: list[int] = [2**l for l in range(int(math.log(self.max_chunk_size, 2)) + 1)]
+        candidates: list[int] = [2**l for l in range(int(math.log2(self.max_chunk_size)) + 1)]
         candidates = [c for c in candidates if c > min_chunk_size]
         candidates = [min_chunk_size] + candidates
         candidates[-1] += 4

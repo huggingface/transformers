@@ -141,8 +141,6 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -167,12 +165,6 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
 
 @require_torch

@@ -62,14 +62,15 @@ into a single instance to both extract the input features and decode the predict
 >>> import re
 >>> from PIL import Image
 
->>> from transformers import NougatProcessor, VisionEncoderDecoderModel, infer_device
+>>> from transformers import NougatProcessor, VisionEncoderDecoderModel
+from accelerate import Accelerator
 >>> from datasets import load_dataset
 >>> import torch
 
 >>> processor = NougatProcessor.from_pretrained("facebook/nougat-base")
 >>> model = VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base")
 
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> model.to(device)  # doctest: +IGNORE_RESULT
 
 >>> # prepare PDF image for the model
@@ -109,6 +110,10 @@ The model is identical to [Donut](donut) in terms of architecture.
 
 [[autodoc]] NougatImageProcessorFast
     - preprocess
+
+## NougatTokenizer
+
+[[autodoc]] NougatTokenizer
 
 ## NougatTokenizerFast
 

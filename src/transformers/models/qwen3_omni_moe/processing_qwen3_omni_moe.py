@@ -27,34 +27,28 @@ import numpy as np
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...video_utils import VideoInput, make_batched_videos
 
 
-class Qwen3OmniMoeVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]]
-    use_audio_in_video: Optional[bool]
-    seconds_per_chunk: Optional[float]
-    position_id_per_seconds: Optional[int]
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
-class Qwen3OmniMoeImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
+# and does not use them in video processor class
+class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
+    use_audio_in_video: bool
+    seconds_per_chunk: float
+    position_id_per_seconds: Union[int, float]
 
 
 class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
     videos_kwargs: Qwen3OmniMoeVideosKwargs
-    images_kwargs: Qwen3OmniMoeImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -72,6 +66,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": True,
+            "truncation": False,
             "return_attention_mask": True,
         },
     }
@@ -107,12 +102,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
     """
 
-    attributes = ["image_processor", "video_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):
@@ -128,9 +117,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -172,7 +161,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
 
         if audio is not None:
-            output_kwargs["audio_kwargs"]["padding"] = True  # Setting to True to avoid default truncation
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
@@ -341,16 +329,72 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+        """
+        Post-process the output of a vlm to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs[0], skip_special_tokens=skip_special_tokens, **kwargs)
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
+        """
+        if generation_mode is None or generation_mode == "text":
+            return self.post_process_image_text_to_text(
+                generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+            )
+
+        elif generation_mode == "audio":
+            # model supports only bs=1, so we will never get several audio outputs
+            audio = generated_outputs[1].reshape(-1).detach().cpu().numpy()
+            return [audio]
+
+        else:
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only `text` and `audio"
+            )
+
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
+        video_processor_input_names = self.video_processor.model_input_names
         return list(
             dict.fromkeys(
                 tokenizer_input_names
                 + feature_extractor_input_names
                 + image_processor_input_names
+                + video_processor_input_names
                 + ["feature_attention_mask"]
                 + ["video_second_per_grid"]
             )

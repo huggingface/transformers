@@ -15,8 +15,9 @@
 """PyTorch IdeficsVision model: a copy of CLIPVisionModel using a simpler config object"""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn

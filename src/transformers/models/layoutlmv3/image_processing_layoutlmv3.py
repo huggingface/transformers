@@ -34,6 +34,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -53,6 +54,25 @@ if is_pytesseract_available():
     import pytesseract
 
 logger = logging.get_logger(__name__)
+
+
+class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    apply_ocr (`bool`, *optional*, defaults to `True`):
+        Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
+        the `apply_ocr` parameter in the `preprocess` method.
+    ocr_lang (`str`, *optional*):
+        The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
+        used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
+    tesseract_config (`str`, *optional*):
+        Any additional custom configuration flags that are forwarded to the `config` parameter when calling
+        Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
+        `preprocess` method.
+    """
+
+    apply_ocr: bool
+    ocr_lang: Optional[str]
+    tesseract_config: Optional[str]
 
 
 def normalize_box(box, width, height):
@@ -143,6 +163,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = LayoutLMv3ImageProcessorKwargs
 
     def __init__(
         self,
@@ -150,7 +171,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_value: float = 1 / 255,
+        rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, Iterable[float]]] = None,
         image_std: Optional[Union[float, Iterable[float]]] = None,
@@ -167,7 +188,9 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self.size = size
         self.resample = resample
         self.do_rescale = do_rescale
-        self.rescale_factor = rescale_value
+        # The standard name is rescale_factor, but this processor accepted rescale_value for a long time,
+        # so allow it as a kwarg for backward compatibility
+        self.rescale_factor = kwargs.get("rescale_value", rescale_factor)
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD

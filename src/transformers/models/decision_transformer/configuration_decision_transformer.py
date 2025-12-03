@@ -14,14 +14,14 @@
 # limitations under the License.
 """Decision Transformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DecisionTransformerConfig(PretrainedConfig):
+class DecisionTransformerConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DecisionTransformerModel`]. It is used to
     instantiate a Decision Transformer model according to the specified arguments, defining the model architecture.
@@ -29,8 +29,8 @@ class DecisionTransformerConfig(PretrainedConfig):
     DecisionTransformer architecture. Many of the config options are used to instantiate the GPT2 model that is used as
     part of the architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

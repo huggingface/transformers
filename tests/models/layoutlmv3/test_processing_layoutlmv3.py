@@ -14,16 +14,13 @@
 
 import json
 import os
-import shutil
-import tempfile
 import unittest
 from functools import cached_property
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutlmv3 import LayoutLMv3Processor, LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_pytesseract_available
+from transformers.utils import is_pytesseract_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -35,117 +32,37 @@ if is_pytesseract_available():
 @require_pytesseract
 @require_tokenizers
 class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    tokenizer_class = LayoutLMv3Tokenizer
-    rust_tokenizer_class = LayoutLMv3TokenizerFast
     processor_class = LayoutLMv3Processor
 
-    def setUp(self):
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
+            do_resize=True,
+            size=224,
+            apply_ocr=True,
+        )
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer", use_fast=False)
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "\u0120",
-            "\u0120l",
-            "\u0120n",
-            "\u0120lo",
-            "\u0120low",
-            "er",
-            "\u0120lowest",
-            "\u0120newer",
-            "\u0120wider",
-            "<unk>",
-        ]
-        self.tmpdirname = tempfile.mkdtemp()
+        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "\u0120", "\u0120l", "\u0120n", "\u0120lo", "\u0120low", "er", "\u0120lowest", "\u0120newer", "\u0120wider", "<unk>"]  # fmt: skip
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-        image_processor_map = {
-            "do_resize": True,
-            "size": 224,
-            "apply_ocr": True,
-        }
+        return tokenizer_class.from_pretrained(cls.tmpdirname, unk_token="<unk>")
 
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(image_processor_map) + "\n")
-
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_tokenizers(self, **kwargs) -> list[PreTrainedTokenizerBase]:
-        return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
-
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
-
-    def test_save_load_pretrained_default(self):
-        image_processor = self.get_image_processor()
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            processor = LayoutLMv3Processor(image_processor=image_processor, tokenizer=tokenizer)
-
-            processor.save_pretrained(self.tmpdirname)
-            processor = LayoutLMv3Processor.from_pretrained(self.tmpdirname)
-
-            self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-            self.assertIsInstance(processor.tokenizer, (LayoutLMv3Tokenizer, LayoutLMv3TokenizerFast))
-
-            self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-            self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
-
-    def test_save_load_pretrained_additional_features(self):
-        processor = LayoutLMv3Processor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
-        processor.save_pretrained(self.tmpdirname)
-
-        # slow tokenizer
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
-
-        processor = LayoutLMv3Processor.from_pretrained(
-            self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutLMv3Tokenizer)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
-
-        # fast tokenizer
-        tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
-
-        processor = LayoutLMv3Processor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, LayoutLMv3TokenizerFast)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv3ImageProcessor)
+    @unittest.skip("LayoutLMv3 Image Processor doesn't return image tensors")
+    def test_image_processor_defaults(self):
+        pass
 
 
 # different use cases tests

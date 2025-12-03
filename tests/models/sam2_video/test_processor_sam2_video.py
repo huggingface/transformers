@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -24,9 +22,11 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_vision_available():
-    from transformers import AutoProcessor, Sam2ImageProcessorFast, Sam2VideoProcessor, Sam2VideoVideoProcessor
+    from transformers import Sam2VideoProcessor
 
 if is_torch_available():
     import torch
@@ -34,22 +34,12 @@ if is_torch_available():
 
 @require_vision
 @require_torchvision
-class Sam2ProcessorTest(unittest.TestCase):
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        image_processor = Sam2ImageProcessorFast()
-        video_processor = Sam2VideoVideoProcessor()
-        processor = Sam2VideoProcessor(image_processor, video_processor)
-        processor.save_pretrained(self.tmpdirname)
+class Sam2VideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Sam2VideoProcessor
 
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @unittest.skip("Sam2VideoProcessor call take in images only")
+    def test_processor_with_multiple_inputs(self):
+        pass
 
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
@@ -67,24 +57,9 @@ class Sam2ProcessorTest(unittest.TestCase):
         # mask_inputs = [Image.fromarray(x) for x in mask_inputs]
         return mask_inputs
 
-    def test_save_load_pretrained_additional_features(self):
-        image_processor = self.get_image_processor()
-        video_processor = self.get_video_processor()
-
-        processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
-        processor.save_pretrained(self.tmpdirname)
-
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-        processor = Sam2VideoProcessor.from_pretrained(self.tmpdirname, do_normalize=False, padding_value=1.0)
-
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, Sam2ImageProcessorFast)
-        self.assertIsInstance(processor.video_processor, Sam2VideoVideoProcessor)
-
     def test_image_processor_no_masks(self):
-        image_processor = self.get_image_processor()
-        video_processor = self.get_video_processor()
+        image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
 
         processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
 
@@ -109,8 +84,8 @@ class Sam2ProcessorTest(unittest.TestCase):
             np.testing.assert_array_equal(original_size, np.array([30, 400]))
 
     def test_image_processor_with_masks(self):
-        image_processor = self.get_image_processor()
-        video_processor = self.get_video_processor()
+        image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
 
         processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
 
@@ -128,8 +103,8 @@ class Sam2ProcessorTest(unittest.TestCase):
 
     @require_torch
     def test_post_process_masks(self):
-        image_processor = self.get_image_processor()
-        video_processor = self.get_video_processor()
+        image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
 
         processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
         dummy_masks = [torch.ones((1, 3, 5, 5))]
@@ -149,5 +124,5 @@ class Sam2ProcessorTest(unittest.TestCase):
         self.assertEqual(masks[0].shape, (1, 3, 1764, 2646))
 
         dummy_masks = [[1, 0], [0, 1]]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes))

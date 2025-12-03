@@ -92,18 +92,12 @@ print(f"The predicted class label is:{predicted_class_label}")
 - Feature maps are used directly instead of token embeddings.
 - Use [`MobileViTImageProcessor`] to preprocess images.
 - If using custom preprocessing, ensure that images are in **BGR** format (not RGB), as expected by the pretrained weights.
-- The classification models are pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k).
+- The classification models are pretrained on [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k).
 - The segmentation models use a [DeepLabV3](https://huggingface.co/papers/1706.05587) head and are pretrained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/).
 
 ## MobileViTConfig
 
 [[autodoc]] MobileViTConfig
-
-## MobileViTFeatureExtractor
-
-[[autodoc]] MobileViTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
 
 ## MobileViTImageProcessor
 

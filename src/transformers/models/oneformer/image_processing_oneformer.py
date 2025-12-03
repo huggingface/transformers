@@ -44,6 +44,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -61,6 +62,30 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch import nn
+
+
+class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
+        Path to a local directory or Hugging Face Hub repository containing model metadata.
+    class_info_file (`str`, *optional*):
+        Path to the JSON file within the repository that contains class metadata.
+    num_text (`int`, *optional*):
+        Number of text queries for the text encoder, used as task-guiding prompts.
+    num_labels (`int`, *optional*):
+        Number of semantic classes for segmentation, determining the output layer's size.
+    ignore_index (`int`, *optional*):
+        Label to ignore in segmentation maps, often used for padding.
+    do_reduce_labels (`bool`, *optional*, defaults to `False`):
+        Whether to decrement all label values by 1, mapping the background class to `ignore_index`.
+    """
+
+    repo_path: Optional[str]
+    class_info_file: Optional[str]
+    num_text: Optional[int]
+    num_labels: Optional[int]
+    ignore_index: Optional[int]
+    do_reduce_labels: bool
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
@@ -423,6 +448,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
+    valid_kwargs = OneFormerImageProcessorKwargs
 
     @filter_out_non_signature_kwargs(extra=["max_size", "metadata", *INIT_SERVICE_KWARGS])
     def __init__(

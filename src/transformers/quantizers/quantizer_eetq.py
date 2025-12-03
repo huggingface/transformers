@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 
@@ -19,7 +19,7 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_eetq_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_kernels_available, is_torch_available, logging
 from .quantizers_utils import get_module_from_name
 
 
@@ -47,25 +47,8 @@ class EetqHfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
-        if not is_eetq_available():
-            raise ImportError(
-                "Using `eetq` 8-bit quantization requires eetq."
-                "Please install the latest version of eetq from : https://github.com/NetEase-FuXi/EETQ"
-            )
-
-        try:
-            import eetq  # noqa: F401
-        except ImportError as exc:
-            if "shard_checkpoint" in str(exc):
-                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
-                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
-                # TODO: Update message once eetq releases a fix
-                raise ImportError(
-                    "You are using a version of EETQ that is incompatible with the current transformers version. "
-                    "Either downgrade transformers to <= v4.46.3 or, if available, upgrade EETQ to > v1.0.0."
-                ) from exc
-            else:
-                raise
+        if not is_kernels_available():
+            raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
 
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
@@ -101,7 +84,7 @@ class EetqHfQuantizer(HfQuantizer):
         return dtype
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from eetq import EetqLinear
+        from ..integrations.eetq import EetqLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
 
@@ -112,38 +95,10 @@ class EetqHfQuantizer(HfQuantizer):
                 return True
         return False
 
-    def create_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        target_device: "torch.device",
-        **kwargs,
-    ):
-        from eetq import EetqLinear, quantize_and_preprocess_weights
-
-        module, tensor_name = get_module_from_name(model, param_name)
-        new_value, weight_scale = quantize_and_preprocess_weights(param_value)
-
-        # Samity check
-        if isinstance(module, EetqLinear):
-            if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.int8:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
-            else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
-
-        module._buffers[tensor_name] = new_value.to(target_device)
-        module.register("weight_scales", weight_scale.to(target_device))
-
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[list[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_eetq_linear
@@ -153,10 +108,7 @@ class EetqHfQuantizer(HfQuantizer):
         )
 
         model = replace_with_eetq_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
+            model, modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized
         )
 
         model.config.quantization_config = self.quantization_config
@@ -167,3 +119,8 @@ class EetqHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
+
+    def get_quantize_ops(self):
+        from ..integrations.eetq import EetqQuantize
+
+        return EetqQuantize(self)

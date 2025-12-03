@@ -15,11 +15,11 @@
 
 import os
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
 from io import BytesIO
-from typing import Callable, NewType, Optional, Union
+from typing import NewType, Optional, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -106,10 +106,22 @@ class VideoMetadata(Mapping):
             raise ValueError("Cannot infer video `timestamps` when `fps` or `frames_indices` is None.")
         return [frame_idx / self.fps for frame_idx in self.frames_indices]
 
+    @property
+    def sampled_fps(self) -> float:
+        "FPS of the sampled video."
+        if self.frames_indices is None or self.total_num_frames is None or self.fps is None:
+            return self.fps or 24
+        return len(self.frames_indices) / self.total_num_frames * self.fps
+
     def update(self, dictionary):
         for key, value in dictionary.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+
+VideoMetadataType = Union[
+    VideoMetadata, dict, list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
+]
 
 
 def is_valid_video_frame(frame):
@@ -196,7 +208,9 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
         return convert_pil_frames_to_video([videos])
     # only one frame passed, thus we unsqueeze time dim
     elif is_valid_image(videos):
-        return [np.array(videos)[None, ...]]
+        if isinstance(videos, PIL.Image.Image):
+            videos = np.array(videos)
+        return [videos[None, ...]]
     elif not isinstance(videos, list):
         raise ValueError(
             f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
@@ -215,7 +229,7 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     return flat_videos_list
 
 
-def make_batched_metadata(videos: VideoInput, video_metadata: Union[VideoMetadata, dict]):
+def make_batched_metadata(videos: VideoInput, video_metadata: VideoMetadataType) -> list[VideoMetadata]:
     if video_metadata is None:
         # Create default metadata and fill attributes we can infer from given video
         video_metadata = [
@@ -365,8 +379,8 @@ def read_video_opencv(
         height=int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         width=int(video.get(cv2.CAP_PROP_FRAME_WIDTH)),
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     index = 0
     frames = []
     while video.isOpened():
@@ -479,8 +493,8 @@ def read_video_pyav(
         height=container.streams.video[0].height,
         width=container.streams.video[0].width,
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     frames = []
     container.seek(0)
     end_index = indices[-1]
@@ -541,7 +555,6 @@ def read_video_torchvision(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-
     video = video[indices].contiguous()
     metadata.update(
         {
@@ -581,24 +594,28 @@ def read_video_torchcodec(
     requires_backends(read_video_torchcodec, ["torchcodec"])
     from torchcodec.decoders import VideoDecoder
 
+    # VideoDecoder expects a string for device, default to "cpu" if None
+
     decoder = VideoDecoder(
         video_path,
         # Interestingly `exact` mode takes less than approximate when we load the whole video
         seek_mode="exact",
         # Allow FFmpeg decide on the number of threads for efficiency
         num_ffmpeg_threads=0,
-        device=kwargs.get("device"),
+        device=kwargs.get("device", "cpu"),
     )
+    total_num_frames = decoder.metadata.num_frames
+    video_fps = decoder.metadata.average_fps
     metadata = VideoMetadata(
-        total_num_frames=decoder.metadata.num_frames,
-        fps=decoder.metadata.average_fps,
+        total_num_frames=total_num_frames,
+        fps=video_fps,
         duration=decoder.metadata.duration_seconds,
         video_backend="torchcodec",
         height=decoder.metadata.height,
         width=decoder.metadata.width,
     )
-    indices = sample_indices_fn(metadata=metadata, **kwargs)
 
+    indices = sample_indices_fn(metadata=metadata, **kwargs)
     video = decoder.get_frames_at(indices=indices).data.contiguous()
     metadata.frames_indices = indices
     return video, metadata
@@ -692,7 +709,7 @@ def load_video(
     # can also load with decord, but not cv2/torchvision
     # both will fail in case of url links
     video_is_url = video.startswith("http://") or video.startswith("https://")
-    if video_is_url and backend in ["opencv"]:
+    if video_is_url and backend == "opencv":
         raise ValueError("If you are trying to load a video from URL, you cannot use 'opencv' as backend")
 
     if (

@@ -16,6 +16,7 @@ import inspect
 import json
 import re
 import types
+from collections.abc import Callable
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
@@ -23,9 +24,7 @@ from functools import lru_cache
 from inspect import isfunction
 from typing import (
     Any,
-    Callable,
     Literal,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -54,6 +53,9 @@ if is_torch_available():
     from torch import Tensor
 
 
+ChatType = list[dict[str, Any]]
+
+
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
@@ -76,13 +78,9 @@ returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL
 class TypeHintParsingException(Exception):
     """Exception raised for errors in parsing type hints to generate JSON schemas"""
 
-    pass
-
 
 class DocstringParsingException(Exception):
     """Exception raised for errors in parsing docstrings to generate JSON schemas"""
-
-    pass
 
 
 def _get_json_schema_type(param_type: type) -> dict[str, str]:
@@ -201,7 +199,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     return schema
 
 
-def parse_google_format_docstring(docstring: str) -> tuple[Optional[str], Optional[dict], Optional[str]]:
+def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | None, str | None]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -464,10 +462,10 @@ def _compile_jinja_template(chat_template):
 
 
 def render_jinja_template(
-    conversations: list[list[dict[str, str]]],
-    tools: Optional[list[Union[dict, Callable]]] = None,
-    documents: Optional[list[dict[str, str]]] = None,
-    chat_template: Optional[str] = None,
+    conversations: list[ChatType],
+    tools: list[dict | Callable] | None = None,
+    documents: ChatType | None = None,
+    chat_template: str | None = None,
     return_assistant_tokens_mask: bool = False,
     continue_final_message: bool = False,
     add_generation_prompt: bool = False,
@@ -563,3 +561,26 @@ def render_jinja_template(
         rendered.append(rendered_chat)
 
     return rendered, all_generation_indices
+
+
+def is_valid_message(message):
+    """
+    Check that input is a valid message in a chat, namely a dict with "role" and "content" keys.
+    """
+    if not isinstance(message, dict):
+        return False
+    if not ("role" in message and "content" in message):
+        return False
+    return True
+
+
+class Chat:
+    """This class is intended to just be used internally for pipelines and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages: dict):
+        for message in messages:
+            if not is_valid_message(message):
+                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+        self.messages = messages

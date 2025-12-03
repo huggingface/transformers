@@ -15,13 +15,15 @@
 """PyTorch Whisper model."""
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -41,7 +43,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_whisper import WhisperConfig
 from .generation_whisper import WhisperGenerationMixin
 
@@ -280,7 +281,6 @@ class WhisperAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -454,7 +454,6 @@ class WhisperDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -531,6 +530,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     config: WhisperConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
     _supports_flash_attn = True
@@ -539,24 +539,14 @@ class WhisperPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, WhisperEncoder):
-            module.embed_positions.weight.copy_(sinusoids(*module.embed_positions.weight.shape))
+        super()._init_weights(module)
+        if isinstance(module, WhisperEncoder):
+            init.copy_(module.embed_positions.weight, sinusoids(*module.embed_positions.weight.shape))
         elif isinstance(module, WhisperForAudioClassification):
             if self.config.use_weighted_layer_sum:
-                module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
+                init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
@@ -810,12 +800,11 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            if self.config.is_encoder_decoder:
-                past_key_values = EncoderDecoderCache(
-                    DynamicCache(config=self.config), DynamicCache(config=self.config)
-                )
-            else:
-                past_key_values = DynamicCache(config=self.config)
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
+                else DynamicCache(config=self.config)
+            )
 
         past_key_values_length = 0
         if cache_position is not None:
@@ -926,9 +915,6 @@ class WhisperModel(WhisperPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
-
-    def get_encoder(self):
-        return self.encoder
 
     def freeze_encoder(self):
         """
@@ -1099,7 +1085,7 @@ class WhisperModel(WhisperPreTrainedModel):
 )
 class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedModel):
     base_model_prefix = "model"
-    _tied_weights_keys = ["proj_out.weight"]
+    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -1109,12 +1095,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def get_output_embeddings(self):
         return self.proj_out
@@ -1280,7 +1260,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     """
 )
 class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["proj_out.weight"]
+    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
     main_input_name = "input_ids"
 
     def __init__(self, config):
@@ -1304,12 +1284,6 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     @auto_docstring
     def forward(

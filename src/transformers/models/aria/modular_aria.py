@@ -19,9 +19,10 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import PaddingMode, convert_to_rgb, pad, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -38,8 +39,8 @@ from ...image_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
@@ -147,45 +148,10 @@ class AriaTextConfig(LlamaConfig):
             results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -204,6 +170,15 @@ class AriaTextConfig(LlamaConfig):
 
     model_type = "aria_text"
     base_config_key = "text_config"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -214,22 +189,22 @@ class AriaTextConfig(LlamaConfig):
         pad_token_id=2,
         **super_kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
         self.intermediate_size = intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
         self.moe_num_shared_experts = moe_num_shared_experts
+        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
 
 
-class AriaConfig(PretrainedConfig):
+class AriaConfig(PreTrainedConfig):
     r"""
     This class handles the configuration for both vision and text components of the Aria model,
     as well as additional parameters for image token handling and projector mapping.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
     [rhymes-ai/Aria](https://huggingface.co/rhymes-ai/Aria) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`AriaVisionConfig` or `dict`, *optional*):
@@ -904,7 +879,15 @@ class AriaImageProcessor(BaseImageProcessor):
         return num_patches
 
 
+class AriaImagesKwargs(ImagesKwargs, total=False):
+    split_image: bool
+    max_image_size: int
+    min_image_size: int
+
+
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: AriaImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -933,10 +916,6 @@ class AriaProcessor(ProcessorMixin):
             A dictionary indicating size conversions for images.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AriaImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
@@ -959,8 +938,6 @@ class AriaProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         images: Optional[ImageInput] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -1120,123 +1097,69 @@ class AriaGroupedExpertsGemm(nn.Module):
         )
 
 
-class AriaGroupedExpertsMLP(nn.Module):
-    """
-    Grouped MLP module for Mixture of Experts.
-
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the model.
-    """
-
+class AriaExperts(nn.Module):
     def __init__(self, config: AriaTextConfig) -> None:
         super().__init__()
         self.config = config
         self.fc1 = AriaGroupedExpertsGemm(config.hidden_size, config.intermediate_size * 2, config.moe_num_experts)
         self.fc2 = AriaGroupedExpertsGemm(config.intermediate_size, config.hidden_size, config.moe_num_experts)
 
-    def forward(self, permuted_tokens, tokens_per_expert):
-        """
-        Forward pass of the Grouped MLP.
-
-        Args:
-            permuted_tokens (torch.Tensor): Permuted input tokens.
-            tokens_per_expert (torch.Tensor): Number of tokens assigned to each expert.
-
-        Returns:
-            torch.Tensor: Output tensor after passing through the MLP.
-        """
-        fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
-        projection, gate = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = nn.functional.silu(projection) * gate
-        fc2_output = self.fc2(fc1_output, tokens_per_expert)
-        return fc2_output
-
-
-# Token permutation adapted from https://github.com/NVIDIA/Megatron-LM/blob/54f1f78529cbc2b9cddad313e7f9d96ac0420a27/megatron/core/transformer/moe/token_dispatcher.py#L291-L587
-class AriaTextMoELayer(nn.Module):
-    """
-    Aria Text Mixture of Experts (MoE) Layer.
-
-    This layer applies a gating mechanism to route input tokens to different experts.
-
-    Args:
-        config (`AriaTextConfig`):
-            Configuration object for the text component of the model.
-    """
-
-    def __init__(self, config: AriaTextConfig):
-        super().__init__()
-
-        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
-        self.experts = AriaGroupedExpertsMLP(config)
-        self.shared_experts = AriaSharedExpertsMLP(config)
-        self.config = config
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the MoE Layer.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input tensor of shape (batch_size, sequence_length, hidden_size).
-
-        Returns:
-            torch.Tensor: Output tensor after passing through the MoE layer.
-
-        Process:
-        1. Route tokens to experts using the router.
-        2. Permute tokens based on routing decisions.
-        3. Process tokens through experts.
-        4. Unpermute and combine expert outputs.
-        5. Add shared expert output to the final result.
-        """
-        original_shape = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-
-        # Top K Routing
-        logits = self.router(hidden_states)
-        top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
+    def route_tokens_to_experts(self, router_logits):
+        top_logits, top_indices = torch.topk(router_logits, k=self.config.moe_topk, dim=1)
         scores = nn.functional.softmax(top_logits, dim=-1)
+        return top_indices, scores
 
-        original_dtype = top_indices.dtype
-
+    def forward(self, hidden_states, router_logits) -> torch.Tensor:
+        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
+        original_dtype = top_k_index.dtype
         tokens_per_expert = torch.histc(
-            top_indices.flatten().to(torch.float32),
+            top_k_index.flatten().to(torch.float32),
             bins=self.config.moe_num_experts,
             min=0,
             max=self.config.moe_num_experts - 1,
         ).to(original_dtype)
-        indices = top_indices
+        indices = top_k_index
 
-        # Token permutation
         flatten_indices = indices.view(-1)
         sorted_indices = torch.argsort(flatten_indices)
         permuted_tokens = hidden_states.index_select(0, sorted_indices // self.config.moe_topk)
 
-        # Process through experts
-        expert_output = self.experts(permuted_tokens, tokens_per_expert)
+        fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
+        projection, gate = torch.chunk(fc1_output, 2, dim=-1)
+        fc1_output = nn.functional.silu(projection) * gate
+        expert_output = self.fc2(fc1_output, tokens_per_expert)
 
-        # Token unpermutation
         unpermuted_tokens = torch.zeros(
-            (scores.shape[0] * self.config.moe_topk, expert_output.size(1)),
+            (top_k_weights.shape[0] * self.config.moe_topk, expert_output.size(1)),
             dtype=expert_output.dtype,
             device=expert_output.device,
         )
         unpermuted_tokens.index_copy_(0, sorted_indices, expert_output)
         unpermuted_tokens = unpermuted_tokens.view(-1, self.config.moe_topk, expert_output.size(1))
 
-        output = (unpermuted_tokens * scores.unsqueeze(-1)).sum(dim=1).view(original_shape)
+        output = (unpermuted_tokens * top_k_weights.unsqueeze(-1)).sum(dim=1)
+        return output
 
-        # Add shared expert output
+
+class AriaTextMoELayer(nn.Module):
+    def __init__(self, config: AriaTextConfig):
+        super().__init__()
+        self.router = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False)
+        self.experts = AriaExperts(config)
+        self.shared_experts = AriaSharedExpertsMLP(config)
+        self.config = config
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        original_shape = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
+        router_logits = self.router(hidden_states)
+        expert_output = self.experts(hidden_states, router_logits).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
-        return output + shared_expert_output
+        return expert_output + shared_expert_output
 
 
 class AriaTextAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    pass
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
@@ -1261,6 +1184,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
 class AriaTextPreTrainedModel(PreTrainedModel):
     config: AriaTextConfig
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -1273,22 +1197,24 @@ class AriaTextPreTrainedModel(PreTrainedModel):
         "attentions": AriaTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaGroupedExpertsGemm):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
-            nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
+            init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
 class AriaTextModel(LlamaModel):
@@ -1302,7 +1228,7 @@ class AriaTextModel(LlamaModel):
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1441,6 +1367,8 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

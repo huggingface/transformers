@@ -61,9 +61,10 @@ detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.pn
 import torch
 from PIL import Image
 import requests
-from transformers import AutoImageProcessor, AutoModelForObjectDetection, infer_device
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
 model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", dtype=torch.float16, attn_implementation="sdpa").to(device)
@@ -117,13 +118,6 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 
 [[autodoc]] YolosImageProcessorFast
     - preprocess
-    - pad
-    - post_process_object_detection
-
-## YolosFeatureExtractor
-
-[[autodoc]] YolosFeatureExtractor
-    - __call__
     - pad
     - post_process_object_detection
 

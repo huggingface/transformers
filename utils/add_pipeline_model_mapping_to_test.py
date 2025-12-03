@@ -134,7 +134,7 @@ def find_test_class(test_file):
             break
     # Take the test class with the shortest name (just a heuristic)
     if target_test_class is None and len(test_classes) > 0:
-        target_test_class = sorted(test_classes, key=lambda x: (len(x.__name__), x.__name__))[0]
+        target_test_class = min(test_classes, key=lambda x: (len(x.__name__), x.__name__))
 
     return target_test_class
 

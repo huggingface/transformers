@@ -18,9 +18,9 @@ from typing import Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
+    TextKwargs,
     Unpack,
 )
 from ...tokenization_utils_base import BatchEncoding, TextInput
@@ -30,25 +30,12 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Lfm2VlImagesKwargs(ImagesKwargs, total=False):
-    downsample_factor: Optional[int]
-    do_image_splitting: Optional[bool]
-    min_tiles: Optional[int]
-    max_tiles: Optional[int]
-    use_thumbnail: Optional[bool]
-    min_image_tokens: Optional[int]
-    max_image_tokens: Optional[int]
-    encoder_patch_size: Optional[int]
-    tile_size: Optional[int]
-    max_pixels_tolerance: Optional[float]
-    patch_size: Optional[int]
-    do_pad: Optional[bool]
-    return_row_col_info: Optional[bool]
+class Lfm2VlTextKwargs(TextKwargs, total=False):
+    use_image_special_tokens: Optional[bool]
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Lfm2VlImagesKwargs
-
+    text_kwargs: Lfm2VlTextKwargs
     _defaults = {
         "images_kwargs": {
             "return_row_col_info": True,
@@ -75,28 +62,24 @@ class Lfm2VlProcessor(ProcessorMixin):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        use_image_special_tokens (`bool`, *optional*, defaults to `True`):
-            Whether to use image special tokens or not when processing.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Lfm2VlImageProcessorFast"
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
         image_processor,
         tokenizer,
         chat_template: Optional[str] = None,
-        use_image_special_tokens: Optional[bool] = True,
         **kwargs,
     ):
-        self.image_token = tokenizer.image_token
-        self.image_token_id = tokenizer.image_token_id
-        self.use_image_special_tokens = use_image_special_tokens
-        self.image_start_token = tokenizer.image_start_token
-        self.image_end_token = tokenizer.image_end_token
-        self.image_thumbnail_token = tokenizer.image_thumbnail
+        self.image_token = getattr(tokenizer, "image_token", "<image>")
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if hasattr(tokenizer, "image_token_id")
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<|image_start|>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "<|image_end|>")
+        self.image_thumbnail_token = getattr(tokenizer, "image_thumbnail_token", "<|img_thumbnail|>")
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def __call__(
@@ -135,7 +118,7 @@ class Lfm2VlProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         n_images_in_text = [sample.count(self.image_token) for sample in text]
         if sum(n_images_in_text) > 0 and images is None:

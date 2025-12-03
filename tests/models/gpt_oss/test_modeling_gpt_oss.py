@@ -45,9 +45,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GptOssForCausalLM,
-        GptOssForSequenceClassification,
-        GptOssForTokenClassification,
         GptOssModel,
     )
 
@@ -61,17 +58,6 @@ class GptOssModelTester(CausalLMModelTester):
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-classification": GptOssForSequenceClassification,
-            "text-generation": GptOssForCausalLM,
-            "token-classification": GptOssForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
@@ -216,7 +202,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     # Non-distributed inference
     # ------------------------
     @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
+    def load_and_forward(model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
@@ -224,6 +210,13 @@ class GptOssIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
         )
+
+        # Set the correct mode
+        if mode == "train":
+            model.train()
+        else:
+            model.eval()
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
@@ -322,6 +315,7 @@ if __name__ == "__main__":
             model_id,
             attn_impl,
             self.input_text,
+            mode=mode,
             use_kernels=kernels,
         )
 

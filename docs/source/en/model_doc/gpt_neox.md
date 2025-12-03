@@ -73,7 +73,7 @@ Flash Attention 2 is an faster, optimized version of the model.
 
 ### Installation
 
-First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
+First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features).
 
 Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2:
 
@@ -101,6 +101,7 @@ Below is an expected speedup diagram that compares pure inference time between t
 </div>
 
 ## Using Scaled Dot Product Attention (SDPA)
+
 PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
 encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
 [official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
@@ -123,6 +124,7 @@ On a local benchmark (rtx3080ti-16GB, PyTorch 2.2.1, OS Ubuntu 22.04) using `flo
 following speedups during training and inference.
 
 ### Training
+
 | Batch size |    Seq len | Time per batch (Eager - s) |    Time per batch (SDPA - s) | Speedup (%) | Eager peak mem (MB) | SDPA peak mem (MB) |    Mem saving (%) |
 |-----------:|-----------:|---------------------------:|-----------------------------:|------------:|--------------------:|-------------------:|------------------:|
 |          1 |        128 |                      0.024 |                        0.019 |      28.945 |             1789.95 |            1789.95 |                 0 |
@@ -142,6 +144,7 @@ following speedups during training and inference.
 |          4 |       2048 |                        OOM |                        0.731 |           / |                 OOM |            12705.1 | SDPA does not OOM |
 
 ### Inference
+
 |    Batch size |      Seq len |    Per token latency Eager (ms) |    Per token latency SDPA (ms) |    Speedup (%) |    Mem Eager (MB) |   Mem SDPA (MB) |    Mem saved (%) |
 |--------------:|-------------:|--------------------------------:|-------------------------------:|---------------:|------------------:|----------------:|-----------------:|
 |             1 |          128 |                           6.569 |                          5.858 |          12.14 |           974.831 |         974.826 |                0 |
@@ -167,6 +170,10 @@ following speedups during training and inference.
 ## GPTNeoXConfig
 
 [[autodoc]] GPTNeoXConfig
+
+## GPTNeoXTokenizer
+
+[[autodoc]] GPTNeoXTokenizer
 
 ## GPTNeoXTokenizerFast
 

@@ -17,12 +17,12 @@ import math
 import torch
 from torch import nn
 
-from ...configuration_utils import PretrainedConfig
+from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
-from ..grounding_dino.configuration_grounding_dino import GroundingDinoConfig
 from ..grounding_dino.modeling_grounding_dino import (
     GroundingDinoContrastiveEmbedding,
     GroundingDinoConvEncoder,
@@ -40,18 +40,18 @@ from ..grounding_dino.modeling_grounding_dino import (
 logger = logging.get_logger(__name__)
 
 
-class MMGroundingDinoConfig(GroundingDinoConfig, PretrainedConfig):
+class MMGroundingDinoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
     MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MM Grounding DINO tiny architecture
     [openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det](https://huggingface.co/openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -158,6 +158,11 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PretrainedConfig):
     ```"""
 
     model_type = "mm-grounding-dino"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+    }
 
     def __init__(
         self,
@@ -205,7 +210,6 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PretrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        PretrainedConfig.__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
@@ -288,6 +292,9 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PretrainedConfig):
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
 
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_encoder_decoder = True
+
 
 class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
     def __init__(self, config):
@@ -313,10 +320,11 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
 
 class MMGroundingDinoPreTrainedModel(GroundingDinoPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MMGroundingDinoContrastiveEmbedding):
-            nn.init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
+            init.constant_(module.bias, -math.log((1 - 0.01) / 0.01))
 
 
 class MMGroundingDinoConvEncoder(GroundingDinoConvEncoder):
@@ -392,12 +400,12 @@ class MMGroundingDinoMLPPredictionHead(GroundingDinoMLPPredictionHead):
 
 
 class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroundingDinoPreTrainedModel):
-    _tied_weights_keys = [
-        r"bbox_embed\.[1-9]\d*",
-        r"model\.decoder\.bbox_embed\.[0-9]\d*",
-        r"class_embed\.[1-9]\d*",
-        r"model\.decoder\.class_embed\.[0-9]\d*",
-    ]
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
+        r"class_embed.(?![0])\d+": r"^class_embed.0",
+        "model.decoder.bbox_embed": "bbox_embed",
+        "model.decoder.class_embed": "class_embed",
+    }
 
     def __init__(self, config: MMGroundingDinoConfig):
         MMGroundingDinoPreTrainedModel.__init__(self, config)
@@ -416,13 +424,9 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
                 for _ in range(config.decoder_layers)
             ]
         )
-
-        # hack for box-refinement
-        self.model.decoder.bbox_embed = self.bbox_embed
-        # hack implementation for two-stage
-        self.model.decoder.class_embed = self.class_embed
-
         # Initialize weights and apply final processing
+        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
+        self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 
 

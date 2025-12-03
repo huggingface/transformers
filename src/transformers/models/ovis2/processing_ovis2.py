@@ -54,10 +54,6 @@ class Ovis2Processor(ProcessorMixin):
             The number of image tokens to be used for each image in the input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
@@ -118,7 +114,7 @@ class Ovis2Processor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         image_inputs = {}
 

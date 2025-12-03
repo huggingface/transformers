@@ -57,10 +57,11 @@ Example of how to use the processor on chat messages:
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration, infer_device
+from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
+from accelerate import Accelerator
 import torch
 
-device = infer_device()
+device = Accelerator().device
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
@@ -99,7 +100,8 @@ print("Generated text:", generated_text)
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration, infer_device
+from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
+from accelerate import Accelerator
 import torch
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -124,7 +126,7 @@ messages = [{
     ],
 }]
 
-device = infer_device()
+device = Accelerator().device
 
 processor = Idefics2Processor.from_pretrained("HuggingFaceM4/idefics2-8b")
 model = Idefics2ForConditionalGeneration.from_pretrained("HuggingFaceM4/idefics2-8b")
@@ -213,13 +215,16 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - forward
 
 ## Idefics2ImageProcessor
+
 [[autodoc]] Idefics2ImageProcessor
     - preprocess
 
 ## Idefics2ImageProcessorFast
+
 [[autodoc]] Idefics2ImageProcessorFast
     - preprocess
 
 ## Idefics2Processor
+
 [[autodoc]] Idefics2Processor
     - __call__

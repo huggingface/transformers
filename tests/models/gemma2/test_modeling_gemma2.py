@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_large_accelerator,
     require_torch_large_gpu,
+    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -45,9 +46,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Gemma2ForCausalLM,
-        Gemma2ForSequenceClassification,
-        Gemma2ForTokenClassification,
         Gemma2Model,
     )
 
@@ -59,18 +57,6 @@ class Gemma2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma2Model,
-            "text-classification": Gemma2ForSequenceClassification,
-            "token-classification": Gemma2ForTokenClassification,
-            "text-generation": Gemma2ForCausalLM,
-            "zero-shot": Gemma2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester
@@ -151,6 +137,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
 
+    # TODO: run_test_using_subprocess was added because of an issue in torch 2.9, which is already fixed in nightly
+    # We can remove this once we upgrade to torch 2.10
+    @run_test_using_subprocess
     @require_read_token
     def test_model_2b_pipeline_bf16_flex_attention(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
