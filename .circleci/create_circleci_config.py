@@ -323,6 +323,7 @@ training_ci_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv pip install ."],
     marker="training_ci",
+    pytest_options={"s": None},
     parallelism=6,
 )
 
