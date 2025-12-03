@@ -2450,7 +2450,7 @@ class Trainer:
 
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
-            
+
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
             remainder = steps_in_epoch % args.gradient_accumulation_steps
