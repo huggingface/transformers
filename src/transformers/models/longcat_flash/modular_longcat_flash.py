@@ -215,7 +215,9 @@ class LongcatFlashMLA(DeepseekV3Attention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        uses_flash_attention_2 = "flash" in self.config._attn_implementation and self.config._attn_implementation.endswith("2")
+        uses_flash_attention_2 = (
+            "flash" in self.config._attn_implementation and self.config._attn_implementation.endswith("2")
+        )
         if uses_flash_attention_2 and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
