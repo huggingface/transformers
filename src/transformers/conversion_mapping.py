@@ -130,12 +130,12 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 source_patterns="mlp.gate.weight_1",
                 target_patterns="mlp.vision_moe.gate.weight",
-                operations=[Transpose()]
+                operations=[Transpose(dim0=0, dim1=1)]
             ),
             WeightConverter(
                 source_patterns="mlp.gate.weight",
                 target_patterns="mlp.text_moe.gate.weight",
-                operations=[Transpose()]
+                operations=[Transpose(dim0=0, dim1=1)]
             ),
             WeightConverter(
                 source_patterns=["mlp.moe_statics.e_score_correction_bias"],
@@ -143,7 +143,7 @@ def _build_checkpoint_conversion_mapping():
                     "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
                     "mlp.vision_moe.gate.moe_statics.e_score_correction_bias",
                 ],
-                operations=[Chunk()],
+                operations=[Chunk(dim=0)],
             ),
             WeightConverter(
                 source_patterns=["experts.*.down_proj.weight"],
