@@ -88,8 +88,6 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
-    - local: chat_response_parsing
-      title: Response parsing
     title: Chat with models
   - sections:
     - local: serving
@@ -1030,6 +1028,8 @@
         title: Emu3
       - local: model_doc/evolla
         title: Evolla
+      - local: model_doc/fast_vlm
+        title: FastVLM
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/florence2

@@ -301,6 +301,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         keep_in_fp32_modules: list[str] | None = None,
+        use_kernels: bool = False,
         **kwargs,
     ):
         from ..integrations import replace_with_mxfp4_linear
@@ -309,7 +310,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        use_kernels = kwargs.get("use_kernels", False)
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         if use_kernels:
             logger.warning_once(
@@ -318,12 +318,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
             self.quantization_config.dequantize = True
 
-        config = model.config
         model = replace_with_mxfp4_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            config=config,
+            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
 
         model.config.quantization_config = self.quantization_config
