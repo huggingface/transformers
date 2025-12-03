@@ -931,7 +931,6 @@ class MimiSdpaAttention(MimiAttention):
 
 MIMI_ATTENTION_CLASSES = {
     "eager": MimiAttention,
-    "kernels-community/flash-attn2": MimiFlashAttention2,
     "flash_attention_2": MimiFlashAttention2,
     "sdpa": MimiSdpaAttention,
 }
