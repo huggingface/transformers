@@ -1972,7 +1972,8 @@ class Gemma3nTextModel(Gemma3TextModel):
             dtype=inputs_embeds.dtype, device=per_layer_projection.device
         )
 
-    @check_model_inputs
+    # Last hidden states should be before reprojecting it to stay consistent, so we do not overwrite with the final one
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
