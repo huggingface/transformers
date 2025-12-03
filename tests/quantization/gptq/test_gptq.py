@@ -176,9 +176,6 @@ class GPTQTest(unittest.TestCase):
         Simple test to check if the model conversion has been done correctly by checking on
         the class type of the linear layers of the converted models
         """
-        if not is_gptqmodel_available():
-            self.skipTest("gptqmodel not available")
-
         from gptqmodel.quantization import METHOD
         from gptqmodel.utils.importer import hf_select_quant_linear_v2
 
@@ -245,7 +242,6 @@ class GPTQTest(unittest.TestCase):
                 quant_type = "ipex" if is_ipex_available() else "torch_fused"
             else:
                 quant_type = "exllamav2"
-            # if self.quantized_model.config["quantization_config"]["format"] == ""
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
