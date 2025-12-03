@@ -46,17 +46,6 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.post_init()
-
-    def post_init(self):
-        r"""
-        Safety checker
-        """
-        if self.quantization_config.activations is not None and not self.pre_quantized:
-            raise ValueError(
-                "We don't support quantizing the activations with transformers library."
-                "Use quanto library for more complex use cases such as activations quantization, calibration and quantization aware training."
-            )
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_quanto_available():
@@ -67,42 +56,26 @@ class QuantoHfQuantizer(HfQuantizer):
             raise ImportError(
                 "Loading an optimum-quanto quantized model requires accelerate library (`pip install accelerate`)"
             )
-
-    def update_device_map(self, device_map):
-        if device_map is None:
-            device_map = {"": "cpu"}
-            logger.info(
-                "The device_map was not initialized. "
-                "Setting device_map to {'':'cpu'}. "
-                "If you want to use the model for inference, please set device_map ='auto'"
+        device_map = kwargs.get("device_map")
+        if device_map is not None:
+            if (
+                isinstance(device_map, dict)
+                and len(device_map) >= 2
+                and ("cpu" in device_map.values() or "disk" in device_map.values())
+            ):
+                raise ValueError(
+                    "You are attempting to load an model with a device_map that contains a CPU or disk device."
+                    "This is not supported with quanto when the model is quantized on the fly. "
+                    "Please remove the CPU or disk device from the device_map."
+                )
+        if self.quantization_config.activations is not None:
+            raise ValueError(
+                "We don't support quantizing the activations with transformers library."
+                "Use quanto library for more complex use cases such as activations quantization, calibration and quantization aware training."
             )
-        return device_map
-
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            logger.info("You did not specify `dtype` in `from_pretrained`. Setting it to `torch.float32`.")
-            dtype = torch.float32
-        return dtype
-
-    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
-        if is_optimum_quanto_available():
-            from optimum.quanto import QModuleMixin
-
-        not_missing_keys = []
-        for name, module in model.named_modules():
-            if isinstance(module, QModuleMixin):
-                for missing in missing_keys:
-                    if (
-                        (name in missing or name in f"{prefix}.{missing}")
-                        and not missing.endswith(".weight")
-                        and not missing.endswith(".bias")
-                    ):
-                        not_missing_keys.append(missing)
-        return [k for k in missing_keys if k not in not_missing_keys]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        if is_optimum_quanto_available():
-            from optimum.quanto import QModuleMixin
+        from optimum.quanto import QModuleMixin
 
         module, tensor_name = get_module_from_name(model, param_name)
         # We only quantize the weights and the bias is not quantized.
@@ -115,21 +88,6 @@ class QuantoHfQuantizer(HfQuantizer):
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
-
-    def create_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        target_device: "torch.device",
-        **kwargs,
-    ):
-        from ..modeling_utils import _load_parameter_into_model
-
-        _load_parameter_into_model(model, param_name, param_value.to(target_device))
-        module, _ = get_module_from_name(model, param_name)
-        module.freeze()
-        module.weight.requires_grad = False
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         from accelerate.utils import CustomDtype
@@ -152,7 +110,7 @@ class QuantoHfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        model, _ = replace_with_quanto_layers(
+        model = replace_with_quanto_layers(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
         model.config.quantization_config = self.quantization_config
@@ -161,5 +119,10 @@ class QuantoHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return False
+
+    def get_quantize_ops(self):
+        from ..integrations.quanto import QuantoQuantize
+
+        return QuantoQuantize(self)
