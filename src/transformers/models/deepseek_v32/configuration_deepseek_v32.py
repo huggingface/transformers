@@ -100,16 +100,30 @@ class DeepseekV32Config(PretrainedConfig):
             Whether to compute the auxiliary loss for each individual sequence.
         topk_group (`int`, *optional*):
             Number of selected groups per token for expert selection.
-        topk_method (`str`, *optional*, defaults to `"greedy"`):
+        topk_method (`str`, *optional*, defaults to `"noaux_tc"`):
             The method used for selecting top-k experts in the routed gate mechanism.
         v_head_dim (`int`, *optional*, defaults to 128):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
             The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the probability distribution over top-k selected experts.
-        moe_intermediate_size (`int`, *optional*, defaults to 1407):
+        moe_intermediate_size (`int`, *optional*, defaults to 2048):
             Dimension of the MoE (Mixture of Experts) representations.
+        scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+            The scoring function for MoE expert routing. Options: "softmax" or "sigmoid".
+        moe_layer_freq (`int`, *optional*, defaults to 1):
+            Frequency of MoE layers (1 means every layer after first_k_dense_replace is MoE).
+        num_nextn_predict_layers (`int`, *optional*, defaults to 1):
+            Number of layers for next-token prediction (speculative decoding).
+        ep_size (`int`, *optional*, defaults to 1):
+            Expert parallelism size for distributed training.
+        index_n_heads (`int`, *optional*, defaults to 64):
+            Number of heads for the sparse attention indexer.
+        index_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of each head in the sparse attention indexer.
+        index_topk (`int`, *optional*, defaults to 2048):
+            Number of top-k tokens to select for sparse attention.
 
     ```python
     >>> from transformers import DeepseekV32Model, DeepseekV32Config
@@ -174,11 +188,15 @@ class DeepseekV32Config(PretrainedConfig):
         routed_scaling_factor=1.0,
         seq_aux=True,
         topk_group=None,
-        topk_method="greedy",
+        topk_method="noaux_tc",
         v_head_dim=128,
         num_experts_per_tok=None,
-        norm_topk_prob=False,
-        moe_intermediate_size=1407,
+        norm_topk_prob=True,
+        moe_intermediate_size=2048,
+        scoring_func="sigmoid",
+        moe_layer_freq=1,
+        num_nextn_predict_layers=1,
+        ep_size=1,
         index_n_heads=64,
         index_head_dim=128,
         index_topk=2048,
@@ -235,6 +253,10 @@ class DeepseekV32Config(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
+        self.scoring_func = scoring_func
+        self.moe_layer_freq = moe_layer_freq
+        self.num_nextn_predict_layers = num_nextn_predict_layers
+        self.ep_size = ep_size
         self.index_n_heads = index_n_heads
         self.index_head_dim = index_head_dim
         self.index_top_k = index_topk
