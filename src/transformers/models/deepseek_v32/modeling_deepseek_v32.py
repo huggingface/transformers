@@ -526,7 +526,7 @@ class DeepseekV32Indexer(nn.Module):
 
         # Compute head weights
         # Reference: model.py:477 - weights = self.weights_proj(x.float()) * n_heads ** -0.5
-        head_weights = self.weights_proj(hidden_states.float()) * (self.num_heads**-0.5)
+        head_weights = F.linear(hidden_states.float(), self.weights_proj.weight.float()) * (self.num_heads**-0.5)
 
         # Compute attention scores: q @ k^T
         # q_states: [B, S, H, D], k_full: [B, T, D]
