@@ -111,7 +111,7 @@ def convert_tekken_tokenizer(tokenizer_file: str):
         "bos_token": SpecialTokens.bos.value,
         "eos_token": SpecialTokens.eos.value,
         "pad_token": SpecialTokens.pad.value,
-        "unk_token": SpecialTokens.unk.value
+        "unk_token": SpecialTokens.unk.value,
     }
 
     for special_key, special_token in MAP_SPECAL.items():
