@@ -68,13 +68,8 @@ class CLIPTokenizer(TokenizersBackend):
         pad_token: str = "<|endoftext|>",
         vocab: Optional[Union[str, dict, list]] = None,
         merges: Optional[Union[str, list]] = None,
-        vocab_file: Optional[str] = None,
-        merges_file: Optional[str] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
-        self.merges_file = merges_file
-
         _vocab = (
             vocab
             if vocab is not None

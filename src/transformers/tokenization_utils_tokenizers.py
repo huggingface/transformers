@@ -109,7 +109,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokenizer_json = json.load(tokenizer_handle)
             local_kwargs["vocab"] = tokenizer_json.get("model", {}).get("vocab", None)
             if cls.model is None:
-                local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"])) # TODO just for now
+                if isinstance(tokenizer_json.get("model", {}), list):
+                    local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"])) # TODO just for now
             elif cls.model.__name__ == "Unigram":
                 local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"]))
             elif cls.model.__name__ == "WordLevel":
@@ -118,8 +119,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 local_kwargs["vocab"] = {token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
             elif cls.model.__name__ == "BPE":
                 local_kwargs["vocab"] = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
-            else:
-                local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"]))
 
             if hasattr(tokenizer_json.get("model", {}), "merges") and cls.model.__name__ == "BPE":
                 merges = tokenizer_json["model"]["merges"]
