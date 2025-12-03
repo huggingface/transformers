@@ -91,32 +91,23 @@ jobs:
             });
             core.setOutput('comment_id', botComment.id);
 
-  run-quality:
+  run-quality-checks:
     runs-on: ubuntu-22.04
     needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url]
-    permissions:
-      pull-requests: write
+    outputs:
+      changes_detected: ${{ steps.run_checks.outputs.changes_detected }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # Instead of checking out the base repo, use the contributor's repo name
           repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
           ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
-          # You may need fetch-depth: 0 for being able to push
           fetch-depth: "0"
-          token: ${{ secrets.HF_STYLE_BOT_ACTION }}
-
-      - name: Check commits
-        run: |
-          git log -n 3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          # TODO: make this more flexible
           python-version: "3.10"
 
-      # TODO: We should try to use docker!
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -127,40 +118,66 @@ jobs:
         id: run_checks
         run: |
           python utils/check_copies.py --fix_and_overwrite
-          echo "ok!"
+          
+          # Check if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+            # Create a patch file with all changes
+            git diff > consistency-fixes.patch
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Commit and push changes
-        id: commit_and_push
+      - name: Upload patch
+        if: steps.run_checks.outputs.changes_detected == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: consistency-fixes-patch
+          path: consistency-fixes.patch
+
+  commit-and-comment:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url, run-quality-checks]
+    if: always()
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.run-quality-checks.outputs.changes_detected == 'true'
+        with:
+          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          ref: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+          fetch-depth: "0"
+          token: ${{ secrets.HF_STYLE_BOT_ACTION }}
+
+      - name: Download patch
+        if: needs.run-quality-checks.outputs.changes_detected == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: consistency-fixes-patch
+
+      - name: Apply patch and push
+        if: needs.run-quality-checks.outputs.changes_detected == 'true'
         env:
           HEADREPOFULLNAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
           HEADREF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
-          PRNUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           GITHUB_TOKEN: ${{ secrets.HF_STYLE_BOT_ACTION }}
         run: |
-          echo "HEADREPOFULLNAME: $HEADREPOFULLNAME, HEADREF: $HEADREF"
-          # Configure git with the Actions bot user
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Make sure your 'origin' remote is set to the contributor's fork
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/$HEADREPOFULLNAME.git"
-
-          # If there are changes after running consistency, commit them
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "Apply repo. consistency fixes"
-            # Push to the original contributor's forked branch
-            git push origin HEAD:$HEADREF
-            echo "changes_pushed=true" >> $GITHUB_OUTPUT
-          else
-            echo "No changes to commit."
-            echo "changes_pushed=false" >> $GITHUB_OUTPUT
-          fi
+          
+          # Apply the patch
+          git apply consistency-fixes.patch
+          
+          git add .
+          git commit -m "Apply repo. consistency fixes"
+          git push origin HEAD:$HEADREF
 
       - name: Prepare final comment message
         id: prepare_final_comment
         run: |
-          if [ "${{ steps.commit_and_push.outputs.changes_pushed }}" = 'true' ]; then
+          if [ "${{ needs.run-quality-checks.outputs.changes_detected }}" = 'true' ]; then
             echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
           else
             echo "final_comment=Repo. Consistency fix runs successfully without any file modified." >> $GITHUB_OUTPUT
@@ -173,8 +190,6 @@ jobs:
         with:
           script: |
             const prNumber = parseInt(process.env.prNumber, 10);
-            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
-
             await github.rest.issues.updateComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
