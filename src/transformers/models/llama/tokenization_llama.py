@@ -89,6 +89,7 @@ class LlamaTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
@@ -120,7 +121,7 @@ class LlamaTokenizer(TokenizersBackend):
             self._merges = generate_merges(filtered_vocab)
 
         self._tokenizer = Tokenizer(
-            BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
+            self.model(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )
         self._tokenizer.normalizer = None
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(

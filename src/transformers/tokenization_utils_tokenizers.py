@@ -89,6 +89,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    model = None
 
     @classmethod
     def convert_to_native_format(cls, **kwargs):
@@ -107,12 +108,24 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             local_kwargs["vocab"] = tokenizer_json.get("model", {}).get("vocab", None)
-            if local_kwargs["vocab"] is not None and isinstance(local_kwargs["vocab"], list):
+            if cls.model is None:
+                local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"])) # TODO just for now
+            if cls.model.__name__ == "Unigram":
                 local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"]))
-            if hasattr(tokenizer_json.get("model", {}), "merges"):
+            elif cls.model.__name__ == "WordLevel":
+                local_kwargs["vocab"] = {token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
+            elif cls.model.__name__ == "WordPiece":
+                local_kwargs["vocab"] = {token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
+            elif cls.model.__name__ == "BPE":
+                local_kwargs["vocab"] = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
+            else:
+                local_kwargs["vocab"] = list(map(tuple, local_kwargs["vocab"]))
+
+            if hasattr(tokenizer_json.get("model", {}), "merges") and cls.model.__name__ == "BPE":
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) for merge in merges]
                 local_kwargs["merges"] = merges
+                local_kwargs["vocab"] = {token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
             return local_kwargs
 
         vocab_file = local_kwargs.get("vocab_file")
