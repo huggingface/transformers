@@ -34,6 +34,9 @@ import typer
 from huggingface_hub import scan_cache_dir
 from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
+from transformers_app import Settings, install_and_start, stop, uninstall
+from transformers_app import status as _status
+from transformers_app.settings import SettingsPayload
 
 import transformers
 from transformers import BitsAndBytesConfig, GenerationConfig
@@ -46,11 +49,11 @@ from transformers.utils.import_utils import (
     is_vision_available,
 )
 
-from .. import (
+from ... import (
     LogitsProcessorList,
     TextIteratorStreamer,
 )
-from ..utils import logging
+from ...utils import logging
 
 
 if TYPE_CHECKING:
@@ -60,7 +63,7 @@ if TYPE_CHECKING:
         ProcessorMixin,
     )
 
-    from ..generation.continuous_batching import ContinuousBatchingManager
+    from ...generation.continuous_batching import ContinuousBatchingManager
 
 
 if is_librosa_available():
@@ -76,7 +79,7 @@ if serve_dependencies_available:
     import uvicorn
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import JSONResponse, StreamingResponse
+    from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
     from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
@@ -315,12 +318,16 @@ class TimedModel:
         self,
         model: "PreTrainedModel",
         timeout_seconds: int,
+        model_id_and_revision: str,
         processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
+        loaded_models: dict[str, "TimedModel"] | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
         self.processor = processor
         self.timeout_seconds = timeout_seconds
+        self.model_id_and_revision = model_id_and_revision
+        self.loaded_models = loaded_models
         self._timer = threading.Timer(self.timeout_seconds, self.timeout_reached)
         self._timer.start()
 
@@ -337,6 +344,7 @@ class TimedModel:
             del self.processor
             self.model = None
             self.processor = None
+            del self.loaded_models[self.model_id_and_revision]
             gc.collect()
 
             # Clear CUDA cache if available
@@ -348,7 +356,7 @@ class TimedModel:
     def timeout_reached(self):
         if self.timeout_seconds > 0:
             self.delete_model()
-            logger.info(
+            logger.warning(
                 f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
             )
 
@@ -390,6 +398,10 @@ class Serve:
             Optional[str],
             typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
         ] = None,
+        context_length: Annotated[
+            Optional[int],
+            typer.Option(help="Context Length, defaults to the model default."),
+        ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
         port: Annotated[int, typer.Option(help="Port the server will listen to.")] = 8000,
         model_timeout: Annotated[
@@ -397,7 +409,7 @@ class Serve:
         ] = 300,
         log_level: Annotated[
             str, typer.Option(help="Logging level as a string. Example: 'info' or 'warning'.")
-        ] = "info",
+        ] = "warning",
         default_seed: Annotated[
             int | None, typer.Option(help="The default seed for torch, should be an integer.")
         ] = None,
@@ -417,6 +429,26 @@ class Serve:
         non_blocking: Annotated[
             bool, typer.Option(hidden=True, help="Whether to run the server in a separate thread.")
         ] = False,
+        daemon: Annotated[
+            bool,
+            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+        ] = False,
+        stop_daemon: Annotated[
+            bool,
+            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+        ] = False,
+        tray: Annotated[
+            bool,
+            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+        ] = False,
+        uninstall_daemon: Annotated[
+            bool,
+            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+        ] = False,
+        daemon_status: Annotated[
+            bool,
+            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+        ] = False,
     ) -> None:
         if not serve_dependencies_available:
             raise ImportError(
@@ -429,6 +461,7 @@ class Serve:
         self.dtype = dtype
         self.trust_remote_code = trust_remote_code
         self.attn_implementation = attn_implementation
+        self.context_length = context_length
         self.quantization = quantization
         self.host = host
         self.port = port
@@ -439,6 +472,29 @@ class Serve:
         self.input_validation = input_validation
         self.force_model = force_model
         self.non_blocking = non_blocking
+
+        if tray:
+            from transformers_app import tray
+
+            tray(["--host", host, "--port", str(port)])
+            return
+
+        if daemon:
+            install_and_start(host=host, port=port)
+            return
+
+        if stop_daemon:
+            stop()
+            return
+
+        if uninstall_daemon:
+            uninstall()
+            return
+
+        if daemon_status:
+            status = _status("org.huggingface.transformers.serve")
+            print("Daemon: loaded" if status["loaded"] else "Daemon: not loaded")
+            return
 
         # Seed
         if default_seed is not None:
@@ -473,10 +529,7 @@ class Serve:
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
-            for model in self.loaded_models.values():
-                model.delete_model()
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+            self.reset_loaded_models()
 
         app = FastAPI(lifespan=lifespan)
 
@@ -544,6 +597,36 @@ class Serve:
         def healthcheck():
             return JSONResponse({"status": "ok"})
 
+        @app.get("/status")
+        def status():
+            return JSONResponse({"loaded_models": list(self.loaded_models.keys())})
+
+        settings = Settings()
+
+        @app.get("/settings", response_class=HTMLResponse, include_in_schema=False)
+        def settings_page():
+            return HTMLResponse(content=settings.html())
+
+        @app.post("/settings/save", include_in_schema=False)
+        def save_settings(payload: SettingsPayload):
+            try:
+                logger.warning(f"Resetting settings to:\n{payload}")
+                settings.load_settings_from_payload(payload)
+                settings.save()
+
+                self.attn_implementation = settings.attention_method.label
+                self.continuous_batching = settings.attention_method.paged
+                self.context_length = settings.context_lengths
+                self.device = settings.device
+                self.quantization = settings.quantization_method.as_string()
+
+                self.reset_loaded_models()
+            except Exception as e:
+                print(e)
+                raise HTTPException(status_code=500, detail=f"Failed to write settings: {e}")
+
+            return JSONResponse({"ok": True, "path": str(settings.local_file)})
+
         @app.middleware("http")
         async def get_or_set_request_id(request: Request, call_next):
             request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
@@ -552,7 +635,7 @@ class Serve:
             response.headers[X_REQUEST_ID] = request_id
             return response
 
-        config = uvicorn.Config(app, host=self.host, port=self.port, log_level=self.log_level)
+        config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info")
         self.server = uvicorn.Server(config)
 
         if self.non_blocking:
@@ -580,6 +663,18 @@ class Serve:
         self.server.should_exit = True
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
+
+    def reset_loaded_models(self):
+        """
+        Resets all loaded models; useful when updating settings or reaching the FastApi lifespan.
+        """
+        if self.running_continuous_batching_manager is not None:
+            logger.warning("Resetting the continuous batching manager.")
+            self.running_continuous_batching_manager.stop(block=True, timeout=2)
+            self.running_continuous_batching_manager = None
+        for model in list(self.loaded_models.values()):
+            model.delete_model()
+        self.last_model = None
 
     def _validate_request(
         self,
@@ -797,6 +892,7 @@ class Serve:
         # When switching models, terminate a continuous batching manager if it is running.
         if must_discard_cache:
             if self.running_continuous_batching_manager is not None:
+                logger.warning("Resetting the continuous batching manager.")
                 self.running_continuous_batching_manager.stop(block=True, timeout=2)
                 self.running_continuous_batching_manager = None
 
@@ -814,6 +910,7 @@ class Serve:
         )
 
         if self.running_continuous_batching_manager is None:
+            logger.warning("Starting the continuous batching manager.")
             self.running_continuous_batching_manager = model.init_continuous_batching(
                 generation_config=generation_config
             )
@@ -823,12 +920,12 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )["input_ids"][0]
+        inputs = processor.apply_chat_template(
+            req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
-            from ..generation.continuous_batching import RequestStatus
+            from ...generation.continuous_batching import RequestStatus
 
             try:
                 # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
@@ -1728,7 +1825,7 @@ class Serve:
             quantization_config = None
 
         if quantization_config is not None:
-            logger.info(f"Quantization applied with the following config: {quantization_config}")
+            logger.warning(f"Quantization applied with the following config: {quantization_config}")
 
         return quantization_config
 
@@ -1768,7 +1865,7 @@ class Serve:
 
         from transformers import AutoConfig, AutoProcessor
 
-        logger.info(f"Loading {model_id_and_revision}")
+        logger.warning(f"Loading {model_id_and_revision}")
 
         if "@" in model_id_and_revision:
             model_id, revision = model_id_and_revision.split("@", 1)
@@ -1805,7 +1902,6 @@ class Serve:
         if has_default_max_length or has_short_max_new_tokens:
             model.generation_config.max_new_tokens = 1024
 
-        logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
     def load_model_and_processor(
@@ -1826,7 +1922,9 @@ class Serve:
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model,
                 timeout_seconds=self.model_timeout,
+                model_id_and_revision=model_id_and_revision,
                 processor=processor,
+                loaded_models=self.loaded_models,
             )
         else:
             self.loaded_models[model_id_and_revision].reset_timer()
@@ -1847,6 +1945,7 @@ class Serve:
             `tuple[PreTrainedModel, ProcessorMixin]`: The loaded audio model and processor.
         """
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
+            logger.warning(f"Loading model into cache: {model_id_and_revision}")
             audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
             self.loaded_models[model_id_and_revision] = TimedModel(
                 audio_model,
