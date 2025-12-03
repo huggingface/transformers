@@ -1,0 +1,50 @@
+name: Training CI (CPU)
+
+on:
+  push:
+    branches:
+      - main
+      - training_ci*
+  pull_request:
+    paths:
+      - "src/transformers/**"
+      - "tests/training_ci/**"
+      - ".github/workflows/training_ci.yml"
+  schedule:
+    # Run daily at 3:17 AM UTC
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+env:
+  TRANSFORMERS_IS_CI: "1"
+  OMP_NUM_THREADS: "1"
+
+jobs:
+  cpu_forward_tests:
+    name: CPU Forward Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[testing]"
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Run CPU forward tests
+        run: |
+          python -m pytest -v --make-reports=tests_training_ci_cpu tests/training_ci/
+
+      - name: Test reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: training_ci_cpu_reports
+          path: reports/tests_training_ci_cpu
