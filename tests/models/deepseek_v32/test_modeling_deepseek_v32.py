@@ -33,7 +33,7 @@ if is_torch_available():
         DeepseekV32ForSequenceClassification,
         DeepseekV32Model,
     )
-    from transformers.models.deepseek_v2.modeling_deepseek_v2 import DeepseekV32RotaryEmbedding
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32RotaryEmbedding
 
 
 class DeepseekV32ModelTester(CausalLMModelTester):
@@ -43,18 +43,50 @@ class DeepseekV32ModelTester(CausalLMModelTester):
     def __init__(
         self,
         parent,
+        # MoE parameters
         n_routed_experts=8,
+        n_shared_experts=2,
+        num_experts_per_tok=2,
+        n_group=2,
+        topk_group=1,
+        routed_scaling_factor=2.5,
+        scoring_func="sigmoid",
+        first_k_dense_replace=1,
+        # MLA parameters
         kv_lora_rank=32,
         q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
+        qk_nope_head_dim=32,
+        qk_rope_head_dim=16,
+        v_head_dim=32,
+        # Indexer parameters (Lightning Attention)
+        index_n_heads=4,
+        index_head_dim=32,
+        index_topk=64,
+        # Other DeepSeek V3.2 specific
+        moe_intermediate_size=32,
     ):
         super().__init__(parent=parent)
+        # MoE
         self.n_routed_experts = n_routed_experts
+        self.n_shared_experts = n_shared_experts
+        self.num_experts_per_tok = num_experts_per_tok
+        self.n_group = n_group
+        self.topk_group = topk_group
+        self.routed_scaling_factor = routed_scaling_factor
+        self.scoring_func = scoring_func
+        self.first_k_dense_replace = first_k_dense_replace
+        # MLA
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
+        self.v_head_dim = v_head_dim
+        # Indexer
+        self.index_n_heads = index_n_heads
+        self.index_head_dim = index_head_dim
+        self.index_topk = index_topk
+        # Other
+        self.moe_intermediate_size = moe_intermediate_size
 
 
 @require_torch
