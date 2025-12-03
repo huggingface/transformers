@@ -140,6 +140,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speecht5", "SpeechT5Processor"),
+        ("t5gemma2", "Gemma3Processor"),
         ("trocr", "TrOCRProcessor"),
         ("tvp", "TvpProcessor"),
         ("udop", "UdopProcessor"),
@@ -316,7 +317,6 @@ class AutoProcessor:
                     processor_class = config_dict.get("processor_class", None)
                     if "AutoProcessor" in config_dict.get("auto_map", {}):
                         processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
-
             # Saved as feature extractor
             if preprocessor_config_file is None:
                 preprocessor_config_file = cached_file(
@@ -344,16 +344,24 @@ class AutoProcessor:
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
-            # Otherwise, load config, if it can be loaded.
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
+            # Last resort: try loading the model config to get processor_class.
+            # This handles cases where processor info is only in config.json (not in any
+            # preprocessor/tokenizer config files). AutoConfig.from_pretrained may raise
+            # ValueError if the model_type is unrecognized or the config is invalid -
+            # we catch and ignore this to allow fallback to AutoTokenizer/AutoImageProcessor.
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
 
-            # And check if the config contains the processor class.
-            processor_class = getattr(config, "processor_class", None)
-            if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:
-                processor_auto_map = config.auto_map["AutoProcessor"]
+                processor_class = getattr(config, "processor_class", None)
+                if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:
+                    processor_auto_map = config.auto_map["AutoProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         if processor_class is not None:
             processor_class = processor_class_from_name(processor_class)

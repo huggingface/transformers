@@ -16,6 +16,13 @@ limitations under the License.
 
 # Version 5 Migration guide
 
+> [!NOTE] 
+> 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
+> movement. We have a section dedicated to what is planned for future release candidates, yet is known not to work in 
+> the RC0. Look for "Disclaimers for the RC0".
+> 
+> We'll be eagerly awaiting your feedback in our GitHub issues!
+
 ## Library-wide changes with widespread impact
 
 ### Removal of TensorFlow and Jax
@@ -317,7 +324,24 @@ labels = tokenizer(text_target=tgt_texts, ...)
 ## Disclaimers for the RC0
 
 ### PEFT + MoE:
+
 Because we are switching from the naive MOE (`nn.ModuleList` for experts) we currently have an issue with MoEs that have adapters. For more details see https://github.com/huggingface/transformers/issues/42491#issuecomment-3591485649. 
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
+
+### Tensor parallel and Expert parallel + MoE
+
+We are streamlining the MoE support with vLLM; while this is being implemented, tensor parallelism and expert parallelism aren't working as expected.
+This is known and actively being worked on.
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
+
+### Remote code incompatibility
+
+A lot of paths were removed and reworked; paths like `transformers.tokenization_utils` and `transformers.tokenization_utils_fast`, which no longer exist.
+We'll be working on backwards compatibility for these before version 5 is fully released.
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
 
 ### Custom pretrained models:
 For anyone inheriting from a `transformers` `PreTrainedModel`, the weights are automatically initialized with the common scheme: 
@@ -555,15 +579,20 @@ but also makes the commands less bloated. The new signature of `transformers cha
 ```
 Usage: transformers chat [OPTIONS] BASE_URL MODEL_ID [GENERATE_FLAGS]...
 
-  Chat with a model from the command line.
+Chat with a model from the command line.
 ```
 
-Example:
+It works hand in hand with `transformers serve`, which means that if `transformers serve` is running on its default endpoint, `transformers chat` can be launched as follows:
 
 ```sh
-transformers chat https://router.huggingface.co/v1 HuggingFaceTB/SmolLM3-3B
+transformers chat HuggingFaceTB/SmolLM3-3B
 ```
 
+It can however use any OpenAI API compatible HTTP endpoint:
+
+```sh
+transformers chat HuggingFaceTB/SmolLM3-3B https://router.huggingface.co/v1
+```
 
 Linked PRs: 
 - https://github.com/huggingface/transformers/pull/40997
