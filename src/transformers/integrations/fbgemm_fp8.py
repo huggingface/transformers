@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from typing import Optional
 
 from ..activations import ACT2FN
@@ -47,7 +46,7 @@ class FbgemmFp8Quantize(ConversionOps):
         target_key, value = tuple(input_dict.items())[0]
         value = value[0]
 
-        from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
+        from ..integrations import FbgemmFp8Llama4TextExperts
 
         module, tensor_name = get_module_from_name(model, target_key)
 
