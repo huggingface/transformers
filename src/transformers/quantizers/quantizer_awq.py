@@ -75,8 +75,10 @@ class AwqQuantizer(HfQuantizer):
         )
 
         model, has_been_replaced = replace_with_awq_linear(
-            model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert,
-            device_map=kwargs.get("device_map", None),
+            model,
+            quantization_config=self.quantization_config,
+            modules_to_not_convert=self.modules_to_not_convert,
+            device_map=kwargs.get("device_map"),
         )
 
         model = replace_quantization_scales(model, model.config.model_type)

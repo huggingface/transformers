@@ -19,16 +19,18 @@ import unittest
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
+    get_device_properties,
     require_accelerate,
     require_gptqmodel,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
-    torch_device, get_device_properties,
+    torch_device,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
 from transformers.utils.quantization_config import AwqBackend
+
 
 if is_torch_available():
     import torch
@@ -39,7 +41,6 @@ if is_accelerate_available():
 
 @require_torch_accelerator
 class AwqConfigTest(unittest.TestCase):
-
     def test_wrong_backend(self):
         """
         Simple test that checks if a user passes a wrong backend an error is raised

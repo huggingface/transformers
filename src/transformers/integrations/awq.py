@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
-from typing import Union, Optional
+
+from typing import Optional, Union
 
 from ..utils import is_gptqmodel_available, is_llm_awq_available, is_torch_available, logging
 from ..utils.quantization_config import (

@@ -849,10 +849,7 @@ class AwqConfig(GPTQConfig):
             )
 
         if self.backend not in AwqBackend.__members__.values():
-            raise ValueError(
-                f"Invalid backend '{self.backend}'. Must be one of: "
-                f"{[b.value for b in AwqBackend]}"
-            )
+            raise ValueError(f"Invalid backend '{self.backend}'. Must be one of: {[b.value for b in AwqBackend]}")
 
         if self.backend == AwqBackend.LLMAWQ:
             # Only cuda device can run this function
