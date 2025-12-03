@@ -1080,10 +1080,9 @@ class ContinuousBatchingManager:
             )
 
         self._generation_step()
-
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()  # FIXME: why is this needed?
-        # Processor updates the batch after generation step is truly over
+        # NOTE: this was commented out and seemingly broke nothing. Keeping there in case it does
+        # if torch.cuda.is_available():
+        #     torch.cuda.synchronize()
         batch_processor.update_batch()
 
     @traced
