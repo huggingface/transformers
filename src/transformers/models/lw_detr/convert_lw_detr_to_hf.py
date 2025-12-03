@@ -329,9 +329,9 @@ def test_models_outputs(model: LwDetrForObjectDetection, image_processor: Deform
         "loss" : 21.400263
     },
     "lwdetr_large_30e_objects365": {
-        "logits": [-9.72590, -4.71623, -6.59528, -5.74079, -4.07018],
-        "boxes" : [0.25423, 0.55063, 0.48317, 0.87475, 0.76970],
-        "loss" : 19.438395
+        "logits": [-9.34162, -4.38863, -3.78537, -5.50365, -4.84258],
+        "boxes" : [0.25067, 0.55070, 0.48561, 0.87355, 0.77104],
+        "loss" : 21.000555
     },
     "lwdetr_xlarge_30e_objects365": {
         "logits": [-11.92917, -4.33070, -4.40749, -5.02067, -6.92108],
