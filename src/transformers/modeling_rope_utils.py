@@ -657,7 +657,7 @@ class RotaryEmbeddingConfigMixin:
         # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
-        rope_parameters = self.rope_parameters or {}
+        rope_parameters = getattr(self, "rope_parameters", None) or {}
 
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
         if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
