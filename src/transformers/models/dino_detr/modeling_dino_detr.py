@@ -1874,10 +1874,10 @@ DINO_DETR_INPUTS_DOCSTRING = r"""
 )
 class DinoDetrModel(DinoDetrPreTrainedModel):
     _tied_weights_keys = {
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.0",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.1",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.2",
-        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.0",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.0",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.1",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.2",
+        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.\d+",
     }
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _can_record_outputs = {
@@ -2139,10 +2139,10 @@ def denoising_post_process(
 )
 class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
     _tied_weights_keys = {
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.0",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.1",
-        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.0.layers.2",
-        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.0",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.0": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.0",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.1": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.1",
+        r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed\.\d+\.layers.2": r"(?:model\.)?(?:transformer\.decoder\.)?bbox_embed.\d+\.layers.2",
+        r"(?:model\.)?(?:transformer\.decoder\.)?class_embed\.\d+": r"(?:model\.)?(?:transformer\.decoder\.)?class_embed.\d+",
     }
     _can_record_outputs = {
         "encoder_self_attentions": OutputRecorder(
