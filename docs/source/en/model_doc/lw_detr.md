@@ -13,91 +13,85 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2025-11-21.* 
+*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2025-12-03.* 
+
+<div style="float: right;">
+ <div class="flex flex-wrap space-x-1">
+  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+ </div>
+</div>
 
 # LW-DETR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[LW-DETR](https://huggingface.co/papers/2407.17140) proposes a light-weight Detection Transformer (DETR) architecture designed to compete with and surpass the dominant YOLO series for real-time object detection. It achieves a new state-of-the-art balance between speed (latency) and accuracy (mAP) by combining recent transformer advances with efficient design choices.
 
-## Overview
+The LW-DETR architecture is characterized by its simple and efficient structure: a plain ViT Encoder, a Projector, and a shallow DETR Decoder.
 
-The LW-Detr model was proposed
-in [LW-DETR: A Transformer Replacement to YOLO for Real-Time Detection](https://huggingface.co/papers/2407.17140) by
-Qiang Chen, Xiangbo Su, Xinyu Zhang, Jian Wang, Jiahui Chen, Yunpeng Shen, Chuchu Han, Ziliang Chen, Weixiang Xu,
-Fanrong Li, Shan Zhang, Kun Yao, Errui Ding, Gang Zhang and Jingdong Wang.
-
-LW-DETR (Light-weight Detection Transformer) is a real-time object detector designed to outperform existing YOLO-based
-models. Its architecture is a simple composition of a Vision Transformer (ViT) encoder, a projector, and a shallow DETR
-decoder. The model's effectiveness comes from integrating advanced techniques such as pretraining on large datasets, an
-improved IoU-aware loss function, and an efficient ViT encoder that uses interleaved window and global attentions to
-reduce computational complexity. The authors also introduce a window-major feature map organization to improve the
-efficiency of attention computations.
-
-The abstract from the paper is the following:
-
-*In this paper, we present a light-weight detection transformer, LW-DETR, which outperforms YOLOs for real-time object
-detection. The architecture is a simple stack of a ViT encoder, a projector, and a shallow DETR decoder. Our approach
-leverages recent advanced techniques, such as training-effective techniques, e.g., improved loss and pretraining, and
-interleaved window and global attentions for reducing the ViT encoder complexity. We improve the ViT encoder by
-aggregating multi-level feature maps, and the intermediate and final feature maps in the ViT encoder, forming richer
-feature maps, and introduce window-major feature map organization for improving the efficiency of interleaved attention
-computation. Experimental results demonstrate that the proposed approach is superior over existing real-time detectors,
-e.g., YOLO and its variants, on COCO and other benchmark datasets.*
-
-This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
+You can find all the available Deformable DETR checkpoints under the [stevenbucaille](https://huggingface.co/stevenbucaille) organization.
 The original code can be found [here](https://github.com/Atten4Vis/LW-DETR).
 
-## Usage tips
+> [!TIP]
+> This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
+>
+> Click on the LW-DETR models in the right sidebar for more examples of how to apply LW-DETR to different object detection tasks.
 
-This second version of RT-DETR improves how the decoder finds objects in an image.
 
-- **Simple Architecture** – The model consists of a ViT encoder, a projector, and a shallow (3-layer) DETR decoder,
-  making it straightforward to implement.
-- **Efficient Inference** – To reduce the quadratic complexity of global self-attention in the ViT encoder, some global
-  attention layers are replaced with window self-attention. Further speed-up is achieved through a window-major feature
-  map organization that reduces costly memory permutation operations.
-- **Effective Training** – The model benefits significantly from pretraining on the Objects365 dataset. It also uses
-  an IoU-aware classification loss and adopts the Group DETR training scheme with multiple weight-sharing decoders to
-  accelerate training.
+The example below demonstrates how to perform object detection with the [`Pipeline`] and the [`AutoModel`] class.
 
-```py
->>> import torch
->>> import requests
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
->>> from PIL import Image
->>> from transformers import LwDetrForObjectDetection, LwDetrImageProcessor
+```python
+from transformers import pipeline
+import torch
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
+pipeline = pipeline(
+    "object-detection", 
+    model="stevenbucaille/lwdetr_small_60e_coco",
+    dtype=torch.float16,
+    device_map=0
+)
 
->>> image_processor = LwDetrImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
->>> model = LwDetrForObjectDetection.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
-
->>> inputs = image_processor(images=image, return_tensors="pt")
-
->>> with torch.no_grad():
-...     outputs = model(**inputs)
-
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.5)
-
->>> for result in results:
-...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-...         score, label = score.item(), label_id.item()
-...         box = [round(i, 2) for i in box.tolist()]
-...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
-cat: 0.97[341.14, 25.11, 639.98, 372.89]
-cat: 0.96[12.78, 56.35, 317.67, 471.34]
-remote: 0.95[39.96, 73.12, 175.65, 117.44]
-sofa: 0.86[-0.11, 2.97, 639.89, 473.62]
-sofa: 0.82[-0.12, 1.78, 639.87, 473.52]
-remote: 0.79[333.65, 76.38, 370.69, 187.48]
+pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+from PIL import Image
+import requests
+import torch
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+model = AutoModelForObjectDetection.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+
+# prepare image for the model
+inputs = image_processor(images=image, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]), threshold=0.3)
+
+for result in results:
+    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+        score, label = score.item(), label_id.item()
+        box = [round(i, 2) for i in box.tolist()]
+        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+```
+
+</hfoption>
+</hfoptions>
+
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LW Detr.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LwDetr.
 
 <PipelineTag pipeline="object-detection"/>
 

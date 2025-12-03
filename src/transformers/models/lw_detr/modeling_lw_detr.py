@@ -41,7 +41,7 @@ if is_timm_available():
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
+    Base class for outputs of the LwDetrDecoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
@@ -70,7 +70,7 @@ class LwDetrDecoderOutput(ModelOutput):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the LWDETR backbone-decoder model.
+    Base class for outputs of the LwDetr backbone-decoder model.
     """
 )
 class LwDetrModelOutput(ModelOutput):
@@ -742,7 +742,6 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
 class LwDetrMLP(nn.Module):
     def __init__(self, config: LwDetrConfig):
         super().__init__()
-        # feedforward neural networks
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
@@ -824,6 +823,7 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
@@ -841,6 +841,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         "hidden_states": [LwDetrDecoderLayer],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -916,6 +917,19 @@ def gen_sine_position_embeddings(pos_tensor, hidden_size=256):
 
 
 class LwDetrDecoder(LwDetrPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DeformableDetrDecoderLayer`].
+
+    The decoder updates the query embeddings through multiple self-attention and deformable cross-attention layers.
+
+    Some tweaks for LwDetr:
+
+    - it uses group detr technique at training for faster convergence.
+
+    Args:
+        config: LwDetrConfig
+    """
+
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -996,7 +1010,7 @@ def refine_bboxes(reference_points, deltas):
 
 @auto_docstring(
     custom_intro="""
-    The bare Deformable DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
+    The bare LW Detr Model (consisting of a backbone and decoder Transformer) outputting raw
     hidden-states without any specific head on top.
     """
 )
@@ -1289,7 +1303,7 @@ class LwDetrMLPPredictionHead(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    Deformable DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
+    LW DETR Model (consisting of a backbone and decoder Transformer) with object detection heads on
     top, for tasks such as COCO detection.
     """
 )
@@ -1342,8 +1356,8 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = LwDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+        >>> model = LwDetrForObjectDetection.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -41,23 +41,20 @@ logger = logging.get_logger(__name__)
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the DeformableDetrDecoder. This class adds two attributes to
+    Base class for outputs of the LwDetrDecoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
     """
 )
 class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    pass
 
 
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of the LWDETR backbone-decoder model.
+    Base class for outputs of the LwDetr backbone-decoder model.
     """
 )
 class LwDetrModelOutput(ModelOutput):
@@ -615,7 +612,6 @@ class LwDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAtte
 class LwDetrMLP(nn.Module):
     def __init__(self, config: LwDetrConfig):
         super().__init__()
-        # feedforward neural networks
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
@@ -697,6 +693,7 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
@@ -714,6 +711,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         "hidden_states": [LwDetrDecoderLayer],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -757,6 +755,19 @@ def refine_bboxes(reference_points, deltas):
 
 
 class LwDetrDecoder(LwDetrPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DeformableDetrDecoderLayer`].
+
+    The decoder updates the query embeddings through multiple self-attention and deformable cross-attention layers.
+
+    Some tweaks for LwDetr:
+
+    - it uses group detr technique at training for faster convergence.
+
+    Args:
+        config: LwDetrConfig
+    """
+
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -828,6 +839,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    The bare LW Detr Model (consisting of a backbone and decoder Transformer) outputting raw
+    hidden-states without any specific head on top.
+    """
+)
 class LwDetrModel(DeformableDetrModel):
     def __init__(self, config: LwDetrConfig):
         LwDetrPreTrainedModel.__init__(config)
@@ -1063,6 +1080,12 @@ class LwDetrMLPPredictionHead(DeformableDetrMLPPredictionHead):
     pass
 
 
+@auto_docstring(
+    custom_intro="""
+    LW DETR Model (consisting of a backbone and decoder Transformer) with object detection heads on
+    top, for tasks such as COCO detection.
+    """
+)
 class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
     _tied_weights_keys = None
 
@@ -1084,6 +1107,52 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
+        r"""
+        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
+            Not used by default. Can be used to mask object queries.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
+            can choose to directly pass a flattened representation of an image.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
+            embedded representation.
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+        >>> model = LwDetrForObjectDetection.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        ...     0
+        ... ]
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
+        Detected cat with confidence 0.8 at location [16.5, 52.84, 318.25, 470.78]
+        Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
+        Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
+        ```"""
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
