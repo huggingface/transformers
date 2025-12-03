@@ -265,7 +265,7 @@ class DeepseekV32Gate(nn.Module):
 
         # Expert selection based on topk_method
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(scores, k=self.num_experts_per_tok, dim=-1, sorted=False)
+            topk_weight, topk_idx = torch.topk(scores, k=self.num_experts_per_tok, dim=-1)
         elif self.topk_method in ("group_limited_greedy", "noaux_tc"):
             # Group-based selection
             group_scores = scores.view(batch_size, self.n_group, -1)
@@ -276,7 +276,7 @@ class DeepseekV32Gate(nn.Module):
                 # Use top-2 sum for group scoring when bias is present
                 group_max = group_scores.topk(2, dim=-1)[0].sum(dim=-1)
 
-            group_idx = torch.topk(group_max, k=self.topk_group, dim=-1, sorted=False)[1]
+            group_idx = torch.topk(group_max, k=self.topk_group, dim=-1)[1]
 
             # Create mask for selected groups
             group_mask = torch.ones(batch_size, self.n_group, dtype=torch.bool, device=scores.device)
@@ -287,7 +287,7 @@ class DeepseekV32Gate(nn.Module):
             scores_masked = scores_masked.masked_fill(group_mask.unsqueeze(-1), float("-inf"))
             scores_masked = scores_masked.view(batch_size, -1)
 
-            topk_weight, topk_idx = torch.topk(scores_masked, k=self.num_experts_per_tok, dim=-1, sorted=False)
+            topk_weight, topk_idx = torch.topk(scores_masked, k=self.num_experts_per_tok, dim=-1)
         else:
             raise ValueError(f"Unknown topk_method: {self.topk_method}")
 
