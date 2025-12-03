@@ -92,7 +92,6 @@ class Bnb4bitDeserialize(ConversionOps):
             module=module,
         )
         # need to reset it for fsdpv1 otherwise, we get an error when flattening the tensor.
-        module.dtype = torch.float16
         module._is_hf_initialized = True
         return {key_weight: new_value}
 
@@ -225,7 +224,7 @@ def _replace_with_bnb_linear(
                             if pre_quantized:
                                 # this is kind of an edge case when supporting both loading and quantization ...
                                 # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
-                                new_module.weight.data = new_module.weight.data.to(dtype=torch.uint8)
+                                new_module.weight.data = new_module.weight.data.to(dtype=quantization_config.bnb_4bit_quant_storage)
                             model._modules[name] = new_module
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later
