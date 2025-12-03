@@ -814,13 +814,21 @@ class ContinuousBatchingManager:
         num_kv_padding_intervals: int,
         compile_config: CompileConfig | None,
     ) -> bool:
+        """Returns whether or not to use cuda graphs for continuous batching, depending on the following criteria:
+        - (use_cuda_graph) which is the user choice
+        - (num_q_padding_intervals) or (num_kv_padding_intervals) which is used to pad inputs: if it was specified by
+            the user, it's probable they want to use cuda graphs so inputs need to be padded
+        - (compile_config): if the compile mode uses its own cudagraphs, we turn off cuda graphs on CB side
+        If none of the above criteria are met, we use a default heuristic based on the attention implementation: we turn
+        on cuda graphs if and only if no attention mask is needed.
+        """
         # If use_cuda_graph is specified, we follow the user's choice
         if use_cuda_graph is not None:
             return use_cuda_graph
         # If a number of padding intervals was specified for either Q or KV, we activate cuda graphs
         if num_q_padding_intervals > 0 or num_kv_padding_intervals > 0:
             return True
-        # If a compile config was found, we use cuda graphs unless the compile config already uses them
+        # If a compile config was found, turn off cuda graphs if the compile config already uses them
         if compile_config is not None:
             options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
             compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
@@ -829,7 +837,7 @@ class ContinuousBatchingManager:
                     f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
                     "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
                 )
-            return not compile_uses_cudagraphs
+                return False
         # Otherwise we have a default heuristic based on the attention implementation:
         # attention implementations where an attention mask is needed suffer a lot more from the padding associated
         # with cuda graphs, so default is to turn cuda graphs off for those implementations
