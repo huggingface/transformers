@@ -116,11 +116,11 @@ class QuarkHfQuantizer(HfQuantizer):
         # assign their values into the corresponding quantizer attributes
         # (`weight_quantizer.scale`, `input_quantizer.scale`, and so on).
 
-        # You can notice here that in target_patterns we use the same key as the source_patterns, 
+        # You can notice here that in target_patterns we use the same key as the source_patterns,
         # this is because we just want to collect the tensors, and we will rename them later in the convert function.
         # We cannot rename directly or else the missing_keys list will not be able to find the tensors.
         converters = []
-        for key, value in CHECKPOINT_KEYS.items():
+        for key in CHECKPOINT_KEYS.keys():
             converters.append(
                 WeightConverter(
                     source_patterns=[key],
