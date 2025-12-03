@@ -97,7 +97,6 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.num_experts = 3
-        config.expert_interval = 1
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
