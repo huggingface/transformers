@@ -193,8 +193,10 @@ jobs:
       - name: Prepare final comment message
         id: prepare_final_comment
         if: needs.init_comment_with_url.result == 'success'
+        env:
+          CHANGES_DETECTED: ${{ needs.run-repo-consistency-checks.outputs.changes_detected }}
         run: |
-          if [ "${{ needs.run-repo-consistency-checks.outputs.changes_detected }}" = 'true' ]; then
+          if [ "$CHANGES_DETECTED" = 'true' ]; then
             echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
           else
             echo "final_comment=Repo. Consistency fix runs successfully without any file modified." >> $GITHUB_OUTPUT
