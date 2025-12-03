@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization class for Funnel Transformer."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -83,7 +83,7 @@ class FunnelTokenizer(TokenizersBackend):
             value for `lowercase` (as in the original BERT).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary.
     """
 
@@ -105,7 +105,7 @@ class FunnelTokenizer(TokenizersBackend):
         tokenize_chinese_chars: bool = True,
         strip_accents: Optional[bool] = None,
         wordpieces_prefix: str = "##",
-        vocab: Optional[dict] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
         vocab_file: Optional[str] = None,
         **kwargs,
     ):
@@ -116,12 +116,10 @@ class FunnelTokenizer(TokenizersBackend):
         self.clean_text = clean_text
         self.wordpieces_prefix = wordpieces_prefix
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -130,6 +128,7 @@ class FunnelTokenizer(TokenizersBackend):
                 str(bos_token): 5,
                 str(eos_token): 6,
             }
+        )
 
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))
 

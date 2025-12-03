@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from typing import Optional, Union
+
 from tokenizers import AddedToken, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -97,9 +99,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
@@ -126,7 +128,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
         add_eos_token=False,
         use_default_system_prompt=False,
         add_prefix_space=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,
         vocab_file=None,
         **kwargs,
@@ -138,21 +140,26 @@ class CodeLlamaTokenizer(TokenizersBackend):
         for token in [prefix_token, middle_token, suffix_token, eot_token, fill_token]:
             additional_special_tokens += [token] if token is not None else []
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(unk_token): 0,
                 str(bos_token): 1,
                 str(eos_token): 2,
             }
+        )
 
-        filtered_vocab = {
-            t: i for t, i in self._vocab.items() if t not in {str(eos_token), str(bos_token), str(unk_token)}
-        }
-        self._merges = merges if merges is not None else generate_merges(filtered_vocab)
+        if merges is None:
+            if isinstance(self._vocab, dict):
+                filtered_vocab = {
+                    t: i for t, i in self._vocab.items() if t not in {str(eos_token), str(bos_token), str(unk_token)}
+                }
+                self._merges = generate_merges(filtered_vocab)
+            else:
+                self._merges = []
+        else:
+            self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -75,7 +75,7 @@ class MBartTokenizer(TokenizersBackend):
         src_lang=None,
         tgt_lang=None,
         additional_special_tokens=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,  # Ignored for Unigram
         vocab_file=None,
         **kwargs,
@@ -89,7 +89,7 @@ class MBartTokenizer(TokenizersBackend):
             )
 
         # MBart uses fairseq vocab alignment: <s>=0, <pad>=1, </s>=2, <unk>=3, then SPM pieces[3:], lang codes, <mask>
-        if vocab is not None:
+        if isinstance(vocab, (dict, list)):
             # Handle different vocab formats (dict, list of tokens, or list of tuples)
             # SentencePieceExtractor returns list[tuple[str, float]] which is the expected format
             if isinstance(vocab, dict):

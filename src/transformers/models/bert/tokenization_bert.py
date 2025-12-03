@@ -15,7 +15,7 @@
 """Tokenization classes for Bert."""
 
 import collections
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -72,7 +72,7 @@ class BertTokenizer(TokenizersBackend):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
     """
 
@@ -91,25 +91,24 @@ class BertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         tokenize_chinese_chars: bool = True,
         strip_accents: Optional[bool] = None,
-        vocab: Optional[dict] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
+        )
 
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))
 

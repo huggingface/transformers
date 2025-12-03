@@ -14,6 +14,8 @@
 # limitations under the License
 """Tokenization classes for Camembert model."""
 
+from typing import Optional, Union
+
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -83,7 +85,7 @@ class CamembertTokenizer(TokenizersBackend):
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
     """
 
@@ -103,7 +105,7 @@ class CamembertTokenizer(TokenizersBackend):
         additional_special_tokens=None,
         add_prefix_space=True,
         vocab_file=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file
@@ -114,9 +116,15 @@ class CamembertTokenizer(TokenizersBackend):
         if additional_special_tokens is None:
             additional_special_tokens = ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
 
-        if vocab is not None and isinstance(vocab, list):
-            self._vocab = list(vocab)
-            unk_index = next(i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token))
+        vocab_list = None
+        if isinstance(vocab, list):
+            vocab_list = list(vocab)
+        elif isinstance(vocab, dict):
+            vocab_list = list(vocab.items())
+
+        if vocab_list is not None:
+            self._vocab = vocab_list
+            unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)
             self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_index, byte_fallback=False))
         else:
             self._vocab = [

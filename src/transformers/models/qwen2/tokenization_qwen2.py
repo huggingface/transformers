@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization classes for Qwen2."""
 
+from typing import Optional, Union
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
@@ -49,21 +51,22 @@ class Qwen2Tokenizer(TokenizersBackend):
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",
         add_prefix_space=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 "<|endoftext|>": 0,
             }
-        self._merges = merges if merges is not None else generate_merges(self._vocab)
+        )
+        self._merges = (
+            merges if merges is not None else generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
+        )
 
         self._tokenizer = Tokenizer(
             BPE(

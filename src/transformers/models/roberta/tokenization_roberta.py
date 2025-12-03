@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -102,9 +102,9 @@ class RobertaTokenizer(TokenizersBackend):
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
@@ -124,25 +124,24 @@ class RobertaTokenizer(TokenizersBackend):
         mask_token: str = "<mask>",
         add_prefix_space: bool = False,
         trim_offsets: bool = True,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
+        )
 
         if merges is not None:
             self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]

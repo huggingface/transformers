@@ -83,9 +83,9 @@ class CodeGenTokenizer(TokenizersBackend):
             Whether or not to add an initial beginning of sentence token to the input.
         return_token_type_ids (`bool`, *optional*, defaults to `False`):
             Whether to return token type IDs.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
@@ -102,8 +102,8 @@ class CodeGenTokenizer(TokenizersBackend):
         add_prefix_space=False,
         add_bos_token=False,
         return_token_type_ids=False,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self.return_token_type_ids = return_token_type_ids
@@ -112,12 +112,7 @@ class CodeGenTokenizer(TokenizersBackend):
 
         self.add_prefix_space = add_prefix_space
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
+        self._vocab = vocab if vocab is not None else {}
 
         if merges is not None:
             self._merges = merges

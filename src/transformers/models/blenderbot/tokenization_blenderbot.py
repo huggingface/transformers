@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
+from typing import Optional, Union
+
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -102,9 +104,9 @@ class BlenderbotTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (Blenderbot tokenizer detect beginning of words by the preceding space).
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
@@ -121,7 +123,7 @@ class BlenderbotTokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,
         **kwargs,
     ):
@@ -132,21 +134,19 @@ class BlenderbotTokenizer(TokenizersBackend):
             else mask_token
         )
 
-        if vocab is not None and merges is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-            self._merges = merges
-        else:
-            # Initialize with minimal vocab
-            self._vocab = {
+        # Initialize vocab and merges; when not provided fall back to minimal vocab
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(bos_token): 0,
                 str(pad_token): 1,
                 str(eos_token): 2,
                 str(unk_token): 3,
                 str(mask_token): 4,
             }
-            self._merges = []
+        )
+        self._merges = merges if merges is not None else []
 
         self._tokenizer = Tokenizer(
             BPE(

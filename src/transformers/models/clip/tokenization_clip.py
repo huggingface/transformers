@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for CLIP."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -46,9 +46,9 @@ class CLIPTokenizer(TokenizersBackend):
             The end of sequence token.
         pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Vocabulary dict to use for the tokenizer.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Merges list to use for the BPE tokenizer.
         vocab_file (`str`, *optional*):
             Path to the vocabulary file.
@@ -66,8 +66,8 @@ class CLIPTokenizer(TokenizersBackend):
         bos_token: str = "<|startoftext|>",
         eos_token: str = "<|endoftext|>",
         pad_token: str = "<|endoftext|>",
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         vocab_file: Optional[str] = None,
         merges_file: Optional[str] = None,
         **kwargs,
@@ -75,14 +75,15 @@ class CLIPTokenizer(TokenizersBackend):
         self.vocab_file = vocab_file
         self.merges_file = merges_file
 
-        if vocab is not None:
-            _vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-        else:
-            _vocab = {
+        _vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(bos_token): 0,
                 str(eos_token): 1,
                 str(pad_token): 2,
             }
+        )
 
         if merges is not None:
             _merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]

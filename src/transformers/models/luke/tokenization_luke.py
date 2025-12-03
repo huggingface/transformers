@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from typing import Optional, Union
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_python import PreTrainedTokenizer
@@ -232,6 +232,9 @@ class LukeTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
+        entity_vocab: Optional[Union[str, dict, list]] = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -250,9 +253,6 @@ class LukeTokenizer(TokenizersBackend):
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
         entity_mask2_token="[MASK2]",
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
-        entity_vocab: Optional[dict] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -269,18 +269,12 @@ class LukeTokenizer(TokenizersBackend):
             entity_vocab = kwargs.pop("entity_vocab")
 
         # Build vocab and merges (either from data or empty, like GPT2Tokenizer)
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
-
+        if vocab is None:
+            vocab = {}
+        self._vocab = vocab
+        if merges is None:
+            merges = []
+        self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -400,17 +394,6 @@ class LukeTokenizer(TokenizersBackend):
             entity_mask2_token=entity_mask2_token,
             entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if it was passed as data
             **kwargs,
-        )
-        self._post_init()
-
-    def _post_init(self):
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{self.cls_token}:0 $A:0 {self.sep_token}:0",
-            pair=f"{self.cls_token}:0 $A:0 {self.sep_token}:0 {self.sep_token}:0 $B:1 {self.sep_token}:1",
-            special_tokens=[
-                (self.cls_token, self.cls_token_id),
-                (self.sep_token, self.sep_token_id),
-            ],
         )
 
     def build_inputs_with_special_tokens(

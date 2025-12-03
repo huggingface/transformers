@@ -44,6 +44,10 @@ from transformers import (
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
     TOKENIZER_MAPPING,
+    AutoTokenizerBackendError,
+    AutoTokenizerLoadError,
+    _load_tokenizers_backend,
+    _try_load_tokenizer_with_fallbacks,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )
@@ -262,6 +266,68 @@ class AutoTokenizerTest(unittest.TestCase):
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertTrue(tokenizer2.vocab_size > 100_000)
+
+    def test_sentencepiece_backend_missing_raises(self):
+        dummy_inputs = ()
+        dummy_kwargs = {"backend": "sentencepiece"}
+        with (
+            mock.patch("transformers.models.auto.tokenization_auto.SentencePieceBackend", None),
+            pytest.raises(
+                AutoTokenizerBackendError,
+                match="SentencePiece backend was requested but sentencepiece is not installed",
+            ),
+        ):
+            _try_load_tokenizer_with_fallbacks(None, "dummy-repo", dummy_inputs, dummy_kwargs)
+
+    def test_tokenizers_backend_missing_raises(self):
+        class DummyBackend:
+            @classmethod
+            def from_pretrained(cls, *args, **kwargs):
+                return cls()
+
+        dummy_inputs = ()
+        dummy_kwargs = {"backend": "tokenizers"}
+        with (
+            mock.patch.multiple(
+                "transformers.models.auto.tokenization_auto", TokenizersBackend=None, SentencePieceBackend=DummyBackend
+            ),
+            pytest.raises(
+                AutoTokenizerBackendError,
+                match="Tokenizers backend is the default but tokenizers library is not installed",
+            ),
+        ):
+            _try_load_tokenizer_with_fallbacks(DummyBackend, "dummy-repo", dummy_inputs, dummy_kwargs)
+
+    def test_auto_tokenizer_load_error_has_expected_message(self):
+        class DummyTokenizer:
+            @classmethod
+            def from_pretrained(cls, *args, **kwargs):
+                return cls()
+
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir,
+            pytest.raises(
+                AutoTokenizerLoadError,
+                match=(
+                    "Could not load tokenizer from .* using tokenizers backend. "
+                    "No tokenizer\\.json, tekken\\.json, vocab\\.json/merges\\.txt, vocab\\.txt, or compatible "
+                    "SentencePiece model found."
+                ),
+            ),
+        ):
+            _load_tokenizers_backend(DummyTokenizer, tmp_dir, (), {})
+
+    @require_tokenizers
+    def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
+        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-BloomForCausalLM")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
+
+    @require_tokenizers
+    def test_auto_tokenizer_loads_sentencepiece_only_repo(self):
+        tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-mbart")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
 
     def test_auto_tokenizer_fast_no_slow(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")

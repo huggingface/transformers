@@ -100,9 +100,9 @@ class CohereTokenizer(TokenizersBackend):
             Whether or not the default system prompt for Cohere tokenizer should be used.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not the tokenizer should automatically add a prefix space
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
@@ -127,8 +127,8 @@ class CohereTokenizer(TokenizersBackend):
         add_eos_token: bool = False,
         use_default_system_prompt: bool = False,
         add_prefix_space: bool = False,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self._add_bos_token = add_bos_token
@@ -138,12 +138,10 @@ class CohereTokenizer(TokenizersBackend):
         self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -151,6 +149,7 @@ class CohereTokenizer(TokenizersBackend):
                 str(mask_token): 4,
                 str(bos_token): 5,
             }
+        )
 
         if merges is not None:
             self._merges = merges

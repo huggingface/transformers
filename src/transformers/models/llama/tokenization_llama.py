@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional, Union
 
-from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
@@ -61,6 +62,10 @@ class LlamaTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
+        vocab (`str`, `dict` or `list`, *optional*):
+            Path to the vocabulary file, a dictionary or a list of tokens.
+        merges (`str` or `list`, *optional*):
+            Path to the merges file or a list of merges.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
@@ -87,6 +92,8 @@ class LlamaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",
@@ -96,30 +103,22 @@ class LlamaTokenizer(TokenizersBackend):
         use_default_system_prompt=False,
         legacy=False,
         add_prefix_space=None,
-        vocab=None,
-        merges=None,
         **kwargs,
     ):
+        special_tokens = {str(eos_token), str(bos_token), str(unk_token)}
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
-
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
+        self._vocab = vocab
+        self._merges = merges
+        if vocab is None:
             self._vocab = {
                 str(unk_token): 0,
                 str(bos_token): 1,
                 str(eos_token): 2,
             }
-
-        special_tokens = {str(eos_token), str(bos_token), str(unk_token)}
-
-        filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
+        if merges is None:
+            filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
             self._merges = generate_merges(filtered_vocab)
+
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )
@@ -138,10 +137,10 @@ class LlamaTokenizer(TokenizersBackend):
             sequence += [decoders.Strip(content=" ", left=1)]
 
         self._tokenizer.decoder = decoders.Sequence(sequence)
-        tokenizer_object = self._tokenizer
-
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
         super().__init__(
-            tokenizer_object=tokenizer_object,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -152,25 +151,6 @@ class LlamaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-
-        self._post_init()
-
-    def _post_init(self):
-        """Post-initialization setup that needs to run after _tokenizer is set."""
-        # Only set pre_tokenizer/normalizer for Llama-3 style tokenizers (use Sequence)
-        pre_tok = self._tokenizer.pre_tokenizer
-        if pre_tok is None or type(pre_tok).__name__ != "Sequence":
-            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-                replacement="▁", prepend_scheme="first", split=False
-            )
-            self._tokenizer.normalizer = None
-            self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
-        super()._post_init()
-        self.update_post_processor()
 
 
 __all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]

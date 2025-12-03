@@ -196,7 +196,7 @@ class UdopTokenizer(TokenizersBackend):
         pad_token_label=-100,
         only_label_first_subword=True,
         extra_special_tokens=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         **kwargs,
     ):
         if "additional_special_tokens" in kwargs and "extra_special_tokens" not in kwargs:

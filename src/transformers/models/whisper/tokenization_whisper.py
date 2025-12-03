@@ -19,7 +19,7 @@ import os
 import re
 import warnings
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
@@ -207,7 +207,7 @@ class WhisperTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,
         normalizer_file=None,
         unk_token="<|endoftext|>",

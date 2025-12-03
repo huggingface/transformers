@@ -173,8 +173,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab=None,
-        vocab_file=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         do_lower_case=True,
         unk_token="[UNK]",
         sep_token="[SEP]",
@@ -190,21 +189,14 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
         strip_accents=None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.do_lower_case = do_lower_case
 
         # Build vocab for WordPiece
         if vocab is not None:
-            if isinstance(vocab, dict):
-                _vocab = vocab
-            else:
-                raise ValueError("vocab must be a dict mapping tokens to ids")
-        elif vocab_file is not None:
-            # Load vocab from file (BERT format: one token per line)
-            _vocab = self._load_vocab_from_file(vocab_file)
+            self._vocab = vocab
         else:
             # Initialize with at least the special tokens for WordPiece
-            _vocab = {
+            self._vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -213,7 +205,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             }
 
         # Initialize WordPiece tokenizer
-        self._tokenizer = Tokenizer(models.WordPiece(vocab=_vocab, unk_token=str(unk_token)))
+        self._tokenizer = Tokenizer(models.WordPiece(vocab=self._vocab, unk_token=str(unk_token)))
 
         # Set normalizer
         self._tokenizer.normalizer = normalizers.BertNormalizer(

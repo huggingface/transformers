@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import AddedToken, BatchEncoding
+from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -101,15 +102,12 @@ class NllbTokenizer(TokenizersBackend):
         tgt_lang=None,
         additional_special_tokens=None,
         legacy_behaviour=False,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,
-        vocab_file=None,
         **kwargs,
     ):
         if additional_special_tokens is None:
             additional_special_tokens = kwargs.get("extra_special_tokens", FAIRSEQ_LANGUAGE_CODES)
-
-        self.vocab_file = vocab_file
 
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)
@@ -118,21 +116,18 @@ class NllbTokenizer(TokenizersBackend):
         )
         self.legacy_behaviour = legacy_behaviour
 
-        if vocab is not None:
-            if isinstance(vocab, list):
-                self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)}
-            else:
-                self._vocab = vocab
-        else:
+        if vocab is None:
             self._vocab = {
                 str(bos_token): 0,
                 str(pad_token): 1,
                 str(eos_token): 2,
                 str(unk_token): 3,
             }
+        else:
+            self._vocab = vocab
 
         if merges is None:
-            self._merges = []
+            self._merges = generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
         else:
             self._merges = merges
 

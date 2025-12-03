@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization classes for Big Bird model."""
 
+from typing import Optional, Union
+
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -37,7 +39,7 @@ class BigBirdTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods
 
     Args:
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -83,7 +85,7 @@ class BigBirdTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",

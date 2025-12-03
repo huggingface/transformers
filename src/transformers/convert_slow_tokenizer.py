@@ -87,22 +87,47 @@ class SentencePieceExtractor:
 
     def __init__(self, model: str):
         requires_backends(self, "sentencepiece")
-        from sentencepiece import SentencePieceProcessor
+        requires_backends(self, "protobuf")
 
-        self.sp = SentencePieceProcessor()
-        self.sp.Load(model)
+        # from .utils import sentencepiece_model_pb2 as model_pb2
+        model_pb2 = import_protobuf()
 
-    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
+        m = model_pb2.ModelProto()
+        with open(model, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def extract(self, **kwargs) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
         """
-        sp = self.sp
-        vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        self.proto.trainer_spec.unk_id
 
-        merges = generate_merges(vocab, vocab_scores)
+        model_type = self.proto.trainer_spec.model_type
+        vocab = [(piece.piece, piece.score) for piece in self.proto.pieces]
 
-        return vocab, merges
+        if model_type == 1:
+            kwargs["unk_id"] = self.proto.trainer_spec.unk_id
+            kwargs["vocab"] = vocab
+        elif model_type == 2:
+            from .tokenization_utils_base import generate_merges
+
+            vocab = {word: i for i, (word, score) in enumerate(vocab)}
+            merges = generate_merges(vocab)
+            kwargs["vocab"] = vocab
+            kwargs["merges"] = merges
+
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [(id, p.piece, p.type == 3) for id, p in enumerate(self.proto.pieces) if p.type in [3, 4]]
+        kwargs["additional_special_tokens"] = [
+            AddedToken(token, normalized=False, special=special)
+            for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+        ]
+        return kwargs
 
 
 class GemmaSentencePieceExtractor(SentencePieceExtractor):
@@ -1171,7 +1196,7 @@ class CLIPConverter(Converter):
         )
         tokenizer.decoder = decoders.ByteLevel()
 
-        # Hack to have a ByteLevel and TemplaceProcessor
+        # Hack to have a ByteLevel and TemplateProcessor
         tokenizer.post_processor = processors.RobertaProcessing(
             sep=(self.original_tokenizer.eos_token, self.original_tokenizer.eos_token_id),
             cls=(self.original_tokenizer.bos_token, self.original_tokenizer.bos_token_id),

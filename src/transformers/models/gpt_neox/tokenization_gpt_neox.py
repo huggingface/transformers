@@ -14,11 +14,12 @@
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
+from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -87,9 +88,9 @@ class GPTNeoXTokenizer(TokenizersBackend):
             Whether or not to add an `eos_token` at the end of sequences.
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether or not the post-processing step should trim offsets to avoid including whitespaces.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
@@ -99,6 +100,8 @@ class GPTNeoXTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         errors: str = "replace",
         unk_token: str = "<|endoftext|>",
         bos_token: str = "<|endoftext|>",
@@ -108,8 +111,6 @@ class GPTNeoXTokenizer(TokenizersBackend):
         add_eos_token: bool = False,
         add_prefix_space: bool = False,
         trim_offsets: bool = True,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         **kwargs,
     ):
         self._add_bos_token = add_bos_token
@@ -117,21 +118,11 @@ class GPTNeoXTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
-                str(unk_token): 0,
-                str(pad_token): 1,
-            }
+        self._vocab = vocab if vocab is not None else {str(unk_token): 0, str(pad_token): 1}
 
-        if merges is not None:
-            self._merges = merges
-        else:
-            self._merges = []
-
+        if merges is None:
+            merges = generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
+        self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -149,10 +140,7 @@ class GPTNeoXTokenizer(TokenizersBackend):
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=False, trim_offsets=True)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -165,21 +153,6 @@ class GPTNeoXTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self.update_post_processor()
-
-    def _post_init(self):
-        """Post-initialization to ensure tokenizer settings are applied correctly."""
-        # Re-apply settings to ensure they're correct after loading from pretrained
-        self._tokenizer.normalizer = normalizers.NFC()
-        self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
-            add_prefix_space=self.add_prefix_space, trim_offsets=self.trim_offsets
-        )
-        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=False, trim_offsets=True)
-
-        # Call parent to handle AddedToken properties
-        super()._post_init()
-
-        # Update post processor with current bos/eos settings
         self.update_post_processor()
 
 

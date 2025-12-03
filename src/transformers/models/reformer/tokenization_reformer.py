@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization class for model Reformer."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
@@ -60,9 +60,9 @@ class ReformerTokenizer(TokenizersBackend):
             The token used for padding, for example when batching sequences of different lengths.
         additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from vocab_file.
     """
 
@@ -76,8 +76,8 @@ class ReformerTokenizer(TokenizersBackend):
         eos_token: str = "</s>",
         unk_token: str = "<unk>",
         additional_special_tokens: Optional[list] = None,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file

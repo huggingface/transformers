@@ -14,6 +14,8 @@
 # limitations under the License
 """Tokenization classes for the BARThez model."""
 
+from typing import Optional, Union
+
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
@@ -77,7 +79,7 @@ class BarthezTokenizer(TokenizersBackend):
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
@@ -98,7 +100,7 @@ class BarthezTokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         vocab_file=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         add_prefix_space=True,
         **kwargs,
     ):

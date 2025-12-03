@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -94,7 +94,7 @@ class MBart50Tokenizer(TokenizersBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,  # Ignored for Unigram
         vocab_file=None,
         **kwargs,
@@ -108,7 +108,7 @@ class MBart50Tokenizer(TokenizersBackend):
         # when loading from pretrained files.
 
         # Always construct a tokenizer_object without referencing external tokenizer files
-        if vocab is not None:
+        if isinstance(vocab, list):
             # MBart50 uses fairseq vocab alignment matching MBart50Converter:
             # <s>=0, <pad>=1, </s>=2, <unk>=3, then tokens, lang codes, <mask>
 

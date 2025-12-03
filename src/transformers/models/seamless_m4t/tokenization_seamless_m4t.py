@@ -24,6 +24,7 @@ from ...tokenization_python import (
     PreTokenizedInput,
     TextInput,
 )
+from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import PaddingStrategy, logging
 
@@ -60,7 +61,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
     Args:
         vocab (`list` or `dict`, *optional*):
             List of (token, score) tuples or dict mapping tokens to indices. If not provided, uses default vocab.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             List of merge rules for BPE model. If not provided, uses empty list.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
@@ -111,8 +112,8 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[list] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -133,6 +134,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
                 str(bos_token): 2,
                 str(eos_token): 3,
             }
+        self._vocab = vocab
 
         # Process vocab - SeamlessM4T uses fairseq vocab alignment: <pad>=0, <unk>=1, <s>=2, </s>=3, then SPM pieces[3:]
         if isinstance(vocab, list):
@@ -171,14 +173,11 @@ class SeamlessM4TTokenizer(TokenizersBackend):
                         idx += 1
 
                 self._vocab = vocab_dict
-        else:
-            self._vocab = vocab
 
         if merges is None:
-            self._merges = []
-        else:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
+            merges = generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
 
+        self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

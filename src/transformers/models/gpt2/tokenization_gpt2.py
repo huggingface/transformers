@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
@@ -84,9 +84,9 @@ class GPT2Tokenizer(TokenizersBackend):
         add_bos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial beginning of sentence token to the input. This allows to treat the leading
             word just as any other word.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
@@ -103,20 +103,15 @@ class GPT2Tokenizer(TokenizersBackend):
         pad_token=None,
         add_prefix_space=False,
         add_bos_token=False,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         #  self.add_bos_token = add_bos_token
 
         self.add_prefix_space = add_prefix_space
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
+        self._vocab = vocab if vocab is not None else {}
 
         if merges is not None:
             self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]

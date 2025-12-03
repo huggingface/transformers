@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
+from typing import Optional, Union
+
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
@@ -48,9 +50,9 @@ class OpenAIGPTTokenizer(TokenizersBackend):
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, a blank vocabulary is initialized.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, an empty list is used.
     """
 
@@ -60,26 +62,20 @@ class OpenAIGPTTokenizer(TokenizersBackend):
     def __init__(
         self,
         unk_token="<unk>",
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         merges=None,
         vocab_file=None,
         merges_file=None,
         **kwargs,
     ):
         # Initialize vocabulary
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            # Initialize minimal vocabulary with unk token
-            self._vocab = {str(unk_token): 0}
+        self._vocab = vocab if vocab is not None else {str(unk_token): 0}
 
         # Initialize merges
-        if merges is not None:
-            self._merges = merges if merges is not None else generate_merges(self._vocab)
+        if merges is None:
+            self._merges = generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
         else:
-            self._merges = []
+            self._merges = merges
 
         # Create BPE tokenizer
         self._tokenizer = Tokenizer(

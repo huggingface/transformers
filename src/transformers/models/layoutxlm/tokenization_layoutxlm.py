@@ -150,8 +150,8 @@ class LayoutXLMTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab (`list[tuple[str, float]]`, *optional*):
-            Vocabulary for the tokenizer as a list of (token, score) tuples.
+        vocab (`str`, `dict` or `list`, *optional*):
+            Vocabulary for the tokenizer as a path, a dictionary or a list of `(token, score)` tuples.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -211,7 +211,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
     def __init__(
         self,
         vocab_file=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -232,14 +232,14 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
         self.add_prefix_space = add_prefix_space
 
-        # Build vocab from list of tuples if provided, else use default
-        # Handle both list of tuples (when creating) and dict (when loading)
-        if vocab is not None:
-            if isinstance(vocab, dict):
-                # Convert dict to list of tuples
-                self._vocab = [(token, score) for token, score in vocab.items()]
-            else:
-                self._vocab = vocab
+        # Build vocab from provided data if available, else use default
+        if isinstance(vocab, dict):
+            # Convert dict to list of tuples
+            self._vocab = [(token, score) for token, score in vocab.items()]
+        elif isinstance(vocab, list):
+            self._vocab = [(token, float(score)) for token, score in vocab]
+        elif vocab is not None:
+            self._vocab = vocab
         else:
             self._vocab = [
                 ("<s>", 0.0),

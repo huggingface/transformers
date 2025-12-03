@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for RemBert model."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -90,8 +90,8 @@ class RemBertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         add_prefix_space: bool = True,
         remove_space: bool = True,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file

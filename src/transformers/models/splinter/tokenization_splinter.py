@@ -16,7 +16,7 @@
 """Tokenization classes for Splinter."""
 
 import collections
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -72,7 +72,7 @@ class SplinterTokenizer(TokenizersBackend):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase`.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, a minimal vocabulary is created.
     """
 
@@ -91,15 +91,13 @@ class SplinterTokenizer(TokenizersBackend):
         question_token: str = "[QUESTION]",
         tokenize_chinese_chars: bool = True,
         strip_accents: Optional[bool] = None,
-        vocab: Optional[dict] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
         **kwargs,
     ):
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -108,6 +106,7 @@ class SplinterTokenizer(TokenizersBackend):
                 str(question_token): 5,
                 ".": 6,
             }
+        )
 
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))
 

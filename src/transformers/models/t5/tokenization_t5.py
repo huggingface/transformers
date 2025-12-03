@@ -15,6 +15,7 @@
 """Tokenization class for model T5."""
 
 import re
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -61,7 +62,7 @@ class T5Tokenizer(TokenizersBackend):
             calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids method
         additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dict. If not provided, a minimal vocabulary is created using the special tokens.
     """
 
@@ -76,7 +77,7 @@ class T5Tokenizer(TokenizersBackend):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         vocab_file=None,
         **kwargs,
     ):

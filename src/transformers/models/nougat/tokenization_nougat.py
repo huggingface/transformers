@@ -380,10 +380,10 @@ class NougatTokenizer(TokenizersBackend):
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
 
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
 
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
@@ -398,22 +398,21 @@ class NougatTokenizer(TokenizersBackend):
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         pad_token: str = "<pad>",
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(bos_token): 0,
                 str(pad_token): 1,
                 str(eos_token): 2,
                 str(unk_token): 3,
                 "[START_REF]": 4,
             }
+        )
 
         if merges is not None:
             self._merges = merges

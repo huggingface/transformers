@@ -154,7 +154,7 @@ class MarkupLMTokenizer(TokenizersBackend):
         self,
         tags_dict,
         vocab: Optional[Union[dict, list]] = None,
-        merges: Optional[list] = None,
+        merges: Optional[Union[str, list]] = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",

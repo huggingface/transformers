@@ -234,8 +234,8 @@ class MLukeTokenizer(TokenizersBackend):
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
         entity_mask2_token="[MASK2]",
-        vocab: Optional[list] = None,
-        entity_vocab: Optional[dict] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        entity_vocab: Optional[Union[str, dict, list]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
@@ -263,10 +263,13 @@ class MLukeTokenizer(TokenizersBackend):
             entity_vocab = kwargs.pop("entity_vocab")
 
         # Build vocab from data (list of (token, score) tuples)
-        if vocab is not None:
+        if isinstance(vocab, list):
             # vocab is list of (token, score) tuples from SentencePieceExtractor
             self._vocab = [(token, float(score)) for token, score in vocab]
             self._vocab_size = len(self._vocab)
+        elif vocab is not None:
+            self._vocab = vocab
+            self._vocab_size = 0
         else:
             # Create minimal vocab with <unk> to satisfy Unigram requirements
             self._vocab = [("<unk>", 0.0)]

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for ALBERT model."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -73,7 +73,7 @@ class AlbertTokenizer(TokenizersBackend):
             other word.
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
@@ -97,7 +97,7 @@ class AlbertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         add_prefix_space: bool = True,
         trim_offsets: bool = True,
-        vocab: Optional[dict] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
         vocab_file: Optional[str] = None,
         **kwargs,
     ):
@@ -108,8 +108,12 @@ class AlbertTokenizer(TokenizersBackend):
         self.do_lower_case = do_lower_case
         self.keep_accents = keep_accents
 
-        if vocab is not None:
-            self._vocab_scores = [(token, 0.0) for token in vocab.keys()] if isinstance(vocab, dict) else list(vocab)
+        if isinstance(vocab, dict):
+            self._vocab_scores = [(token, 0.0) for token in vocab.keys()]
+        elif isinstance(vocab, list):
+            self._vocab_scores = list(vocab)
+        elif vocab is not None:
+            self._vocab_scores = vocab
         else:
             self._vocab_scores = [
                 (str(pad_token), 0.0),

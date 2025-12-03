@@ -14,7 +14,7 @@
 # limitations under the License
 """Tokenization classes for XLM-RoBERTa model (Tokenizers backend)."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -47,8 +47,8 @@ class XLMRobertaTokenizer(TokenizersBackend):
         pad_token (`str`, optional, defaults to `"<pad>"`): The padding token.
         mask_token (`str`, optional, defaults to `"<mask>"`): The mask token.
         add_prefix_space (`bool`, optional, defaults to `True`): Whether to add an initial space.
-        vocab (`dict`, optional): Custom vocabulary dictionary.
-        merges (`list`, optional): Custom merges list.
+        vocab (`str`, `dict` or `list`, optional): Custom vocabulary dictionary.
+        merges (`str` or `list`, optional): Custom merges list.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -65,7 +65,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
         add_prefix_space: bool = True,
-        vocab: Optional[dict] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
         vocab_file: Optional[str] = None,
         **kwargs,
     ):

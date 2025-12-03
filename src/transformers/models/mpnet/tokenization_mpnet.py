@@ -15,7 +15,7 @@
 # limitations under the License.
 """Tokenization classes for MPNet."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -38,7 +38,7 @@ class MPNetTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Dictionary mapping tokens to their IDs. If not provided, an empty vocab is initialized.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
@@ -90,7 +90,7 @@ class MPNetTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[dict] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
         do_lower_case=True,
         bos_token="<s>",
         eos_token="</s>",
@@ -104,12 +104,7 @@ class MPNetTokenizer(TokenizersBackend):
         **kwargs,
     ):
         # Initialize vocab
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
+        self._vocab = vocab if vocab is not None else {}
 
         # Initialize the tokenizer with WordPiece model
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))

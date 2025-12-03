@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization class for model PEGASUS."""
 
+from typing import Optional, Union
+
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -70,7 +72,7 @@ class PegasusTokenizer(TokenizersBackend):
             that uses the tokens 2 - 104 only for pretraining
         offset (`int`, *optional*, defaults to 103):
             Offset for additional special tokens.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, a blank vocabulary is initialized.
     """
 
@@ -86,7 +88,7 @@ class PegasusTokenizer(TokenizersBackend):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         vocab_file=None,
         **kwargs,
     ):
@@ -97,7 +99,7 @@ class PegasusTokenizer(TokenizersBackend):
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
-        if vocab is not None:
+        if isinstance(vocab, list):
             # For Pegasus, insert special tokens at the beginning
             special_tokens_set = {pad_token, eos_token, mask_token_sent, mask_token, unk_token}
             special_tokens_set.update(additional_special_tokens)

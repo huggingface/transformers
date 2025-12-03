@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
@@ -50,7 +50,7 @@ class GemmaTokenizer(TokenizersBackend):
             Whether or not to add a `bos_token` at the start of sequences.
         add_eos_token (`bool`, optional, defaults to False):
             Whether or not to add an `eos_token` at the end of sequences.
-        vocab (`dict`, optional):
+        vocab (`str`, `dict` or `list`, optional):
             Custom vocabulary dict. If not provided, a minimal vocabulary is created using the special tokens.
     """
 
@@ -68,8 +68,8 @@ class GemmaTokenizer(TokenizersBackend):
         mask_token: str = "<mask>",
         add_bos_token: bool = True,
         add_eos_token: bool = False,
-        vocab: Optional[dict] = None,
-        merges: Optional[list[tuple[str, str]]] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self._add_bos_token = add_bos_token
@@ -77,21 +77,26 @@ class GemmaTokenizer(TokenizersBackend):
 
         special_tokens = {str(pad_token), str(eos_token), str(bos_token), str(unk_token)}
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(eos_token): 1,
                 str(bos_token): 2,
                 str(unk_token): 3,
                 str(mask_token): 4,
             }
+        )
 
-        filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-        self._merges = merges if merges is not None else generate_merges(filtered_vocab)
+        if merges is None:
+            if isinstance(self._vocab, dict):
+                filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
+                self._merges = generate_merges(filtered_vocab)
+            else:
+                self._merges = []
+        else:
+            self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for XGLM."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -50,7 +50,7 @@ class XGLMTokenizer(TokenizersBackend):
             The unknown token.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, a minimal vocabulary is created.
         merges (`list[tuple[str, str]]`, *optional*):
             Custom merge rules for BPE. If not provided, merges are generated from the vocabulary.
@@ -70,8 +70,8 @@ class XGLMTokenizer(TokenizersBackend):
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
-        vocab: Optional[dict] = None,
-        merges: Optional[list[tuple[str, str]]] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         add_prefix_space: bool = True,
         **kwargs,
     ):

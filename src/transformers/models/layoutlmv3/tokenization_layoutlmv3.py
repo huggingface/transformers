@@ -159,9 +159,9 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file when using from_pretrained.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file when using from_pretrained.
     """
 
@@ -185,8 +185,8 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict, list]] = None,
+        merges: Optional[Union[str, list]] = None,
         vocab_file: Optional[str] = None,
         merges_file: Optional[str] = None,
         **kwargs,
