@@ -24,20 +24,18 @@ Key innovations:
 - Sigmoid scoring with noaux_tc routing for MoE
 """
 import math
-from typing import Callable, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 
 
@@ -502,7 +500,7 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         return freqs
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Compute rotary embeddings for given positions.
 
@@ -605,11 +603,11 @@ class DeepseekV32Gate(nn.Module):
         torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         # Add bias for 7168 hidden size (following reference implementation)
         if config.hidden_size == 7168:
-            self.bias = nn.Parameter(torch.zeros(config.n_routed_experts))
+            self.e_score_correction_bias = nn.Parameter(torch.zeros(config.n_routed_experts))
         else:
-            self.register_parameter("bias", None)
+            self.register_parameter("e_score_correction_bias", None)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Compute routing weights and expert indices.
 
@@ -633,8 +631,8 @@ class DeepseekV32Gate(nn.Module):
         original_scores = scores
 
         # Apply bias if present
-        if self.bias is not None:
-            scores = scores + self.bias
+        if self.e_score_correction_bias is not None:
+            scores = scores + self.e_score_correction_bias
 
         # Expert selection based on topk_method
         if self.topk_method == "greedy":
@@ -643,7 +641,7 @@ class DeepseekV32Gate(nn.Module):
             # Group-based selection
             group_scores = scores.view(batch_size, self.n_group, -1)
 
-            if self.bias is None:
+            if self.e_score_correction_bias is None:
                 group_max = group_scores.amax(dim=-1)
             else:
                 # Use top-2 sum for group scoring when bias is present
@@ -756,14 +754,14 @@ class DeepseekV32Indexer(nn.Module):
         self.q_lora_rank = config.q_lora_rank
 
         # Query projection from compressed representation
-        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.wq_b = nn.Linear(self.q_lora_rank, self.num_heads * self.head_dim, bias=False)
 
         # Key projection (single-head)
-        self.k_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
         self.k_norm = nn.LayerNorm(self.head_dim)
 
         # Head weights projection
-        self.weight_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
+        self.weights_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
 
         self.softmax_scale = self.head_dim**-0.5
 
@@ -776,7 +774,7 @@ class DeepseekV32Indexer(nn.Module):
         sin: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         k_cache: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Compute top-k token indices for sparse attention.
 
@@ -794,7 +792,7 @@ class DeepseekV32Indexer(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
 
         # Project queries from compressed representation
-        q_states = self.q_b_proj(q_compressed)
+        q_states = self.wq_b(q_compressed)
         q_states = q_states.view(batch_size, seq_len, self.num_heads, self.head_dim)
 
         # Split Q into RoPE and non-RoPE parts
@@ -810,7 +808,7 @@ class DeepseekV32Indexer(nn.Module):
         q_states = torch.cat([q_rot, q_pass], dim=-1)
 
         # Project and normalize keys (single-head)
-        k_states = self.k_norm(self.k_proj(hidden_states))
+        k_states = self.k_norm(self.wk(hidden_states))
 
         # Split K into RoPE and non-RoPE parts
         k_rot = k_states[..., : self.qk_rope_head_dim]
@@ -831,7 +829,7 @@ class DeepseekV32Indexer(nn.Module):
             k_full = k_states
 
         # Compute head weights
-        head_weights = self.weight_proj(hidden_states) * (self.num_heads**-0.5)
+        head_weights = self.weights_proj(hidden_states) * (self.num_heads**-0.5)
 
         # Compute attention scores: q @ k^T
         # q_states: [B, S, H, D], k_full: [B, T, D]
@@ -921,13 +919,13 @@ class DeepseekV32Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """
         Forward pass for MLA attention with DSA.
 
@@ -1067,9 +1065,9 @@ class DeepseekV32DecoderLayer(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """
         Forward pass for decoder layer.
 
@@ -1189,7 +1187,7 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutputWithPast]:
         """
         Forward pass for base model.
 
@@ -1388,7 +1386,7 @@ class DeepseekV32ForCausalLM(DeepseekV32PreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: int = 0,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[tuple, CausalLMOutputWithPast]:
         """
         Forward pass for causal LM.
 

@@ -82,7 +82,7 @@ def test_config_loading():
         print(f"  {status} {name}: {actual} (expected {expected})")
 
     if config.rope_scaling and config.rope_scaling.get("type") == "yarn":
-        print(f"  ✓ rope_scaling type: yarn")
+        print("  ✓ rope_scaling type: yarn")
     else:
         print(f"  ✗ rope_scaling type: {config.rope_scaling}")
         all_passed = False
@@ -147,7 +147,7 @@ def test_small_model_forward():
         print(f"  ✗ Forward pass failed: {e}")
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -186,7 +186,7 @@ def test_generation():
 
     try:
         model = DeepseekV32ForCausalLM(config)
-        print(f"  ✓ Model created")
+        print("  ✓ Model created")
     except Exception as e:
         print(f"  ✗ Model creation failed: {e}")
         return False
@@ -210,7 +210,7 @@ def test_generation():
         print(f"  ✗ Generation failed: {e}")
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -258,9 +258,9 @@ def test_kv_cache():
             past_kv = outputs.past_key_values
 
         if past_kv is not None:
-            print(f"  ✓ First pass: KV cache created")
+            print("  ✓ First pass: KV cache created")
         else:
-            print(f"  ✗ First pass: KV cache is None")
+            print("  ✗ First pass: KV cache is None")
             return False
 
         # Second pass: process single token with cache
@@ -269,7 +269,7 @@ def test_kv_cache():
             outputs2 = model(next_token, past_key_values=past_kv, use_cache=True)
 
         if outputs2.logits.shape == (1, 1, 1000):
-            print(f"  ✓ Second pass: incremental decoding works")
+            print("  ✓ Second pass: incremental decoding works")
         else:
             print(f"  ✗ Second pass: unexpected shape {outputs2.logits.shape}")
             return False
@@ -280,7 +280,7 @@ def test_kv_cache():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -339,7 +339,7 @@ def test_batch_processing():
         print(f"  ✗ Batch processing failed: {e}")
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -387,7 +387,7 @@ def test_yarn_rope():
 
     try:
         model = DeepseekV32ForCausalLM(config)
-        print(f"  ✓ Model with YaRN created")
+        print("  ✓ Model with YaRN created")
 
         # Test forward pass with longer sequence
         input_ids = torch.randint(0, 1000, (1, 32))
@@ -397,14 +397,14 @@ def test_yarn_rope():
         if outputs.logits.shape == (1, 32, 1000):
             print(f"  ✓ Forward with YaRN: shape {tuple(outputs.logits.shape)}")
         else:
-            print(f"  ✗ Forward with YaRN: unexpected shape")
+            print("  ✗ Forward with YaRN: unexpected shape")
             return False
 
     except Exception as e:
         print(f"  ✗ YaRN RoPE test failed: {e}")
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -470,9 +470,9 @@ def test_mscale_single_application():
         rotary_scaling = model.model.rotary_emb.attention_scaling
         if rotary_scaling != 1.0:
             print(f"  ✗ Rotary embedding attention_scaling = {rotary_scaling}, expected 1.0")
-            print(f"    (mscale should only be applied in attention softmax_scale)")
+            print("    (mscale should only be applied in attention softmax_scale)")
             return False
-        print(f"  ✓ Rotary embedding attention_scaling = 1.0 (correct)")
+        print("  ✓ Rotary embedding attention_scaling = 1.0 (correct)")
 
         # Check 2: Attention softmax_scale should include mscale^2
         attn = model.model.layers[0].self_attn
@@ -493,7 +493,7 @@ def test_mscale_single_application():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -507,7 +507,6 @@ def test_indexer_relu_order():
     print("Test 8: Indexer ReLU Order")
     print("=" * 60)
 
-    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
     from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32ForCausalLM
 
     config = get_small_test_config()
@@ -560,9 +559,9 @@ def test_indexer_relu_order():
         weight_mult_pos = source.find("scores * head_weights")
 
         if relu_pos < weight_mult_pos and relu_pos != -1:
-            print(f"  ✓ ReLU is applied before weight multiplication (correct order)")
+            print("  ✓ ReLU is applied before weight multiplication (correct order)")
         else:
-            print(f"  ✗ ReLU order is incorrect in source code")
+            print("  ✗ ReLU order is incorrect in source code")
             return False
 
     except Exception as e:
@@ -571,7 +570,7 @@ def test_indexer_relu_order():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -585,7 +584,7 @@ def test_mlp_float32_precision():
     print("Test 9: MLP Float32 Precision")
     print("=" * 60)
 
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MLP, DeepseekV32Expert
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Expert, DeepseekV32MLP
 
     config = get_small_test_config()
 
@@ -600,15 +599,15 @@ def test_mlp_float32_precision():
         expert_has_float = ".float()" in expert_source and ".type_as(" in expert_source
 
         if mlp_has_float:
-            print(f"  ✓ DeepseekV32MLP uses float32 for intermediate computation")
+            print("  ✓ DeepseekV32MLP uses float32 for intermediate computation")
         else:
-            print(f"  ✗ DeepseekV32MLP missing float32 cast for numerical stability")
+            print("  ✗ DeepseekV32MLP missing float32 cast for numerical stability")
             return False
 
         if expert_has_float:
-            print(f"  ✓ DeepseekV32Expert uses float32 for intermediate computation")
+            print("  ✓ DeepseekV32Expert uses float32 for intermediate computation")
         else:
-            print(f"  ✗ DeepseekV32Expert missing float32 cast for numerical stability")
+            print("  ✗ DeepseekV32Expert missing float32 cast for numerical stability")
             return False
 
         # Also verify it works correctly with bf16 input
@@ -620,7 +619,7 @@ def test_mlp_float32_precision():
             output = mlp(x)
 
         if output.dtype == torch.bfloat16:
-            print(f"  ✓ MLP output dtype matches input (bfloat16)")
+            print("  ✓ MLP output dtype matches input (bfloat16)")
         else:
             print(f"  ✗ MLP output dtype {output.dtype} != input dtype bfloat16")
             return False
@@ -631,7 +630,7 @@ def test_mlp_float32_precision():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -649,8 +648,8 @@ def test_rope_interleaved_vs_non_interleaved():
     print("=" * 60)
 
     from transformers.models.deepseek_v32.modeling_deepseek_v32 import (
-        apply_rotary_pos_emb_single,
         apply_rotary_pos_emb_non_interleaved,
+        apply_rotary_pos_emb_single,
     )
 
     try:
@@ -674,33 +673,33 @@ def test_rope_interleaved_vs_non_interleaved():
 
         # They should produce DIFFERENT results (if same, something is wrong)
         if not torch.allclose(x_interleaved, x_non_interleaved, atol=1e-5):
-            print(f"  ✓ Interleaved and non-interleaved RoPE produce different results (correct)")
+            print("  ✓ Interleaved and non-interleaved RoPE produce different results (correct)")
         else:
-            print(f"  ✗ Interleaved and non-interleaved RoPE produce same results (wrong!)")
+            print("  ✗ Interleaved and non-interleaved RoPE produce same results (wrong!)")
             return False
 
         # Verify shapes are preserved
         if x_interleaved.shape == x.shape and x_non_interleaved.shape == x.shape:
-            print(f"  ✓ Both RoPE variants preserve input shape")
+            print("  ✓ Both RoPE variants preserve input shape")
         else:
-            print(f"  ✗ Shape mismatch after RoPE")
+            print("  ✗ Shape mismatch after RoPE")
             return False
 
         # Verify interleaved uses rotate_half pattern (check implementation)
         import inspect
         source = inspect.getsource(apply_rotary_pos_emb_single)
         if "rotate_half" in source:
-            print(f"  ✓ Interleaved RoPE uses rotate_half (correct)")
+            print("  ✓ Interleaved RoPE uses rotate_half (correct)")
         else:
-            print(f"  ✗ Interleaved RoPE missing rotate_half")
+            print("  ✗ Interleaved RoPE missing rotate_half")
             return False
 
         # Verify non-interleaved uses complex multiplication
         source = inspect.getsource(apply_rotary_pos_emb_non_interleaved)
         if "torch.complex" in source:
-            print(f"  ✓ Non-interleaved RoPE uses complex multiplication (correct)")
+            print("  ✓ Non-interleaved RoPE uses complex multiplication (correct)")
         else:
-            print(f"  ✗ Non-interleaved RoPE missing complex multiplication")
+            print("  ✗ Non-interleaved RoPE missing complex multiplication")
             return False
 
     except Exception as e:
@@ -709,7 +708,7 @@ def test_rope_interleaved_vs_non_interleaved():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -787,7 +786,7 @@ def test_dense_vs_moe_layers():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -844,7 +843,7 @@ def test_mla_dimension_splits():
         if attn.qk_head_dim == qk_head_dim:
             print(f"  ✓ qk_head_dim: {qk_head_dim} = {config.qk_nope_head_dim} (nope) + {config.qk_rope_head_dim} (rope)")
         else:
-            print(f"  ✗ qk_head_dim mismatch")
+            print("  ✗ qk_head_dim mismatch")
             return False
 
     except Exception as e:
@@ -853,7 +852,7 @@ def test_mla_dimension_splits():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -929,7 +928,7 @@ def test_gradient_flow():
                     return False
 
         print(f"  ✓ Loss computed for all {len(test_cases)} test cases")
-        print(f"  ✓ All components have gradients across all test cases")
+        print("  ✓ All components have gradients across all test cases")
 
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
@@ -937,7 +936,7 @@ def test_gradient_flow():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -992,7 +991,7 @@ def test_sparse_attention_mask():
             outputs = model(input_ids, output_attentions=True)
 
         if outputs.attentions is not None:
-            print(f"  ✓ Attention weights captured")
+            print("  ✓ Attention weights captured")
 
             # Check that attention is sparse (most weights should be ~0 due to masking)
             # Note: Due to softmax, masked positions get very small but non-zero values
@@ -1002,9 +1001,9 @@ def test_sparse_attention_mask():
             # For sequences longer than index_topk, sparse attention should be applied
             # We can't easily verify exact sparsity pattern without modifying the model,
             # but we can verify the forward pass completes successfully
-            print(f"  ✓ Forward pass with sparse attention completed")
+            print("  ✓ Forward pass with sparse attention completed")
         else:
-            print(f"  ✓ Forward pass completed (attention weights not returned by default)")
+            print("  ✓ Forward pass completed (attention weights not returned by default)")
 
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
@@ -1012,7 +1011,7 @@ def test_sparse_attention_mask():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -1087,7 +1086,7 @@ def test_attention_output_sensitivity():
             corrupted_attn = model(input_ids, output_attentions=True).attentions[0]
 
         if torch.allclose(baseline_attn, corrupted_attn, atol=1e-5):
-            print(f"  ✗ Attention weights unchanged after modifying softmax_scale!")
+            print("  ✗ Attention weights unchanged after modifying softmax_scale!")
             return False
 
         attn_diff = (baseline_attn - corrupted_attn).abs().mean().item()
@@ -1099,7 +1098,7 @@ def test_attention_output_sensitivity():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -1166,7 +1165,7 @@ def test_rope_affects_position_sensitivity():
                     print(f"  ✗ Causal masking not preserved at position [{i}, {j}]")
                     return False
 
-        print(f"  ✓ Causal masking preserved in attention weights")
+        print("  ✓ Causal masking preserved in attention weights")
 
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
@@ -1174,7 +1173,7 @@ def test_rope_affects_position_sensitivity():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -1215,7 +1214,7 @@ def test_moe_expert_diversity():
         unique_experts = set(all_selected_experts)
 
         if len(unique_experts) == 1:
-            print(f"  ✗ Only 1 expert ever selected! Routing is broken.")
+            print("  ✗ Only 1 expert ever selected! Routing is broken.")
             return False
 
         # Should use a reasonable fraction of available experts
@@ -1223,7 +1222,7 @@ def test_moe_expert_diversity():
         print(f"  ✓ {len(unique_experts)}/{config.n_routed_experts} experts used ({usage_ratio:.1%})")
 
         if usage_ratio < 0.5:
-            print(f"  ⚠ Warning: Less than 50% of experts used, routing may be suboptimal")
+            print("  ⚠ Warning: Less than 50% of experts used, routing may be suboptimal")
 
         # Verify routing is input-dependent (not constant)
         # Count how many unique routing patterns we see across samples
@@ -1236,7 +1235,7 @@ def test_moe_expert_diversity():
             unique_patterns.add(tuple(sorted(indices[0].tolist())))
 
         if len(unique_patterns) < 2:
-            print(f"  ✗ Only 1 unique routing pattern! Gate always selects same experts.")
+            print("  ✗ Only 1 unique routing pattern! Gate always selects same experts.")
             return False
 
         print(f"  ✓ {len(unique_patterns)} unique routing patterns across {num_samples} samples")
@@ -1247,7 +1246,7 @@ def test_moe_expert_diversity():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -1293,8 +1292,8 @@ def test_indexer_selects_different_tokens():
             unique_patterns.add(pattern)
 
         if len(unique_patterns) == 1:
-            print(f"  ✗ All query positions select identical tokens!")
-            print(f"    Indexer should be query-dependent.")
+            print("  ✗ All query positions select identical tokens!")
+            print("    Indexer should be query-dependent.")
             return False
 
         print(f"  ✓ {len(unique_patterns)} unique selection patterns across {seq_len} positions")
@@ -1307,10 +1306,10 @@ def test_indexer_selects_different_tokens():
             topk_indices2, _ = indexer(hidden_states2, q_compressed2, cos, sin)
 
         if torch.equal(topk_indices, topk_indices2):
-            print(f"  ✗ Different inputs produce identical selections!")
+            print("  ✗ Different inputs produce identical selections!")
             return False
 
-        print(f"  ✓ Different inputs produce different token selections")
+        print("  ✓ Different inputs produce different token selections")
 
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
@@ -1318,7 +1317,7 @@ def test_indexer_selects_different_tokens():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -1393,7 +1392,7 @@ def test_causal_masking():
                     print(f"  ✗ Position {i} attends to future position {j}! (attn={future_attn:.6f})")
                     return False
 
-        print(f"  ✓ No attention to future positions (upper triangle is zero)")
+        print("  ✓ No attention to future positions (upper triangle is zero)")
 
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
@@ -1401,7 +1400,7 @@ def test_causal_masking():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
@@ -1465,7 +1464,7 @@ def test_gate_routing_correctness():
         print(f"  ✓ Selected {expected_experts} experts per token ({len(test_cases)} test cases)")
         print(f"  ✓ All expert indices in valid range [0, {config.n_routed_experts})")
         print(f"  ✓ Weights sum to {expected_sum} (routed_scaling_factor)")
-        print(f"  ✓ All weights are non-negative")
+        print("  ✓ All weights are non-negative")
 
     except Exception as e:
         print(f"  ✗ Test failed: {e}")
@@ -1473,7 +1472,7 @@ def test_gate_routing_correctness():
         traceback.print_exc()
         return False
 
-    print(f"\n  Result: PASSED\n")
+    print("\n  Result: PASSED\n")
     return True
 
 
