@@ -929,7 +929,9 @@ def convert_and_load_state_dict_in_model(
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
     model._weight_conversions = weight_mapping
-    thread_pool.shutdown(wait=False)
+    if thread_pool is not None:
+        thread_pool.shutdown(wait=False)
+
     return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, misc
 
 
