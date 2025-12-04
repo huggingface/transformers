@@ -905,7 +905,7 @@ def convert_and_load_state_dict_in_model(
                             mapping.distributed_operation,
                             hf_quantizer,
                         )
- 
+
                 # Cleanup the tensors
                 mapping.reset()
             except SkipLayer:
