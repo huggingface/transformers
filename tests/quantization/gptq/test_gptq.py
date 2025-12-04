@@ -97,6 +97,7 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student of the University")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a very friendly and caring")
     EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student in the field")
+    EXPECTED_OUTPUTS.add("Hello my name is Michael, I am a professional photographer and I")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
@@ -197,7 +198,7 @@ class GPTQTest(unittest.TestCase):
             quant_method=METHOD.GPTQ,
             meta=meta,
             backend=self.quantization_config.backend,
-            pack=False,
+            pack=True,
         )
         self.assertEqual(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__, QuantLinear)
 
