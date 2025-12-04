@@ -3365,7 +3365,7 @@ class ModelTesterMixin:
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
     @slow
