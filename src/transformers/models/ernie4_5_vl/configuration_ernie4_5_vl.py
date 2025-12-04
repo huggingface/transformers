@@ -269,7 +269,7 @@ class Ernie4_5_VLConfig(PreTrainedConfig):
         image_token_id=100295,
         video_start_token_id=101306,
         video_end_token_id=101307,
-        video_token_id=100296,
+        video_token_id=103367,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
