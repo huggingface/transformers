@@ -14,6 +14,7 @@
 """
 Hub utilities: utilities related to download and cache models
 """
+from concurrent.futures import ThreadPoolExecutor
 
 import json
 import os
@@ -55,7 +56,7 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
 )
 
-from . import __version__, logging
+from . import __version__, hf_logging
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     get_torch_version,
@@ -69,7 +70,7 @@ CHAT_TEMPLATE_FILE = "chat_template.jinja"
 CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
 
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+logger = hf_logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 class DownloadKwargs(TypedDict, total=False):
@@ -419,10 +420,10 @@ def cached_files(
 
     user_agent = http_user_agent(user_agent)
     # download the files if needed
+# download the files if needed
     try:
         if len(full_filenames) == 1:
-            # This is slightly better for only 1 file
-            hf_hub_download(
+            resolved_file = hf_hub_download(
                 path_or_repo_id,
                 filenames[0],
                 subfolder=None if len(subfolder) == 0 else subfolder,
@@ -435,21 +436,29 @@ def cached_files(
                 token=token,
                 local_files_only=local_files_only,
             )
+            resolved_files = [resolved_file]
         else:
-            snapshot_download(
-                path_or_repo_id,
-                allow_patterns=full_filenames,
-                repo_type=repo_type,
-                revision=revision,
-                cache_dir=cache_dir,
-                user_agent=user_agent,
-                force_download=force_download,
-                proxies=proxies,
-                token=token,
-                local_files_only=local_files_only,
-            )
+            # Parallel download for multiple files
+            def download_file(file_name: str) -> str:
+                return hf_hub_download(
+                    path_or_repo_id,
+                    file_name,
+                    subfolder=None if len(subfolder) == 0 else subfolder,
+                    repo_type=repo_type,
+                    revision=revision,
+                    cache_dir=cache_dir,
+                    user_agent=user_agent,
+                    force_download=force_download,
+                    proxies=proxies,
+                    token=token,
+                    local_files_only=local_files_only,
+                )
 
+            with ThreadPoolExecutor(max_workers=min(8, len(full_filenames))) as executor:
+                resolved_files = list(executor.map(download_file, full_filenames))
     except Exception as e:
+    
+
         # We cannot recover from them
         if isinstance(e, RepositoryNotFoundError) and not isinstance(e, GatedRepoError):
             raise OSError(
