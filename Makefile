@@ -93,6 +93,7 @@ fix-copies:
 	python utils/check_pipeline_typing.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
+	python utils/add_dates.py
 
 # Run tests for the library
 
