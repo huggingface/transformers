@@ -68,20 +68,18 @@ class T5Tokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        vocab: Optional[Union[str, dict, list]] = None,
-        vocab_file=None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
         # Handle extra_ids and additional_special_tokens
@@ -131,10 +129,7 @@ class T5Tokenizer(TokenizersBackend):
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,

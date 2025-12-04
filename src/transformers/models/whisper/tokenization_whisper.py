@@ -204,10 +204,11 @@ class WhisperTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         merges=None,
         normalizer_file=None,
         unk_token="<|endoftext|>",
