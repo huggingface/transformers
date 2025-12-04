@@ -136,7 +136,12 @@ class Sam3TrackerFeedForward(Sam2FeedForward):
     pass
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model 3 (SAM 3) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
+    """
+)
 class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
