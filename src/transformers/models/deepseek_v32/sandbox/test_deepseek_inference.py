@@ -11,6 +11,7 @@ Usage:
 """
 
 import modal
+from modal import experimental
 
 
 # Configuration
@@ -18,6 +19,7 @@ GPU_TYPE = "B200"
 GPU_COUNT = 8
 MODEL_VOLUME_NAME = "models"
 MODEL_MOUNT_PATH = "/mnt/model"
+LOCAL_MODEL_PATH = "/tmp/model"  # Local ephemeral disk for faster loading
 DEFAULT_MODEL_PATH = "deepseek-ai--DeepSeek-V3.2_bf16"
 
 # Build image with transformers fork
@@ -34,12 +36,12 @@ image = (
     )
     # Install transformers fork with DeepSeek V3.2 support
     .run_commands(
-        "echo 'Installing transformers fork v2.7'",  # increment to force rebuild
+        "echo 'Installing transformers fork v2.7.2'",  # increment to force rebuild
         "pip install --no-cache-dir git+https://github.com/jyliu24/transformers.git",
     )
 )
 
-app = modal.App("test-deepseek-inference", image=image)
+app = modal.App("test-deepseek-inference-copytest", image=image)
 
 model_volume = modal.Volume.from_name(MODEL_VOLUME_NAME)
 
@@ -48,6 +50,7 @@ model_volume = modal.Volume.from_name(MODEL_VOLUME_NAME)
     gpu=f"{GPU_TYPE}:{GPU_COUNT}",
     volumes={MODEL_MOUNT_PATH: model_volume},
     timeout=60 * 240,  # 2 hour timeout (loading alone takes ~1hr)
+    ephemeral_disk=2 * 1024 * 1024,  # 2 TB local disk for model copy
 )
 @modal.experimental.clustered(1, rdma=True)
 def test_inference(
@@ -55,15 +58,81 @@ def test_inference(
     prompt: str = "Hello! What is 2 + 2?",
     max_new_tokens: int = 1000,
     use_fp8: bool = False,
+    use_local_copy: bool = True,  # Copy model to local disk for faster loading
 ) -> str:
     """
     Test barebones inference with DeepSeek V3.2 using transformers.
     """
     import os
+    import shutil
 
     import torch
 
-    full_model_path = f"{MODEL_MOUNT_PATH}/{model_path}"
+    volume_model_path = f"{MODEL_MOUNT_PATH}/{model_path}"
+    local_model_path = f"{LOCAL_MODEL_PATH}/{model_path}"
+
+    # Optionally copy model to local disk for faster random I/O during weight loading
+    if use_local_copy:
+        print("=" * 70)
+        print("📋 Copying model to local NVMe disk for faster loading...")
+        print("=" * 70)
+
+        # Calculate total size first
+        if not os.path.exists(volume_model_path):
+            print(f"  ❌ Model path does not exist: {volume_model_path}")
+            return "ERROR: Model path not found"
+
+        import time
+        t_copy = time.time()
+
+        # Get list of files with sizes for progress tracking
+        files_to_copy = []
+        total_size = 0
+        for f in os.listdir(volume_model_path):
+            src_path = os.path.join(volume_model_path, f)
+            if os.path.isfile(src_path):
+                size = os.path.getsize(src_path)
+                files_to_copy.append((f, size))
+                total_size += size
+
+        print(f"  Total size to copy: {total_size / 1024**3:.1f} GB ({len(files_to_copy)} files)")
+
+        # Clean up any existing local copy
+        if os.path.exists(local_model_path):
+            shutil.rmtree(local_model_path)
+
+        os.makedirs(local_model_path, exist_ok=True)
+
+        # Copy with progress tracking
+        print(f"  Copying from: {volume_model_path}")
+        print(f"  Copying to:   {local_model_path}")
+
+        copied_size = 0
+        for i, (filename, filesize) in enumerate(files_to_copy):
+            src = os.path.join(volume_model_path, filename)
+            dst = os.path.join(local_model_path, filename)
+            shutil.copy2(src, dst)
+            copied_size += filesize
+
+            # Progress update
+            pct = copied_size / total_size * 100
+            elapsed = time.time() - t_copy
+            speed = copied_size / elapsed / 1024**3 if elapsed > 0 else 0
+            eta = (total_size - copied_size) / (copied_size / elapsed) if copied_size > 0 else 0
+            bar_width = 30
+            filled = int(bar_width * copied_size / total_size)
+            bar = "█" * filled + "░" * (bar_width - filled)
+            print(f"\r  [{bar}] {pct:5.1f}% | {copied_size/1024**3:.1f}/{total_size/1024**3:.1f} GB | {speed:.2f} GB/s | ETA: {eta:.0f}s | {filename[:40]:<40}", end="", flush=True)
+
+        print()  # Newline after progress bar
+
+        copy_time = time.time() - t_copy
+        print(f"  ✅ Copied in {copy_time:.1f}s ({total_size / 1024**3 / copy_time:.1f} GB/s)")
+        print("=" * 70)
+
+        full_model_path = local_model_path
+    else:
+        full_model_path = volume_model_path
 
     # Add model path to PYTHONPATH for inference/ package if present
     inference_dir = os.path.join(full_model_path, "inference")
@@ -100,7 +169,7 @@ def test_inference(
         if os.path.isfile(item_path):
             size_bytes = os.path.getsize(item_path)
             total_size += size_bytes
-            if item.endswith(".safetensors"):
+            if item.endswith('.safetensors'):
                 safetensor_files.append((item, size_bytes))
 
     print(f"  Total files: {len(os.listdir(full_model_path))}")
@@ -126,7 +195,7 @@ def test_inference(
         print(f"  dtype: {config.get('dtype', 'NOT FOUND')}")
 
         # Check quantization config
-        quant_config = config.get("quantization_config")
+        quant_config = config.get('quantization_config')
         if quant_config:
             print("\n📋 Quantization config found:")
             print(f"  quant_method: {quant_config.get('quant_method', 'NOT FOUND')}")
@@ -146,7 +215,7 @@ def test_inference(
         print(f"  tokenizer_class: {tok_config.get('tokenizer_class', 'NOT FOUND')}")
         print(f"  model_max_length: {tok_config.get('model_max_length', 'NOT FOUND')}")
         # Show auto_map if present (for custom tokenizers)
-        if "auto_map" in tok_config:
+        if 'auto_map' in tok_config:
             print(f"  auto_map: {tok_config.get('auto_map')}")
     else:
         print("\n⚠️  No tokenizer_config.json found")
@@ -157,28 +226,24 @@ def test_inference(
 
     print("\n🔧 Loading transformers...")
     import transformers
-
     print(f"  transformers version: {transformers.__version__}")
 
     # Check available FP8 quantization configs
     print("\n🔍 Checking FP8 support in transformers:")
     try:
         from transformers import FbgemmFp8Config
-
         print("  ✅ FbgemmFp8Config available")
     except ImportError:
         print("  ❌ FbgemmFp8Config not available")
 
     try:
         from transformers import FineGrainedFP8Config
-
         print("  ✅ FineGrainedFP8Config available")
     except ImportError:
         print("  ❌ FineGrainedFP8Config not available")
 
     try:
         from transformers import BitsAndBytesConfig
-
         print("  ✅ BitsAndBytesConfig available")
     except ImportError:
         print("  ❌ BitsAndBytesConfig not available")
@@ -186,10 +251,7 @@ def test_inference(
     # Check quantization utils
     try:
         from transformers.quantizers import auto
-
-        print(
-            f"  Available quantization methods: {list(auto.AUTO_QUANTIZER_MAPPING.keys()) if hasattr(auto, 'AUTO_QUANTIZER_MAPPING') else 'unknown'}"
-        )
+        print(f"  Available quantization methods: {list(auto.AUTO_QUANTIZER_MAPPING.keys()) if hasattr(auto, 'AUTO_QUANTIZER_MAPPING') else 'unknown'}")
     except Exception as e:
         print(f"  Could not check quantization methods: {e}")
 
@@ -211,7 +273,7 @@ def test_inference(
     print("\n🔍 Loading AutoConfig to check quantization...")
     auto_config = AutoConfig.from_pretrained(full_model_path, trust_remote_code=True)
     print(f"  Config class: {type(auto_config).__name__}")
-    if hasattr(auto_config, "quantization_config") and auto_config.quantization_config:
+    if hasattr(auto_config, 'quantization_config') and auto_config.quantization_config:
         print(f"  quantization_config type: {type(auto_config.quantization_config)}")
         print(f"  quantization_config: {auto_config.quantization_config}")
     else:
@@ -221,7 +283,7 @@ def test_inference(
     fp8_quant_config = None
 
     # Use FP8 if requested via flag OR if model already has FP8 config
-    should_use_fp8 = use_fp8 or (quant_config and quant_config.get("quant_method") == "fp8")
+    should_use_fp8 = use_fp8 or (quant_config and quant_config.get('quant_method') == 'fp8')
 
     if should_use_fp8:
         print("\n🔧 Creating FP8 quantization config...", flush=True)
@@ -231,8 +293,7 @@ def test_inference(
         # Try FineGrainedFP8Config first (better for MoE models like DeepSeek)
         try:
             from transformers import FineGrainedFP8Config
-
-            block_size = quant_config.get("weight_block_size", [128, 128]) if quant_config else [128, 128]
+            block_size = quant_config.get('weight_block_size', [128, 128]) if quant_config else [128, 128]
             fp8_quant_config = FineGrainedFP8Config(weight_block_size=block_size)
             print(f"  ✅ Created FineGrainedFP8Config with block_size={block_size}", flush=True)
         except Exception as e:
@@ -241,7 +302,6 @@ def test_inference(
             # Try FbgemmFp8Config as fallback
             try:
                 from transformers import FbgemmFp8Config
-
                 fp8_quant_config = FbgemmFp8Config()
                 print("  ✅ Created FbgemmFp8Config as fallback", flush=True)
             except Exception as e2:
@@ -255,12 +315,12 @@ def test_inference(
     num_gpus = torch.cuda.device_count()
     if fp8_quant_config:
         # FP8 model is ~half the size, should fit entirely on GPU
-        max_memory = dict.fromkeys(range(num_gpus), "175GiB")
+        max_memory = {i: "175GiB" for i in range(num_gpus)}
         max_memory["cpu"] = "0GiB"  # No CPU needed for FP8
         print("  max_memory config: GPU=175GiB each, CPU=0GiB (FP8 fits on GPU)", flush=True)
     else:
         # BF16 model - allocate GPU memory evenly, minimal CPU
-        max_memory = dict.fromkeys(range(num_gpus), "175GiB")
+        max_memory = {i: "175GiB" for i in range(num_gpus)}
         max_memory["cpu"] = "100GiB"  # Allow CPU for buffers/intermediates
         print("  max_memory config: GPU=175GiB each, CPU=100GiB (buffers only)", flush=True)
 
@@ -271,14 +331,12 @@ def test_inference(
     # This avoids the slow auto device placement during weight loading
     print("  Computing optimal device map...", flush=True)
     from accelerate import infer_auto_device_map, init_empty_weights
-
     from transformers import AutoConfig
 
     model_config = AutoConfig.from_pretrained(full_model_path, trust_remote_code=True)
 
     with init_empty_weights():
         from transformers import AutoModelForCausalLM as AutoModelEmpty
-
         empty_model = AutoModelEmpty.from_config(model_config, trust_remote_code=True)
 
     device_map = infer_auto_device_map(
@@ -355,7 +413,6 @@ def test_inference(
 
     # Use a streamer to show progress
     from transformers import TextStreamer
-
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
     with torch.no_grad():
@@ -369,11 +426,8 @@ def test_inference(
         )
 
     gen_time = time.time() - t_gen
-    num_new_tokens = outputs.shape[1] - inputs["input_ids"].shape[1]
-    print(
-        f"\n  Generation complete: {num_new_tokens} tokens in {gen_time:.1f}s ({num_new_tokens / gen_time:.1f} tok/s)",
-        flush=True,
-    )
+    num_new_tokens = outputs.shape[1] - inputs['input_ids'].shape[1]
+    print(f"\n  Generation complete: {num_new_tokens} tokens in {gen_time:.1f}s ({num_new_tokens/gen_time:.1f} tok/s)", flush=True)
 
     # Decode
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -392,6 +446,7 @@ def test_inference(
     gpu=f"{GPU_TYPE}:{GPU_COUNT}",
     volumes={MODEL_MOUNT_PATH: model_volume},
     timeout=60 * 240,  # 2 hour timeout (loading alone takes ~1hr)
+    ephemeral_disk=2 * 1024 * 1024,  # 2 TB local disk for model copy
 )
 @modal.experimental.clustered(1, rdma=True)
 def test_chat_inference(
@@ -399,16 +454,81 @@ def test_chat_inference(
     user_message: str = "What is the capital of France?",
     max_new_tokens: int = 1000,
     use_fp8: bool = False,
+    use_local_copy: bool = True,  # Copy model to local disk for faster loading
 ) -> str:
     """
     Test chat-style inference with DeepSeek V3.2 using apply_chat_template.
     """
     import os
+    import shutil
     import time
 
     import torch
 
-    full_model_path = f"{MODEL_MOUNT_PATH}/{model_path}"
+    volume_model_path = f"{MODEL_MOUNT_PATH}/{model_path}"
+    local_model_path = f"{LOCAL_MODEL_PATH}/{model_path}"
+
+    # Optionally copy model to local disk for faster random I/O during weight loading
+    if use_local_copy:
+        print("=" * 70)
+        print("📋 Copying model to local NVMe disk for faster loading...")
+        print("=" * 70)
+
+        # Calculate total size first
+        if not os.path.exists(volume_model_path):
+            print(f"  ❌ Model path does not exist: {volume_model_path}")
+            return "ERROR: Model path not found"
+
+        t_copy = time.time()
+
+        # Get list of files with sizes for progress tracking
+        files_to_copy = []
+        total_size = 0
+        for f in os.listdir(volume_model_path):
+            src_path = os.path.join(volume_model_path, f)
+            if os.path.isfile(src_path):
+                size = os.path.getsize(src_path)
+                files_to_copy.append((f, size))
+                total_size += size
+
+        print(f"  Total size to copy: {total_size / 1024**3:.1f} GB ({len(files_to_copy)} files)")
+
+        # Clean up any existing local copy
+        if os.path.exists(local_model_path):
+            shutil.rmtree(local_model_path)
+
+        os.makedirs(local_model_path, exist_ok=True)
+
+        # Copy with progress tracking
+        print(f"  Copying from: {volume_model_path}")
+        print(f"  Copying to:   {local_model_path}")
+
+        copied_size = 0
+        for i, (filename, filesize) in enumerate(files_to_copy):
+            src = os.path.join(volume_model_path, filename)
+            dst = os.path.join(local_model_path, filename)
+            shutil.copy2(src, dst)
+            copied_size += filesize
+
+            # Progress update
+            pct = copied_size / total_size * 100
+            elapsed = time.time() - t_copy
+            speed = copied_size / elapsed / 1024**3 if elapsed > 0 else 0
+            eta = (total_size - copied_size) / (copied_size / elapsed) if copied_size > 0 else 0
+            bar_width = 30
+            filled = int(bar_width * copied_size / total_size)
+            bar = "█" * filled + "░" * (bar_width - filled)
+            print(f"\r  [{bar}] {pct:5.1f}% | {copied_size/1024**3:.1f}/{total_size/1024**3:.1f} GB | {speed:.2f} GB/s | ETA: {eta:.0f}s | {filename[:40]:<40}", end="", flush=True)
+
+        print()  # Newline after progress bar
+
+        copy_time = time.time() - t_copy
+        print(f"  ✅ Copied in {copy_time:.1f}s ({total_size / 1024**3 / copy_time:.1f} GB/s)")
+        print("=" * 70)
+
+        full_model_path = local_model_path
+    else:
+        full_model_path = volume_model_path
 
     # Add model path to PYTHONPATH for inference/ package if present
     inference_dir = os.path.join(full_model_path, "inference")
@@ -432,7 +552,6 @@ def test_chat_inference(
     print("=" * 70)
 
     import transformers
-
     transformers.logging.set_verbosity_info()
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -453,14 +572,12 @@ def test_chat_inference(
         print("  🔧 Using FP8 quantization (requested via --use-fp8)", flush=True)
         try:
             from transformers import FineGrainedFP8Config
-
             fp8_quant_config = FineGrainedFP8Config(weight_block_size=[128, 128])
             print("    ✅ Created FineGrainedFP8Config", flush=True)
         except Exception as e:
             print(f"    ❌ FineGrainedFP8Config failed: {e}", flush=True)
             try:
                 from transformers import FbgemmFp8Config
-
                 fp8_quant_config = FbgemmFp8Config()
                 print("    ✅ Created FbgemmFp8Config as fallback", flush=True)
             except Exception as e2:
@@ -468,20 +585,18 @@ def test_chat_inference(
 
     # Configure memory
     num_gpus = torch.cuda.device_count()
-    max_memory = dict.fromkeys(range(num_gpus), "175GiB")
+    max_memory = {i: "175GiB" for i in range(num_gpus)}
     max_memory["cpu"] = "0GiB" if fp8_quant_config else "100GiB"
 
     # Pre-compute device map for faster loading
     print("  Computing optimal device map...", flush=True)
     from accelerate import infer_auto_device_map, init_empty_weights
-
     from transformers import AutoConfig
 
     model_config = AutoConfig.from_pretrained(full_model_path, trust_remote_code=True)
 
     with init_empty_weights():
         from transformers import AutoModelForCausalLM as AutoModelEmpty
-
         empty_model = AutoModelEmpty.from_config(model_config, trust_remote_code=True)
 
     device_map = infer_auto_device_map(
@@ -521,7 +636,9 @@ def test_chat_inference(
     print("\n🚀 Running chat inference...", flush=True)
 
     # Build chat messages
-    messages = [{"role": "user", "content": user_message}]
+    messages = [
+        {"role": "user", "content": user_message}
+    ]
     print(f"  User message: {user_message}", flush=True)
 
     # Apply chat template
@@ -545,7 +662,6 @@ def test_chat_inference(
     t_gen = time.time()
 
     from transformers import TextStreamer
-
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
     with torch.no_grad():
@@ -559,14 +675,11 @@ def test_chat_inference(
         )
 
     gen_time = time.time() - t_gen
-    num_new_tokens = outputs.shape[1] - inputs["input_ids"].shape[1]
-    print(
-        f"\n  Generation complete: {num_new_tokens} tokens in {gen_time:.1f}s ({num_new_tokens / gen_time:.1f} tok/s)",
-        flush=True,
-    )
+    num_new_tokens = outputs.shape[1] - inputs['input_ids'].shape[1]
+    print(f"\n  Generation complete: {num_new_tokens} tokens in {gen_time:.1f}s ({num_new_tokens/gen_time:.1f} tok/s)", flush=True)
 
     # Decode only new tokens
-    new_tokens = outputs[0][inputs["input_ids"].shape[1] :]
+    new_tokens = outputs[0][inputs['input_ids'].shape[1]:]
     response = tokenizer.decode(new_tokens, skip_special_tokens=True)
 
     print("\n" + "=" * 70)
@@ -585,25 +698,29 @@ def main(
     max_new_tokens: int = 1000,
     chat_mode: bool = False,
     use_fp8: bool = False,
+    use_local_copy: bool = True,  # Copy model to local disk for faster loading
 ):
     """
     Test DeepSeek V3.2 inference with custom transformers fork.
-
+    
     Examples:
         # Basic inference test
         modal run utils/test_deepseek_inference.py
-
+        
         # Custom prompt
         modal run utils/test_deepseek_inference.py --prompt "Explain quantum computing"
-
+        
         # Chat mode (uses apply_chat_template)
         modal run utils/test_deepseek_inference.py --chat-mode
-
+        
         # Custom model path
         modal run utils/test_deepseek_inference.py --model-path "deepseek-ai--DeepSeek-V3.2"
-
+        
         # Use FP8 quantization (halves memory, fits entirely on GPU)
         modal run utils/test_deepseek_inference.py --use-fp8
+        
+        # Skip local copy (load directly from volume - slower but no copy time)
+        modal run utils/test_deepseek_inference.py --no-use-local-copy
     """
     print("🚀 Launching DeepSeek V3.2 inference test on Modal")
     print("=" * 70)
@@ -614,6 +731,7 @@ def main(
     print(f"  Mode:            {'Chat' if chat_mode else 'Completion'}")
     print(f"  Max New Tokens:  {max_new_tokens}")
     print(f"  Use FP8:         {use_fp8}")
+    print(f"  Use Local Copy:  {use_local_copy}")
     print("=" * 70)
 
     if chat_mode:
@@ -622,6 +740,7 @@ def main(
             user_message=prompt,
             max_new_tokens=max_new_tokens,
             use_fp8=use_fp8,
+            use_local_copy=use_local_copy,
         )
     else:
         result = test_inference.remote(
@@ -629,8 +748,10 @@ def main(
             prompt=prompt,
             max_new_tokens=max_new_tokens,
             use_fp8=use_fp8,
+            use_local_copy=use_local_copy,
         )
 
     print("\n" + "=" * 70)
     print("✅ Test completed!")
     print("=" * 70)
+

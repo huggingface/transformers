@@ -263,7 +263,7 @@ class DeepseekV32Gate(nn.Module):
 
         # Expert selection based on topk_method
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(scores, k=self.num_experts_per_tok, dim=-1)
+            topk_weight, topk_idx = torch.topk(scores, k=self.num_experts_per_tok, dim=-1, sorted=False)
         elif self.topk_method in ("group_limited_greedy", "noaux_tc"):
             # Group-based selection
             group_scores = scores.view(batch_size, self.n_group, -1)
@@ -274,7 +274,7 @@ class DeepseekV32Gate(nn.Module):
                 # Use top-2 sum for group scoring when bias is present
                 group_max = group_scores.topk(2, dim=-1)[0].sum(dim=-1)
 
-            group_idx = torch.topk(group_max, k=self.topk_group, dim=-1)[1]
+            group_idx = torch.topk(group_max, k=self.topk_group, dim=-1, sorted=False)[1]
 
             # Create mask for selected groups
             group_mask = torch.ones(batch_size, self.n_group, dtype=torch.bool, device=scores.device)
@@ -285,7 +285,7 @@ class DeepseekV32Gate(nn.Module):
             scores_masked = scores_masked.masked_fill(group_mask.unsqueeze(-1), float("-inf"))
             scores_masked = scores_masked.view(batch_size, -1)
 
-            topk_weight, topk_idx = torch.topk(scores_masked, k=self.num_experts_per_tok, dim=-1)
+            topk_weight, topk_idx = torch.topk(scores_masked, k=self.num_experts_per_tok, dim=-1, sorted=False)
         else:
             raise ValueError(f"Unknown topk_method: {self.topk_method}")
 
@@ -391,14 +391,16 @@ def hadamard_transform_activation(x: torch.Tensor) -> torch.Tensor:
     """
     Apply Hadamard transform to activations for efficient indexer computation.
 
-    This is an optional optimization used in DeepSeek V3.2's sparse attention indexer.
-    Requires the `fast_hadamard_transform` package. Falls back to identity if unavailable.
+    This is required for DeepSeek V3.2's sparse attention indexer to function correctly.
+    Requires the `fast_hadamard_transform` package.
     """
     try:
         from fast_hadamard_transform import hadamard_transform
     except ImportError:
-        # Fallback: skip Hadamard transform if library not installed
-        return x
+        raise ImportError(
+            "DeepSeek V3.2 requires the `fast_hadamard_transform` package for the Lightning Indexer "
+            "to compute correct sparse attention indices. Install it with: pip install fast-hadamard-transform"
+        )
 
     hidden_size = x.size(-1)
     original_dtype = x.dtype
@@ -423,6 +425,7 @@ class DeepseekV32Indexer(nn.Module):
     Key differences from main attention:
     - Single-head keys (broadcast to multi-head queries)
     - Applies Hadamard transform for efficiency
+    - Maintains its own key cache for decode (matching reference implementation)
     """
 
     def __init__(self, config: DeepseekV32Config, layer_idx: int):
@@ -449,6 +452,52 @@ class DeepseekV32Indexer(nn.Module):
 
         self.softmax_scale = self.head_dim**-0.5
 
+        # Internal key cache for decode (matching reference model.py lines 480-481)
+        # This is dynamically sized unlike the reference's fixed buffer
+        self._k_cache: Optional[torch.Tensor] = None
+
+    def reset_cache(self):
+        """Reset the internal key cache. Should be called when starting a new generation."""
+        self._k_cache = None
+
+    def _update_cache(self, k_states: torch.Tensor, cache_position: torch.Tensor) -> torch.Tensor:
+        """
+        Update the internal key cache and return all cached keys.
+
+        Args:
+            k_states: New keys [batch_size, seq_len, head_dim]
+            cache_position: Position indices for the new keys [seq_len]
+
+        Returns:
+            All cached keys [batch_size, total_len, head_dim]
+        """
+        batch_size, seq_len, head_dim = k_states.shape
+        start_pos = cache_position[0].item()
+        end_pos = cache_position[-1].item() + 1
+
+        if self._k_cache is None or start_pos == 0:
+            # First call or reset: initialize/resize cache
+            if seq_len == end_pos:
+                # Prefill: cache is exactly the new keys
+                self._k_cache = k_states.clone()
+            else:
+                # Need larger cache
+                self._k_cache = torch.zeros(
+                    batch_size, end_pos, head_dim, dtype=k_states.dtype, device=k_states.device
+                )
+                self._k_cache[:, start_pos:end_pos] = k_states
+        else:
+            # Decode: extend cache if needed and store new keys
+            current_cache_len = self._k_cache.shape[1]
+            if end_pos > current_cache_len:
+                # Extend cache
+                new_cache = torch.zeros(batch_size, end_pos, head_dim, dtype=k_states.dtype, device=k_states.device)
+                new_cache[:, :current_cache_len] = self._k_cache
+                self._k_cache = new_cache
+            self._k_cache[:, start_pos:end_pos] = k_states
+
+        return self._k_cache[:, :end_pos]
+
     @torch.no_grad()
     def forward(
         self,
@@ -456,81 +505,87 @@ class DeepseekV32Indexer(nn.Module):
         q_compressed: torch.Tensor,
         freqs_cis: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        k_cache: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        cache_position: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         """
         Compute top-k token indices for sparse attention.
 
-        Exactly matches reference model.py lines 482-519 (Indexer.forward).
+        Exactly matches reference model.py lines 457-487 (Indexer.forward).
 
         Args:
             hidden_states: [batch_size, seq_len, hidden_size]
             q_compressed: [batch_size, seq_len, q_lora_rank] - compressed Q from main attention
             freqs_cis: Complex RoPE frequencies [seq_len, rope_dim // 2]
             attention_mask: Optional mask for causal attention
-            k_cache: Optional cached keys from previous positions
+            cache_position: Position indices for caching [seq_len]
 
         Returns:
             topk_indices: [batch_size, seq_len, topk] - indices of selected tokens
-            k_states: [batch_size, seq_len, head_dim] - keys to cache
         """
         batch_size, seq_len, _ = hidden_states.shape
 
         # Project queries from compressed representation
-        # Reference: model.py lines 487-488
+        # Reference: model.py lines 460-461
         q_states = self.wq_b(q_compressed)
         q_states = q_states.view(batch_size, seq_len, self.num_heads, self.head_dim)
 
         # Split Q into RoPE and non-RoPE parts (note: rope FIRST, unlike main attention)
-        # Reference: model.py line 489
+        # Reference: model.py line 462
         q_pe = q_states[..., : self.qk_rope_head_dim]
         q_nope = q_states[..., self.qk_rope_head_dim :]
 
         # Apply RoPE to Q (interleaved=False for indexer!)
-        # Reference: model.py lines 490-492
+        # Reference: model.py lines 463-464
         q_pe = apply_rotary_emb(q_pe, freqs_cis, interleaved=False)
 
         # Project and normalize keys (single-head)
-        # Reference: model.py lines 493-494
+        # Reference: model.py lines 466-467
         k_states = self.k_norm(self.wk(hidden_states))
 
         # Split K into RoPE and non-RoPE parts
-        # Reference: model.py line 495
+        # Reference: model.py line 468
         k_pe = k_states[..., : self.qk_rope_head_dim]
         k_nope = k_states[..., self.qk_rope_head_dim :]
 
         # Apply RoPE to K (single-head, add head dim temporarily, interleaved=False)
-        # Reference: model.py lines 496-498
+        # Reference: model.py lines 469-470
         k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis, interleaved=False).squeeze(2)
 
         # Combine rope and nope parts
-        # Reference: model.py lines 492, 498
+        # Reference: model.py lines 465, 471
         q_states = torch.cat([q_pe, q_nope], dim=-1)
         k_states = torch.cat([k_pe, k_nope], dim=-1)
 
-        # Apply Hadamard transform (optional optimization)
+        # Apply Hadamard transform
+        # Reference: model.py lines 472-473
         q_states = hadamard_transform_activation(q_states)
         k_states = hadamard_transform_activation(k_states)
 
-        # Use cached keys if available
-        if k_cache is not None:
-            k_full = torch.cat([k_cache, k_states], dim=1)
+        # Update cache and get all keys
+        # Reference: model.py lines 476-477 (k_cache update)
+        if cache_position is not None:
+            k_full = self._update_cache(k_states, cache_position)
         else:
             k_full = k_states
 
         # Compute head weights
+        # Reference: model.py line 478
         head_weights = F.linear(hidden_states.float(), self.weights_proj.weight.float()) * (self.num_heads**-0.5)
 
         # Compute attention scores: q @ k^T
         # q_states: [B, S, H, D], k_full: [B, T, D]
+        # Reference: model.py line 480 (fp8_index computes this internally)
         scores = torch.einsum("bshd,btd->bsht", q_states.float(), k_full.float()) * self.softmax_scale
 
         # Apply ReLU then head weights per formula: I_{t,s} = Σ_j w^I_{t,j} · ReLU(q^I_{t,j} · k^I_s)
+        # Note: Reference uses fp8_index which combines q_scale with weights_proj output
+        # Reference: model.py lines 479-480
         scores = torch.relu(scores)
         scores = scores * head_weights.unsqueeze(-1)
         index_scores = scores.sum(dim=2)  # [B, S, T]
 
         # Apply mask
+        # Reference: model.py lines 481-482
         if attention_mask is not None:
             # attention_mask is [B, 1, S, T] or [B, S, T]
             if attention_mask.dim() == 4:
@@ -538,11 +593,12 @@ class DeepseekV32Indexer(nn.Module):
             index_scores = index_scores + attention_mask
 
         # Select top-k
+        # Reference: model.py line 483
         T = index_scores.shape[-1]
         topk = min(self.index_topk, T)
         topk_indices = index_scores.topk(topk, dim=-1).indices
 
-        return topk_indices, k_states
+        return topk_indices
 
 
 # =============================================================================
@@ -691,26 +747,30 @@ class DeepseekV32Attention(nn.Module):
             causal_mask = attention_mask[:, :, :, : k_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
-        # Apply sparse attention via indexer (during prefill with full mask)
-        # Reference: model.py lines 631-637
-        if seq_len > 1:
-            # Get top-k indices from indexer
-            topk_indices, _ = self.indexer(
-                hidden_states,
-                q_compressed,
-                freqs_cis,
-                attention_mask.squeeze(1) if attention_mask is not None else None,
-            )
+        # Apply sparse attention via indexer (during BOTH prefill AND decode)
+        # Reference: model.py lines 582-586 (prefill) and lines 599-602 (decode)
+        # The indexer maintains its own key cache and computes top-k indices
+        # against all previous tokens, enabling sparse attention during generation
+        topk_indices = self.indexer(
+            hidden_states,
+            q_compressed,
+            freqs_cis,
+            attention_mask.squeeze(1) if attention_mask is not None else None,
+            cache_position,
+        )
 
-            # Build sparse mask
-            index_mask = torch.full(
-                (batch_size, seq_len, k_states.shape[-2]),
-                float("-inf"),
-                device=hidden_states.device,
-                dtype=attn_weights.dtype,
-            )
-            index_mask.scatter_(-1, topk_indices, 0.0)
-            attn_weights = attn_weights + index_mask.unsqueeze(1)
+        # Build sparse mask
+        # Reference: model.py line 584 (prefill) and line 601 (decode)
+        # Prefill: index_mask shape is [B, seq_len, seq_len]
+        # Decode: index_mask shape is [B, 1, total_len]
+        index_mask = torch.full(
+            (batch_size, seq_len, k_states.shape[-2]),
+            float("-inf"),
+            device=hidden_states.device,
+            dtype=attn_weights.dtype,
+        )
+        index_mask.scatter_(-1, topk_indices, 0.0)
+        attn_weights = attn_weights + index_mask.unsqueeze(1)
 
         # Softmax and dropout
         # Reference: model.py line 639
@@ -885,6 +945,11 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    def reset_indexer_caches(self):
+        """Reset all indexer caches. Called when starting a new generation."""
+        for layer in self.layers:
+            layer.self_attn.indexer.reset_cache()
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -935,13 +1000,20 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # Initialize cache
+        # Initialize cache and reset indexer caches for new generation
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
+            # Reset indexer caches when starting new generation
+            self.reset_indexer_caches()
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
+
+        # Reset indexer caches if starting from position 0 without existing cache
+        # This handles cases like use_cache=False or fresh forward passes
+        if cache_position[0] == 0 and past_key_values is None:
+            self.reset_indexer_caches()
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
