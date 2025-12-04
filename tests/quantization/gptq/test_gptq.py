@@ -96,6 +96,7 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a new member of the")
     EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student of the University")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a very friendly and caring")
+    EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student in the field")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
@@ -169,7 +170,7 @@ class GPTQTest(unittest.TestCase):
         """
         self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
+        self.assertEqual(self.quantized_model.config._pre_quantization_dtype, torch.float16)
 
     def test_quantized_layers_class(self):
         """
@@ -198,7 +199,7 @@ class GPTQTest(unittest.TestCase):
             backend=self.quantization_config.backend,
             pack=False,
         )
-        self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
+        self.assertEqual(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__, QuantLinear)
 
     def check_inference_correctness(self, model):
         r"""
@@ -345,7 +346,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_quantized_layers_type(self):
-        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllama")
+        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllama")
 
     def test_generate_quality(self):
         """
@@ -360,14 +361,14 @@ class GPTQTestActOrderExllama(unittest.TestCase):
 
         prompt = "I am in Paris and" * 1000
         inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertTrue(inp["input_ids"].shape[1] > 4028)
+        self.assertGreater(inp["input_ids"].shape[1], 4028)
         with self.assertRaises(RuntimeError) as cm:
             self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
-            self.assertTrue("temp_state buffer is too small" in str(cm.exception))
+            self.assertIn("temp_state buffer is too small", str(cm.exception))
 
         prompt = "I am in Paris and"
         inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertTrue(inp["input_ids"].shape[1] < 4028)
+        self.assertLess(inp["input_ids"].shape[1], 4028)
         self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
 
 
