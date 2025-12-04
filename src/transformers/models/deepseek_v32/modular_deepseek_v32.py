@@ -471,18 +471,16 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         else:
             inv_freq = self.inv_freq.to(x.device)
 
-        # Get sequence length from position_ids
-        seq_len = position_ids.shape[-1]
-        # For simplicity, use sequential positions (matching reference precompute_freqs_cis)
-        # The reference computes freqs_cis once for max_seq_len and indexes into it
-        t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-        # Add offset for cached positions
-        if position_ids.numel() > 0:
-            start_pos = position_ids[0, 0].item() if position_ids.dim() > 1 else position_ids[0].item()
-            t = t + start_pos
+        # Use position_ids directly for position frequencies
+        # position_ids shape: [batch_size, seq_len]
+        # We use the first batch's positions (they should be the same across batch)
+        if position_ids.dim() > 1:
+            positions = position_ids[0].float()
+        else:
+            positions = position_ids.float()
 
         # Compute frequencies: outer product of positions and inv_freq
-        freqs = torch.outer(t, inv_freq)
+        freqs = torch.outer(positions, inv_freq)
         # Convert to complex exponentials: e^(i * freqs)
         freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
 
