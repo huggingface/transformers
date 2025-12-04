@@ -702,7 +702,7 @@ class Ernie4_5_VLVariableResolutionResamplerModel(nn.Module):
 
 
 class Ernie4_5_VLModel(Qwen2_5_VLModel):
-    _checkpoint_conversion_mapping = {}
+    _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
 
     def __init__(self, config: Ernie4_5_VLConfig):
         super().__init__(config)
@@ -1053,6 +1053,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
 
 
 class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
+    _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
+
     def __init__(self, config):
         super().__init__(config)
 

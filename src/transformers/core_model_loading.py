@@ -433,7 +433,6 @@ class WeightTransform:
     source_patterns: Union[str, list[str]] = field(init=True)
     target_patterns: Union[str, list[str]] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
-    allow_recursive_renaming: bool = field(init=True, default=True)
 
     distributed_operation: Optional[TensorParallelLayer] = None
     quantization_operation: Optional[ConversionOps] = None
@@ -453,8 +452,8 @@ class WeightTransform:
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
-            # Remove negative lookahead if any. This is ugly but needed for reverse mapping of Qwen2.5 and Sam3!
-            pattern = re.sub(r"\(\?!.+\)", "", pattern)
+            # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of Qwen2.5, Sam3, Ernie4.5 VL!
+            pattern = re.sub(r"\(\?.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
             if r"(.+)" in pattern:
                 pattern = pattern.replace(r"(.+)", r"\1")
@@ -506,15 +505,6 @@ class WeightTransform:
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
         renamed_key = source_key.replace(match_object.group(0), replacement)
-
-        # If desired, renamings that result in recursive parts (e.g. `model.model`) can be disabled
-        # See `ernie4_5_vl` for a specific example that would result in `model <-> language_model` recursion
-        renamed_key_parts = renamed_key.split(".")
-        if not self.allow_recursive_renaming and any(
-            renamed_key_parts[i] == renamed_key_parts[i + 1] for i in range(len(renamed_key_parts) - 1)
-        ):
-            return source_key, None
-
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:

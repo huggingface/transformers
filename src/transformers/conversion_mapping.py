@@ -124,9 +124,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("temporal_linear.2", "temporal_linear.fc2"),
             WeightRenaming("temporal_linear.3", "temporal_linear.ln"),
             # language model
-            WeightRenaming("model.norm", "model.language_model.norm", allow_recursive_renaming=False),
-            WeightRenaming("embed_tokens", "language_model.embed_tokens", allow_recursive_renaming=False),
-            WeightRenaming("layers", "language_model.layers", allow_recursive_renaming=False),
+            WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
+            WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
             WeightConverter(
                 source_patterns="mlp.gate.weight_1",
                 target_patterns="mlp.vision_moe.gate.weight",
@@ -250,32 +249,6 @@ def get_checkpoint_conversion_mapping(model_type):
     return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
 
 
-# DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = [
-    "aria",
-    "ayavision",
-    "colpali",
-    "emu3",
-    "fuyu",
-    "gotocr2",
-    "gemma3",
-    "internvl",
-    "llava",  # all llava prefixed models fall under this check
-    "mistral3",
-    "mllama",
-    "paligemma",
-    "shieldgemma2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "videollava",
-    "vipllava",
-    "sam3_video",
-    "sam3",
-    "sam3_tracker",
-    "sam3_tracker_video",
-]
-
-
 def get_model_conversion_mapping(
     model: PreTrainedModel,
     key_mapping: dict[str, str] | None = None,
@@ -291,11 +264,7 @@ def get_model_conversion_mapping(
     # Load models with key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
-    elif any(
-        allowed_name in class_name.__name__.lower()
-        for class_name in model.__class__.__mro__[:-1]
-        for allowed_name in VLMS
-    ):
+    else:
         weight_conversions = [
             WeightRenaming(source_patterns=k, target_patterns=v)
             for k, v in model._checkpoint_conversion_mapping.items()
