@@ -50,20 +50,21 @@ class OpenAIGPTTokenizer(TokenizersBackend):
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        vocab (`str`, `dict` or `list`, *optional*):
+        vocab (`str` or `dict[str, int]`, *optional*):
             Custom vocabulary dictionary. If not provided, a blank vocabulary is initialized.
-        merges (`str` or `list`, *optional*):
+        merges (`str` or `list[str]`, *optional*):
             Custom merges list. If not provided, an empty list is used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
         unk_token="<unk>",
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         vocab_file=None,
         merges_file=None,
         **kwargs,

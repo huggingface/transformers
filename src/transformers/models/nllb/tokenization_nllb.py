@@ -84,7 +84,7 @@ class NllbTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     prefix_tokens: list[int] = []
     suffix_tokens: list[int] = []
@@ -102,8 +102,8 @@ class NllbTokenizer(TokenizersBackend):
         tgt_lang=None,
         additional_special_tokens=None,
         legacy_behaviour=False,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         if additional_special_tokens is None:

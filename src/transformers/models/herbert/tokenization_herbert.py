@@ -57,17 +57,18 @@ class HerbertTokenizer(TokenizersBackend):
             The separator token.
         vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary.
-        merges (`str` or `list`, *optional*):
+        merges (`str` or `list[str]`, *optional*):
             Custom merges list.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = None
+    model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",

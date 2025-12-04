@@ -60,15 +60,15 @@ class ReformerTokenizer(TokenizersBackend):
             The token used for padding, for example when batching sequences of different lengths.
         additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`str` or `list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from vocab_file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `vocab_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
@@ -76,8 +76,8 @@ class ReformerTokenizer(TokenizersBackend):
         eos_token: str = "</s>",
         unk_token: str = "<unk>",
         additional_special_tokens: Optional[list] = None,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file

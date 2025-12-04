@@ -146,15 +146,21 @@ class MarkupLMTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, the vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
         tags_dict,
-        vocab: Optional[Union[dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: Optional[Union[str, dict[str, int], list[tuple[str, float]]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -172,33 +178,19 @@ class MarkupLMTokenizer(TokenizersBackend):
         trim_offsets=False,
         **kwargs,
     ):
-        if kwargs.get("from_slow"):
-            logger.warning(
-                "MarkupLMTokenizer no longer supports initialization from a slow tokenizer. Ignoring `from_slow=True`."
-            )
-        kwargs["from_slow"] = False
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        processed_vocab = vocab
         processed_merges = merges
 
-        if isinstance(processed_vocab, list):
-            processed_vocab = {
-                token: index for index, (token, _score) in enumerate(processed_vocab) if isinstance(token, str)
-            }
-        elif isinstance(processed_vocab, dict):
-            processed_vocab = {str(token): int(index) for token, index in processed_vocab.items()}
-
-        if processed_vocab is None:
-            processed_vocab = {
+        if vocab is None:
+            vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -221,7 +213,7 @@ class MarkupLMTokenizer(TokenizersBackend):
 
         tokenizer = Tokenizer(
             BPE(
-                vocab=processed_vocab,
+                vocab=vocab,
                 merges=processed_merges,
                 dropout=None,
                 continuing_subword_prefix="",
@@ -235,8 +227,8 @@ class MarkupLMTokenizer(TokenizersBackend):
         sep_token_str = str(sep_token)
         cls_token_str = str(cls_token)
         tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(sep_token_str, processed_vocab.get(sep_token_str, processed_vocab.get("</s>", 2))),
-            cls=(cls_token_str, processed_vocab.get(cls_token_str, processed_vocab.get("<s>", 0))),
+            sep=(sep_token_str, vocab.get(sep_token_str, vocab.get("</s>", 2))),
+            cls=(cls_token_str, vocab.get(cls_token_str, vocab.get("<s>", 0))),
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
         )

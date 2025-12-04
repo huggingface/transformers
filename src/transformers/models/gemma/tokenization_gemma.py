@@ -30,7 +30,7 @@ class GemmaTokenizer(TokenizersBackend):
     """
     Construct a fast Gemma tokenizer (backed by HuggingFace's tokenizers library).
 
-    This tokenizer uses a Unigram model with ByteFallback, no prefix space, and a normalizer that replaces
+    This tokenizer uses a BPE model with byte fallback, no prefix space, and a normalizer that replaces
     spaces with "▁".
 
     Args:
@@ -50,17 +50,19 @@ class GemmaTokenizer(TokenizersBackend):
             Whether or not to add a `bos_token` at the start of sequences.
         add_eos_token (`bool`, optional, defaults to False):
             Whether or not to add an `eos_token` at the end of sequences.
-        vocab (`str`, `dict` or `list`, optional):
+        vocab (`str` or `dict[str, int]`, optional):
             Custom vocabulary dict. If not provided, a minimal vocabulary is created using the special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = None
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         unk_token: str = "<unk>",
         bos_token: str = "<bos>",
         eos_token: str = "<eos>",
@@ -68,8 +70,6 @@ class GemmaTokenizer(TokenizersBackend):
         mask_token: str = "<mask>",
         add_bos_token: bool = True,
         add_eos_token: bool = False,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self._add_bos_token = add_bos_token
@@ -90,13 +90,11 @@ class GemmaTokenizer(TokenizersBackend):
         )
 
         if merges is None:
-            if isinstance(self._vocab, dict):
-                filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-                self._merges = generate_merges(filtered_vocab)
-            else:
-                self._merges = []
+            filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
+            self._merges = generate_merges(filtered_vocab)
         else:
             self._merges = merges
+
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -113,10 +111,7 @@ class GemmaTokenizer(TokenizersBackend):
         )
         self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
         self._tokenizer.pre_tokenizer = pre_tokenizers.Split(" ", "merged_with_previous")
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

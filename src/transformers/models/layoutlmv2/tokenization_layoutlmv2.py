@@ -159,21 +159,11 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = None
-
-    @staticmethod
-    def _load_vocab_from_file(vocab_file):
-        """Load vocab from a BERT-style vocab file (one token per line)."""
-        vocab = {}
-        with open(vocab_file, "r", encoding="utf-8") as reader:
-            for index, line in enumerate(reader):
-                token = line.rstrip("\n")
-                vocab[token] = index
-        return vocab
+    model = models.WordPiece
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         do_lower_case=True,
         unk_token="[UNK]",
         sep_token="[SEP]",

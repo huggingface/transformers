@@ -83,15 +83,15 @@ class CodeGenTokenizer(TokenizersBackend):
             Whether or not to add an initial beginning of sentence token to the input.
         return_token_type_ids (`bool`, *optional*, defaults to `False`):
             Whether to return token type IDs.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`str` or `list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
@@ -102,8 +102,8 @@ class CodeGenTokenizer(TokenizersBackend):
         add_prefix_space=False,
         add_bos_token=False,
         return_token_type_ids=False,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         self.return_token_type_ids = return_token_type_ids

@@ -19,6 +19,7 @@ from typing import Optional, Union
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
+from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -84,18 +85,20 @@ class GPT2Tokenizer(TokenizersBackend):
         add_bos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial beginning of sentence token to the input. This allows to treat the leading
             word just as any other word.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`str` or `list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors="replace",
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
@@ -103,20 +106,14 @@ class GPT2Tokenizer(TokenizersBackend):
         pad_token=None,
         add_prefix_space=False,
         add_bos_token=False,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
-        #  self.add_bos_token = add_bos_token
-
         self.add_prefix_space = add_prefix_space
-
         self._vocab = vocab if vocab is not None else {}
 
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
+        if merges is  None:
+            merges = generate_merges(self._vocab)
+        self._merges = merges
 
         self._tokenizer = Tokenizer(
             BPE(
@@ -132,14 +129,11 @@ class GPT2Tokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
 
-        tokenizer_object = self._tokenizer
 
-        # Set these before calling super().__init__() so the base class _post_init() can use them
         self._add_bos_token = add_bos_token
         self._add_eos_token = False
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -149,10 +143,6 @@ class GPT2Tokenizer(TokenizersBackend):
             add_bos_token=add_bos_token,
             **kwargs,
         )
-
-        # Call _post_init for tokenizers created directly (not from_pretrained)
-        # For from_pretrained, this will be called again after loading the tokenizer from file
-        self._post_init()
 
 
 __all__ = ["GPT2Tokenizer"]

@@ -73,8 +73,8 @@ class AlbertTokenizer(TokenizersBackend):
             other word.
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        vocab (`str` or `list[tuple[str, float]]`, *optional*):
+            Custom vocabulary with `(token, score)` tuples. If not provided, vocabulary is loaded from `vocab_file`.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
@@ -82,7 +82,7 @@ class AlbertTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
@@ -97,7 +97,7 @@ class AlbertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         add_prefix_space: bool = True,
         trim_offsets: bool = True,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         vocab_file: Optional[str] = None,
         **kwargs,
     ):

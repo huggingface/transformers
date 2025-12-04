@@ -96,11 +96,12 @@ class DebertaTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
+    model = BPE
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors="replace",
         bos_token="[CLS]",
         eos_token="[SEP]",
@@ -127,9 +128,8 @@ class DebertaTokenizer(TokenizersBackend):
         )
 
         if merges is None:
-            self._merges = generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
-        else:
-            self._merges = merges
+            merges = generate_merges(self._vocab)
+        self._merges = merges
 
         self._tokenizer = Tokenizer(
             BPE(

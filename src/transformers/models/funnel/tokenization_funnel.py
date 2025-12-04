@@ -83,16 +83,17 @@ class FunnelTokenizer(TokenizersBackend):
             value for `lowercase` (as in the original BERT).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
-        vocab (`str`, `dict` or `list`, *optional*):
+        vocab (`str` or `dict[str, int]`, *optional*):
             Custom vocabulary dictionary.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = None
+    model = WordPiece
     cls_token_type_id: int = 2
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         do_lower_case: bool = True,
         unk_token: str = "<unk>",
         sep_token: str = "<sep>",
@@ -105,11 +106,8 @@ class FunnelTokenizer(TokenizersBackend):
         tokenize_chinese_chars: bool = True,
         strip_accents: Optional[bool] = None,
         wordpieces_prefix: str = "##",
-        vocab: Optional[Union[str, dict, list]] = None,
-        vocab_file: Optional[str] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.do_lower_case = do_lower_case
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
@@ -150,10 +148,7 @@ class FunnelTokenizer(TokenizersBackend):
             ],
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,

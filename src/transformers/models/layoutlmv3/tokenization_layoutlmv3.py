@@ -159,15 +159,16 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file when using from_pretrained.
-        merges (`str` or `list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file when using from_pretrained.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file` when using
+            `from_pretrained`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file` when using `from_pretrained`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "bbox"]
-    slow_tokenizer_class = None
+    model = models.BPE
 
     def __init__(
         self,
@@ -185,8 +186,8 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         vocab_file: Optional[str] = None,
         merges_file: Optional[str] = None,
         **kwargs,

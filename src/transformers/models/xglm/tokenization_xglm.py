@@ -50,17 +50,15 @@ class XGLMTokenizer(TokenizersBackend):
             The unknown token.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, a minimal vocabulary is created.
-        merges (`list[tuple[str, str]]`, *optional*):
-            Custom merge rules for BPE. If not provided, merges are generated from the vocabulary.
+        vocab (`str` or `list[tuple[str, float]]`, *optional*):
+            Custom vocabulary with `(token, score)` tuples. If not provided, a minimal vocabulary is created.
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether to add a prefix space before encoding.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
@@ -70,7 +68,7 @@ class XGLMTokenizer(TokenizersBackend):
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         merges: Optional[Union[str, list]] = None,
         add_prefix_space: bool = True,
         **kwargs,

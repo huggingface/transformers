@@ -72,17 +72,17 @@ class BertTokenizer(TokenizersBackend):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = WordPiece
 
     def __init__(
         self,
-        vocab_file: Optional[str] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         do_lower_case: bool = False,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
@@ -91,7 +91,6 @@ class BertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         tokenize_chinese_chars: bool = True,
         strip_accents: Optional[bool] = None,
-        vocab: Optional[Union[str, dict, list]] = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case
@@ -120,11 +119,7 @@ class BertTokenizer(TokenizersBackend):
         )
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.WordPiece(prefix="##")
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,

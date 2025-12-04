@@ -115,9 +115,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 vocab = list(map(tuple, vocab))
             elif cls.model.__name__ == "WordLevel":
                 vocab = {token: i for i, token in enumerate(vocab)}
-            elif cls.model.__name__ == "WordPiece":
-                vocab = {token: i for i, token in enumerate(vocab)}
-            elif cls.model.__name__ == "BPE":
+            elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
                 if isinstance(vocab, list):
                     vocab =  {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
             local_kwargs["vocab"] = vocab
@@ -126,7 +124,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) for merge in merges]
                 local_kwargs["merges"] = merges
-                local_kwargs["vocab"] = {token: i for i, token in enumerate(tokenizer_json["model"]["vocab"])}
             return local_kwargs
 
         vocab_file = local_kwargs.get("vocab_file")

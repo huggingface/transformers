@@ -38,7 +38,7 @@ class MPNetTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab (`str`, `dict` or `list`, *optional*):
+        vocab (`str` or `dict[str, int]`, *optional*):
             Dictionary mapping tokens to their IDs. If not provided, an empty vocab is initialized.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
@@ -87,10 +87,11 @@ class MPNetTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = WordPiece
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         do_lower_case=True,
         bos_token="<s>",
         eos_token="</s>",

@@ -72,12 +72,13 @@ class PegasusTokenizer(TokenizersBackend):
             that uses the tokens 2 - 104 only for pretraining
         offset (`int`, *optional*, defaults to 103):
             Offset for additional special tokens.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, a blank vocabulary is initialized.
+        vocab (`str` or `list[tuple[str, float]]`, *optional*):
+            Custom vocabulary with `(token, score)` tuples. If not provided, a blank vocabulary is initialized.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = Unigram
 
     def __init__(
         self,
@@ -88,7 +89,7 @@ class PegasusTokenizer(TokenizersBackend):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         vocab_file=None,
         **kwargs,
     ):

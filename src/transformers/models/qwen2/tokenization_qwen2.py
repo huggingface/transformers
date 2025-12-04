@@ -40,7 +40,7 @@ PRETOKENIZE_REGEX = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p
 class Qwen2Tokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
@@ -51,8 +51,8 @@ class Qwen2Tokenizer(TokenizersBackend):
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",
         add_prefix_space=None,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False

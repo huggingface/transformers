@@ -35,6 +35,7 @@ from ...tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
     to_py_obj,
+    generate_merges
 )
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, is_torch_tensor, logging
@@ -167,6 +168,10 @@ class LukeTokenizer(TokenizersBackend):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, the vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
         entity_vocab_file (`str`):
             Path to the entity vocabulary file.
         task (`str`, *optional*):
@@ -228,12 +233,12 @@ class LukeTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         entity_vocab: Optional[Union[str, dict, list]] = None,
         errors="replace",
         bos_token="<s>",
@@ -268,12 +273,12 @@ class LukeTokenizer(TokenizersBackend):
         if entity_vocab is None and "entity_vocab" in kwargs:
             entity_vocab = kwargs.pop("entity_vocab")
 
-        # Build vocab and merges (either from data or empty, like GPT2Tokenizer)
         if vocab is None:
             vocab = {}
+
         self._vocab = vocab
         if merges is None:
-            merges = []
+            merges = generate_merges(self._vocab)
         self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(

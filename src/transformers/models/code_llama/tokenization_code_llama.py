@@ -111,9 +111,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",
@@ -128,9 +131,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
         add_eos_token=False,
         use_default_system_prompt=False,
         add_prefix_space=None,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges=None,
-        vocab_file=None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
@@ -151,13 +151,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
         )
 
         if merges is None:
-            if isinstance(self._vocab, dict):
-                filtered_vocab = {
-                    t: i for t, i in self._vocab.items() if t not in {str(eos_token), str(bos_token), str(unk_token)}
-                }
-                self._merges = generate_merges(filtered_vocab)
-            else:
-                self._merges = []
+            self._merges = generate_merges(self._vocab)
         else:
             self._merges = merges
         self._tokenizer = Tokenizer(

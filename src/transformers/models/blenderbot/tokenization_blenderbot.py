@@ -104,14 +104,15 @@ class BlenderbotTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (Blenderbot tokenizer detect beginning of words by the preceding space).
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`str` or `list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
@@ -123,8 +124,8 @@ class BlenderbotTokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
