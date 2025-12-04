@@ -805,8 +805,9 @@ def convert_and_load_state_dict_in_model(
     mismatch_keys = set()
     unexpected_keys = set()
 
-    # We use threading by default, if not explicitly deactivated via env variable
-    if not is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD"):
+    # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
+    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
+    if not is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") and "disk" not in device_map.values():
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
     else:
         thread_pool = None
