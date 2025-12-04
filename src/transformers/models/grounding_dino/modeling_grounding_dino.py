@@ -1510,6 +1510,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1664,6 +1665,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -2056,6 +2058,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
@@ -2460,6 +2463,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[list[dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
+        **kwargs,
     ):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):

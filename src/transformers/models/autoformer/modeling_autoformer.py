@@ -903,6 +903,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
@@ -1024,6 +1025,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, AutoFormerDecoderOutput]:
         r"""
         Args:
@@ -1360,6 +1362,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[AutoformerModelOutput, tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1610,6 +1613,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Seq2SeqTSPredictionOutput, tuple]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

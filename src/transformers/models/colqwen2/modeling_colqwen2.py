@@ -141,6 +141,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):

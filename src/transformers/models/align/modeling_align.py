@@ -1004,6 +1004,7 @@ class AlignVisionModel(AlignPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         r"""
         Examples:
@@ -1169,6 +1170,7 @@ class AlignModel(AlignPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, AlignOutput]:
         r"""
         return_loss (`bool`, *optional*):

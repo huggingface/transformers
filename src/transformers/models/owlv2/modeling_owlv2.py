@@ -793,6 +793,7 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
@@ -903,6 +904,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1052,6 +1054,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Owlv2Output]:
         r"""
         return_loss (`bool`, *optional*):
@@ -1602,6 +1605,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Owlv2ObjectDetectionOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):

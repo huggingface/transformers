@@ -942,6 +942,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Swinv2ModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -1030,6 +1031,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Swinv2MaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
@@ -1144,6 +1146,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Swinv2ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1209,6 +1212,7 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:

@@ -1474,7 +1474,7 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         )
 
     def forward(
-        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor
+        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs
     ) -> tuple[torch.Tensor, torch.BoolTensor]:
         """Encodes a batch of MELs.
 

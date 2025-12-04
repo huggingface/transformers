@@ -1946,6 +1946,7 @@ class ReformerModel(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ReformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2297,6 +2298,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2428,6 +2430,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2577,6 +2580,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

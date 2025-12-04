@@ -534,6 +534,7 @@ class MvpEncoder(MvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
@@ -698,6 +699,7 @@ class MvpDecoder(MvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -917,6 +919,7 @@ class MvpModel(MvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1065,6 +1068,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1213,6 +1217,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1372,6 +1377,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1548,6 +1554,7 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

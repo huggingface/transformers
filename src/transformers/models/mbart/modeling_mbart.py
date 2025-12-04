@@ -540,6 +540,7 @@ class MBartEncoder(MBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
@@ -691,6 +692,7 @@ class MBartDecoder(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -919,6 +921,7 @@ class MBartModel(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqModelOutput, tuple[torch.FloatTensor]]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1052,6 +1055,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqLMOutput, tuple[torch.FloatTensor]]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1205,6 +1209,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1338,6 +1343,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1480,6 +1486,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

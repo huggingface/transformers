@@ -222,6 +222,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 
@@ -640,6 +641,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 

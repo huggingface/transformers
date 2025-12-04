@@ -342,7 +342,11 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
                         Examples:

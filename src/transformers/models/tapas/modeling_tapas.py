@@ -563,6 +563,7 @@ class TapasModel(TapasPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, 7)`, *optional*):
@@ -843,6 +844,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TableQuestionAnsweringOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, 7)`, *optional*):
@@ -1164,6 +1166,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, 7)`, *optional*):

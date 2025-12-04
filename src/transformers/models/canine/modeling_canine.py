@@ -836,6 +836,7 @@ class CanineModel(CaninePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, CanineModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1006,6 +1007,7 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1089,6 +1091,7 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
@@ -1192,6 +1195,7 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1287,6 +1291,7 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

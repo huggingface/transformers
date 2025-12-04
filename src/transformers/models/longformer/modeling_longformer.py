@@ -1414,6 +1414,7 @@ class LongformerModel(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LongformerBaseModelOutputWithPooling]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1567,6 +1568,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LongformerMaskedLMOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1678,6 +1680,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LongformerSequenceClassifierOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1800,6 +1803,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LongformerQuestionAnsweringModelOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1928,6 +1932,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LongformerTokenClassifierOutput]:
         r"""
         global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2007,6 +2012,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LongformerMultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):

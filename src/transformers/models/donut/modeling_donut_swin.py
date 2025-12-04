@@ -837,6 +837,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, DonutSwinModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
@@ -923,6 +924,7 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, DonutSwinImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

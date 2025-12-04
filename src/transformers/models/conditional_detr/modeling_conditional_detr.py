@@ -1032,6 +1032,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1156,6 +1157,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1344,6 +1346,7 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], ConditionalDetrModelOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
@@ -1529,6 +1532,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], ConditionalDetrObjectDetectionOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
@@ -1693,6 +1697,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], ConditionalDetrSegmentationOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):

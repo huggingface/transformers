@@ -1007,6 +1007,7 @@ class JanusVQVAE(JanusPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        **kwargs,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)

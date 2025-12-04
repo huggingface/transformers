@@ -721,6 +721,7 @@ class TvpModel(TvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs,
     ):
         r"""
         Examples:
@@ -822,6 +823,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs,
     ):
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):

@@ -471,6 +471,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -529,6 +530,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

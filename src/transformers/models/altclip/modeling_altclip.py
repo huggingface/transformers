@@ -891,6 +891,7 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -970,6 +971,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1061,6 +1063,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndProjection]:
         r"""
         Examples:
@@ -1236,6 +1239,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, AltCLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):

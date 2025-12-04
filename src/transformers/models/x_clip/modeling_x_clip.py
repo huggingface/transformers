@@ -737,6 +737,7 @@ class XCLIPTextModel(XCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -927,6 +928,7 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1340,6 +1342,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, XCLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):

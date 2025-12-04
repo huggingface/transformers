@@ -1275,6 +1275,7 @@ class VitsModel(VitsPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
+        **kwargs,
     ) -> Union[tuple[Any], VitsModelOutput]:
         r"""
         speaker_id (`int`, *optional*):

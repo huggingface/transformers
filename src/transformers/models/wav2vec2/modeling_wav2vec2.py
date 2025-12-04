@@ -1340,6 +1340,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Wav2Vec2BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1453,6 +1454,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Wav2Vec2ForPreTrainingOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1628,6 +1630,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1729,6 +1732,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -1840,6 +1844,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1943,6 +1948,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -2114,6 +2120,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, XVectorOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

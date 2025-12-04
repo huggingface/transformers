@@ -1685,6 +1685,7 @@ class MimiModel(MimiPreTrainedModel):
         encoder_past_key_values: Optional[Cache] = None,
         decoder_past_key_values: Optional[Cache] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], MimiOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):

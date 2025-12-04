@@ -2117,6 +2117,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         frame_idx: Optional[int] = None,
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
+        **kwargs,
     ) -> EdgeTamVideoSegmentationOutput:
         r"""
         inference_session (`EdgeTamVideoInferenceSession`):

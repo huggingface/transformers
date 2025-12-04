@@ -749,6 +749,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -869,6 +870,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1043,6 +1045,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], TableTransformerModelOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
@@ -1202,6 +1205,7 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], TableTransformerObjectDetectionOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):

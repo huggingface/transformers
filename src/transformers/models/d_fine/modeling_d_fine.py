@@ -681,6 +681,7 @@ class DFineDecoder(DFinePreTrainedModel):
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
+        **kwargs,
     ) -> DFineDecoderOutput:
         r"""
         Args:
@@ -1247,6 +1248,7 @@ class DFineModel(DFinePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DFineModelOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):

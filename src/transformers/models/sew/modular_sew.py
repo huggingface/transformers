@@ -392,6 +392,7 @@ class SEWModel(SEWPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):

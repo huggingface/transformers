@@ -693,6 +693,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[BaseModelOutputWithPastAndCrossAttentions, tuple[torch.Tensor]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -821,6 +822,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[MaskedLMOutput, tuple[torch.Tensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1035,6 +1037,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[SequenceClassifierOutput, tuple[torch.Tensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1114,6 +1117,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[MultipleChoiceModelOutput, tuple[torch.Tensor]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
@@ -1210,6 +1214,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[TokenClassifierOutput, tuple[torch.Tensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1275,6 +1280,7 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[QuestionAnsweringModelOutput, tuple[torch.Tensor]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

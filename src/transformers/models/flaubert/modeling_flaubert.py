@@ -792,6 +792,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1002,6 +1003,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1090,6 +1092,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1195,6 +1198,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1286,6 +1290,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1423,6 +1428,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FlaubertForQuestionAnsweringOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1538,6 +1544,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):

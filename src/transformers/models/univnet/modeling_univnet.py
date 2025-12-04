@@ -476,6 +476,7 @@ class UnivNetModel(PreTrainedModel):
         padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
         noise_sequence (`torch.FloatTensor`, *optional*):

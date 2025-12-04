@@ -609,6 +609,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         return_dict: Optional[bool] = None,
         is_decoder: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor`, *optional*):
@@ -771,6 +772,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         reduction: Optional[str] = "mean",
         cache_position: Optional[torch.Tensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         encoder_hidden_states (`torch.FloatTensor`, *optional*): Sequence of

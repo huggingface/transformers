@@ -1422,7 +1422,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor, **kwargs):
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -1551,6 +1551,7 @@ class Florence2Model(LlavaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

@@ -882,6 +882,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         """
         Args:
@@ -1228,6 +1229,7 @@ class MoshiModel(MoshiPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

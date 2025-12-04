@@ -640,6 +640,7 @@ class MambaModel(MambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, MambaOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):

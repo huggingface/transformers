@@ -703,6 +703,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, FalconMambaOutput]:
         r"""
         cache_params (`FalconMambaCache`, *optional*):

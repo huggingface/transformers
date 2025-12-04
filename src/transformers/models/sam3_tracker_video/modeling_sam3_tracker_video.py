@@ -1719,6 +1719,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
         run_mem_encoder: bool = True,
+        **kwargs,
     ) -> Sam3TrackerVideoSegmentationOutput:
         r"""
         inference_session (`Sam3TrackerVideoInferenceSession`):
