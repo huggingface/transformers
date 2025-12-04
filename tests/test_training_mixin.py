@@ -8,10 +8,11 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from transformers import set_seed
-from transformers.testing_utils import is_training_test
+from transformers.testing_utils import is_training_test, init_test_logger, Colors, build_cpu_memory_monitor
 
-from tests.training_ci.logging import logger, init_logger, Colors
-from tests.training_ci.metrics import build_cpu_memory_monitor
+import logging
+
+logger = logging.getLogger()
 
 
 class TrainingTesterMixin(ABC):
@@ -119,8 +120,8 @@ class TrainingTesterMixin(ABC):
     def test_training_overfit(self):
         """Test that a tiny model can overfit on a fixed batch."""
         # Initialize logging and memory monitoring
-        init_logger()
-        memory_monitor = build_cpu_memory_monitor()
+        init_test_logger()
+        memory_monitor = build_cpu_memory_monitor(logger)
         
         logger.info("=" * 70)
         logger.info(f"Starting test: {self._testMethodName}")
