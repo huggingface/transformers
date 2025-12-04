@@ -850,10 +850,10 @@ def convert_and_load_state_dict_in_model(
             if source_pattern is not None:
                 new_converter = deepcopy(pattern_to_converter[source_pattern])
                 # each target key gets its own converter instance
-                mapping = param_name_to_load.get(renamed_key, new_converter)
+                mapping = param_name_to_load.setdefault(renamed_key, new_converter)
             # Otherwise, only potential renaming
             else:
-                mapping = WeightRenaming(original_key, renamed_key)
+                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
                 source_pattern = original_key
 
             # 3. Handle dtype casting
@@ -899,18 +899,11 @@ def convert_and_load_state_dict_in_model(
             if future_or_tensor is None:
                 device_match = device_map_regex.match(renamed_key)
                 param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
-                # We do not load offloaded params if they don't require an explicit Operation, as the weight is already on disk
-                if param_device == "disk":
-                    # We need to load them in this case, to resave the converted weight
-                    if isinstance(mapping, WeightConverter):
-                        future_or_tensor = spawn_materialize(thread_pool, tensor, "cpu", _dtype)
-                else:
-                    future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+                # If disk, we need to materialize on cpu first
+                param_device = "cpu" if param_device == "disk" else param_device
+                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
-            # Add it to the mapping and params to load - can still be None here for offloaded params without WeightConverter
-            if future_or_tensor is not None:
-                mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
-                param_name_to_load[renamed_key] = mapping
+            mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
