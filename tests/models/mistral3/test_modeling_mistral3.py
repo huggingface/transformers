@@ -355,7 +355,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
-                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nSilence in the woods",
+                ("cuda", (8, 0)): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
+                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the woods",
                 ("rocm", (9, 5)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene"
             }
         )  # fmt: skip
@@ -433,7 +434,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nPeace in nature's hold",
-                ("rocm", (9, 4)): "Calm waters reflect\nWooden path to distant shore\nSilence in the pines",
+                ("rocm", (9, 4)): "Calm waters reflect\nWooden path to distant shore\nSilence in the pines"
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
