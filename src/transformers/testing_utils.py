@@ -4137,7 +4137,7 @@ class ColoredFormatter(logging.Formatter):
     # Loggers that should be dimmed (less important/verbose)
     DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
 
-    def __init__(self, fmt: str = None, datefmt: str = None):
+    def __init__(self, fmt: str | None = None, datefmt: str | None = None):
         super().__init__(fmt, datefmt)
 
     def format(self, record: logging.LogRecord) -> str:
@@ -4286,7 +4286,7 @@ class CPUMemoryMonitor:
             self._peak_rss = self._process.memory_info().rss
 
 
-def build_cpu_memory_monitor(logger_instance: logging.Logger = None) -> CPUMemoryMonitor:
+def build_cpu_memory_monitor(logger_instance: logging.Logger | None = None) -> CPUMemoryMonitor:
     """Build and initialize a CPU memory monitor.
 
     Args:
