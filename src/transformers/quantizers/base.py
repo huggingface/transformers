@@ -41,7 +41,7 @@ def _assign_original_dtype(module, original_dtype):
         _assign_original_dtype(child, original_dtype)
 
 
-def get_keys_to_not_convert(model) -> set:
+def get_keys_to_not_convert(model) -> list:
     r"""
     Function to automatically detect keys to not convert for usage like quantization. For example for CausalLM modules
     we may want to keep the lm_head in full precision for numerical stability reasons.
@@ -323,19 +323,19 @@ class HfQuantizer(ABC):
         skip_modules: list[str] | None = None,
         keep_in_fp32_modules: list[str] | None = None,
         add_default_skips: bool = False,
-    ) -> list:
+    ):
         if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
         else:
-            modules_to_not_convert = set()
+            modules_to_not_convert = []
 
         if skip_modules is not None:
-            modules_to_not_convert.update(skip_modules)
+            modules_to_not_convert.extend(skip_modules)
 
         if keep_in_fp32_modules is not None:
-            modules_to_not_convert.update(keep_in_fp32_modules)
+            modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        modules_to_not_convert = list(modules_to_not_convert)
+        modules_to_not_convert = list(set(modules_to_not_convert))
 
         return modules_to_not_convert
 
