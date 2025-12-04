@@ -680,7 +680,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids=None,
@@ -940,9 +940,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1098,9 +1095,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1246,11 +1240,8 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

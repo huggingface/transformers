@@ -65,9 +65,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     config: VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -146,9 +145,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             )
 
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()

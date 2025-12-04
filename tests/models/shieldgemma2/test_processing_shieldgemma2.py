@@ -14,22 +14,16 @@
 
 import json
 import os
-import shutil
-import tempfile
 import unittest
 from collections.abc import Mapping
 
 from parameterized import parameterized
 
-from transformers import GemmaTokenizer, ShieldGemma2Processor
+from transformers import ShieldGemma2Processor
 from transformers.testing_utils import get_tests_dir, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_vision_available():
-    from transformers import Gemma3ImageProcessor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -73,24 +67,19 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ShieldGemma2Processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = Gemma3ImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class.from_pretrained("google/siglip-so400m-patch14-384")
 
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         extra_special_tokens = {
             "image_token": "<image_soft_token>",
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
         }
-        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
-
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = ShieldGemma2Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+        return tokenizer_class(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
 
     @classmethod
     def prepare_processor_dict(cls):

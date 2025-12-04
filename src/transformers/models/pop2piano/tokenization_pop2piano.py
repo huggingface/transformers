@@ -21,7 +21,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
+from ...tokenization_python import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
 from ...utils.import_utils import requires
 

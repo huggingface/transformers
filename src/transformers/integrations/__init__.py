@@ -32,8 +32,8 @@ _import_structure = {
         "unpack_weights",
     ],
     "bitsandbytes": [
+        "Bnb4bitQuantize",
         "dequantize_and_replace",
-        "get_keys_to_not_convert",
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
     ],
@@ -72,6 +72,7 @@ _import_structure = {
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
+        "use_kernel_func_from_hub",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -177,8 +178,8 @@ if TYPE_CHECKING:
         unpack_weights,
     )
     from .bitsandbytes import (
+        Bnb4bitQuantize,
         dequantize_and_replace,
-        get_keys_to_not_convert,
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
@@ -212,6 +213,7 @@ if TYPE_CHECKING:
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
+        use_kernel_func_from_hub,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
