@@ -22,16 +22,14 @@ Text-to-speech (TTS) is the task of creating natural-sounding speech from text, 
 languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as [Dia](../model_doc/dia), [CSM](../model_doc/csm),
 [Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits) and [SpeechT5](../model_doc/speecht5).
 
-You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`). Some models, like Dia,
-can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music.
-Here's an example of how you would use the `"text-to-speech"` pipeline with Dia:
+You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`).
+Here's an example of how you would use the `"text-to-speech"` pipeline with [CSM](https://huggingface.co/sesame/csm-1b):
 
-```py
+```python
 >>> from transformers import pipeline
 
->>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626")
->>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
->>> output = pipe(text)
+>>> pipe = pipeline("text-to-audio", model="sesame/csm-1b")
+>>> output = pipe("Hello from Sesame.")
 ```
 
 Here's a code snippet you can use to listen to the resulting audio in a notebook:
@@ -41,7 +39,44 @@ Here's a code snippet you can use to listen to the resulting audio in a notebook
 >>> Audio(output["audio"], rate=output["sampling_rate"])
 ```
 
-For more examples on what Bark and other pretrained TTS models can do, refer to our
+By default, CSM uses a random voice. You can do voice cloning by providing a reference audio as part of a chat template dictionary:
+
+```python
+>>> import soundfile as sf
+>>> import torch
+>>> from datasets import Audio, load_dataset
+>>> from transformers import pipeline
+
+>>> pipe = pipeline("text-to-audio", model="sesame/csm-1b")
+
+>>> ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
+>>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+>>> conversation = [
+...     {
+...         "role": "0",
+...         "content": [
+...             {"type": "text", "text": "What are you working on?"},
+...             {"type": "audio", "path": ds[0]["audio"]["array"]},
+...         ],
+...     },
+...     {"role": "0", "content": [{"type": "text", "text": "How much money can you spend?"}]},
+... ]
+>>> output = pipe(conversation)
+```
+
+Some models, like [Dia](https://huggingface.co/nari-labs/Dia-1.6B-0626), can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music. Below is such an example:
+
+```python
+>>> from transformers import pipeline
+
+>>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626")
+>>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
+>>> output = pipe(text)
+```
+
+Note that Dia also accepts speaker tags such as [S1] and [S2] to generate a conversation between unique voices.
+
+For more examples on what CSM and other pretrained TTS models can do, refer to our
 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models).
 
 If you are looking to fine-tune a TTS model, the only text-to-speech models currently available in 🤗 Transformers
