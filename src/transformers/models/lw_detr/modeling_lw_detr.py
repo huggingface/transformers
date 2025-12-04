@@ -992,10 +992,11 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
             intermediate += (intermediate_hidden_states,)
 
         intermediate = torch.stack(intermediate)
+        last_hidden_state = intermediate[-1]
         intermediate_reference_points = torch.stack(intermediate_reference_points)
 
         return LwDetrDecoderOutput(
-            last_hidden_state=hidden_states,
+            last_hidden_state=last_hidden_state,
             intermediate_hidden_states=intermediate,
             intermediate_reference_points=intermediate_reference_points,
         )
@@ -1383,18 +1384,14 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
             **kwargs,
         )
 
-        hidden_states = outputs.intermediate_hidden_states
-        reference_points = outputs.intermediate_reference_points
+        last_hidden_states = outputs.last_hidden_state
+        intermediate_reference_points = outputs.intermediate_reference_points
         enc_outputs_class_logits = outputs.enc_outputs_class
         enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
 
-        outputs_coord_delta = self.bbox_embed(hidden_states)
-        outputs_coord = refine_bboxes(reference_points, outputs_coord_delta)
-
-        outputs_class = self.class_embed(hidden_states)
-
-        logits = outputs_class[-1]
-        pred_boxes = outputs_coord[-1]
+        logits = self.class_embed(last_hidden_states)
+        pred_boxes_delta = self.bbox_embed(last_hidden_states)
+        pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
 
         enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
         pred_class = []
@@ -1406,6 +1403,13 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
+            outputs_class, outputs_coord = None, None
+            if self.config.auxiliary_loss:
+                intermediate_hidden_states = outputs.intermediate_hidden_states
+                outputs_coord_delta = self.bbox_embed(intermediate_hidden_states)
+                outputs_coord = refine_bboxes(intermediate_reference_points, outputs_coord_delta)
+                outputs_class = self.class_embed(intermediate_hidden_states)
+
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits,
                 labels,
