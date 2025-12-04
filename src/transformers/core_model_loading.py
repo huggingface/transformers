@@ -694,7 +694,7 @@ def convert_and_load_state_dict_in_model(
                 target_patterns=["q", "k","v"],
                 operations=[Chunk(dim=0, chunks=3)]),
                 collected_tensors={
-                    "qkv": [Future, Future, Future]},
+                    "qkv": [Future]},
                 layer_targets={
                     "model.layers.0.attention.q.weight": {"model.layers.0.attention.qkv.weight"},
                     "model.layers.0.attention.k.weight": {"model.layers.0.attention.qkv.weight"},
