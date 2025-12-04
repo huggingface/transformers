@@ -13,20 +13,24 @@
 # limitations under the License.
 "FP-Quant integration file"
 
+from typing import Optional
+
+import torch
+
 from ..utils import (
     is_fp_quant_available,
 )
 
-import torch
-from typing import Optional
 
 if is_fp_quant_available():
     from fp_quant import FPQuantConfig as FPQuantLinearConfig
     from fp_quant import FPQuantDtype
 
 from transformers.utils.quantization_config import FPQuantConfig
-from ..quantizers.quantizers_utils import get_module_from_name
+
 from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
+
 
 class FpQuantQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
@@ -82,7 +86,7 @@ class FpQuantDeserialize(ConversionOps):
                 # the way the FPQuantLinear module is designed, these parameters are expected in the model
                 # even though they are not used so we need to set them to zeros
                 ".weight": torch.nn.Parameter(torch.zeros(0)),
-                ".qweight": torch.nn.Parameter(torch.zeros(0)),
+                ".dqweight": torch.nn.Parameter(torch.zeros(0)),
             }
 
         if target_key == ".dqweight":
