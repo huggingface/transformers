@@ -368,7 +368,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         with open("./tests/fixtures/tests_samples/COCO/000000039769.png", "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode("utf-8")
 
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
         messages = [
             {
                 "role": "user",
@@ -382,4 +382,4 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             }
         ]
         outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
-        self.assertEqual(outputs, "Two cats laying on a pink blanket next to a")
+        self.assertEqual(outputs, "Two cats are sleeping on a pink blanket, with")
