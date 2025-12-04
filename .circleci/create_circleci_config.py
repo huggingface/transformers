@@ -320,9 +320,10 @@ non_model_job = CircleCIJob(
 
 training_ci_job = CircleCIJob(
     "training_ci",
+    additional_env={"RUN_TRAINING_TESTS": True},
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv pip install ."],
-    marker="training_ci",
+    marker="is_training_test",
     pytest_options={"s": None},
     parallelism=6,
 )
