@@ -2375,6 +2375,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             f"{source_param_name} to {target_param_name}, but both are absent from the checkpoint, "
                             "and we could not find another related tied weight for those keys"
                         )
+            # If missing_keys is None (tie_weights called after loading), check if both params exist
+            # with different values - if so, don't tie them
+            else:
+                try:
+                    source_param_check = self.get_parameter_or_buffer(source_param_name)
+                    target_param_check = self.get_parameter_or_buffer(target_param_name)
+                    # If both exist and are different tensors (not already tied), skip tying
+                    if source_param_check is not None and target_param_check is not None:
+                        if source_param_check.data_ptr() != target_param_check.data_ptr():
+                            logger.warning(
+                                f"The tied weights mapping for this model specifies to tie {source_param_name} to "
+                                f"{target_param_name}, but both exist with different values. Skipping tying. "
+                                "You should update the config with `tie_word_embeddings=False` to silence this warning"
+                            )
+                            continue
+                except (AttributeError, ValueError):
+                    # Params don't exist yet or can't be retrieved, proceed with tying
+                    pass
 
             # Perform the actual tying
             source_param = self.get_parameter_or_buffer(source_param_name)
