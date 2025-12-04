@@ -378,6 +378,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SuperPointKeypointDescriptionOutput]:
         r"""
         Examples:
