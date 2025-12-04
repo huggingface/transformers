@@ -113,11 +113,7 @@ class CodeGenTokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
 
         self._vocab = vocab if vocab is not None else {}
-
-        if merges is not None:
-            self._merges = merges
-        else:
-            self._merges = []
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

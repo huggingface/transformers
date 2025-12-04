@@ -20,7 +20,7 @@ from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_base import generate_merges
-from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend, AddedToken
 from ...utils import logging
 
 
@@ -99,11 +99,11 @@ class GPT2Tokenizer(TokenizersBackend):
         self,
         vocab: Optional[Union[str, dict[str, int]]] = None,
         merges: Optional[Union[str, list[str]]] = None,
-        errors="replace",
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        pad_token=None,
+        errors: str = "replace",
+        unk_token: Union[AddedToken, str] = "<|endoftext|>",
+        bos_token: Union[AddedToken, str] = "<|endoftext|>",
+        eos_token: Union[AddedToken, str] = "<|endoftext|>",
+        pad_token: Optional[Union[AddedToken, str]] = None,
         add_prefix_space=False,
         add_bos_token=False,
         **kwargs,
@@ -111,12 +111,7 @@ class GPT2Tokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
         self._vocab = vocab if vocab is not None else {}
 
-        special_tokens = {str(unk_token), str(bos_token), str(eos_token)}
-        if pad_token is not None:
-            special_tokens.add(str(pad_token))
-        if merges is None:
-            merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-        self._merges = merges
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

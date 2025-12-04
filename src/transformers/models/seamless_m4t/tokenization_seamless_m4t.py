@@ -174,13 +174,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
                 self._vocab = vocab_dict
 
-        special_tokens = {str(bos_token), str(eos_token), str(sep_token), str(cls_token), str(unk_token), str(pad_token)}
-        if merges is None:
-            merges = (
-                generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-            )
-
-        self._merges = merges
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

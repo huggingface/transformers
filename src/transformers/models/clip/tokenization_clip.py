@@ -81,14 +81,12 @@ class CLIPTokenizer(TokenizersBackend):
             }
         )
 
-        special_tokens = {str(unk_token), str(bos_token), str(eos_token), str(pad_token)}
-        if merges is None:
-            merges = generate_merges(_vocab, skip_tokens=special_tokens)
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=_vocab,
-                merges=merges,
+                merges=self._merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="</w>",

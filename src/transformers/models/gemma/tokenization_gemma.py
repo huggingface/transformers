@@ -89,10 +89,7 @@ class GemmaTokenizer(TokenizersBackend):
             }
         )
 
-        if merges is None:
-            self._merges = generate_merges(self._vocab, skip_tokens=special_tokens)
-        else:
-            self._merges = merges
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

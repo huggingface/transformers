@@ -206,12 +206,11 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
-        vocab_file=None,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: Optional[Union[str, list]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -232,13 +231,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
         self.add_prefix_space = add_prefix_space
 
-        # Build vocab from provided data if available, else use default
-        if isinstance(vocab, dict):
-            # Convert dict to list of tuples
-            self._vocab = [(token, score) for token, score in vocab.items()]
-        elif isinstance(vocab, list):
-            self._vocab = [(token, float(score)) for token, score in vocab]
-        elif vocab is not None:
+        if vocab is not None:
             self._vocab = vocab
         else:
             self._vocab = [
@@ -282,7 +275,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             ],
         )
 
-        tokenizer_object = self._tokenizer
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -292,7 +284,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
         self.only_label_first_subword = only_label_first_subword
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
@@ -300,7 +291,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            vocab_file=vocab_file,
             vocab=vocab,
             add_prefix_space=add_prefix_space,
             cls_token_box=cls_token_box,
@@ -311,7 +301,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self.vocab_file = vocab_file
 
     def _get_token_id(self, token: str) -> int:
         """Helper to get token ID from vocab."""

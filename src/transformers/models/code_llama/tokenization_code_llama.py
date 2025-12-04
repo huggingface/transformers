@@ -150,18 +150,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
             }
         )
 
-        special_tokens = {
-            str(unk_token),
-            str(bos_token),
-            str(eos_token),
-            *(token for token in additional_special_tokens),
-        }
-        if merges is None:
-            self._merges = (
-                generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-            )
-        else:
-            self._merges = merges
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

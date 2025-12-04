@@ -119,11 +119,7 @@ class GPTNeoXTokenizer(TokenizersBackend):
         self.trim_offsets = trim_offsets
 
         self._vocab = vocab if vocab is not None else {str(unk_token): 0, str(pad_token): 1}
-        special_tokens = {str(unk_token), str(bos_token), str(eos_token), str(pad_token)}
-
-        if merges is None:
-            merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-        self._merges = merges
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

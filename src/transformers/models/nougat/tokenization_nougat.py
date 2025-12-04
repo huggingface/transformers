@@ -413,12 +413,7 @@ class NougatTokenizer(TokenizersBackend):
                 "[START_REF]": 4,
             }
         )
-
-        if merges is not None:
-            self._merges = merges
-        else:
-            self._merges = []
-
+        self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -463,10 +458,8 @@ class NougatTokenizer(TokenizersBackend):
         self._tokenizer.enable_truncation(max_length=4096)
         self._tokenizer.enable_padding(length=4096, pad_id=pad_token_id, pad_token=str(pad_token))
 
-        tokenizer_object = self._tokenizer
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -474,45 +467,6 @@ class NougatTokenizer(TokenizersBackend):
             pad_token=pad_token,
             **kwargs,
         )
-
-    def _post_init(self):
-        """Post-initialization to ensure tokenizer settings are applied correctly."""
-        # Re-apply settings to ensure they're correct after loading from pretrained
-        self._tokenizer.normalizer = normalizers.NFKC()
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.Split(pattern="SPL1T-TH1S-Pl3A5E", behavior="removed", invert=False),
-                pre_tokenizers.Digits(individual_digits=True),
-                pre_tokenizers.Split(
-                    pattern=r"[\(\)\[\]\{\}]|([!\"#\$%\&'\*\+,\-\./:;<=>\?\\\^_`\|\~])\1*",
-                    behavior="isolated",
-                    invert=False,
-                ),
-                pre_tokenizers.Split(pattern="\n", behavior="isolated", invert=False),
-                pre_tokenizers.ByteLevel(add_prefix_space=False, trim_offsets=True, use_regex=True),
-            ]
-        )
-        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
-
-        # Set up post processor with bos and eos tokens
-        bos_token_id = self.bos_token_id if self.bos_token_id is not None else 0
-        eos_token_id = self.eos_token_id if self.eos_token_id is not None else 2
-        pad_token_id = self.pad_token_id if self.pad_token_id is not None else 1
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{self.bos_token}:0 $A:0 {self.eos_token}:0",
-            pair="$A:0 $B:1",
-            special_tokens=[
-                (str(self.eos_token), eos_token_id),
-                (str(self.bos_token), bos_token_id),
-            ],
-        )
-
-        # Enable truncation and padding
-        self._tokenizer.enable_truncation(max_length=4096)
-        self._tokenizer.enable_padding(length=4096, pad_id=pad_token_id, pad_token=str(self.pad_token))
-
-        # Call parent to handle AddedToken properties
-        super()._post_init()
 
     def remove_hallucinated_references(self, text: str) -> str:
         """

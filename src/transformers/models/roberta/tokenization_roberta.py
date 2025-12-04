@@ -142,18 +142,7 @@ class RobertaTokenizer(TokenizersBackend):
             }
         self._vocab = vocab
 
-        special_tokens = {
-            str(pad_token),
-            str(unk_token),
-            str(cls_token),
-            str(sep_token),
-            str(mask_token),
-            str(bos_token),
-            str(eos_token),
-        }
-        if merges is None:
-            merges = generate_merges(self._vocab, skip_tokens=special_tokens)
-        self._merges = merges
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

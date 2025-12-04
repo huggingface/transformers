@@ -21,7 +21,7 @@ import json
 import os
 from collections import defaultdict
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any, Iterable, Optional, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import AddedToken, processors
@@ -161,8 +161,43 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Fallback to standard vocab/merges files if they existed!
         if vocab is None and isinstance(vocab_file, str) and os.path.isfile(vocab_file):
             local_kwargs["vocab"] = vocab_file
+            vocab = local_kwargs["vocab"]
         if merges is None and isinstance(merges_file, str) and os.path.isfile(merges_file):
             local_kwargs["merges"] = merges_file
+            merges = local_kwargs["merges"]
+
+        # Generate merges automatically when not provided for BPE tokenizers
+        if merges is None and cls.model is not None and cls.model.__name__ == "BPE" and isinstance(vocab, dict):
+            # Gather special tokens from kwargs to skip in merge generation
+            def _iter_special_tokens(values: Iterable[Any]) -> list[str]:
+                collected: list[str] = []
+                for val in values:
+                    if val is None:
+                        continue
+                    if isinstance(val, (list, tuple)):
+                        collected.extend(_iter_special_tokens(val))
+                    else:
+                        collected.append(str(val))
+                return collected
+
+            special_tokens_keys = [
+                "pad_token",
+                "unk_token",
+                "bos_token",
+                "eos_token",
+                "sep_token",
+                "cls_token",
+                "mask_token",
+                "additional_special_tokens",
+                "extra_special_tokens",
+            ]
+            skip_tokens: set[str] = set()
+            for key in special_tokens_keys:
+                if key in local_kwargs:
+                    skip_tokens.update(_iter_special_tokens([local_kwargs[key]]))
+
+            merges = generate_merges(vocab, skip_tokens=skip_tokens)
+            local_kwargs["merges"] = merges
         return local_kwargs
 
     def __init__(self, *args, **kwargs):

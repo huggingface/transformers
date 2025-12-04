@@ -67,11 +67,7 @@ class Qwen2Tokenizer(TokenizersBackend):
         special_tokens = {str(unk_token), str(eos_token), str(pad_token)}
         if bos_token is not None:
             special_tokens.add(str(bos_token))
-        self._merges = (
-            merges
-            if merges is not None
-            else generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-        )
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

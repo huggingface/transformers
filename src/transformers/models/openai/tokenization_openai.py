@@ -73,13 +73,7 @@ class OpenAIGPTTokenizer(TokenizersBackend):
         self._vocab = vocab if vocab is not None else {str(unk_token): 0}
 
         # Initialize merges
-        special_tokens = {str(unk_token)}
-        if merges is None:
-            self._merges = (
-                generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-            )
-        else:
-            self._merges = merges
+        self._merges = merges or []
 
         # Create BPE tokenizer
         self._tokenizer = Tokenizer(

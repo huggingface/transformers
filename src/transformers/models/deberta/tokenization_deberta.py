@@ -127,18 +127,7 @@ class DebertaTokenizer(TokenizersBackend):
             }
         )
 
-        special_tokens = {
-            str(unk_token),
-            str(cls_token),
-            str(sep_token),
-            str(pad_token),
-            str(mask_token),
-            str(bos_token),
-            str(eos_token),
-        }
-        if merges is None:
-            merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-        self._merges = merges
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

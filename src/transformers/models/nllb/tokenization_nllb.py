@@ -126,20 +126,7 @@ class NllbTokenizer(TokenizersBackend):
         else:
             self._vocab = vocab
 
-        special_tokens = {
-            str(bos_token),
-            str(pad_token),
-            str(eos_token),
-            str(unk_token),
-            str(mask_token),
-            *(str(token) for token in additional_special_tokens),
-        }
-        if merges is None:
-            self._merges = (
-                generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-            )
-        else:
-            self._merges = merges
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
