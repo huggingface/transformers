@@ -807,10 +807,10 @@ def convert_and_load_state_dict_in_model(
 
     # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
     # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
-    if not is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") and "disk" not in device_map.values():
-        thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-    else:
+    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
         thread_pool = None
+    else:
+        thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
