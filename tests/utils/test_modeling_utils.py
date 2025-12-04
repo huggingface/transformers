@@ -2251,7 +2251,6 @@ class ModelUtilsTest(TestCasePlus):
             before = counter
             _ = BaseModel.from_pretrained(tmpdirname)
             after = counter
-            print(f"NUMBER: {after - before}")
             self.assertTrue(after - before > 0, "Loading should have spawned new threads!")
 
             # Deactivate threading
