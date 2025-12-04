@@ -1982,16 +1982,16 @@ class DataCollatorWithFlatteningTest(unittest.TestCase):
             },
         ]
         collator = DataCollatorWithFlattening(return_tensors="pt")
-        
+
         # This should not raise TypeError anymore
         batch = collator(features)
-        
+
         # Verify the output
         self.assertIsInstance(batch, dict)
         self.assertIn("input_ids", batch)
         self.assertIn("labels", batch)
         self.assertIn("position_ids", batch)
-        
+
         # Check shapes
         self.assertEqual(batch["input_ids"].shape, (1, 7))  # 4 + 3 tokens
         self.assertEqual(batch["labels"].shape, (1, 7))
@@ -2011,7 +2011,7 @@ class DataCollatorWithFlatteningTest(unittest.TestCase):
         ]
         collator = DataCollatorWithFlattening(return_tensors="pt")
         batch = collator(features)
-        
+
         # Verify it still works with lists
         self.assertIsInstance(batch, dict)
         self.assertEqual(batch["input_ids"].shape, (1, 7))
