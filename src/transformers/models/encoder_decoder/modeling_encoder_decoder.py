@@ -76,7 +76,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
     _supports_flash_attn = True
     _supports_sdpa = True
 

@@ -434,8 +434,8 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
         pos_seq = torch.arange(0, seq_len).to(device=hidden_states.device, dtype=torch.long)
         pos_seq = pos_seq[:, None] - pos_seq[None, :]
 
-        pos_seq[pos_seq < -self.max_length] = -self.max_length
-        pos_seq[pos_seq >= self.max_length] = self.max_length - 1
+        pos_seq = torch.where(pos_seq < -self.max_length, -self.max_length, pos_seq)
+        pos_seq = torch.where(pos_seq >= self.max_length, self.max_length - 1, pos_seq)
         pos_seq = pos_seq + self.max_length
 
         return self.pe_k(pos_seq)
@@ -2309,7 +2309,7 @@ def _generate_speech(
     """
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
-    input_modalities = "text"
+    input_modalities = ("text",)
     main_input_name = "input_ids"
 
     def __init__(self, config: SpeechT5Config):

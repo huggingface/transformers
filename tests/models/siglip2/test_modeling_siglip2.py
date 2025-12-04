@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -90,7 +90,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
             self.assertTrue(model_eager.config._attn_implementation == "eager")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
@@ -599,7 +599,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         self.assertIsNotNone(model)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Siglip2 does not support right padding")
@@ -742,6 +742,11 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
                 [  1.0236,  -0.0376,  -1.4464], [ -4.5358,  -6.2235,  -1.5628], [  4.1708,   5.0334,   3.5187],
                 [  9.4241,  10.1828,   6.3366], [  2.4371,   3.1062,   4.5530], [-12.3173, -13.7240, -13.4580],
                 [  1.1502,   1.1716,  -1.9623]
+            ],
+            ("xpu", 3): [
+                [  1.0195,  -0.0280,  -1.4468], [ -4.5395,  -6.2269,  -1.5667], [  4.1757,   5.0358,   3.5159],
+                [  9.4264,  10.1879,   6.3353], [  2.4409,   3.1058,   4.5491], [-12.3230, -13.7355, -13.4632],
+                [  1.1520,   1.1687,  -1.9647]
             ],
         })
         EXPECTED_LOGITS_PER_TEXT = torch.tensor(expected_logits_per_texts.get_expectation()).to(torch_device)

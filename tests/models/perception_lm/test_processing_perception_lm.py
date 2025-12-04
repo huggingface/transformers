@@ -12,23 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
-import shutil
-import tempfile
 import unittest
 
 from transformers import (
-    AutoProcessor,
-    AutoTokenizer,
     PerceptionLMProcessor,
 )
 from transformers.testing_utils import require_read_token, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_vision_available():
-    from transformers import PerceptionLMImageProcessorFast, PerceptionLMVideoProcessor
 
 if is_torch_available():
     import torch
@@ -39,37 +32,25 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 @require_vision
 @require_read_token
-@unittest.skip("Fequires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
+@unittest.skip("Requires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
 class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = PerceptionLMImageProcessorFast(
-            tile_size=448, max_num_tiles=4, vision_input_type="thumb+tile"
-        )
-        video_processor = PerceptionLMVideoProcessor()
-        tokenizer = AutoTokenizer.from_pretrained(TEST_MODEL_PATH)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<|image|>", "<|video|>"]})
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = PerceptionLMProcessor(
-            image_processor=image_processor, video_processor=video_processor, tokenizer=tokenizer, **processor_kwargs
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token_id = processor.image_token_id
-        cls.video_token_id = processor.video_token_id
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(tile_size=448, max_num_tiles=4, vision_input_type="thumb+tile")
 
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        tokenizer = tokenizer_class.from_pretrained(TEST_MODEL_PATH)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|image|>", "<|video|>"]})
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token_id = processor.image_token_id
+        cls.video_token_id = processor.video_token_id
 
     @staticmethod
     def prepare_processor_dict():

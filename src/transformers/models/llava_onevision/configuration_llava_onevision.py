@@ -58,8 +58,6 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         image_grid_pinpoints (`List`, *optional*):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
 
@@ -102,7 +100,6 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         vision_feature_layer=-1,
         vision_aspect_ratio="anyres_max_9",
         image_grid_pinpoints=None,
-        tie_word_embeddings=False,
         multimodal_projector_bias=True,
         **kwargs,
     ):
@@ -188,7 +185,13 @@ class LlavaOnevisionConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
+
+        # Due to a mismatch at model addition-time, the `tie_word_embeddings` was saved in the text config, even
+        # though it concerns the main model, while it was set to False by default in the main model... So we hardcode a fix here
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = True
+            self.text_config.tie_word_embeddings = False
 
 
 __all__ = ["LlavaOnevisionConfig"]
