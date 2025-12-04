@@ -1451,7 +1451,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map},"
-            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
+            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)" 
         )
 
     def __len__(self) -> int:
