@@ -323,7 +323,13 @@ class GPTQTestActOrderExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028, desc_act=cls.desc_act, act_group_aware=cls.act_group_aware, backend=cls.load_backend)
+        cls.quantization_config = GPTQConfig(
+            bits=4,
+            max_input_length=4028,
+            desc_act=cls.desc_act,
+            act_group_aware=cls.act_group_aware,
+            backend=cls.load_backend,
+        )
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,
@@ -369,6 +375,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
+
     load_backend = BACKEND.EXLLAMA_V2
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
