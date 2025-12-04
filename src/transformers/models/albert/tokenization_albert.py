@@ -102,15 +102,10 @@ class AlbertTokenizer(TokenizersBackend):
     ):
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
-
         self.do_lower_case = do_lower_case
         self.keep_accents = keep_accents
 
-        if isinstance(vocab, dict):
-            self._vocab_scores = [(token, 0.0) for token in vocab.keys()]
-        elif isinstance(vocab, list):
-            self._vocab_scores = list(vocab)
-        elif vocab is not None:
+        if vocab is not None:
             self._vocab_scores = vocab
         else:
             self._vocab_scores = [

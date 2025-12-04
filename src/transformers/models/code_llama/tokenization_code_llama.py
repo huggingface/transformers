@@ -196,18 +196,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
         self._eot_token = eot_token
         self.fill_token = fill_token
 
-        self._post_init()
-
-    def _post_init(self):
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
-        self._tokenizer.normalizer = None
-
-        # This matches LlamaTokenizer's behavior and is needed when loading from vocab/merges
-        self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
-
-        self.update_post_processor()
-        super()._post_init()
-
     @property
     def prefix_token(self):
         return self._prefix_token

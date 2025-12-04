@@ -48,8 +48,6 @@ class BertTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`, *optional*):
-            File containing the vocabulary.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
@@ -96,21 +94,16 @@ class BertTokenizer(TokenizersBackend):
         self.do_lower_case = do_lower_case
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
-
-        self._vocab = (
-            vocab
-            if vocab is not None
-            else {
+        if vocab is None:
+            vocab ={
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
-        )
-
+        self._vocab = vocab
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))
-
         self._tokenizer.normalizer = normalizers.BertNormalizer(
             clean_text=True,
             handle_chinese_chars=tokenize_chinese_chars,

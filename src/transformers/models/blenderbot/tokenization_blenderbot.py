@@ -116,16 +116,16 @@ class BlenderbotTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
-        bos_token: str = "<s>",
-        eos_token: str = "</s>",
-        sep_token: str = "</s>",
-        cls_token: str = "<s>",
-        unk_token: str = "<unk>",
-        pad_token: str = "<pad>",
-        mask_token: str = "<mask>",
-        add_prefix_space: bool = True,
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        add_prefix_space=True,
+        vocab=None,
+        merges=None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -148,11 +148,7 @@ class BlenderbotTokenizer(TokenizersBackend):
             }
         )
 
-        if merges is None:
-            self._merges = ()
-        else:
-            self._merges = merges or []
-
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

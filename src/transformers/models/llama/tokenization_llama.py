@@ -108,7 +108,6 @@ class LlamaTokenizer(TokenizersBackend):
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
         self._vocab = vocab
-        self._merges = merges or []
         if vocab is None:
             self._vocab = {
                 str(unk_token): 0,
@@ -118,7 +117,7 @@ class LlamaTokenizer(TokenizersBackend):
 
         self._merges = merges or []
         self._tokenizer = Tokenizer(
-            self.model(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
+            BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )
         self._tokenizer.normalizer = None
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(

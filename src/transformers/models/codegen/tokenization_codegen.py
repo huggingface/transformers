@@ -149,13 +149,6 @@ class CodeGenTokenizer(TokenizersBackend):
 
         self._post_init()
 
-    def _post_init(self):
-        self._tokenizer.post_processor = processors.ByteLevel(
-            add_prefix_space=True, use_regex=True, trim_offsets=False
-        )
-        # Ensure base class post-init runs to register special/extra tokens, etc.
-        super()._post_init()
-
     def decode(
         self,
         token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
