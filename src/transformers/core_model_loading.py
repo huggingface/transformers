@@ -884,9 +884,9 @@ def convert_and_load_state_dict_in_model(
         else:
             unexpected_keys.add(renamed_key)
 
-    total_entries = len(param_name_to_load)
-    with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
-        try:
+    try:
+        total_entries = len(param_name_to_load)
+        with logging.tqdm(total=total_entries, desc="Loading weights") as pbar:
             for first_param_name, mapping in param_name_to_load.items():
                 pbar.update(1)
                 pbar.set_postfix({"Materializing param": first_param_name})
@@ -928,11 +928,11 @@ def convert_and_load_state_dict_in_model(
                 except SkipLayer:
                     continue
 
-        # Close the pool, independently of if the code was interrupted or run successfully
-        finally:
-            if thread_pool is not None:
-                # `cancel_futures=True` in case the program was interupted, to avoid wasting time on exit
-                thread_pool.shutdown(wait=False, cancel_futures=True)
+    # Close the pool, independently of whether the code was interrupted or finished successfully
+    finally:
+        if thread_pool is not None:
+            # `cancel_futures=True` in case the program was interupted, to avoid wasting time on exit
+            thread_pool.shutdown(wait=False, cancel_futures=True)
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
     model._weight_conversions = weight_mapping
