@@ -98,6 +98,13 @@ class TrainingTesterMixin(ABC):
         """Create fixed batch for audio models using a deterministic waveform."""
         pass
 
+    def _decode_text_tokens(self, tokens: list[int], max_display: int = 40) -> str:
+        """Decode tokens to readable string (maps token IDs to letters: 1->a, 2->b, etc.)."""
+        decoded = ''.join(chr(ord('a') + (t - 1) % 26) for t in tokens)
+        if len(decoded) > max_display:
+            return f"'{decoded[:max_display]}...'"
+        return f"'{decoded}'"
+
     def _get_trainable_model_class(self):
         """Get the model class to use for training (prefers *ForCausalLM, *ForSequenceClassification, etc.)."""
         # Prefer model classes with a head (for computing loss)
@@ -150,6 +157,7 @@ class TrainingTesterMixin(ABC):
         logger.info(f"Model loaded in {Colors.GREEN}{load_time:.3f}s{Colors.RESET}")
         
         # Log model architecture
+        #TODO(3outeille): make sure if there is other parameters to log
         logger.info(f"{Colors.BOLD}Model Architecture:{Colors.RESET}")
         logger.info(f"  {Colors.CYAN}model_class:{Colors.RESET} {model_class.__name__}")
         if hasattr(config, 'hidden_size'):
@@ -195,11 +203,7 @@ class TrainingTesterMixin(ABC):
             )
             logger.info(f"{Colors.CYAN}Training pattern:{Colors.RESET} Repeating token sequence (1-19)")
         else:
-            # Use the sample inputs from model_tester as training data
-            batch = {k: v for k, v in sample_inputs.items()}
-            if "labels" not in batch and "input_ids" in batch:
-                batch["labels"] = batch["input_ids"].clone()
-            logger.info(f"{Colors.CYAN}Training data:{Colors.RESET} Using sample inputs from model_tester")
+            raise ValueError(f"Modality {modality} not supported yet for training overfit")
         
         tokens_per_batch = self.training_overfit_batch_size * self.training_overfit_seq_length
         logger.info(f"  {Colors.CYAN}batch_size:{Colors.RESET} {self.training_overfit_batch_size}")
@@ -301,7 +305,7 @@ class TrainingTesterMixin(ABC):
         logger.info(f"  {Colors.CYAN}grad_norm_reduction:{Colors.RESET} {grad_norm_reduction:.1f}%")
         
         # Generation Test (only for text/causal LM models)
-        # TODO: handle audio and generate
+        # TODO(3outeille): handle audio and generate
         generation_matches = None
         if modality == "text" and hasattr(model, 'generate'):
             logger.info("-" * 70)
@@ -316,14 +320,7 @@ class TrainingTesterMixin(ABC):
             prompt_ids = torch.tensor([[expected_tokens[0]]], dtype=torch.long)
             num_tokens_to_generate = len(expected_tokens) - 1
             
-            # Decode tokens to readable string (maps token IDs to letters: 1->a, 2->b, etc.)
-            def decode_tokens(tokens: list[int], max_display: int = 40) -> str:
-                decoded = ''.join(chr(ord('a') + (t - 1) % 26) for t in tokens)
-                if len(decoded) > max_display:
-                    return f"'{decoded[:max_display]}...'"
-                return f"'{decoded}'"
-            
-            logger.info(f"Prompt: {decode_tokens([expected_tokens[0]])}")
+            logger.info(f"Prompt: {self._decode_text_tokens([expected_tokens[0]])}")
             
             with torch.no_grad():
                 generated_ids = model.generate(
@@ -339,13 +336,14 @@ class TrainingTesterMixin(ABC):
             # Compare generated tokens with expected tokens
             generation_matches = generated_tokens == expected_tokens
             
+            #TODO(3outeille): handle audio and image generation
             if generation_matches:
-                logger.info(f"Expected:  {Colors.GREEN}{decode_tokens(expected_tokens)}{Colors.RESET}")
-                logger.info(f"Generated: {Colors.GREEN}{decode_tokens(generated_tokens)}{Colors.RESET}")
+                logger.info(f"Expected:  {Colors.GREEN}{self._decode_text_tokens(expected_tokens)}{Colors.RESET}")
+                logger.info(f"Generated: {Colors.GREEN}{self._decode_text_tokens(generated_tokens)}{Colors.RESET}")
                 logger.info(f"{Colors.GREEN}✓ Generation matches training sequence!{Colors.RESET}")
             else:
-                logger.info(f"Expected:  {Colors.GREEN}{decode_tokens(expected_tokens)}{Colors.RESET}")
-                logger.info(f"Generated: {Colors.RED}{decode_tokens(generated_tokens)}{Colors.RESET}")
+                logger.info(f"Expected:  {Colors.GREEN}{self._decode_text_tokens(expected_tokens)}{Colors.RESET}")
+                logger.info(f"Generated: {Colors.RED}{self._decode_text_tokens(generated_tokens)}{Colors.RESET}")
                 # Count matching tokens
                 matches = sum(1 for g, e in zip(generated_tokens, expected_tokens) if g == e)
                 logger.info(f"{Colors.YELLOW}✗ Generation mismatch: {matches}/{len(expected_tokens)} tokens match{Colors.RESET}")
