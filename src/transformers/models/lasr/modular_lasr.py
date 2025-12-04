@@ -1,0 +1,523 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import itertools
+from typing import Optional, Union, Unpack
+
+import torch
+from torch import nn
+
+from transformers.modeling_utils import PreTrainedModel
+
+from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
+from ...tokenization_utils_base import TokenizersBackend
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
+from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
+from ..parakeet.modeling_parakeet import ParakeetEncoderBlock, ParakeetForCTC, ParakeetPreTrainedModel
+from ..parakeet.processing_parakeet import ParakeetProcessor
+from ..t5.tokenization_t5 import T5Tokenizer
+
+
+class LastAsrTokenizer(T5Tokenizer, TokenizersBackend):
+    def _decode(
+        self,
+        token_ids: Union[int, list[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        group_tokens: bool = True,
+        **kwargs,
+    ) -> str:
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+        if group_tokens:
+            token_ids = [token_group[0] for token_group in itertools.groupby(token_ids)]
+
+        # for CTC we filter out the blank token, which is the pad token
+        token_ids = [token for token in token_ids if token != self.pad_token_id]
+
+        return TokenizersBackend._decode(
+            self,
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+
+class LastAsrProcessor(ParakeetProcessor):
+    tokenizer_class = "ParakeetTokenizerFast"
+
+
+class LastAsrEncoderConfig(ParakeetEncoderConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`LastAsrEncoder`]. It is used to instantiate a
+    `LastAsrEncoder` model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 512):
+            Dimension of the layers and the hidden states.
+        num_hidden_layers (`int`, *optional*, defaults to 17):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the encoder and pooler.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the attention layers.
+        conv_kernel_size (`int`, *optional*, defaults to 32):
+            The kernel size of the convolution layers in the Conformer block.
+        subsampling_factor (`int`, *optional*, defaults to 4):
+            The factor by which the input sequence is subsampled.
+        subsampling_conv_channels (`int`, *optional*, defaults to 256):
+            The number of channels in the subsampling convolution layers.
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            Number of mel features.
+        subsampling_conv_kernel_size (`int`, *optional*, defaults to 5):
+            The kernel size of the subsampling convolution layers.
+        subsampling_conv_stride (`int`, *optional*, defaults to 2):
+            The stride of the subsampling convolution layers.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for all fully connected layers in the embeddings, encoder, and pooler.
+        dropout_positions (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the positions in the input sequence.
+        layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the layers in the encoder.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for activations inside the fully connected layer.
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention layers.
+        max_position_embeddings (`int`, *optional*, defaults to 10000):
+            The maximum sequence length that this model might ever be used with.
+        scale_input (`bool`, *optional*, defaults to `False`):
+            Whether to scale the input embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
+        feed_forward_residual_weights (`tuple[float, float]`, *optional*, defaults to (1.5, 0.5)):
+            The residual weights for the feed forward layers.
+        conv_residual_weights (`tuple[float, float]`, *optional*, defaults to (2.0, 1.0)):
+            The residual weights for the convolution layers.
+        batch_norm_momentum (`float`, *optional*, defaults to 0.01):
+            The momentum for the batch normalization layers.
+
+    Example:
+        ```python
+        >>> from transformers import LastAsrEncoderModel, LastAsrEncoderConfig
+
+        >>> # Initializing a `LastAsrEncoder` configuration
+        >>> configuration = LastAsrEncoderConfig()
+
+        >>> # Initializing a model from the configuration
+        >>> model = LastAsrEncoderModel(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+
+    This configuration class is based on the LastAsrEncoder architecture from Google Health AI. You can find more details
+    and pre-trained models at [TODO](TODO)).
+    """
+
+    def __init__(
+        self,
+        hidden_size=512,
+        num_hidden_layers=17,
+        num_attention_heads=8,
+        intermediate_size=2048,
+        hidden_act="silu",
+        attention_bias=False,
+        conv_kernel_size=32,
+        subsampling_factor=4,
+        subsampling_conv_channels=256,
+        num_mel_bins=128,
+        subsampling_conv_kernel_size=5,
+        subsampling_conv_stride=2,
+        dropout=0.1,
+        dropout_positions=0.0,
+        layerdrop=0.1,
+        activation_dropout=0.1,
+        attention_dropout=0.1,
+        max_position_embeddings=10000,
+        scale_input=False,
+        initializer_range=0.02,
+        layer_norm_eps=1e-6,
+        feed_forward_residual_weights=(1.5, 0.5),
+        conv_residual_weights=(2.0, 1.0),
+        batch_norm_momentum=0.01,
+        rope_parameters=None,
+        **kwargs,
+    ):
+        super().__init__(
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            attention_bias=attention_bias,
+            conv_kernel_size=conv_kernel_size,
+            subsampling_factor=subsampling_factor,
+            subsampling_conv_channels=subsampling_conv_channels,
+            num_mel_bins=num_mel_bins,
+            subsampling_conv_kernel_size=subsampling_conv_kernel_size,
+            subsampling_conv_stride=subsampling_conv_stride,
+            dropout=dropout,
+            dropout_positions=dropout_positions,
+            layerdrop=layerdrop,
+            activation_dropout=activation_dropout,
+            attention_dropout=attention_dropout,
+            max_position_embeddings=max_position_embeddings,
+            scale_input=scale_input,
+            initializer_range=initializer_range,
+            **kwargs,
+        )
+
+        del self.convolution_bias
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
+        rope_config_validation(self)
+
+        self.layer_norm_eps = layer_norm_eps
+        self.feed_forward_residual_weights = feed_forward_residual_weights
+        self.conv_residual_weights = conv_residual_weights
+        self.batch_norm_momentum = batch_norm_momentum
+
+
+class LastAsrCTCConfig(ParakeetCTCConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`LastAsrForCTC`]. It is used to instantiate a
+    LastAsr CTC model according to the specified arguments, defining the model architecture.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+    Args:
+            vocab_size (`int`, *optional*, defaults to 512):
+                Vocabulary size of the model.
+            ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+                Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+                instance of [`LastAsrForCTC`].
+            ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+                Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+                occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+                of [`LastAsrForCTC`].
+            encoder_config (`Union[dict, LastAsrEncoderConfig]`, *optional*):
+                The config object or dictionary of the encoder.
+            pad_token_id (`int`, *optional*, defaults to 0):
+                Padding token id. Also used as blank token id.
+    Example:
+        ```python
+        >>> from transformers import LastAsrForCTC, LastAsrCTCConfig
+        >>> # Initializing a LastAsr configuration
+        >>> configuration = LastAsrCTCConfig()
+        >>> # Initializing a model from the configuration
+        >>> model = LastAsrForCTC(configuration)
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+    This configuration class is based on the LastAsr CTC architecture from Google Health AI. You can find more details
+    and pre-trained models at [TODO](TODO)).
+    """
+
+    def __init__(
+        self,
+        vocab_size=512,
+        ctc_loss_reduction="mean",
+        ctc_zero_infinity=True,
+        encoder_config: Union[dict, LastAsrEncoderConfig] = None,
+        pad_token_id=0,
+        **kwargs,
+    ):
+        super().__init__(
+            vocab_size=vocab_size,
+            ctc_loss_reduction=ctc_loss_reduction,
+            ctc_zero_infinity=ctc_zero_infinity,
+            encoder_config=encoder_config,
+            pad_token_id=pad_token_id,
+            **kwargs,
+        )
+
+
+class LastAsrEncoderSubsampling(nn.Module):
+    def __init__(self, config: LastAsrEncoderConfig):
+        super().__init__()
+        self.dense_0 = nn.Linear(config.num_mel_bins, config.hidden_size)
+        self.conv_0 = nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+        )
+        self.conv_1 = nn.Conv1d(
+            config.hidden_size,
+            config.subsampling_conv_channels,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+        )
+        self.dense_1 = nn.Linear(config.subsampling_conv_channels, config.hidden_size)
+        self.act_fn = nn.ReLU()
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.act_fn(self.dense_0(input_features))
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.act_fn(self.conv_0(hidden_states))
+        hidden_states = self.act_fn(self.conv_1(hidden_states))
+        hidden_states = hidden_states.transpose(1, 2)
+        return self.dense_1(hidden_states)
+
+
+class LastAsrEncoderConvolutionModule(nn.Module):
+    def __init__(self, config: LastAsrEncoderConfig):
+        super().__init__()
+        channels = config.hidden_size
+        self.activation = ACT2FN[config.hidden_act]
+        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=False)
+        self.depthwise_conv = nn.Conv1d(
+            channels,
+            channels,
+            kernel_size=config.conv_kernel_size,
+            stride=1,
+            padding="same",
+            groups=channels,
+            bias=False,
+        )
+        self.norm = nn.BatchNorm1d(channels, momentum=config.batch_norm_momentum)
+        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=False)
+
+    def forward(self, hidden_states, attention_mask=None):
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input
+              tensor.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, 1, time)`):
+              Attention mask.
+
+        Returns:
+            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
+        """
+        # exchange the temporal dimension and the feature dimension
+        hidden_states = hidden_states.transpose(1, 2)
+
+        # GLU mechanism, (batch_size, 2*channel, dim)
+        hidden_states = self.pointwise_conv1(hidden_states)
+        # (batch_size, channel, dim)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        # Apply padding mask before convolution
+        if attention_mask is not None:
+            hidden_states = torch.where(attention_mask.squeeze(1), hidden_states, 0)
+
+        # 1D Depthwise Conv
+        hidden_states = self.depthwise_conv(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.pointwise_conv2(hidden_states)
+
+        return hidden_states.transpose(1, 2)
+
+
+class LastAsrEncoderRotaryEmbedding(LlamaRotaryEmbedding): ...
+
+
+class LastAsrEncoderAttention(LlamaAttention): ...
+
+
+class LastAsrEncoderBlock(ParakeetEncoderBlock):
+    def __init__(self, config: LastAsrEncoderConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
+        self.norm_self_att = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
+        self.norm_conv = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
+        self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
+        self.norm_out = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
+        hidden_states = (
+            self.config.feed_forward_residual_weights[0] * residual
+            + self.config.feed_forward_residual_weights[1] * hidden_states
+        )
+
+        normalized_hidden_states = self.norm_self_att(hidden_states)
+        attn_output, _ = self.self_attn(
+            hidden_states=normalized_hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = hidden_states + attn_output
+
+        conv_output = self.conv(self.norm_conv(hidden_states), attention_mask=attention_mask)
+        hidden_states = (
+            self.config.conv_residual_weights[0] * hidden_states + self.config.conv_residual_weights[1] * conv_output
+        )
+
+        residual = hidden_states
+        hidden_states = self.feed_forward2(self.norm_feed_forward2(hidden_states))
+        hidden_states = (
+            self.config.feed_forward_residual_weights[0] * residual
+            + self.config.feed_forward_residual_weights[1] * hidden_states
+        )
+
+        hidden_states = self.norm_out(hidden_states)
+
+        return hidden_states
+
+
+class LastAsrPreTrainedModel(ParakeetPreTrainedModel):
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(module)
+
+    def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
+        encoder_config = self.config.encoder_config if isinstance(self.config, LastAsrCTCConfig) else self.config
+        kernel_size = encoder_config.subsampling_conv_kernel_size
+        stride = encoder_config.subsampling_conv_stride
+
+        num_layers = 2
+        for _ in range(num_layers):
+            input_lengths = (input_lengths - kernel_size) // stride + 1
+
+        return input_lengths
+
+
+# TODO: @eustlb, update this docstring
+@auto_docstring(
+    custom_intro="""
+    The Parakeet Encoder model, based on the [Conformer architecture]() ???.
+    """
+)
+class LastAsrEncoder(LastAsrPreTrainedModel):
+    config: LastAsrEncoderConfig
+    base_model_prefix = "encoder"
+
+    def __init__(self, config: LastAsrEncoderConfig):
+        super().__init__(config)
+        self.gradient_checkpointing = False
+
+        self.dropout = config.dropout
+        self.dropout_positions = config.dropout_positions
+        self.layerdrop = config.layerdrop
+
+        self.subsampler = LastAsrEncoderSubsampling(config)
+        self.rotary_emb = LastAsrEncoderRotaryEmbedding(config)
+        self.layers = nn.ModuleList(
+            [LastAsrEncoderBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.out_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
+
+        self.post_init()
+
+    @auto_docstring
+    @check_model_inputs()
+    @can_return_tuple
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        r"""
+        TODO: @eustlb, add docstring
+        """
+        hidden_states = self.subsampler(input_features)
+        position_embeddings = self.rotary_emb(hidden_states)
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        position_embeddings = nn.functional.dropout(
+            position_embeddings, p=self.dropout_positions, training=self.training
+        )
+
+        if attention_mask is not None:
+            output_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
+            attention_mask = (
+                torch.arange(hidden_states.shape[1], device=output_lengths.device)[None, :] < output_lengths[:, None]
+            )
+
+        for encoder_layer in self.layers:
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if not to_drop:
+                hidden_states = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
+
+        hidden_states = self.out_norm(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
+class LastAsrForCTC(ParakeetForCTC):
+    def generate(**super_kwargs):
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, LastAsrForCTC
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = TODO
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = LastAsrForCTC.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"], text=ds[0]["text"])
+        >>> predicted_ids = model.generate(**inputs)
+        >>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+
+        >>> print(transcription)
+        ```
+        """
+        return super().generate(**super_kwargs)
+
+
+__all__ = [
+    "LastAsrForCTC",
+    "LastAsrEncoder",
+    "LastAsrPreTrainedModel",
+    "LastAsrProcessor",
+    "LastAsrEncoderConfig",
+    "LastAsrCTCConfig",
+]
