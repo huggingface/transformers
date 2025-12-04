@@ -55,9 +55,15 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # importlib.metadata works with the distribution package, which may be different from the import
             # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
             distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
-            # In most cases, the packages are well-behaved and both have the same name. If it's not the case, we
-            # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
-            distribution_name = pkg_name if pkg_name in distributions else distributions[0]
+            # Per PEP 503, underscores and hyphens are equivalent in package names.
+            # Prefer the distribution that matches the (normalized) package name.
+            normalized_pkg_name = pkg_name.replace("_", "-")
+            if normalized_pkg_name in distributions:
+                distribution_name = normalized_pkg_name
+            elif pkg_name in distributions:
+                distribution_name = pkg_name
+            else:
+                distribution_name = distributions[0]
             package_version = importlib.metadata.version(distribution_name)
         except (importlib.metadata.PackageNotFoundError, KeyError):
             # If we cannot find the metadata (because of editable install for example), try to import directly.
