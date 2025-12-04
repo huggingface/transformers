@@ -125,6 +125,9 @@ class AwqTest(unittest.TestCase):
     EXPECTED_OUTPUT.add(
         "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out"
     )
+    EXPECTED_OUTPUT.add(
+        "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very creative"
+    )
 
     EXPECTED_OUTPUT_BF16 = [
         "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
