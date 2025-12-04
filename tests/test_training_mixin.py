@@ -331,6 +331,7 @@ class TrainingTesterMixin(ABC):
                     max_new_tokens=num_tokens_to_generate,
                     do_sample=False,
                     pad_token_id=config.pad_token_id if hasattr(config, 'pad_token_id') else 0,
+                    eos_token_id=0
                 )
             
             generated_tokens = generated_ids[0].tolist()
