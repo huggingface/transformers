@@ -597,20 +597,12 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             return moe_1, moe_2
 
         moe_1, moe_2 = cat_gate("model.layers.0")
-        torch.testing.assert_close(
-            model_state["model.layers.0.experts.gate_up_proj.weight"], moe_1
-        )
-        torch.testing.assert_close(
-            model_state["model.layers.0.extra_experts.gate_up_proj.weight"], moe_2
-        )
+        torch.testing.assert_close(model_state["model.layers.0.experts.gate_up_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.0.extra_experts.gate_up_proj.weight"], moe_2)
 
         moe_1, moe_2 = cat_gate("model.layers.1")
-        torch.testing.assert_close(
-            model_state["model.layers.1.experts.gate_up_proj.weight"], moe_1
-        )
-        torch.testing.assert_close(
-            model_state["model.layers.1.extra_experts.gate_up_proj.weight"], moe_2
-        )
+        torch.testing.assert_close(model_state["model.layers.1.experts.gate_up_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.1.extra_experts.gate_up_proj.weight"], moe_2)
 
         def stack_down(layer_prefix: str) -> torch.Tensor:
             moe_1 = torch.stack(
@@ -630,20 +622,12 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             return moe_1, moe_2
 
         moe_1, moe_2 = stack_down("model.layers.0")
-        torch.testing.assert_close(
-            model_state["model.layers.0.experts.down_proj.weight"], moe_1
-        )
-        torch.testing.assert_close(
-            model_state["model.layers.0.extra_experts.down_proj.weight"], moe_2
-        )
+        torch.testing.assert_close(model_state["model.layers.0.experts.down_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.0.extra_experts.down_proj.weight"], moe_2)
 
         moe_1, moe_2 = stack_down("model.layers.1")
-        torch.testing.assert_close(
-            model_state["model.layers.1.experts.down_proj.weight"], moe_1
-        )
-        torch.testing.assert_close(
-            model_state["model.layers.1.extra_experts.down_proj.weight"], moe_2
-        )
+        torch.testing.assert_close(model_state["model.layers.1.experts.down_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.1.extra_experts.down_proj.weight"], moe_2)
 
     def test_ernie4_5_vl_moe_conversion_reversed(self):
         model = DummyRoot(add_extra_moe=True)
