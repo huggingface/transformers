@@ -367,7 +367,6 @@ class AltRobertaLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.align.modeling_align.AlignTextEncoder with AlignText->AltRoberta
 class AltRobertaEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
