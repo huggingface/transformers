@@ -1171,7 +1171,7 @@ class CLIPConverter(Converter):
         )
         tokenizer.decoder = decoders.ByteLevel()
 
-        # Hack to have a ByteLevel and TemplaceProcessor
+        # Hack to have a ByteLevel and TemplateProcessor
         tokenizer.post_processor = processors.RobertaProcessing(
             sep=(self.original_tokenizer.eos_token, self.original_tokenizer.eos_token_id),
             cls=(self.original_tokenizer.bos_token, self.original_tokenizer.bos_token_id),
