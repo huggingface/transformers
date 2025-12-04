@@ -136,7 +136,8 @@ from ...models.auto.tokenization_auto import AutoTokenizer
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import auto_docstring, TensorType
+from ...tokenization_utils_base import BatchEncoding
+from ...utils import TensorType, auto_docstring
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
@@ -201,6 +202,13 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
         if self._attn_implementation is None:
             self._attn_implementation = "flash_attention_2"
+
+        # Keep legacy and new attention implementation fields in sync
+        existing_attn_impl = getattr(self, "attn_implementation", None)
+        if existing_attn_impl is None:
+            self.attn_implementation = self._attn_implementation
+        else:
+            self._attn_implementation = existing_attn_impl
 
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
@@ -1306,6 +1314,7 @@ class IsaacConfig(PretrainedConfig):
     ):
         self._rope_scaling: Optional[dict[str, Any]] = None
         self._rope_parameters: Optional[dict[str, Any]] = None
+
         resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
@@ -1318,22 +1327,48 @@ class IsaacConfig(PretrainedConfig):
 
         text_config_kwargs.update(kwargs)
 
+        legacy_rope_theta = text_config_kwargs.pop("rope_theta", None)
+        incoming_rope_params = text_config_kwargs.pop("rope_parameters", None)
+        incoming_rope_scaling = text_config_kwargs.pop("rope_scaling", None)
+        normalized_rope_params = incoming_rope_params or incoming_rope_scaling
+        if normalized_rope_params is None and legacy_rope_theta is not None:
+            normalized_rope_params = {"rope_type": "default", "rope_theta": legacy_rope_theta}
+        elif (
+            normalized_rope_params is not None
+            and legacy_rope_theta is not None
+            and "rope_theta" not in normalized_rope_params
+        ):
+            normalized_rope_params = {**normalized_rope_params, "rope_theta": legacy_rope_theta}
+        if normalized_rope_params is not None:
+            text_config_kwargs["rope_parameters"] = normalized_rope_params
+
         self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
-        if not hasattr(self.text_config, "rope_theta"):
-            rope_theta_override = text_config_kwargs.get("rope_theta", kwargs.get("rope_theta"))
-            if rope_theta_override is None:
-                rope_theta_override = getattr(Qwen3Config(), "rope_theta", 10000.0)
-            self.text_config.rope_theta = rope_theta_override
+
+        # Normalize rope parameters on the text config (prefer rope_parameters; alias rope_scaling)
+        self._rope_parameters = getattr(self.text_config, "rope_parameters", None)
+        if self._rope_parameters is None:
+            self._rope_parameters = getattr(self.text_config, "rope_scaling", None)
+        if self._rope_parameters is None and normalized_rope_params is not None:
+            self._rope_parameters = normalized_rope_params
+        if self._rope_parameters is None:
+            self._rope_parameters = {"rope_type": "default"}
+
+        try:
+            self.text_config.rope_parameters = self._rope_parameters
+        except AttributeError:
+            setattr(self.text_config, "rope_parameters", self._rope_parameters)
+        if hasattr(self.text_config, "rope_scaling"):
+            self.text_config.rope_scaling = self._rope_parameters
+        else:
+            try:
+                setattr(self.text_config, "rope_scaling", self._rope_parameters)
+            except Exception:
+                pass
 
         super().__init__(**kwargs)
 
-        if self._rope_scaling is None:
-            self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
-        else:
-            self.text_config.rope_scaling = self._rope_scaling
-
         # Keep rope parameters alias in sync with upstream expectations
-        self._rope_parameters = self._rope_scaling
+        self._rope_scaling = self._rope_parameters
 
         # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
         self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
@@ -1355,7 +1390,6 @@ class IsaacConfig(PretrainedConfig):
         self.initializer_range = self.text_config.initializer_range
         self.rms_norm_eps = self.text_config.rms_norm_eps
         self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.text_config.rope_theta
         self.attention_bias = getattr(self.text_config, "attention_bias", False)
         self.attention_dropout = getattr(self.text_config, "attention_dropout", 0.0)
 
@@ -1396,21 +1430,33 @@ class IsaacConfig(PretrainedConfig):
     @property
     def rope_scaling(self):
         if hasattr(self, "text_config") and self.text_config is not None:
-            return getattr(self.text_config, "rope_scaling", None)
-        return self._rope_scaling
+            return getattr(self.text_config, "rope_parameters", None) or getattr(
+                self.text_config, "rope_scaling", None
+            )
+        return self._rope_parameters
 
     @rope_scaling.setter
     def rope_scaling(self, value):
+        self._rope_parameters = value
         self._rope_scaling = value
         if hasattr(self, "text_config") and self.text_config is not None:
-            self.text_config.rope_scaling = value
+            try:
+                self.text_config.rope_parameters = value
+            except AttributeError:
+                setattr(self.text_config, "rope_parameters", value)
+            try:
+                self.text_config.rope_scaling = value
+            except AttributeError:
+                pass
 
     @property
     def rope_parameters(self) -> dict[str, Any] | None:
         """Alias introduced upstream for rope scaling dictionaries."""
         value = self._rope_parameters
-        if value is None:
-            value = self.rope_scaling
+        if value is None and hasattr(self, "text_config") and self.text_config is not None:
+            value = getattr(self.text_config, "rope_parameters", None) or getattr(
+                self.text_config, "rope_scaling", None
+            )
         if value is None:
             return {"rope_type": "default"}
         return value
@@ -1418,6 +1464,7 @@ class IsaacConfig(PretrainedConfig):
     @rope_parameters.setter
     def rope_parameters(self, value: dict[str, Any] | None) -> None:
         self._rope_parameters = value
+        self._rope_scaling = value
         self.rope_scaling = value
 
     @property
@@ -1437,9 +1484,17 @@ class IsaacConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
+        rope_params = self.rope_parameters
+        output["rope_parameters"] = rope_params
+        output.pop("rope_scaling", None)
+        output.pop("rope_theta", None)
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
-            output["text_config"] = self.text_config.to_dict()
+            text_config_dict = self.text_config.to_dict()
+            text_config_dict.pop("rope_theta", None)
+            text_config_dict.pop("rope_scaling", None)
+            text_config_dict["rope_parameters"] = rope_params
+            output["text_config"] = text_config_dict
         if hasattr(self, "vision_config") and self.vision_config is not None:
             output["vision_config"] = self.vision_config.to_dict()
         return output
@@ -1599,8 +1654,26 @@ class IsaacProcessor(ProcessorMixin):
         Returns:
             BatchFeature with input_ids and tensor_stream
         """
-        # Normalize inputs to lists
-        if isinstance(text, str):
+        # Normalize inputs to lists and support BatchEncoding (v5 apply_chat_template default)
+        encoding_input = None
+        if isinstance(text, BatchEncoding):
+            encoding_input = text
+        elif isinstance(text, dict) and "input_ids" in text:
+            encoding_input = BatchEncoding(text)
+
+        if encoding_input is not None:
+            input_ids_field = encoding_input["input_ids"]
+            if isinstance(input_ids_field, torch.Tensor):
+                ids = input_ids_field
+            else:
+                ids = torch.tensor(input_ids_field)
+            if ids.ndim == 1:
+                ids = ids.unsqueeze(0)
+            if ids.size(0) != 1:
+                raise ValueError("IsaacProcessor currently supports batch_size=1 for chat templates.")
+            decoded_text = self.tokenizer.decode(ids[0].tolist(), skip_special_tokens=False)
+            texts = [decoded_text]
+        elif isinstance(text, str):
             texts = [text]
         else:
             texts = text
@@ -1683,17 +1756,29 @@ class IsaacRotaryEmbedding(nn.Module):
         super().__init__()
 
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
-        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
+        rope_params = (
+            getattr(rope_source_cfg, "rope_parameters", None) or getattr(rope_source_cfg, "rope_scaling", None) or {}
+        )
+        legacy_rope_theta = getattr(rope_source_cfg, "rope_theta", None)
+        if legacy_rope_theta is not None and isinstance(rope_params, dict) and "rope_theta" not in rope_params:
+            rope_params = {**rope_params, "rope_theta": legacy_rope_theta}
 
-        sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
+        sanitized_params = {k: v for k, v in rope_params.items() if k not in self.EXTRA_ROPE_KEYS}
         config_for_rope = copy.copy(rope_source_cfg)
-        config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
+        config_for_rope.rope_parameters = sanitized_params if sanitized_params else None
+        if hasattr(config_for_rope, "rope_scaling"):
+            config_for_rope.rope_scaling = sanitized_params if sanitized_params else None
+        if hasattr(config_for_rope, "rope_theta"):
+            try:
+                delattr(config_for_rope, "rope_theta")
+            except Exception:
+                config_for_rope.rope_theta = None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
         self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
         rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
-        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
+        self.mrope_section = self._resolve_mrope_section(rope_params.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
@@ -2201,8 +2286,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        Forward pass for conditional generation supporting both standard inputs and TensorStream.
-
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of

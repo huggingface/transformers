@@ -893,17 +893,29 @@ class IsaacRotaryEmbedding(nn.Module):
         super().__init__()
 
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
-        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
+        rope_params = (
+            getattr(rope_source_cfg, "rope_parameters", None) or getattr(rope_source_cfg, "rope_scaling", None) or {}
+        )
+        legacy_rope_theta = getattr(rope_source_cfg, "rope_theta", None)
+        if legacy_rope_theta is not None and isinstance(rope_params, dict) and "rope_theta" not in rope_params:
+            rope_params = {**rope_params, "rope_theta": legacy_rope_theta}
 
-        sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
+        sanitized_params = {k: v for k, v in rope_params.items() if k not in self.EXTRA_ROPE_KEYS}
         config_for_rope = copy.copy(rope_source_cfg)
-        config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
+        config_for_rope.rope_parameters = sanitized_params if sanitized_params else None
+        if hasattr(config_for_rope, "rope_scaling"):
+            config_for_rope.rope_scaling = sanitized_params if sanitized_params else None
+        if hasattr(config_for_rope, "rope_theta"):
+            try:
+                delattr(config_for_rope, "rope_theta")
+            except Exception:
+                config_for_rope.rope_theta = None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
         self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
         rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
-        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
+        self.mrope_section = self._resolve_mrope_section(rope_params.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod

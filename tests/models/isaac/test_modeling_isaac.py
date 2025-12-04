@@ -15,7 +15,7 @@ from transformers import (
     IsaacConfig,
     IsaacForConditionalGeneration,
     IsaacModel,
-    PreTrainedTokenizer,
+    PythonBackend,
     is_torch_available,
 )
 from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
@@ -166,7 +166,6 @@ def tokenizer(isaac_reference_checkpoint):
         AutoTokenizer,
         isaac_reference_checkpoint,
         trust_remote_code=True,
-        use_fast=False,
     )
 
 
@@ -254,7 +253,7 @@ def _reference_checkpoint_or_skip():
     return MODEL_ID
 
 
-class SimpleIsaacTokenizer(PreTrainedTokenizer):
+class SimpleIsaacTokenizer(PythonBackend):
     vocab_files_names = {}
     model_input_names = ["input_ids"]
 
@@ -272,7 +271,7 @@ class SimpleIsaacTokenizer(PreTrainedTokenizer):
             eos_token="<eos>",
             pad_token="<pad>",
             unk_token="<unk>",
-            additional_special_tokens=["<image>"],
+            extra_special_tokens=["<image>"],
             model_max_length=512,
         )
         self.chat_template = (
@@ -423,9 +422,6 @@ class IsaacModelTester:
             # Keep the same multi-RoPE setup as the reference checkpoints but shrink the
             # sections so they sum to the rotary half-dimension (4) of this tiny test model.
             "rope_parameters": {"rope_type": "default", "mrope_section": [2, 1, 1], "mrope_interleaved": True},
-            # Qwen3 config expects `rope_theta` to be present on the text sub-config, so we
-            # set it explicitly to mimic real checkpoints and keep attribute mirroring working.
-            "rope_theta": 10000,
             "tie_word_embeddings": True,
         }
 
@@ -533,6 +529,16 @@ def test_isaac_config_extends_qwen3_defaults(isaac_tiny_config):
     assert isaac_tiny_config.vision_token == "<image>"
 
 
+def test_isaac_config_migrates_legacy_rope_theta():
+    cfg = IsaacConfig(text_config={"rope_theta": 12345})
+    assert cfg.rope_parameters.get("rope_theta") == 12345
+    assert cfg.rope_parameters.get("rope_type") == "default"
+    serialized = cfg.to_dict()
+    assert "rope_theta" not in serialized
+    assert "rope_theta" not in serialized.get("text_config", {})
+    assert serialized["rope_parameters"].get("rope_theta") == 12345
+
+
 @require_torch
 def test_isaac_for_conditional_generation_initialization(isaac_tiny_config):
     model = IsaacForConditionalGeneration(isaac_tiny_config)
@@ -581,6 +587,20 @@ def test_isaac_processor_text_only_round_trip(isaac_processor):
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     prompt = isaac_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     outputs = isaac_processor(text=prompt, images=None, return_tensors="pt")
+
+    assert "input_ids" in outputs
+    assert "tensor_stream" in outputs
+    assert isinstance(outputs["tensor_stream"], TensorStream)
+    assert outputs["input_ids"].shape[0] == 1
+
+
+@require_torch
+@tensorstream_required
+def test_isaac_processor_accepts_batchencoding_chat_template(isaac_processor):
+    messages = [{"role": "user", "content": "Hello, how are you?"}]
+    batch_encoding = isaac_processor.apply_chat_template(messages, add_generation_prompt=True)
+
+    outputs = isaac_processor(text=batch_encoding, images=None, return_tensors="pt")
 
     assert "input_ids" in outputs
     assert "tensor_stream" in outputs
