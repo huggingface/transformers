@@ -1966,6 +1966,7 @@ class DataCollatorForLanguageModelingUnitTest(unittest.TestCase):
 
         np.testing.assert_array_equal(output_mask, expected_mask)
 
+
 class DataCollatorWithFlatteningTest(unittest.TestCase):
     """Tests for DataCollatorWithFlattening"""
 
@@ -2016,5 +2017,3 @@ class DataCollatorWithFlatteningTest(unittest.TestCase):
         self.assertIsInstance(batch, dict)
         self.assertEqual(batch["input_ids"].shape, (1, 7))
         self.assertEqual(batch["labels"].shape, (1, 7))
-
-
