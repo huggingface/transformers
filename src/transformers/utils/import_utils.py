@@ -77,6 +77,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         return package_exists
 
 
+def is_env_variable_true(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a true value in the environment"""
+    return os.getenv(env_variable, "false").lower() in ("true", "1", "y", "yes", "on")
+
+
+def is_env_variable_false(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a false value in the environment"""
+    return os.getenv(env_variable, "true").lower() in ("false", "0", "n", "no", "off")
+
+
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 
