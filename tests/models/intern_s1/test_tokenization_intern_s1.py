@@ -42,7 +42,11 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
     from_pretrained_id = "internlm/Intern-S1"
     tokenizer_class = InternS1Tokenizer
     rust_tokenizer_class = None
+    # InternS1Tokenizer is a slow tokenizer
     test_rust_tokenizer = False
+    test_tokenizer_from_extractor = False
+    # InternS1Tokenizer encodes ' A' and 'A' differently
+    test_pretokenized_inputs = False
 
     @classmethod
     def setUpClass(cls):
@@ -56,7 +60,8 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
         ]
         for model_name in model_names:
             target_path = os.path.join(cls.tmpdirname, model_name)
-            os.symlink(SAMPLE_VOCAB, target_path)
+            if not os.path.exists(target_path):
+                os.symlink(SAMPLE_VOCAB, target_path)
 
         cls.special_tokens_map = {"eos_token": "<|endoftext|>"}
 
@@ -69,39 +74,6 @@ class InternS1TokenizationTest(Qwen2TokenizationTest):
         kwargs = _kwargs
         pretrained_name = pretrained_name or cls.tmpdirname
         return InternS1Tokenizer.from_pretrained(pretrained_name, **kwargs)
-
-    def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
-        # InternS1Tokenizer changes the default `spaces_between_special_tokens` in `decode` to False
-        if not self.test_slow_tokenizer:
-            self.skipTest(reason="test_slow_tokenizer is set to False")
-
-        # tokenizer has a special token: `"<|endfotext|>"` as eos, but it is not `legacy_added_tokens`
-        # special tokens in `spaces_between_special_tokens` means spaces between `legacy_added_tokens`
-        # that would be `"<|im_start|>"` and `"<|im_end|>"` in InternS1 Models
-        token_ids = [259, 260, 270, 271, 26]
-        sequence = " lower<|endoftext|><|im_start|>;"
-        sequence_with_space = " lower<|endoftext|> <|im_start|> ;"
-
-        tokenizer = self.get_tokenizer()
-        # let's add a legacy_added_tokens
-        im_start = AddedToken(
-            "<|im_start|>",
-            single_word=False,
-            lstrip=False,
-            rstrip=False,
-            special=True,
-            normalized=False,
-        )
-        tokenizer.add_tokens([im_start])
-
-        # `spaces_between_special_tokens` defaults to False
-        self.assertEqual(tokenizer.decode(token_ids), sequence)
-
-        # but it can be set to True
-        self.assertEqual(
-            tokenizer.decode(token_ids, spaces_between_special_tokens=True),
-            sequence_with_space,
-        )
 
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

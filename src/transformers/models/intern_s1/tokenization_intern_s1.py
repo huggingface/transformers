@@ -24,7 +24,7 @@ from typing import Optional, Union
 import regex as re
 import sentencepiece as spm
 
-from ...tokenization_python import PreTrainedTokenizer
+from ...tokenization_python import PythonBackend
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import logging
 from ...utils.import_utils import requires
@@ -388,7 +388,7 @@ def get_pairs(word):
 
 
 @requires(backends=("sentencepiece",))
-class InternS1Tokenizer(PreTrainedTokenizer):
+class InternS1Tokenizer(PythonBackend):
     """
     Construct an InternS1 tokenizer. Based on byte-level Byte-Pair-Encoding.
 
