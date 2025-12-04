@@ -36,7 +36,13 @@ class FpQuantQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys: Optional[list[str]] = None, **kwargs) -> dict[str, torch.Tensor]:
+    def convert(
+        self,
+        input_dict: torch.Tensor,
+        model: Optional[torch.nn.Module] = None,
+        missing_keys: Optional[list[str]] = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0]
         # Loading master weights or an unquantized checkpoint
@@ -62,11 +68,19 @@ class FpQuantQuantize(ConversionOps):
         missing_keys.discard(f"{prefix_target_key}.dqweight")
         return {}
 
+
 class FpQuantDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, full_layer_name: str | None = None, missing_keys: Optional[list[str]] = None, **kwargs) -> dict[str, torch.Tensor]:
+    def convert(
+        self,
+        input_dict: torch.Tensor,
+        model: Optional[torch.nn.Module] = None,
+        full_layer_name: str | None = None,
+        missing_keys: Optional[list[str]] = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
         value = value[0] if isinstance(value, list) else value
         module, _ = get_module_from_name(model, target_key)
@@ -94,13 +108,14 @@ class FpQuantDeserialize(ConversionOps):
             dqweight = torch.nn.Parameter(value)
 
             return {
-                    ".dqweight": dqweight,
-                    # the way the FPQuantLinear module ips designed, these parameters are expected in the model
-                    # even though they are not used so we need to set them to zeros
-                    ".weight": torch.nn.Parameter(torch.zeros(0)),
-                    ".qweight": torch.nn.Parameter(torch.zeros(0)),
-                    ".scales": torch.nn.Parameter(torch.zeros(0))
-                }
+                ".dqweight": dqweight,
+                # the way the FPQuantLinear module ips designed, these parameters are expected in the model
+                # even though they are not used so we need to set them to zeros
+                ".weight": torch.nn.Parameter(torch.zeros(0)),
+                ".qweight": torch.nn.Parameter(torch.zeros(0)),
+                ".scales": torch.nn.Parameter(torch.zeros(0)),
+            }
+
 
 def adapt_fp_quant_config(config: FPQuantConfig):
     if config.forward_dtype == "mxfp4":

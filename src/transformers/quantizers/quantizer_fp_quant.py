@@ -140,10 +140,7 @@ class FPQuantHfQuantizer(HfQuantizer):
 
         from ..integrations.fp_quant import adapt_fp_quant_config
 
-        replace_with_fp_quant_linear(
-            model,
-            fp_quant_linear_config=adapt_fp_quant_config(self.quantization_config)
-        )
+        replace_with_fp_quant_linear(model, fp_quant_linear_config=adapt_fp_quant_config(self.quantization_config))
         model.config.quantization_config = self.quantization_config
 
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
@@ -183,11 +180,13 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     def get_quantize_ops(self):
         from ..integrations.fp_quant import FpQuantQuantize
+
         return FpQuantQuantize(self)
 
     def get_weight_conversions(self):
         from ..core_model_loading import WeightConverter
         from ..integrations.fp_quant import FpQuantDeserialize
+
         if self.pre_quantized:
             if self.quantization_config.pseudoquantization:
                 return [
