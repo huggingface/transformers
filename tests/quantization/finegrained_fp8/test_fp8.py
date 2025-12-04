@@ -46,6 +46,9 @@ def _patch_no_accelerator():
         stack.enter_context(patch("torch.cuda.is_available", return_value=False))
         if hasattr(torch, "xpu"):
             stack.enter_context(patch("torch.xpu.is_available", return_value=False))
+            stack.enter_context(
+                patch("transformers.quantizers.quantizer_finegrained_fp8.is_torch_xpu_available", return_value=False)
+            )
         yield
 
 

@@ -886,6 +886,7 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1016,6 +1017,7 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1222,6 +1224,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DabDetrModelOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
@@ -1469,6 +1472,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DabDetrObjectDetectionOutput]:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
