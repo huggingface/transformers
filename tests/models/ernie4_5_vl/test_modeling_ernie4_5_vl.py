@@ -269,8 +269,8 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @slow
-#@require_torch_multi_accelerator
-#@require_torch_large_accelerator
+@require_torch_multi_accelerator
+@require_torch_large_accelerator
 @require_torch
 class Ernie4_5_VLIntegrationTest(unittest.TestCase):
     model = None
@@ -373,7 +373,6 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
             'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a mix of grey and brown fur, and features like small ears and distinctive facial mark'
         ]  # fmt: skip
 
-        print(self.processor.batch_decode(output, skip_special_tokens=True))
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
