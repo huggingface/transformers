@@ -220,9 +220,7 @@ class VibeVoiceCausalConvTranspose1d(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerDecoder(nn.Module):
-    """
-    Decoder component for the VibeVoice tokenizer that converts latent representations back to audio.
-    """
+    """Decoder component for the VibeVoice tokenizer that converts latent representations back to audio."""
 
     def __init__(self, config):
         super().__init__()

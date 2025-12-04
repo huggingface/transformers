@@ -57,9 +57,7 @@ class VibeVoiceEncoderFeedForward(nn.Module):
 
 
 class VibeVoiceConv1dCache:
-    """
-    Cache class for maintaining convolution states across layers to support streaming.
-    """
+    """Cache class for maintaining convolution states across layers to support streaming."""
 
     def __init__(
         self,
@@ -172,14 +170,9 @@ class VibeVoiceCausalConv1d(nn.Module):
 
 
 class VibeVoiceConvNext1dLayer(nn.Module):
-    """
-    ConvNeXt-like block adapted for 1D convolutions, used in VibeVoice tokenizer encoder.
+    """ConvNeXt-like block adapted for 1D convolutions."""
 
-    For reference, original 2D `ConvNextLayer`:
-    https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L120
-    """
-
-    def __init__(self, config, hidden_size, drop_path=0.0, dilation=1, stride=1, layer_idx=None):
+    def __init__(self, config, hidden_size, dilation=1, stride=1, layer_idx=None):
         super().__init__()
 
         self.norm = VibeVoiceRMSNorm(hidden_size, eps=config.rms_norm_eps)
@@ -187,17 +180,6 @@ class VibeVoiceConvNext1dLayer(nn.Module):
         self.ffn = VibeVoiceEncoderFeedForward(config, hidden_size)
         self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
         self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
-
-        # NOTE (ebezzam) original code has option for DropPath but is never actually used (and `nn.modules.DropPath` does not exist):
-        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L637
-        # however, could be interesting feature for future versions of `ConvNext1dLayer` as the 2D version has it:
-        # https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L146
-        if drop_path > 0.0:
-            # possible implementation (that may needed to be adapted for 1D):
-            # https://github.com/huggingface/transformers/blob/e20df45bf676d80bdddb9757eeeafe6c0c81ecfa/src/transformers/models/convnext/modeling_convnext.py#L40
-            raise NotImplementedError("DropPath is not implemented.")
-        self.drop_path = nn.Identity()
-
         self.mixer = VibeVoiceCausalConv1d(
             in_channels=hidden_size,
             out_channels=hidden_size,
@@ -210,31 +192,23 @@ class VibeVoiceConvNext1dLayer(nn.Module):
         )
 
     def forward(self, hidden_states, padding_cache=None):
+        # mixer
         residual = hidden_states
         hidden_states = self.norm(hidden_states.transpose(1, 2)).transpose(1, 2)
         hidden_states = self.mixer(hidden_states, padding_cache=padding_cache)
         hidden_states = hidden_states * self.gamma.unsqueeze(-1)
-        # (ebezzam) original code (https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L653)
-        # as mentioned above, drop_path is not used and the VibeVoice authors don't use the `forward` method but a custom
-        # call which does `residual + hidden_states` directly (see link below), which is same as using identity
-        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L768
-        hidden_states = residual + self.drop_path(hidden_states)
+        hidden_states = residual + hidden_states
 
         # ffn
         residual = hidden_states
-        hidden_states = self.ffn_norm(hidden_states.transpose(1, 2))  # [B, T, C]
-        hidden_states = self.ffn(hidden_states)  # FFN expects [B, T, C]
-        hidden_states = hidden_states.transpose(1, 2)  # Back to [B, C, T]
+        hidden_states = self.ffn_norm(hidden_states.transpose(1, 2))
+        hidden_states = self.ffn(hidden_states).transpose(1, 2)
         hidden_states = hidden_states * self.ffn_gamma.unsqueeze(-1)
-        # (ebezzam) see comment above
-        hidden_states = residual + self.drop_path(hidden_states)
-        return hidden_states
+        return residual + hidden_states
 
 
 class VibeVoiceSemanticTokenizerEncoder(nn.Module):
-    """
-    Encoder component for the VibeVoice tokenizer that converts audio to latent representations.
-    """
+    """Encoder component for the VibeVoice tokenizer that converts audio to latent representations."""
 
     def __init__(self, config):
         super().__init__()
@@ -327,7 +301,7 @@ class VibeVoiceSemanticTokenizerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class VibeVoiceSemanticTokenizerModel(VibeVoiceSemanticTokenizerPreTrainedModel):
-    """Encoder-only VibeVoice tokenizer model for semantic tokens."""
+    """Encoder-only VibeVoice tokenizer model for semantic embeddings."""
 
     def __init__(self, config):
         super().__init__(config)
