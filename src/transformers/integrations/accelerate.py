@@ -466,7 +466,7 @@ def expand_device_map(device_map, param_names):
 
 
 def accelerate_disk_offload(
-    model: PreTrainedModel,
+    model: "PreTrainedModel",
     disk_offload_folder: str | None,
     checkpoint_files: list[str] | None,
     device_map: dict,
