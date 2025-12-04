@@ -4148,10 +4148,7 @@ class ColoredFormatter(logging.Formatter):
             # Dim the entire log line for httpx and similar
             timestamp = self.formatTime(record, self.datefmt)
             message = record.getMessage()
-            return (
-                f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - "
-                f"{message}{Colors.RESET}"
-            )
+            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {message}{Colors.RESET}"
 
         # Get color for this level
         color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
