@@ -57,25 +57,6 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
-    def test_save_load_pretrained_additional_features(self):
-        processor = SeamlessM4TProcessor(
-            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
-        )
-        processor.save_pretrained(self.tmpdirname)
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
-
-        processor = SeamlessM4TProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
-
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-
-        tokenizer_instance = isinstance(processor.tokenizer, (SeamlessM4TTokenizerFast, SeamlessM4TTokenizer))
-        self.assertTrue(tokenizer_instance)
-
     # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->SeamlessM4T
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()

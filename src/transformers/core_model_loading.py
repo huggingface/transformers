@@ -594,7 +594,6 @@ def set_param_for_module(
             missing_keys.discard(target_name)
             if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
                 mismatch_keys.add((target_name, param_value.shape, ref.shape))
-                module_obj.param_name._is_hf_initialized = False  # Needs to be initialized
             else:
                 # super important otherwise _init_weight will re-init the param
                 param_value._is_hf_initialized = True
@@ -827,6 +826,7 @@ def convert_and_load_state_dict_in_model(
             if hf_quantizer and hf_quantizer.pre_quantized and original_key != renamed_key:
                 # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
                 # so we need to make sure to load the tensor with the same dtype from the checkpoint
+                # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
                 _dtype = None
             elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)

@@ -509,6 +509,29 @@ def is_torch_tf32_available() -> bool:
 
 
 @lru_cache
+def enable_tf32(enable: bool) -> None:
+    """
+    Set TF32 mode using the appropriate PyTorch API.
+    For PyTorch 2.9+, uses the new fp32_precision API.
+    For older versions, uses the legacy allow_tf32 flags.
+    Args:
+        enable: Whether to enable TF32 mode
+    """
+    import torch
+
+    pytorch_version = version.parse(get_torch_version())
+    if pytorch_version >= version.parse("2.9.0"):
+        precision_mode = "tf32" if enable else "ieee"
+        torch.backends.fp32_precision = precision_mode
+    else:
+        if is_torch_musa_available():
+            torch.backends.mudnn.allow_tf32 = enable
+        else:
+            torch.backends.cuda.matmul.allow_tf32 = enable
+            torch.backends.cudnn.allow_tf32 = enable
+
+
+@lru_cache
 def is_torch_flex_attn_available() -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
 
@@ -1003,11 +1026,6 @@ def is_gptqmodel_available() -> bool:
 
 
 @lru_cache
-def is_eetq_available() -> bool:
-    return _is_package_available("eetq")
-
-
-@lru_cache
 def is_fbgemm_gpu_available() -> bool:
     return _is_package_available("fbgemm_gpu")
 
@@ -1283,11 +1301,20 @@ def is_jit_tracing() -> bool:
         return False
 
 
+def is_cuda_stream_capturing() -> bool:
+    try:
+        import torch
+
+        return torch.cuda.is_current_stream_capturing()
+    except Exception:
+        return False
+
+
 def is_tracing(tensor=None) -> bool:
-    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx or CUDA stream capturing"""
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
-    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
+    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
     return _is_tracing

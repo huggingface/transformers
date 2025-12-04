@@ -19,6 +19,8 @@ fronting encoding methods) Special token mixing (host the special tokens logic) 
 of output with special method for the Fast tokenizers)
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import os
@@ -60,6 +62,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -756,7 +759,7 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"], *, non_blocking: bool = False) -> "BatchEncoding":
+    def to(self, device: Union[str, torch.device], *, non_blocking: bool = False) -> BatchEncoding:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
@@ -1827,8 +1830,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)
-            # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
-            config_tokenizer_class = init_kwargs.get("tokenizer_class")
+            # used in the past to check if the tokenizer class matches the class in the repo
             init_kwargs.pop("tokenizer_class", None)
             if not has_tokenizer_file:
                 init_kwargs.get("tokenizer_file", None)
@@ -1836,7 +1838,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
-            config_tokenizer_class = None
             init_kwargs = init_configuration
 
         # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
@@ -1863,54 +1864,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 # For backward compatibility with odl format.
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
-
-        if config_tokenizer_class is None:
-            # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
-            #       If not, it raises a warning, but otherwise continues. Since we mostly load tokenizers with
-            #       AutoTokenizer these days, it seems like a lot of work (and a source of bugs) for little gain.
-            #       Maybe we can just remove this entirely?
-            from .models.auto.configuration_auto import AutoConfig  # tests_ignore
-
-            # Second attempt. If we have not yet found tokenizer_class, let's try to use the config.
-            try:
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    token=token,
-                    cache_dir=cache_dir,
-                    local_files_only=local_files_only,
-                    trust_remote_code=trust_remote_code,
-                    _commit_hash=_commit_hash,
-                )
-                config_tokenizer_class = config.tokenizer_class
-            except (OSError, ValueError, KeyError):
-                # skip if an error occurred.
-                config = None
-            if config_tokenizer_class is None:
-                # Third attempt. If we have not yet found the original type of the tokenizer,
-                # we are loading we see if we can infer it from the type of the configuration file
-                from .models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES  # tests_ignore
-
-                if hasattr(config, "model_type"):
-                    model_type = config.model_type
-                else:
-                    # Fallback: use pattern matching on the string.
-                    model_type = None
-                    for pattern in TOKENIZER_MAPPING_NAMES:
-                        if pattern in str(pretrained_model_name_or_path):
-                            model_type = pattern
-                            break
-
-                if model_type is not None:
-                    config_tokenizer_class = TOKENIZER_MAPPING_NAMES.get(model_type)
-
-        if config_tokenizer_class is not None:
-            if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
-                logger.warning(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this"
-                    " function is called from. It may result in unexpected tokenization. \nThe tokenizer class you"
-                    f" load from this checkpoint is '{config_tokenizer_class}'. \nThe class this function is called"
-                    f" from is '{cls.__name__}'."
-                )
 
         # Preserve extra_special_tokens from tokenizer_config.json before updating with kwargs
         # extra_special_tokens should be a list (user-defined extra tokens)
@@ -3095,7 +3048,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        token_ids: Union[int, list[int], list[list[int]], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         **kwargs,
     ) -> Union[str, list[str]]:
@@ -3143,7 +3096,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -3568,6 +3521,45 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Legacy format for single templates: Just make them a key in tokenizer_config.json
             tokenizer_config["chat_template"] = self.chat_template
         return tokenizer_config, saved_raw_chat_template_files
+
+    def parse_response(
+        self,
+        response: str | list[str | int | list[int]] | np.ndarray | torch.Tensor,
+        schema: list | dict | None = None,
+    ):
+        """
+        Converts an output string created by generating text from a model into a parsed message dictionary.
+        This method is intended for use with chat models, and will read the tokenizer's `response_schema` attribute to
+        control parsing, although this can be overridden by passing a `response_schema` argument directly.
+
+        This method is currently **highly experimental** and the schema specification is likely to change in future!
+        We recommend not building production code on top of it just yet.
+
+        Args:
+            response (`str`):
+                The output string generated by the model. This can be either a decoded string or list of strings,
+                or token IDs as a list/array.
+            schema (`Union[list, dict]`, *optional*):
+                A response schema that indicates the expected output format and how parsing should be performed.
+                If not provided, the tokenizer's `response_schema` attribute will be used.
+        """
+        batched = (
+            (isinstance(response, list) and not isinstance(response[0], int))
+            or getattr(response, "ndim", 0) > 1  # For torch/numpy tensors
+        )
+
+        if schema is None:
+            if getattr(self, "response_schema", None) is None:
+                raise AttributeError("This tokenizer does not have a `response_schema` for parsing chat responses!")
+            schema = self.response_schema
+        if batched:
+            if not (isinstance(response, list) and isinstance(response[0], str)):
+                response = self.batch_decode(response)
+            return [recursive_parse(single_response, schema) for single_response in response]
+        else:
+            if not isinstance(response, str):
+                response = self.decode(response)
+            return recursive_parse(response, schema)
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:
