@@ -927,6 +927,8 @@ class ModelTesterMixin:
         if hasattr(config, "use_cache"):
             config.use_cache = False
 
+        has_verified_model = False
+
         for model_class in self.all_model_classes:
             if not getattr(model_class, "supports_gradient_checkpointing", False):
                 continue
@@ -1001,6 +1003,12 @@ class ModelTesterMixin:
                 grad_after_gc.abs().sum().item(),
                 0,
                 f"{model_class.__name__} should keep non-zero embedding gradients with gradient checkpointing enabled.",
+            )
+            has_verified_model = True
+
+        if not has_verified_model:
+            self.skipTest(
+                reason="No model with a differentiable loss was available to verify enable_input_require_grads with gradient checkpointing."
             )
 
     def test_can_init_all_missing_weights(self):

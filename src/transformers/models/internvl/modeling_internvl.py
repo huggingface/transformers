@@ -21,7 +21,7 @@
 
 
 import collections.abc
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -484,6 +484,55 @@ class InternVLPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+
+    def enable_input_require_grads(self, raise_on_missing_embeddings: bool = False):
+        """
+        InternVL's vision embeddings return tuples, so we override the base logic to recurse into the tensor outputs.
+        The alternative is modifying enable_input_require_grads for every model which is unreasonable.
+        We could also change the output of vision embeddings but that changes the public API.
+        """
+
+        def make_inputs_require_grads(module, inputs, output):
+            def _set_requires_grad(tensor_like):
+                if isinstance(tensor_like, torch.Tensor):
+                    tensor_like.requires_grad_(True)
+                elif isinstance(tensor_like, Mapping):
+                    for value in tensor_like.values():
+                        _set_requires_grad(value)
+                elif isinstance(tensor_like, (tuple, list)):
+                    for value in tensor_like:
+                        _set_requires_grad(value)
+
+            _set_requires_grad(output)
+
+        hooks = []
+        seen_modules = set()
+        found_embeddings = False
+
+        for module in self.modules():
+            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+                continue
+
+            input_embeddings = module.get_input_embeddings()
+            if input_embeddings is None or not hasattr(input_embeddings, "register_forward_hook"):
+                continue
+
+            embedding_id = id(input_embeddings)
+            if embedding_id in seen_modules:
+                continue
+
+            seen_modules.add(embedding_id)
+            hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+            found_embeddings = True
+
+        self._require_grads_hooks = hooks
+        if hooks:
+            self._require_grads_hook = hooks[0]
+        if raise_on_missing_embeddings and not found_embeddings:
+            raise RuntimeError(
+                f"{self.__class__.__name__} does not expose input embeddings. "
+                "Override `get_input_embeddings` to enable gradient checkpointing with adapters."
+            )
 
 
 class InternVLMultiModalProjector(nn.Module):

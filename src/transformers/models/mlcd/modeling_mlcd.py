@@ -258,7 +258,7 @@ class MLCDAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -315,7 +315,7 @@ class MLCDEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
@@ -324,18 +324,20 @@ class MLCDEncoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
                 Represents the hidden states from the previous layer or the input embeddings.
-            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`):
-                A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
-                Represents absolute positional embeddings for the query and key in the attention mechanism.
+            position_embeddings (`torch.Tensor` of shape `(seq_len, embed_dim)`):
+                Rotary position embeddings used to derive sine and cosine components for attention.
             attention_mask (`torch.FloatTensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
+        cos_position_embeddings = position_embeddings.cos()
+        sin_position_embeddings = position_embeddings.sin()
+        rotary_embeddings = (cos_position_embeddings, sin_position_embeddings)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
+            position_embeddings=rotary_embeddings,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -388,10 +390,11 @@ class MLCDEncoder(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
         """
         hidden_states = inputs_embeds
+        position_embeddings_tensor = position_embeddings
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
-                position_embeddings,
+                position_embeddings_tensor,
                 attention_mask,
                 **kwargs,
             )
@@ -476,8 +479,7 @@ class MLCDVisionTransformer(nn.Module):
         rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
         rotary_pos_emb = rotary_pos_emb.to(self.class_pos_emb.device)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
