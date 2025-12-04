@@ -29,7 +29,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, check_with, logging
+from ...utils import auto_docstring, check_with, is_torchdynamo_compiling, logging
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_qwen2_audio import Qwen2AudioConfig, Qwen2AudioEncoderConfig
 
@@ -774,7 +774,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 audio_tokens = input_ids == self.config.audio_token_id
                 legacy_processing = (audio_tokens[:, :-1] & audio_tokens[:, 1:]).sum() == 0
 
-                if legacy_processing:
+                if not is_torchdynamo_compiling() and legacy_processing:
                     logger.warning_once(
                         "Expanding inputs for audio tokens in Qwen2Audio should be done in processing."
                     )

@@ -31,7 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
@@ -492,7 +492,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         # The call to `_upad_input` in `_flash_attention_forward` is expensive
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
+        if not is_torchdynamo_compiling() and not torch.any(~patch_attention_mask):
             patch_attention_mask = None
         elif self.config._attn_implementation != "flash_attention_2":
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
