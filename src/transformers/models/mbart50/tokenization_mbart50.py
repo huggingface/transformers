@@ -79,13 +79,14 @@ class MBart50Tokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     prefix_tokens: list[int] = []
     suffix_tokens: list[int] = []
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict, list]] = None,
         src_lang=None,
         tgt_lang=None,
         eos_token="</s>",
@@ -94,14 +95,9 @@ class MBart50Tokenizer(TokenizersBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges=None,  # Ignored for Unigram
-        vocab_file=None,
         **kwargs,
     ):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        self.vocab_file = vocab_file
 
         # Do not pass language codes via extra_special_tokens to super().__init__.
         # We will mark them as special AFTER backend construction to avoid re-adding tokens

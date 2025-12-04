@@ -81,10 +81,10 @@ class DebertaV2Tokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
+    model = Unigram
 
     def __init__(
         self,
-        vocab_file=None,
         vocab: Optional[Union[str, dict, list]] = None,
         do_lower_case=False,
         split_by_punct=False,
@@ -99,13 +99,12 @@ class DebertaV2Tokenizer(TokenizersBackend):
         unk_id=3,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
         self.add_prefix_space = add_prefix_space
 
         if vocab is None:
-            self._vocab = [
+            vocab = [
                 (str(pad_token), 0.0),
                 (str(bos_token), 0.0),
                 (str(unk_token), 0.0),
@@ -114,8 +113,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
                 (str(cls_token), 0.0),
                 (str(mask_token), 0.0),
             ]
-        else:
-            self._vocab = vocab
+        self._vocab = vocab
 
         self._tokenizer = Tokenizer(
             Unigram(

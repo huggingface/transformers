@@ -82,6 +82,7 @@ class PegasusTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         pad_token="<pad>",
         eos_token="</s>",
         unk_token="<unk>",
@@ -89,12 +90,9 @@ class PegasusTokenizer(TokenizersBackend):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
-        vocab_file=None,
         **kwargs,
     ):
         self.offset = offset
-        self.vocab_file = vocab_file
 
         if additional_special_tokens is None:
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
@@ -126,9 +124,7 @@ class PegasusTokenizer(TokenizersBackend):
             _vocab_list = [(str(unk_token), 0.0)]
 
         self._vocab = {token: idx for idx, (token, _) in enumerate(_vocab_list)}
-
         self._tokenizer = Tokenizer(Unigram(vocab=_vocab_list, unk_id=self._vocab.get(str(unk_token), 0)))
-
         self._tokenizer.normalizer = normalizers.Sequence(
             [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
         )
@@ -138,6 +134,9 @@ class PegasusTokenizer(TokenizersBackend):
             pair=f"$A $B {eos_token}",
             special_tokens=[(str(eos_token), self._vocab.get(str(eos_token), 1))],
         )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+
 
         super().__init__(
             pad_token=pad_token,
@@ -149,9 +148,5 @@ class PegasusTokenizer(TokenizersBackend):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-
 
 __all__ = ["PegasusTokenizer"]

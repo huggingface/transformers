@@ -210,6 +210,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden
         add_prefix_space = kwargs.get("add_prefix_space", False)
+        vocab_file = kwargs.get("vocab_file")
 
         fast_tokenizer = None
         if tokenizer_object is not None:
@@ -267,6 +268,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+        if vocab_file is not None:
+            self.vocab_file = vocab_file
         # Ensure add_prefix_space is set correctly after parent init
         self.add_prefix_space = add_prefix_space
         self._tokenizer.encode_special_tokens = self.split_special_tokens

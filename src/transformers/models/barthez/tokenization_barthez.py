@@ -92,6 +92,7 @@ class BarthezTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict, list]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -99,15 +100,12 @@ class BarthezTokenizer(TokenizersBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        vocab_file=None,
-        vocab: Optional[Union[str, dict, list]] = None,
         add_prefix_space=True,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
         self.add_prefix_space = add_prefix_space
-        self.vocab_file = vocab_file
 
         if vocab is not None:
             self._vocab = vocab

@@ -72,26 +72,15 @@ class ReformerTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab_file: Optional[str] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         eos_token: str = "</s>",
         unk_token: str = "<unk>",
         additional_special_tokens: Optional[list] = None,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
-
-        if vocab is not None:
-            self._vocab = vocab
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            # Convert lists to tuples if necessary (happens when loading from JSON)
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
+        self._vocab = vocab or {}
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

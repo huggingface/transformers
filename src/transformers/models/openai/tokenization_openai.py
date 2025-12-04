@@ -64,17 +64,11 @@ class OpenAIGPTTokenizer(TokenizersBackend):
         vocab: Optional[Union[str, dict[str, int]]] = None,
         merges: Optional[Union[str, list[str]]] = None,
         unk_token: str = "<unk>",
-        vocab_file=None,
-        merges_file=None,
         **kwargs,
     ):
-        # Initialize vocabulary
         self._vocab = vocab if vocab is not None else {str(unk_token): 0}
-
-        # Initialize merges
         self._merges = merges or []
 
-        # Create BPE tokenizer
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -104,26 +98,6 @@ class OpenAIGPTTokenizer(TokenizersBackend):
             unk_token=unk_token,
             **kwargs,
         )
-
-        self.vocab_file = vocab_file
-        self.merges_file = merges_file
-
-    def _post_init(self):
-        """Post-initialization to ensure tokenizer settings are applied correctly."""
-        # Re-apply settings to ensure they're correct after loading from pretrained
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.NFD(),
-                normalizers.Lowercase(),
-                normalizers.StripAccents(),
-            ]
-        )
-
-        self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
-        self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
-
-        # Call parent to handle AddedToken properties
-        super()._post_init()
 
     @property
     def do_lower_case(self):

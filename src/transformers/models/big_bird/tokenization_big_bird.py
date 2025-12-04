@@ -82,6 +82,7 @@ class BigBirdTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     prefix_tokens: list[int] = []
+    model = Unigram
 
     def __init__(
         self,
@@ -94,8 +95,6 @@ class BigBirdTokenizer(TokenizersBackend):
         mask_token="[MASK]",
         cls_token="[CLS]",
         add_prefix_space=True,
-        vocab_file=None,
-        tokenizer_file=None,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -107,19 +106,9 @@ class BigBirdTokenizer(TokenizersBackend):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.add_prefix_space = add_prefix_space
-        self.vocab_file = vocab_file
 
         # Convert vocab to list of (token, score) tuples
         if vocab is None:
-            vocab_scores = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(bos_token), 0.0)]
-        elif isinstance(vocab, dict):
-            vocab_scores = [(str(token), float(score)) for token, score in vocab.items()]
-        elif isinstance(vocab, list) and len(vocab) > 0:
-            if isinstance(vocab[0], (tuple, list)):
-                vocab_scores = [(str(token), float(score)) for token, score in vocab]
-            else:
-                vocab_scores = [(str(token), 0.0) for token in vocab]
-        else:
             vocab_scores = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(bos_token), 0.0)]
 
         # Find unk_id in vocab
