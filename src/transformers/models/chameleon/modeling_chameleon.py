@@ -772,7 +772,7 @@ class ChameleonImageVocabularyMapping:
 class ChameleonPreTrainedModel(PreTrainedModel):
     config: ChameleonConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["ChameleonDecoderLayer", "ChameleonSwinDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -780,7 +780,6 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_param_buffer_assignment = False
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -1009,7 +1008,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
     """
 )
 class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

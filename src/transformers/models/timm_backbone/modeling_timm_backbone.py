@@ -39,7 +39,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     """
 
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     config: TimmBackboneConfig
 
@@ -114,6 +114,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     def unfreeze_batch_norm_2d(self):
         timm.utils.model.unfreeze_batch_norm_2d(self._backbone)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """
         Empty init weights function to ensure compatibility of the class in the library.

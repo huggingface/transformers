@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -129,14 +130,16 @@ class VoxtralModelTester:
 
 
 @require_torch
-class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class VoxtralForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `VoxtralForConditionalGeneration`.
     """
 
     all_model_classes = (VoxtralForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-to-speech": VoxtralForConditionalGeneration, "audio-text-to-text": VoxtralForConditionalGeneration}
+        {"text-to-speech": VoxtralForConditionalGeneration, "any-to-any": VoxtralForConditionalGeneration}
         if is_torch_available()
         else {}
     )
@@ -187,6 +190,10 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
     )
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip(reason="Voxtral has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

@@ -22,7 +22,9 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2CLS
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -417,7 +419,7 @@ class PatchTSTEncoderLayer(nn.Module):
         super().__init__()
 
         self.channel_attention = config.channel_attention
-        # Multi-Head attention
+
         self.self_attn = PatchTSTAttention(
             embed_dim=config.d_model,
             num_heads=config.num_attention_heads,
@@ -552,9 +554,13 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     config: PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = False
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """
         Initialize weights
@@ -566,20 +572,28 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
             ) // self.config.patch_stride + 1
             # initialize cls_token
             if self.config.use_cls_token:
-                nn.init.normal_(module.cls_token, std=0.02)
+                init.normal_(module.cls_token, std=0.02)
                 num_patches += 1
             # initialize positional encoding
-            module.position_enc = module._init_pe(self.config, num_patches)
+            position_enc = module._init_pe(self.config, num_patches)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(module.position_enc, modifier_rank=None):
+                    if module.position_enc.numel() > 0:
+                        init.copy_(module.position_enc, position_enc)
+            else:
+                init.copy_(module.position_enc, position_enc)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, PatchTSTBatchNorm):
-            module.batchnorm.bias.data.zero_()
-            module.batchnorm.weight.data.fill_(1.0)
+            init.zeros_(module.batchnorm.bias)
+            init.ones_(module.batchnorm.weight)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (PatchTSTEncoder)):

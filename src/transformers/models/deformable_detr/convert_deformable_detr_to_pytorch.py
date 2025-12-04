@@ -198,7 +198,7 @@ def convert_deformable_detr_checkpoint(
         model_name += "-with-box-refine" if with_box_refine else ""
         model_name += "-two-stage" if two_stage else ""
         print("Pushing model to hub...")
-        model.push_to_hub(repo_path_or_name=model_name, organization="nielsr", commit_message="Add model")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

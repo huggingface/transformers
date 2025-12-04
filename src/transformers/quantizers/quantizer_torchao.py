@@ -15,7 +15,7 @@ import importlib
 import re
 import types
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from packaging import version
 
@@ -29,6 +29,10 @@ if TYPE_CHECKING:
 from safetensors import safe_open
 
 from ..utils import is_torch_available, is_torchao_available, logging
+
+
+if is_torch_available():
+    from ..core_model_loading import WeightConverter
 
 
 if is_torch_available():
@@ -49,7 +53,7 @@ if is_torchao_available():
 logger = logging.get_logger(__name__)
 
 
-def fuzzy_match_size(config_name: str) -> Optional[str]:
+def fuzzy_match_size(config_name: str) -> str | None:
     """
     Extract the size digit from strings like "4weight", "8weight".
     Returns the digit as an integer if found, otherwise None.
@@ -162,7 +166,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                 dtype = torch.float32
         return dtype
 
-    def get_state_dict_and_metadata(self, model, safe_serialization: Optional[bool] = False):
+    def get_state_dict_and_metadata(self, model, safe_serialization: bool | None = False):
         """
         If the model is safe serializable, we flatten the state dict of tensor subclasses so that it is compatible with
         the safetensors format.
@@ -212,13 +216,13 @@ class TorchAoHfQuantizer(HfQuantizer):
                 "`pip install --upgrade accelerate`"
             )
 
-    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
     def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: Optional[list[str]] = None, **kwargs
+        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
     ):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
@@ -237,6 +241,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        if self.pre_quantized:
+            return False
         if self.quantization_config.quant_type == "autoquant":
             return False
 
@@ -245,13 +251,30 @@ class TorchAoHfQuantizer(HfQuantizer):
             return False
         elif any(param_name.endswith(f":{x}") for x in self.full_ao_keys):
             return True
-        else:
-            # we only quantize the weight of nn.Linear and nn.Embedding
-            module, tensor_name = get_module_from_name(model, param_name)
-            _QUANTIZABLE = [torch.nn.Linear]
-            if self.quantization_config.include_input_output_embeddings:
-                _QUANTIZABLE.append(torch.nn.Embedding)
-            return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
+
+        # we only quantize the weight of nn.Linear and nn.Embedding
+        module, tensor_name = get_module_from_name(model, param_name)
+        _QUANTIZABLE = [torch.nn.Linear]
+        if self.quantization_config.include_input_output_embeddings:
+            _QUANTIZABLE.append(torch.nn.Embedding)
+
+        # Handle FqnToConfig, introduced in torchao 0.15.0+
+        if self.quantization_config._get_ao_version() >= version.parse("0.15.0"):
+            from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
+
+            if isinstance(self.quantization_config.quant_type, FqnToConfig):
+                module_fqn, param_name_fqn = param_name.rsplit(".", 1)
+                if (
+                    fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
+                    or fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
+                    or (
+                        "_default" in self.quantization_config.quant_type.fqn_to_config
+                        and isinstance(module, tuple(_QUANTIZABLE))
+                    )
+                ):
+                    return True
+
+        return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
     def create_quantized_param(
         self,
@@ -319,8 +342,54 @@ class TorchAoHfQuantizer(HfQuantizer):
                 model.tie_weights()
                 setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
 
+            # handle FqnToConfig, introduced in torchao 0.15.0+
+            if self.quantization_config._get_ao_version() >= version.Version("0.15.0"):
+                from torchao.quantization import FqnToConfig
+
+                config = self.quantization_config.get_apply_tensor_subclass()
+                if isinstance(config, FqnToConfig):
+                    module_fqn, top_level_param_name = param_name.rsplit(".", 1)
+                    c = None
+                    if param_name in config.fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "param fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[param_name]
+                    elif module_fqn in config.fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "module fqn should not start with`re:`, which is used for specifying regex"
+                        )
+                        c = config.module_fqn_to_config[module_fqn]
+                    # regex match module and param
+                    else:
+                        for maybe_module_fqn_pattern in config.fqn_to_config:
+                            # if key doesn't start with re, it is an exact fqn key, so we don't regex match
+                            if not maybe_module_fqn_pattern.startswith("re:"):
+                                continue
+                            # see if param matches first
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], param_name):
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
+                                # we'll apply the config for first fully matched pattern
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                        else:
+                            c = config.module_fqn_to_config.get("_default", None)
+
+                    if c is not None:
+                        if top_level_param_name == "weight":
+                            # we can apply the module config directly
+                            quantize_(module, c, (lambda x, fqn: True))
+                        else:
+                            # need to apply to custom param name
+                            custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
+                            quantize_(module, custom_param_fqn_config, filter_fn=None)
+                    return
+
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
-            if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+            # TODO deprecate this when we deprecate ModuleFqnToConfig
+            elif self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
                 from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
@@ -342,7 +411,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                                 break
                         else:
                             c = config.module_fqn_to_config.get("_default", None)
-
                     if c is not None:
                         # filter_fn: not filtering out any modules
                         quantize_(module, c, filter_fn=lambda x, fqn: True)
@@ -468,3 +536,27 @@ class TorchAoHfQuantizer(HfQuantizer):
                     metadata.update(metadata_)
             # Save it
             self.metadata = metadata
+
+    def get_quantize_ops(self):
+        from ..integrations.torchao import TorchAoQuantize
+
+        return TorchAoQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.torchao import TorchAoDeserialize
+
+        if self.pre_quantized:
+            return [
+                WeightConverter(
+                    source_patterns=["weight:qdata", "weight:scale", "weight:zero_point"],
+                    target_patterns="weight",
+                    operations=[TorchAoDeserialize(self)],
+                ),
+                WeightConverter(
+                    source_patterns=["weight:_data"],
+                    target_patterns="weight",
+                    operations=[TorchAoDeserialize(self)],
+                ),
+                # used for unsafe serialization
+            ]
+        return []

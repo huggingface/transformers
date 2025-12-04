@@ -19,6 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
@@ -236,22 +237,17 @@ class ConvNextPreTrainedModel(PreTrainedModel):
     config: ConvNextConfig
     base_model_prefix = "convnext"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["ConvNextLayer"]
     _can_record_outputs = {}  # hidden states are collected explicitly
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, ConvNextLayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, ConvNextLayer):
+        super()._init_weights(module)
+        if isinstance(module, ConvNextLayer):
             if module.layer_scale_parameter is not None:
-                module.layer_scale_parameter.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_parameter, self.config.layer_scale_init_value)
 
 
 @auto_docstring

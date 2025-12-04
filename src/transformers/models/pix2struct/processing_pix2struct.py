@@ -51,15 +51,19 @@ class Pix2StructProcessor(ProcessorMixin):
     Constructs a PIX2STRUCT processor which wraps a BERT tokenizer and PIX2STRUCT image processor into a single
     processor.
 
-    [`Pix2StructProcessor`] offers all the functionalities of [`Pix2StructImageProcessor`] and [`T5TokenizerFast`]. See
+    [`Pix2StructProcessor`] offers all the functionalities of [`Pix2StructImageProcessor`] and [`T5Tokenizer`]. See
     the docstring of [`~Pix2StructProcessor.__call__`] and [`~Pix2StructProcessor.decode`] for more information.
 
     Args:
         image_processor (`Pix2StructImageProcessor`):
             An instance of [`Pix2StructImageProcessor`]. The image processor is a required input.
-        tokenizer (Union[`T5TokenizerFast`, `T5Tokenizer`]):
-            An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
+        tokenizer (`T5Tokenizer`):
+            An instance of ['T5Tokenizer`]. The tokenizer is a required input.
     """
+
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "Pix2StructImageProcessor"
+    tokenizer_class = ("T5Tokenizer",)
 
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
@@ -73,7 +77,7 @@ class Pix2StructProcessor(ProcessorMixin):
     ) -> Union[BatchEncoding, BatchFeature]:
         """
         This method uses [`Pix2StructImageProcessor.preprocess`] method to prepare image(s) for the model, and
-        [`T5TokenizerFast.__call__`] to prepare text for the model.
+        [`T5Tokenizer.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """

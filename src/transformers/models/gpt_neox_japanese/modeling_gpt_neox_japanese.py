@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -47,25 +48,15 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     base_model_prefix = "gpt_neox_japanese"
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
-
     _can_compile_fullgraph = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, GPTNeoXJapaneseAttention):
+        super()._init_weights(module)
+        if isinstance(module, GPTNeoXJapaneseAttention):
             if module.dense_bias is not None:
-                module.dense_bias.data.zero_()
+                init.zeros_(module.dense_bias)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoXJapanese
@@ -183,7 +174,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
             )
 
         self.layer_idx = layer_idx
-        self.rotary_ndims = int(self.head_size * config.rotary_pct)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        self.rotary_ndims = int(self.head_size * partial_rotary_factor)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = math.sqrt(self.head_size)
 
@@ -656,7 +648,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     """
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["embed_out.weight"]
+    _tied_weights_keys = {"embed_out.weight": "gpt_neox_japanese.embed_in.weight"}
 
     def __init__(self, config):
         super().__init__(config)
