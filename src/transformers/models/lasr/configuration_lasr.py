@@ -22,13 +22,12 @@
 from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
-class LastAsrEncoderConfig(PreTrainedConfig):
+class LasrEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LastAsrEncoder`]. It is used to instantiate a
-    `LastAsrEncoder` model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
+    `LasrEncoder` model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -46,6 +45,8 @@ class LastAsrEncoderConfig(PreTrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the attention layers.
+        convolution_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in convolutions of the conformer's convolution module.
         conv_kernel_size (`int`, *optional*, defaults to 32):
             The kernel size of the convolution layers in the Conformer block.
         subsampling_factor (`int`, *optional*, defaults to 4):
@@ -85,23 +86,23 @@ class LastAsrEncoderConfig(PreTrainedConfig):
 
     Example:
         ```python
-        >>> from transformers import LastAsrEncoderModel, LastAsrEncoderConfig
+        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LastAsrEncoder` configuration
-        >>> configuration = LastAsrEncoderConfig()
+        >>> # Initializing a `LasrEncoder` configuration
+        >>> configuration = LasrEncoderConfig()
 
         >>> # Initializing a model from the configuration
-        >>> model = LastAsrEncoderModel(configuration)
+        >>> model = LasrEncoderModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
         ```
 
-    This configuration class is based on the LastAsrEncoder architecture from Google Health AI. You can find more details
+    This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
     and pre-trained models at [TODO](TODO)).
     """
 
-    model_type = "last_asr_encoder"
+    model_type = "lasr_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -112,6 +113,7 @@ class LastAsrEncoderConfig(PreTrainedConfig):
         intermediate_size=2048,
         hidden_act="silu",
         attention_bias=False,
+        convolution_bias=False,
         conv_kernel_size=32,
         subsampling_factor=4,
         subsampling_conv_channels=256,
@@ -133,9 +135,11 @@ class LastAsrEncoderConfig(PreTrainedConfig):
         rope_parameters=None,
         **kwargs,
     ):
-        super().__init__(
-            **kwargs,
-        )
+        self.rope_parameters = rope_parameters
+        self.layer_norm_eps = layer_norm_eps
+        self.feed_forward_residual_weights = feed_forward_residual_weights
+        self.conv_residual_weights = conv_residual_weights
+        self.batch_norm_momentum = batch_norm_momentum
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -143,11 +147,9 @@ class LastAsrEncoderConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.attention_bias = attention_bias
+        self.convolution_bias = convolution_bias
 
-        if (conv_kernel_size - 1) % 2 != 0:
-            raise ValueError(f"conv_kernel_size must be odd, got {conv_kernel_size}")
         self.conv_kernel_size = conv_kernel_size
-
         self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
         self.subsampling_conv_stride = subsampling_conv_stride
 
@@ -164,25 +166,15 @@ class LastAsrEncoderConfig(PreTrainedConfig):
         self.scale_input = scale_input
         self.initializer_range = initializer_range
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        self.layer_norm_eps = layer_norm_eps
-        self.feed_forward_residual_weights = feed_forward_residual_weights
-        self.conv_residual_weights = conv_residual_weights
-        self.batch_norm_momentum = batch_norm_momentum
+        super().__init__(
+            **kwargs,
+        )
 
 
-class LastAsrCTCConfig(PreTrainedConfig):
+class LasrCTCConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LastAsrForCTC`]. It is used to instantiate a
-    LastAsr CTC model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`LasrForCTC`]. It is used to instantiate a
+    Lasr CTC model according to the specified arguments, defining the model architecture.
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
     Args:
@@ -190,38 +182,38 @@ class LastAsrCTCConfig(PreTrainedConfig):
                 Vocabulary size of the model.
             ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
                 Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-                instance of [`LastAsrForCTC`].
+                instance of [`LasrForCTC`].
             ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
                 Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
                 occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-                of [`LastAsrForCTC`].
-            encoder_config (`Union[dict, LastAsrEncoderConfig]`, *optional*):
+                of [`LasrForCTC`].
+            encoder_config (`Union[dict, LasrEncoderConfig]`, *optional*):
                 The config object or dictionary of the encoder.
             pad_token_id (`int`, *optional*, defaults to 0):
                 Padding token id. Also used as blank token id.
     Example:
         ```python
-        >>> from transformers import LastAsrForCTC, LastAsrCTCConfig
-        >>> # Initializing a LastAsr configuration
-        >>> configuration = LastAsrCTCConfig()
+        >>> from transformers import LasrForCTC, LasrCTCConfig
+        >>> # Initializing a Lasr configuration
+        >>> configuration = LasrCTCConfig()
         >>> # Initializing a model from the configuration
-        >>> model = LastAsrForCTC(configuration)
+        >>> model = LasrForCTC(configuration)
         >>> # Accessing the model configuration
         >>> configuration = model.config
         ```
-    This configuration class is based on the LastAsr CTC architecture from Google Health AI. You can find more details
+    This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
     and pre-trained models at [TODO](TODO)).
     """
 
-    model_type = "last_asr_ctc"
-    sub_configs = {"encoder_config": LastAsrEncoderConfig}
+    model_type = "lasr_ctc"
+    sub_configs = {"encoder_config": LasrEncoderConfig}
 
     def __init__(
         self,
         vocab_size=512,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, LastAsrEncoderConfig] = None,
+        encoder_config: Union[dict, LasrEncoderConfig] = None,
         pad_token_id=0,
         **kwargs,
     ):
@@ -230,9 +222,9 @@ class LastAsrCTCConfig(PreTrainedConfig):
         self.ctc_zero_infinity = ctc_zero_infinity
 
         if isinstance(encoder_config, dict):
-            self.encoder_config = LastAsrEncoderConfig(**encoder_config)
+            self.encoder_config = LasrEncoderConfig(**encoder_config)
         elif encoder_config is None:
-            self.encoder_config = LastAsrEncoderConfig()
+            self.encoder_config = LasrEncoderConfig()
 
         self.encoder_config = self.encoder_config
         self.initializer_range = self.encoder_config.initializer_range
@@ -243,15 +235,15 @@ class LastAsrCTCConfig(PreTrainedConfig):
         )
 
     @classmethod
-    def from_encoder_config(cls, encoder_config: LastAsrEncoderConfig, **kwargs):
+    def from_encoder_config(cls, encoder_config: LasrEncoderConfig, **kwargs):
         r"""
-        Instantiate a [`LastAsrCTCConfig`] (or a derived class) from last_asr encoder model configuration.
+        Instantiate a [`LasrCTCConfig`] (or a derived class) from lasr encoder model configuration.
 
         Returns:
-            [`LastAsrCTCConfig`]: An instance of a configuration object
+            [`LasrCTCConfig`]: An instance of a configuration object
         """
 
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
 
-__all__ = ["LastAsrEncoderConfig", "LastAsrCTCConfig"]
+__all__ = ["LasrEncoderConfig", "LasrCTCConfig"]

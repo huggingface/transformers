@@ -19,10 +19,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union, Unpack
+from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
@@ -30,7 +30,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class LastAsrProcessorKwargs(ProcessingKwargs, total=False):
+class LasrProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -45,7 +45,7 @@ class LastAsrProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class LastAsrProcessor(ProcessorMixin):
+class LasrProcessor(ProcessorMixin):
     tokenizer_class = "ParakeetTokenizerFast"
 
     def __init__(self, feature_extractor, tokenizer):
@@ -56,12 +56,12 @@ class LastAsrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput], None] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs: Unpack[LastAsrProcessorKwargs],
+        **kwargs: Unpack[LasrProcessorKwargs],
     ):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            LastAsrProcessorKwargs,
+            LasrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -92,4 +92,4 @@ class LastAsrProcessor(ProcessorMixin):
         return feature_extractor_input_names + ["labels"]
 
 
-__all__ = ["LastAsrProcessor"]
+__all__ = ["LasrProcessor"]

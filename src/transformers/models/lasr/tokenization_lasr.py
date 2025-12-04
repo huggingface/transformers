@@ -26,15 +26,15 @@ from typing import Optional, Union
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
-from ...tokenization_utils_base import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
-class LastAsrTokenizer(TokenizersBackend):
+class LasrTokenizer(TokenizersBackend):
     """
-    Construct a LAST_ASR tokenizer (backed by HuggingFace's *tokenizers* library). Based on
+    Construct a LASR tokenizer (backed by HuggingFace's *tokenizers* library). Based on
     [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
     This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should
@@ -95,14 +95,14 @@ class LastAsrTokenizer(TokenizersBackend):
             elif extra_ids > 0 and extra_ids != len(extra_tokens):
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
-                    " provided to LastAsrTokenizer. In this case the additional_special_tokens must include the extra_ids"
+                    " provided to LasrTokenizer. In this case the additional_special_tokens must include the extra_ids"
                     " tokens"
                 )
         else:
             extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
             additional_special_tokens = extra_tokens
 
-        # LAST_ASR vocab structure: <pad>=0, </s>=1, <unk>=2, then regular vocab, then extra_ids in reverse
+        # LASR vocab structure: <pad>=0, </s>=1, <unk>=2, then regular vocab, then extra_ids in reverse
         if vocab is not None:
             self._vocab_scores = vocab
         else:
@@ -186,3 +186,6 @@ class LastAsrTokenizer(TokenizersBackend):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+
+__all__ = ["LasrTokenizer"]

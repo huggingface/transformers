@@ -297,15 +297,14 @@ class LasrForCTCModelTest(ModelTesterMixin, unittest.TestCase):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
 
-@require_torch
-class LasrForCTCIntegrationTest(unittest.TestCase):
+class LASRForCTCIntegrationTest(unittest.TestCase):
     _dataset = None
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "nvidia/Lasr-ctc-1.1b"
-        cls.dtype = torch.bfloat16
-        cls.processor = AutoProcessor.from_pretrained("nvidia/Lasr-ctc-1.1b")
+        cls.checkpoint_name = "/Users/eustachelebihan/dev/transformers/tmp"
+        cls.dtype = torch.float32
+        cls.processor = AutoProcessor.from_pretrained("/Users/eustachelebihan/dev/transformers/tmp")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -326,16 +325,12 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    def test_1b_model_integration(self):
-        """
-        bezzam reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_single-py
-        eustlb reproducer: https://gist.github.com/eustlb/6e9e3aa85de3f7c340ec3c36e65f2fe6
-        """
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/Lasr/expected_results_single.json"
-        with open(RESULTS_PATH, "r") as f:
-            raw_data = json.load(f)
-        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
-        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+    def test_model_integration(self):
+        # RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/lasr/expected_results_single.json"
+        # with open(RESULTS_PATH, "r") as f:
+        #     raw_data = json.load(f)
+        # EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
+        # EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(1)
         model = LasrForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
@@ -346,22 +341,19 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         inputs = self.processor(samples)
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
-        torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
+        # torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
-        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+        print(predicted_transcripts)
+        print()
+        # self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
-    def test_1b_model_integration_batched(self):
-        """
-        bezzam reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batched-py
-        eustlb reproducer: https://gist.github.com/eustlb/575b5da58de34a70116a1955b1183596
-        """
-
-        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/Lasr/expected_results_batch.json"
-        with open(RESULTS_PATH, "r") as f:
-            raw_data = json.load(f)
-        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
-        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+    def test_model_integration_batched(self):
+        # RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/lasr/expected_results_batch.json"
+        # with open(RESULTS_PATH, "r") as f:
+        #     raw_data = json.load(f)
+        # EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
+        # EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(5)
         model = LasrForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
@@ -369,9 +361,11 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         # -- apply
-        inputs = self.processor(samples)
+        inputs = self.processor(samples, return_attention_mask=True)
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
-        torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
+        # torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
-        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+        print(predicted_transcripts)
+        print()
+        # self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)

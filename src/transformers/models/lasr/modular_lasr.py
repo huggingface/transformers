@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import itertools
-from typing import Optional, Union, Unpack
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -23,18 +23,19 @@ from transformers.modeling_utils import PreTrainedModel
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
-from ...tokenization_utils_base import TokenizersBackend
+from ...processing_utils import Unpack
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
-from ..parakeet.modeling_parakeet import ParakeetEncoderBlock, ParakeetForCTC, ParakeetPreTrainedModel
+from ..parakeet.modeling_parakeet import ParakeetEncoderBlock, ParakeetForCTC, ParakeetPreTrainedModel, ParakeetEncoderConvolutionModule
 from ..parakeet.processing_parakeet import ParakeetProcessor
 from ..t5.tokenization_t5 import T5Tokenizer
+from ...masking_utils import create_bidirectional_mask
 
 
-class LastAsrTokenizer(T5Tokenizer, TokenizersBackend):
+class LasrTokenizer(T5Tokenizer, TokenizersBackend):
     def _decode(
         self,
         token_ids: Union[int, list[int]],
@@ -60,14 +61,14 @@ class LastAsrTokenizer(T5Tokenizer, TokenizersBackend):
         )
 
 
-class LastAsrProcessor(ParakeetProcessor):
+class LasrProcessor(ParakeetProcessor):
     tokenizer_class = "ParakeetTokenizerFast"
 
 
-class LastAsrEncoderConfig(ParakeetEncoderConfig):
+class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LastAsrEncoder`]. It is used to instantiate a
-    `LastAsrEncoder` model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
+    `LasrEncoder` model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -85,6 +86,8 @@ class LastAsrEncoderConfig(ParakeetEncoderConfig):
             The non-linear activation function (function or string) in the encoder and pooler.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the attention layers.
+        convolution_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in convolutions of the conformer's convolution module.
         conv_kernel_size (`int`, *optional*, defaults to 32):
             The kernel size of the convolution layers in the Conformer block.
         subsampling_factor (`int`, *optional*, defaults to 4):
@@ -124,19 +127,19 @@ class LastAsrEncoderConfig(ParakeetEncoderConfig):
 
     Example:
         ```python
-        >>> from transformers import LastAsrEncoderModel, LastAsrEncoderConfig
+        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LastAsrEncoder` configuration
-        >>> configuration = LastAsrEncoderConfig()
+        >>> # Initializing a `LasrEncoder` configuration
+        >>> configuration = LasrEncoderConfig()
 
         >>> # Initializing a model from the configuration
-        >>> model = LastAsrEncoderModel(configuration)
+        >>> model = LasrEncoderModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
         ```
 
-    This configuration class is based on the LastAsrEncoder architecture from Google Health AI. You can find more details
+    This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
     and pre-trained models at [TODO](TODO)).
     """
 
@@ -148,6 +151,7 @@ class LastAsrEncoderConfig(ParakeetEncoderConfig):
         intermediate_size=2048,
         hidden_act="silu",
         attention_bias=False,
+        convolution_bias=False,
         conv_kernel_size=32,
         subsampling_factor=4,
         subsampling_conv_channels=256,
@@ -169,6 +173,12 @@ class LastAsrEncoderConfig(ParakeetEncoderConfig):
         rope_parameters=None,
         **kwargs,
     ):
+        self.rope_parameters = rope_parameters
+        self.layer_norm_eps = layer_norm_eps
+        self.feed_forward_residual_weights = feed_forward_residual_weights
+        self.conv_residual_weights = conv_residual_weights
+        self.batch_norm_momentum = batch_norm_momentum
+
         super().__init__(
             hidden_size=hidden_size,
             num_hidden_layers=num_hidden_layers,
@@ -176,6 +186,7 @@ class LastAsrEncoderConfig(ParakeetEncoderConfig):
             intermediate_size=intermediate_size,
             hidden_act=hidden_act,
             attention_bias=attention_bias,
+            convolution_bias=convolution_bias,
             conv_kernel_size=conv_kernel_size,
             subsampling_factor=subsampling_factor,
             subsampling_conv_channels=subsampling_conv_channels,
@@ -193,27 +204,12 @@ class LastAsrEncoderConfig(ParakeetEncoderConfig):
             **kwargs,
         )
 
-        del self.convolution_bias
+        
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        self.layer_norm_eps = layer_norm_eps
-        self.feed_forward_residual_weights = feed_forward_residual_weights
-        self.conv_residual_weights = conv_residual_weights
-        self.batch_norm_momentum = batch_norm_momentum
-
-
-class LastAsrCTCConfig(ParakeetCTCConfig):
+class LasrCTCConfig(ParakeetCTCConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LastAsrForCTC`]. It is used to instantiate a
-    LastAsr CTC model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`LasrForCTC`]. It is used to instantiate a
+    Lasr CTC model according to the specified arguments, defining the model architecture.
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
     Args:
@@ -221,26 +217,26 @@ class LastAsrCTCConfig(ParakeetCTCConfig):
                 Vocabulary size of the model.
             ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
                 Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-                instance of [`LastAsrForCTC`].
+                instance of [`LasrForCTC`].
             ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
                 Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
                 occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-                of [`LastAsrForCTC`].
-            encoder_config (`Union[dict, LastAsrEncoderConfig]`, *optional*):
+                of [`LasrForCTC`].
+            encoder_config (`Union[dict, LasrEncoderConfig]`, *optional*):
                 The config object or dictionary of the encoder.
             pad_token_id (`int`, *optional*, defaults to 0):
                 Padding token id. Also used as blank token id.
     Example:
         ```python
-        >>> from transformers import LastAsrForCTC, LastAsrCTCConfig
-        >>> # Initializing a LastAsr configuration
-        >>> configuration = LastAsrCTCConfig()
+        >>> from transformers import LasrForCTC, LasrCTCConfig
+        >>> # Initializing a Lasr configuration
+        >>> configuration = LasrCTCConfig()
         >>> # Initializing a model from the configuration
-        >>> model = LastAsrForCTC(configuration)
+        >>> model = LasrForCTC(configuration)
         >>> # Accessing the model configuration
         >>> configuration = model.config
         ```
-    This configuration class is based on the LastAsr CTC architecture from Google Health AI. You can find more details
+    This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
     and pre-trained models at [TODO](TODO)).
     """
 
@@ -249,7 +245,7 @@ class LastAsrCTCConfig(ParakeetCTCConfig):
         vocab_size=512,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, LastAsrEncoderConfig] = None,
+        encoder_config: Union[dict, LasrEncoderConfig] = None,
         pad_token_id=0,
         **kwargs,
     ):
@@ -263,8 +259,8 @@ class LastAsrCTCConfig(ParakeetCTCConfig):
         )
 
 
-class LastAsrEncoderSubsampling(nn.Module):
-    def __init__(self, config: LastAsrEncoderConfig):
+class LasrEncoderSubsampling(nn.Module):
+    def __init__(self, config: LasrEncoderConfig):
         super().__init__()
         self.dense_0 = nn.Linear(config.num_mel_bins, config.hidden_size)
         self.conv_0 = nn.Conv1d(
@@ -291,65 +287,27 @@ class LastAsrEncoderSubsampling(nn.Module):
         return self.dense_1(hidden_states)
 
 
-class LastAsrEncoderConvolutionModule(nn.Module):
-    def __init__(self, config: LastAsrEncoderConfig):
-        super().__init__()
-        channels = config.hidden_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=False)
-        self.depthwise_conv = nn.Conv1d(
-            channels,
-            channels,
-            kernel_size=config.conv_kernel_size,
-            stride=1,
-            padding="same",
-            groups=channels,
-            bias=False,
-        )
-        self.norm = nn.BatchNorm1d(channels, momentum=config.batch_norm_momentum)
-        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=False)
-
-    def forward(self, hidden_states, attention_mask=None):
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input
-              tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, 1, time)`):
-              Attention mask.
-
-        Returns:
-            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
-        """
-        # exchange the temporal dimension and the feature dimension
-        hidden_states = hidden_states.transpose(1, 2)
-
-        # GLU mechanism, (batch_size, 2*channel, dim)
-        hidden_states = self.pointwise_conv1(hidden_states)
-        # (batch_size, channel, dim)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-
-        # Apply padding mask before convolution
-        if attention_mask is not None:
-            hidden_states = torch.where(attention_mask.squeeze(1), hidden_states, 0)
-
-        # 1D Depthwise Conv
-        hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-
-        return hidden_states.transpose(1, 2)
+class LasrEncoderRotaryEmbedding(LlamaRotaryEmbedding): ...
 
 
-class LastAsrEncoderRotaryEmbedding(LlamaRotaryEmbedding): ...
-
-
-class LastAsrEncoderAttention(LlamaAttention): ...
-
-
-class LastAsrEncoderBlock(ParakeetEncoderBlock):
-    def __init__(self, config: LastAsrEncoderConfig, layer_idx: int):
+class LasrEncoderAttention(LlamaAttention):
+    def __init__(self, config: LasrEncoderConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.is_causal = False
+
+
+class LasrEncoderConvolutionModule(ParakeetEncoderConvolutionModule):
+    def __init__(self, config: LasrEncoderConfig, module_config=None):
+        super().__init__(config, module_config)
+        self.padding = "same"
+
+
+class LasrEncoderBlock(ParakeetEncoderBlock):
+    def __init__(self, config: LasrEncoderConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.feed_forward_residual_weights = config.feed_forward_residual_weights
+        self.conv_residual_weights = config.conv_residual_weights
 
         self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_self_att = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
@@ -367,8 +325,8 @@ class LastAsrEncoderBlock(ParakeetEncoderBlock):
         residual = hidden_states
         hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
         hidden_states = (
-            self.config.feed_forward_residual_weights[0] * residual
-            + self.config.feed_forward_residual_weights[1] * hidden_states
+            self.feed_forward_residual_weights[0] * residual
+            + self.feed_forward_residual_weights[1] * hidden_states
         )
 
         normalized_hidden_states = self.norm_self_att(hidden_states)
@@ -382,14 +340,14 @@ class LastAsrEncoderBlock(ParakeetEncoderBlock):
 
         conv_output = self.conv(self.norm_conv(hidden_states), attention_mask=attention_mask)
         hidden_states = (
-            self.config.conv_residual_weights[0] * hidden_states + self.config.conv_residual_weights[1] * conv_output
+            self.conv_residual_weights[0] * hidden_states + self.conv_residual_weights[1] * conv_output
         )
 
         residual = hidden_states
         hidden_states = self.feed_forward2(self.norm_feed_forward2(hidden_states))
         hidden_states = (
-            self.config.feed_forward_residual_weights[0] * residual
-            + self.config.feed_forward_residual_weights[1] * hidden_states
+            self.feed_forward_residual_weights[0] * residual
+            + self.feed_forward_residual_weights[1] * hidden_states
         )
 
         hidden_states = self.norm_out(hidden_states)
@@ -397,12 +355,12 @@ class LastAsrEncoderBlock(ParakeetEncoderBlock):
         return hidden_states
 
 
-class LastAsrPreTrainedModel(ParakeetPreTrainedModel):
+class LasrPreTrainedModel(ParakeetPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
-        encoder_config = self.config.encoder_config if isinstance(self.config, LastAsrCTCConfig) else self.config
+        encoder_config = self.config.encoder_config if isinstance(self.config, LasrCTCConfig) else self.config
         kernel_size = encoder_config.subsampling_conv_kernel_size
         stride = encoder_config.subsampling_conv_stride
 
@@ -419,11 +377,11 @@ class LastAsrPreTrainedModel(ParakeetPreTrainedModel):
     The Parakeet Encoder model, based on the [Conformer architecture]() ???.
     """
 )
-class LastAsrEncoder(LastAsrPreTrainedModel):
-    config: LastAsrEncoderConfig
+class LasrEncoder(LasrPreTrainedModel):
+    config: LasrEncoderConfig
     base_model_prefix = "encoder"
 
-    def __init__(self, config: LastAsrEncoderConfig):
+    def __init__(self, config: LasrEncoderConfig):
         super().__init__(config)
         self.gradient_checkpointing = False
 
@@ -431,10 +389,10 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
         self.dropout_positions = config.dropout_positions
         self.layerdrop = config.layerdrop
 
-        self.subsampler = LastAsrEncoderSubsampling(config)
-        self.rotary_emb = LastAsrEncoderRotaryEmbedding(config)
+        self.subsampler = LasrEncoderSubsampling(config)
+        self.rotary_emb = LasrEncoderRotaryEmbedding(config)
         self.layers = nn.ModuleList(
-            [LastAsrEncoderBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [LasrEncoderBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.out_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
 
@@ -453,18 +411,19 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
         TODO: @eustlb, add docstring
         """
         hidden_states = self.subsampler(input_features)
-        position_embeddings = self.rotary_emb(hidden_states)
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        position_embeddings = nn.functional.dropout(
-            position_embeddings, p=self.dropout_positions, training=self.training
+        cos, sin = self.rotary_emb(
+            hidden_states, torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
         )
 
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        cos = nn.functional.dropout(cos, p=self.dropout_positions, training=self.training)
+        sin = nn.functional.dropout(sin, p=self.dropout_positions, training=self.training)
+
         if attention_mask is not None:
-            output_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
-            attention_mask = (
-                torch.arange(hidden_states.shape[1], device=output_lengths.device)[None, :] < output_lengths[:, None]
-            )
+            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
+            attention_mask = attention_mask & attention_mask.transpose(1, 2)
+            attention_mask = attention_mask.unsqueeze(1)
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -478,7 +437,7 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    position_embeddings=position_embeddings,
+                    position_embeddings=(cos, sin),
                     **kwargs,
                 )
 
@@ -486,19 +445,18 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
-
-class LastAsrForCTC(ParakeetForCTC):
+class LasrForCTC(ParakeetForCTC):
     def generate(**super_kwargs):
         r"""
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, LastAsrForCTC
+        >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = TODO
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = LastAsrForCTC.from_pretrained(model_id)
+        >>> model = LasrForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -514,10 +472,11 @@ class LastAsrForCTC(ParakeetForCTC):
 
 
 __all__ = [
-    "LastAsrForCTC",
-    "LastAsrEncoder",
-    "LastAsrPreTrainedModel",
-    "LastAsrProcessor",
-    "LastAsrEncoderConfig",
-    "LastAsrCTCConfig",
+    "LasrForCTC",
+    "LasrEncoder",
+    "LasrPreTrainedModel",
+    "LasrProcessor",
+    "LasrEncoderConfig",
+    "LasrCTCConfig",
+    "LasrTokenizer"
 ]

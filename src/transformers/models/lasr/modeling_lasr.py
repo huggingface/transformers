@@ -21,7 +21,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union, Unpack
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -35,13 +35,14 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from .configuration_lasr import LastAsrCTCConfig, LastAsrEncoderConfig
+from .configuration_lasr import LasrCTCConfig, LasrEncoderConfig
 
 
-class LastAsrEncoderSubsampling(nn.Module):
-    def __init__(self, config: LastAsrEncoderConfig):
+class LasrEncoderSubsampling(nn.Module):
+    def __init__(self, config: LasrEncoderConfig):
         super().__init__()
         self.dense_0 = nn.Linear(config.num_mel_bins, config.hidden_size)
         self.conv_0 = nn.Conv1d(
@@ -68,60 +69,10 @@ class LastAsrEncoderSubsampling(nn.Module):
         return self.dense_1(hidden_states)
 
 
-class LastAsrEncoderConvolutionModule(nn.Module):
-    def __init__(self, config: LastAsrEncoderConfig):
-        super().__init__()
-        channels = config.hidden_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=False)
-        self.depthwise_conv = nn.Conv1d(
-            channels,
-            channels,
-            kernel_size=config.conv_kernel_size,
-            stride=1,
-            padding="same",
-            groups=channels,
-            bias=False,
-        )
-        self.norm = nn.BatchNorm1d(channels, momentum=config.batch_norm_momentum)
-        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=False)
-
-    def forward(self, hidden_states, attention_mask=None):
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input
-              tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, 1, time)`):
-              Attention mask.
-
-        Returns:
-            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
-        """
-        # exchange the temporal dimension and the feature dimension
-        hidden_states = hidden_states.transpose(1, 2)
-
-        # GLU mechanism, (batch_size, 2*channel, dim)
-        hidden_states = self.pointwise_conv1(hidden_states)
-        # (batch_size, channel, dim)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-
-        # Apply padding mask before convolution
-        if attention_mask is not None:
-            hidden_states = torch.where(attention_mask.squeeze(1), hidden_states, 0)
-
-        # 1D Depthwise Conv
-        hidden_states = self.depthwise_conv(hidden_states)
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.pointwise_conv2(hidden_states)
-
-        return hidden_states.transpose(1, 2)
-
-
-class LastAsrEncoderRotaryEmbedding(nn.Module):
+class LasrEncoderRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: LastAsrEncoderConfig, device=None):
+    def __init__(self, config: LasrEncoderConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -139,7 +90,7 @@ class LastAsrEncoderRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[LastAsrEncoderConfig] = None,
+        config: Optional[LasrEncoderConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
     ) -> tuple["torch.Tensor", float]:
@@ -256,10 +207,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class LastAsrEncoderAttention(nn.Module):
+class LasrEncoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LastAsrEncoderConfig, layer_idx: int):
+    def __init__(self, config: LasrEncoderConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -267,7 +218,7 @@ class LastAsrEncoderAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -327,8 +278,77 @@ class LastAsrEncoderAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class LastAsrEncoderFeedForward(nn.Module):
-    def __init__(self, config: LastAsrEncoderConfig):
+class LasrEncoderConvolutionModule(nn.Module):
+    def __init__(self, config: LasrEncoderConfig, module_config=None):
+        """
+        Args:
+            config (LasrEncoderConfig): Configuration for the model.
+            module_config (dict): Configuration for the module (e.g., encoder or decoder).
+        """
+        super().__init__()
+        channels = config.hidden_size
+        # kernel_size should be an odd number for 'SAME' padding
+        if module_config is None:
+            # e.g. using `LasrEncoderEncoderConfig` in src/transformers/models/lasr_encoder/configuration_lasr_encoder.py
+            kernel_size = config.conv_kernel_size
+            self.activation = ACT2FN[getattr(config, "hidden_act", "silu")]
+        else:
+            kernel_size = module_config["kernel_size"]
+            self.activation = ACT2FN[module_config.get("activation", "silu")]
+        self.padding = "same"
+        self.pointwise_conv1 = nn.Conv1d(
+            channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
+        )
+        self.depthwise_conv = nn.Conv1d(
+            channels,
+            channels,
+            kernel_size,
+            stride=1,
+            padding=self.padding,
+            groups=channels,
+            bias=config.convolution_bias,
+        )
+        self.norm = nn.BatchNorm1d(channels)
+        self.pointwise_conv2 = nn.Conv1d(
+            channels, channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
+        )
+
+    def forward(self, hidden_states, attention_mask=None):
+        """
+        Compute convolution module.
+
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, time)`): Attention mask.
+
+        Returns:
+            `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
+
+        """
+        # exchange the temporal dimension and the feature dimension
+        hidden_states = hidden_states.transpose(1, 2)
+
+        # GLU mechanism, (batch_size, 2*channel, dim)
+        hidden_states = self.pointwise_conv1(hidden_states)
+        # (batch_size, channel, dim)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        # Apply padding mask before convolution
+        if attention_mask is not None:
+            all_masked_rows = torch.all(~attention_mask, dim=-1)
+            hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
+
+        # 1D Depthwise Conv
+        hidden_states = self.depthwise_conv(hidden_states)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.pointwise_conv2(hidden_states)
+
+        return hidden_states.transpose(1, 2)
+
+
+class LasrEncoderFeedForward(nn.Module):
+    def __init__(self, config: LasrEncoderConfig):
         super().__init__()
         self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.attention_bias)
         self.activation = ACT2FN[config.hidden_act]
@@ -342,21 +362,24 @@ class LastAsrEncoderFeedForward(nn.Module):
         return hidden_states
 
 
-class LastAsrEncoderBlock(GradientCheckpointingLayer):
-    def __init__(self, config: LastAsrEncoderConfig, layer_idx: int):
+class LasrEncoderBlock(GradientCheckpointingLayer):
+    def __init__(self, config: LasrEncoderConfig, layer_idx: int):
         super().__init__()
         self.gradient_checkpointing = False
 
-        self.feed_forward1 = LastAsrEncoderFeedForward(config)
-        self.self_attn = LastAsrEncoderAttention(config, layer_idx)
-        self.conv = LastAsrEncoderConvolutionModule(config)
-        self.feed_forward2 = LastAsrEncoderFeedForward(config)
+        self.feed_forward1 = LasrEncoderFeedForward(config)
+        self.self_attn = LasrEncoderAttention(config, layer_idx)
+        self.conv = LasrEncoderConvolutionModule(config)
+        self.feed_forward2 = LasrEncoderFeedForward(config)
 
         self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_self_att = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_conv = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_out = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
+
+        self.feed_forward_residual_weights = config.feed_forward_residual_weights
+        self.conv_residual_weights = config.conv_residual_weights
 
     def forward(
         self,
@@ -368,8 +391,7 @@ class LastAsrEncoderBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
         hidden_states = (
-            self.config.feed_forward_residual_weights[0] * residual
-            + self.config.feed_forward_residual_weights[1] * hidden_states
+            self.feed_forward_residual_weights[0] * residual + self.feed_forward_residual_weights[1] * hidden_states
         )
 
         normalized_hidden_states = self.norm_self_att(hidden_states)
@@ -382,15 +404,12 @@ class LastAsrEncoderBlock(GradientCheckpointingLayer):
         hidden_states = hidden_states + attn_output
 
         conv_output = self.conv(self.norm_conv(hidden_states), attention_mask=attention_mask)
-        hidden_states = (
-            self.config.conv_residual_weights[0] * hidden_states + self.config.conv_residual_weights[1] * conv_output
-        )
+        hidden_states = self.conv_residual_weights[0] * hidden_states + self.conv_residual_weights[1] * conv_output
 
         residual = hidden_states
         hidden_states = self.feed_forward2(self.norm_feed_forward2(hidden_states))
         hidden_states = (
-            self.config.feed_forward_residual_weights[0] * residual
-            + self.config.feed_forward_residual_weights[1] * hidden_states
+            self.feed_forward_residual_weights[0] * residual + self.feed_forward_residual_weights[1] * hidden_states
         )
 
         hidden_states = self.norm_out(hidden_states)
@@ -399,13 +418,13 @@ class LastAsrEncoderBlock(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class LastAsrPreTrainedModel(PreTrainedModel):
-    config: LastAsrCTCConfig
+class LasrPreTrainedModel(PreTrainedModel):
+    config: LasrCTCConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LastAsrEncoderBlock"]
+    _no_split_modules = ["LasrEncoderBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -416,8 +435,8 @@ class LastAsrPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": LastAsrEncoderBlock,
-        "attentions": LastAsrEncoderAttention,
+        "hidden_states": LasrEncoderBlock,
+        "attentions": LasrEncoderAttention,
     }
 
     @torch.no_grad()
@@ -425,7 +444,7 @@ class LastAsrPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
-        encoder_config = self.config.encoder_config if isinstance(self.config, LastAsrCTCConfig) else self.config
+        encoder_config = self.config.encoder_config if isinstance(self.config, LasrCTCConfig) else self.config
         kernel_size = encoder_config.subsampling_conv_kernel_size
         stride = encoder_config.subsampling_conv_stride
 
@@ -453,11 +472,11 @@ class LastAsrPreTrainedModel(PreTrainedModel):
     The Parakeet Encoder model, based on the [Conformer architecture]() ???.
     """
 )
-class LastAsrEncoder(LastAsrPreTrainedModel):
-    config: LastAsrEncoderConfig
+class LasrEncoder(LasrPreTrainedModel):
+    config: LasrEncoderConfig
     base_model_prefix = "encoder"
 
-    def __init__(self, config: LastAsrEncoderConfig):
+    def __init__(self, config: LasrEncoderConfig):
         super().__init__(config)
         self.gradient_checkpointing = False
 
@@ -465,10 +484,10 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
         self.dropout_positions = config.dropout_positions
         self.layerdrop = config.layerdrop
 
-        self.subsampler = LastAsrEncoderSubsampling(config)
-        self.rotary_emb = LastAsrEncoderRotaryEmbedding(config)
+        self.subsampler = LasrEncoderSubsampling(config)
+        self.rotary_emb = LasrEncoderRotaryEmbedding(config)
         self.layers = nn.ModuleList(
-            [LastAsrEncoderBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [LasrEncoderBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.out_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
 
@@ -487,18 +506,19 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
         TODO: @eustlb, add docstring
         """
         hidden_states = self.subsampler(input_features)
-        position_embeddings = self.rotary_emb(hidden_states)
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        position_embeddings = nn.functional.dropout(
-            position_embeddings, p=self.dropout_positions, training=self.training
+        cos, sin = self.rotary_emb(
+            hidden_states, torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
         )
 
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        cos = nn.functional.dropout(cos, p=self.dropout_positions, training=self.training)
+        sin = nn.functional.dropout(sin, p=self.dropout_positions, training=self.training)
+
         if attention_mask is not None:
-            output_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
-            attention_mask = (
-                torch.arange(hidden_states.shape[1], device=output_lengths.device)[None, :] < output_lengths[:, None]
-            )
+            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
+            attention_mask = attention_mask & attention_mask.transpose(1, 2)
+            attention_mask = attention_mask.unsqueeze(1)
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -512,7 +532,7 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
                 hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    position_embeddings=position_embeddings,
+                    position_embeddings=(cos, sin),
                     **kwargs,
                 )
 
@@ -522,9 +542,9 @@ class LastAsrEncoder(LastAsrPreTrainedModel):
 
 
 @dataclass
-class LastAsrGenerateOutput(ModelOutput):
+class LasrGenerateOutput(ModelOutput):
     """
-    Outputs of LastAsr models.
+    Outputs of Lasr models.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -550,15 +570,15 @@ class LastAsrGenerateOutput(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    LastAsr Encoder with a Connectionist Temporal Classification (CTC) head.
+    Lasr Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
-class LastAsrForCTC(LastAsrPreTrainedModel):
-    config: LastAsrCTCConfig
+class LasrForCTC(LasrPreTrainedModel):
+    config: LasrCTCConfig
 
-    def __init__(self, config: LastAsrCTCConfig):
+    def __init__(self, config: LasrCTCConfig):
         super().__init__(config)
-        self.encoder = LastAsrEncoder(config.encoder_config)
+        self.encoder = LasrEncoder(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
         self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
@@ -577,12 +597,12 @@ class LastAsrForCTC(LastAsrPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, LastAsrForCTC
+        >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "nvidia/last_asr-ctc-1.1b"
+        >>> model_id = "nvidia/lasr-ctc-1.1b"
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = LastAsrForCTC.from_pretrained(model_id)
+        >>> model = LasrForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -644,17 +664,17 @@ class LastAsrForCTC(LastAsrPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         return_dict_in_generate: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[LastAsrGenerateOutput, torch.LongTensor]:
+    ) -> Union[LasrGenerateOutput, torch.LongTensor]:
         r"""
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, LastAsrForCTC
+        >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = TODO
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = LastAsrForCTC.from_pretrained(model_id)
+        >>> model = LasrForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -682,7 +702,7 @@ class LastAsrForCTC(LastAsrPreTrainedModel):
             sequences[~attention_mask] = self.config.pad_token_id
 
         if return_dict_in_generate:
-            return LastAsrGenerateOutput(
+            return LasrGenerateOutput(
                 sequences=sequences,
                 logits=outputs.logits,
                 attentions=outputs.attentions,
@@ -692,4 +712,4 @@ class LastAsrForCTC(LastAsrPreTrainedModel):
         return sequences
 
 
-__all__ = ["LastAsrForCTC", "LastAsrEncoder", "LastAsrPreTrainedModel"]
+__all__ = ["LasrForCTC", "LasrEncoder", "LasrPreTrainedModel"]

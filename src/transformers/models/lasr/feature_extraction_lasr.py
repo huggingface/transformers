@@ -66,7 +66,7 @@ def linear_to_mel_weight_matrix(
 
 
 @requires(backends=("torch",))
-class LASRFeatureExtractor(SequenceFeatureExtractor):
+class LasrFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a LASR feature extractor.
 
@@ -274,4 +274,4 @@ class LASRFeatureExtractor(SequenceFeatureExtractor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["LASRFeatureExtractor"]
+__all__ = ["LasrFeatureExtractor"]
