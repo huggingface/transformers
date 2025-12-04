@@ -628,6 +628,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FocalNetModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
@@ -710,6 +711,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FocalNetMaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
@@ -812,6 +814,7 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FocalNetImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -871,6 +874,7 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:
