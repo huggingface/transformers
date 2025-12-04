@@ -152,8 +152,17 @@ class CohereTokenizer(TokenizersBackend):
             }
         )
 
+        special_tokens = {
+            str(unk_token),
+            str(bos_token),
+            str(eos_token),
+            str(pad_token),
+            str(cls_token),
+            str(sep_token),
+            str(mask_token),
+        }
         if merges is None:
-            merges = generate_merges(self._vocab)
+            merges = generate_merges(self._vocab, skip_tokens=special_tokens)
         self._merges = merges
 
         self._tokenizer = Tokenizer(
@@ -176,10 +185,7 @@ class CohereTokenizer(TokenizersBackend):
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,

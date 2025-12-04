@@ -63,12 +63,12 @@ class CLIPTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         unk_token: str = "<|endoftext|>",
         bos_token: str = "<|startoftext|>",
         eos_token: str = "<|endoftext|>",
         pad_token: str = "<|endoftext|>",
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         _vocab = (
@@ -81,8 +81,9 @@ class CLIPTokenizer(TokenizersBackend):
             }
         )
 
+        special_tokens = {str(unk_token), str(bos_token), str(eos_token), str(pad_token)}
         if merges is None:
-            merges = generate_merges(_vocab)
+            merges = generate_merges(_vocab, skip_tokens=special_tokens)
 
         self._tokenizer = Tokenizer(
             BPE(

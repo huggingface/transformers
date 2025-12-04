@@ -44,15 +44,15 @@ class Qwen2Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab_file=None,
-        merges_file=None,
-        unk_token="<|endoftext|>",
-        bos_token=None,
-        eos_token="<|endoftext|>",
-        pad_token="<|endoftext|>",
-        add_prefix_space=None,
         vocab: Optional[Union[str, dict[str, int]]] = None,
         merges: Optional[Union[str, list[str]]] = None,
+        vocab_file=None,
+        merges_file=None,
+        unk_token: str = "<|endoftext|>",
+        bos_token=None,
+        eos_token: str = "<|endoftext|>",
+        pad_token: str = "<|endoftext|>",
+        add_prefix_space=None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False
@@ -64,8 +64,13 @@ class Qwen2Tokenizer(TokenizersBackend):
                 "<|endoftext|>": 0,
             }
         )
+        special_tokens = {str(unk_token), str(eos_token), str(pad_token)}
+        if bos_token is not None:
+            special_tokens.add(str(bos_token))
         self._merges = (
-            merges if merges is not None else generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
+            merges
+            if merges is not None
+            else generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
         )
 
         self._tokenizer = Tokenizer(
@@ -95,12 +100,10 @@ class Qwen2Tokenizer(TokenizersBackend):
                 ),
             ]
         )
-        tokenizer_object = self._tokenizer
 
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

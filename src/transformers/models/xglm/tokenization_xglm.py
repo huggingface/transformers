@@ -50,8 +50,10 @@ class XGLMTokenizer(TokenizersBackend):
             The unknown token.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding.
-        vocab (`str` or `list[tuple[str, float]]`, *optional*):
-            Custom vocabulary with `(token, score)` tuples. If not provided, a minimal vocabulary is created.
+        vocab (`str`, `dict` or `list`, *optional*):
+            Custom vocabulary dictionary. If not provided, a minimal vocabulary is created.
+        merges (`list[tuple[str, str]]`, *optional*):
+            Custom merge rules for BPE. If not provided, merges are generated from the vocabulary.
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether to add a prefix space before encoding.
     """
@@ -62,14 +64,13 @@ class XGLMTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         sep_token: str = "</s>",
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
-        merges: Optional[Union[str, list]] = None,
         add_prefix_space: bool = True,
         **kwargs,
     ):
@@ -104,11 +105,7 @@ class XGLMTokenizer(TokenizersBackend):
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

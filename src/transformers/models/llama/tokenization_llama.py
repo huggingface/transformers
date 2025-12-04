@@ -118,8 +118,7 @@ class LlamaTokenizer(TokenizersBackend):
 
         if merges is None:
             if isinstance(self._vocab, dict):
-                filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-                self._merges = generate_merges(filtered_vocab)
+                self._merges = generate_merges(self._vocab, skip_tokens=special_tokens)
             else:
                 self._merges = {}
         else:

@@ -139,10 +139,7 @@ class PegasusTokenizer(TokenizersBackend):
             special_tokens=[(str(eos_token), self._vocab.get(str(eos_token), 1))],
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             pad_token=pad_token,
             eos_token=eos_token,
             unk_token=unk_token,

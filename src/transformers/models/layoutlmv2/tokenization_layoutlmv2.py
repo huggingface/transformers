@@ -215,8 +215,6 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
         # Temporarily set to None, will be configured after parent init
         self._tokenizer.post_processor = None
 
-        tokenizer_object = self._tokenizer
-
         # additional properties
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
@@ -225,7 +223,6 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
         self.only_label_first_subword = only_label_first_subword
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,

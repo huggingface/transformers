@@ -368,10 +368,8 @@ class MLukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
-        tokenizer_object = self._tokenizer
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

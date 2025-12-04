@@ -111,8 +111,11 @@ class GPT2Tokenizer(TokenizersBackend):
         self.add_prefix_space = add_prefix_space
         self._vocab = vocab if vocab is not None else {}
 
-        if merges is  None:
-            merges = generate_merges(self._vocab)
+        special_tokens = {str(unk_token), str(bos_token), str(eos_token)}
+        if pad_token is not None:
+            special_tokens.add(str(pad_token))
+        if merges is None:
+            merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
         self._merges = merges
 
         self._tokenizer = Tokenizer(

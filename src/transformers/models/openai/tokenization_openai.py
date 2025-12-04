@@ -62,9 +62,9 @@ class OpenAIGPTTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        unk_token="<unk>",
         vocab: Optional[Union[str, dict[str, int]]] = None,
         merges: Optional[Union[str, list[str]]] = None,
+        unk_token: str = "<unk>",
         vocab_file=None,
         merges_file=None,
         **kwargs,
@@ -73,8 +73,11 @@ class OpenAIGPTTokenizer(TokenizersBackend):
         self._vocab = vocab if vocab is not None else {str(unk_token): 0}
 
         # Initialize merges
+        special_tokens = {str(unk_token)}
         if merges is None:
-            self._merges = generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
+            self._merges = (
+                generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
+            )
         else:
             self._merges = merges
 
@@ -104,10 +107,7 @@ class OpenAIGPTTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             **kwargs,
         )

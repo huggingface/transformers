@@ -86,6 +86,7 @@ class AlbertTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         do_lower_case: bool = True,
         keep_accents: bool = False,
         bos_token: str = "[CLS]",
@@ -97,11 +98,8 @@ class AlbertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         add_prefix_space: bool = True,
         trim_offsets: bool = True,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
-        vocab_file: Optional[str] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
 
@@ -167,10 +165,7 @@ class AlbertTokenizer(TokenizersBackend):
             ],
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=self.do_lower_case,
             keep_accents=self.keep_accents,
             bos_token=bos_token,

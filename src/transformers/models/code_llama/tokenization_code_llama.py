@@ -127,10 +127,10 @@ class CodeLlamaTokenizer(TokenizersBackend):
         eot_token="▁<EOT>",
         fill_token="<FILL_ME>",
         additional_special_tokens=None,
-        add_bos_token=True,
-        add_eos_token=False,
-        use_default_system_prompt=False,
-        add_prefix_space=None,
+        add_bos_token: bool = True,
+        add_eos_token: bool = False,
+        use_default_system_prompt: bool = False,
+        add_prefix_space: Optional[bool] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
@@ -150,8 +150,16 @@ class CodeLlamaTokenizer(TokenizersBackend):
             }
         )
 
+        special_tokens = {
+            str(unk_token),
+            str(bos_token),
+            str(eos_token),
+            *(token for token in additional_special_tokens),
+        }
         if merges is None:
-            self._merges = generate_merges(self._vocab)
+            self._merges = (
+                generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
+            )
         else:
             self._merges = merges
         self._tokenizer = Tokenizer(
@@ -173,7 +181,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
         )
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,

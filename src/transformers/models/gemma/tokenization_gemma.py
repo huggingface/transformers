@@ -75,7 +75,7 @@ class GemmaTokenizer(TokenizersBackend):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
 
-        special_tokens = {str(pad_token), str(eos_token), str(bos_token), str(unk_token)}
+        special_tokens = {str(pad_token), str(eos_token), str(bos_token), str(unk_token), str(mask_token)}
 
         self._vocab = (
             vocab
@@ -90,8 +90,7 @@ class GemmaTokenizer(TokenizersBackend):
         )
 
         if merges is None:
-            filtered_vocab = {t: i for t, i in self._vocab.items() if t not in special_tokens}
-            self._merges = generate_merges(filtered_vocab)
+            self._merges = generate_merges(self._vocab, skip_tokens=special_tokens)
         else:
             self._merges = merges
 

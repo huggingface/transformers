@@ -138,11 +138,7 @@ class MPNetTokenizer(TokenizersBackend):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        # Store for later use
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             bos_token=bos_token,
             eos_token=eos_token,

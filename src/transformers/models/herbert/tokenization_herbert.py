@@ -79,8 +79,9 @@ class HerbertTokenizer(TokenizersBackend):
         **kwargs,
     ):
         self._vocab = vocab if vocab is not None else {str(unk_token): 0}
+        special_tokens = {str(unk_token), str(cls_token), str(sep_token), str(pad_token), str(mask_token)}
         if merges is None:
-            merges = generate_merges(self._vocab)
+            merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
         self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(

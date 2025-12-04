@@ -126,8 +126,18 @@ class NllbTokenizer(TokenizersBackend):
         else:
             self._vocab = vocab
 
+        special_tokens = {
+            str(bos_token),
+            str(pad_token),
+            str(eos_token),
+            str(unk_token),
+            str(mask_token),
+            *(str(token) for token in additional_special_tokens),
+        }
         if merges is None:
-            self._merges = generate_merges(self._vocab) if isinstance(self._vocab, dict) else []
+            self._merges = (
+                generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
+            )
         else:
             self._merges = merges
 
@@ -153,13 +163,10 @@ class NllbTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
-        tokenizer_object = self._tokenizer
-
         # Remove extra_special_tokens from kwargs if present to avoid conflict
         kwargs.pop("extra_special_tokens", None)
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

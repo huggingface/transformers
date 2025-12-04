@@ -233,7 +233,6 @@ class UdopTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             eos_token=eos_token,
             sep_token=sep_token,
             unk_token=unk_token,

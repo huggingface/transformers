@@ -277,8 +277,17 @@ class LukeTokenizer(TokenizersBackend):
             vocab = {}
 
         self._vocab = vocab
+        special_tokens = {
+            str(bos_token),
+            str(eos_token),
+            str(sep_token),
+            str(cls_token),
+            str(unk_token),
+            str(pad_token),
+            str(mask_token),
+        }
         if merges is None:
-            merges = generate_merges(self._vocab)
+            merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
         self._merges = merges
         self._tokenizer = Tokenizer(
             BPE(
@@ -364,8 +373,6 @@ class LukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
-        tokenizer_object = self._tokenizer
-
         # Configure default special token behaviors to match LUKE formatting
         token_type_ids_pattern = kwargs.setdefault("token_type_ids_pattern", "all_zeros")
         special_tokens_pattern = kwargs.setdefault("special_tokens_pattern", "cls_double_sep")
@@ -378,7 +385,6 @@ class LukeTokenizer(TokenizersBackend):
         kwargs.setdefault("clean_up_tokenization_spaces", True)
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,

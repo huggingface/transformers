@@ -118,10 +118,7 @@ class ReformerTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             eos_token=eos_token,
             unk_token=unk_token,
             additional_special_tokens=additional_special_tokens or [],

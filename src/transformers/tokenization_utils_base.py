@@ -30,7 +30,7 @@ from collections import OrderedDict, UserDict
 from collections.abc import Callable, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, Collection, NamedTuple, Optional, Union
 
 import numpy as np
 from huggingface_hub import create_repo, list_repo_files
@@ -3577,15 +3577,22 @@ def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     return prepend_scheme
 
 
-def generate_merges(vocab, vocab_scores: Optional[dict[str, float]] = None):
+def generate_merges(
+    vocab, vocab_scores: Optional[dict[str, float]] = None, skip_tokens: Optional[Collection[str]] = None
+):
+    skip_tokens = set(skip_tokens) if skip_tokens is not None else set()
     reverse = vocab_scores is not None
     vocab_scores = dict(vocab_scores) if reverse else vocab
 
     merges = []
     for merge, piece_score in vocab_scores.items():
+        if merge in skip_tokens:
+            continue
         local = []
         for index in range(1, len(merge)):
             piece_l, piece_r = merge[:index], merge[index:]
+            if piece_l in skip_tokens or piece_r in skip_tokens:
+                continue
             if piece_l in vocab and piece_r in vocab:
                 local.append((piece_l, piece_r, piece_score))
         local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))

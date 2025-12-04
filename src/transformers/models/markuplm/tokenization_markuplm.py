@@ -234,7 +234,6 @@ class MarkupLMTokenizer(TokenizersBackend):
         )
 
         super().__init__(
-            tokenizer_object=tokenizer,
             tags_dict=tags_dict,
             vocab=vocab,
             merges=merges,
