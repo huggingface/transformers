@@ -1068,8 +1068,6 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return Qwen3VLModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
 
