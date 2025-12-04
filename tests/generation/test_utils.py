@@ -43,6 +43,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_optimum_quanto,
     require_read_token,
     require_torch,
@@ -1763,6 +1764,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -1861,6 +1863,14 @@ class GenerationTesterMixin:
     def test_eager_matches_fa3_generate(self):
         """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_3")
+
+    @pytest.mark.flash_attn_4_test
+    @require_flash_attn_4
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa4_generate(self):
+        """Tests that generate has equivalent outputs with FA4 and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_4")
 
     @require_flash_attn
     @require_torch_accelerator
@@ -1972,6 +1982,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2109,6 +2120,22 @@ class GenerationTesterMixin:
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(
             attn_implementation="flash_attention_3", fa_kwargs=True
+        )
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_4")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_4", fa_kwargs=True
         )
 
     def _get_custom_4d_mask_test_data(self):

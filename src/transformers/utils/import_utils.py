@@ -870,6 +870,9 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 @lru_cache
 def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash_attn" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
@@ -889,6 +892,15 @@ def is_flash_attn_2_available() -> bool:
 @lru_cache
 def is_flash_attn_3_available() -> bool:
     return is_torch_cuda_available() and _is_package_available("flash_attn_3")
+
+
+@lru_cache
+def is_flash_attn_4_available() -> bool:
+    if not (is_torch_cuda_available() and _is_package_available("flash_attn")):
+        return False
+
+    # FA4 is distributed to just "flash_attn" but its mapping is properly mapped to cute
+    return "flash-attn-cute" in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
 
 
 @lru_cache
