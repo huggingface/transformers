@@ -129,10 +129,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
 
         list_normalizers.extend(
             [
-                normalizers.Replace("\n", " "),
-                normalizers.Replace("\r", " "),
-                normalizers.Replace("\t", " "),
-                normalizers.Replace(Regex(r" {2,}"), " "),
+                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
                 normalizers.NFC(),
                 normalizers.Strip(left=False, right=True),
             ]
