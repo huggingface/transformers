@@ -137,7 +137,6 @@ class PegasusTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
-
         super().__init__(
             pad_token=pad_token,
             eos_token=eos_token,
@@ -148,5 +147,6 @@ class PegasusTokenizer(TokenizersBackend):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
+
 
 __all__ = ["PegasusTokenizer"]

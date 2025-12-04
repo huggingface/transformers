@@ -34,7 +34,6 @@ from ...tokenization_utils_base import (
     TextInput,
     TextInputPair,
     TruncationStrategy,
-    generate_merges,
     to_py_obj,
 )
 from ...tokenization_utils_tokenizers import TokenizersBackend
