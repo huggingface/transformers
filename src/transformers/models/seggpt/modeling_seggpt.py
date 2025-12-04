@@ -647,6 +647,7 @@ class SegGptModel(SegGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SegGptEncoderOutput]:
         r"""
         prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -843,6 +844,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SegGptImageSegmentationOutput]:
         r"""
         prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
