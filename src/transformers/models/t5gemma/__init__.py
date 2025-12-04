@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_encdecgemma2 import *
-    from .modeling_encdecgemma2 import *
+    from .configuration_t5gemma import *
+    from .modeling_t5gemma import *
 else:
     import sys
 

@@ -53,7 +53,7 @@ from .utils import (
     requires_backends,
 )
 from .utils.generic import strtobool
-from .utils.import_utils import is_optimum_neuron_available
+from .utils.import_utils import enable_tf32, is_optimum_neuron_available
 
 
 logger = logging.get_logger(__name__)
@@ -379,7 +379,7 @@ class TrainingArguments:
             metric values.
         tf32 (`bool`, *optional*):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
-            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
+            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32` and For PyTorch 2.9+ torch.backends.cuda.matmul.fp32_precision. For more details please refer to
             the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
             experimental API and it may change.
         ddp_backend (`str`, *optional*):
@@ -1601,11 +1601,7 @@ class TrainingArguments:
                         f"Setting TF32 in {device_str} backends to speedup torch compile, you won't see any improvement"
                         " otherwise."
                     )
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                    enable_tf32(True)
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
@@ -1613,20 +1609,12 @@ class TrainingArguments:
         if is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                    enable_tf32(True)
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = False
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = False
-                        torch.backends.cudnn.allow_tf32 = False
+                    enable_tf32(False)
                 # no need to assert on else
 
         if self.report_to == "all" or self.report_to == ["all"]:
@@ -2754,10 +2742,24 @@ class TrainingArguments:
                         fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
-            fsdp_plugin_args["fsdp_version"] = self.fsdp_config.get("fsdp_version", 1)
+            fsdp_version = int(self.fsdp_config.get("version", 1))
+            fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
-            fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
-            fsdp_plugin_args["forward_prefetch"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+            if fsdp_version == 2:
+                fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
+                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                )
+            else:
+                fsdp_plugin_args["forward_prefetch"] = str_to_bool(
+                    str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+                )
+                fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+                fsdp_plugin_args["reshard_after_forward"] = str(
+                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
+                ).lower()
+                fsdp_plugin_args["use_orig_params"] = str_to_bool(
+                    str(self.fsdp_config.get("use_orig_params", "true")).lower()
+                )
 
             sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
             cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
@@ -2767,11 +2769,10 @@ class TrainingArguments:
                 raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
 
             # we need to set the env here as otherwise we get a warning in accelerate + we need to set it for transformers
-            fsdp_plugin_args["cpu_ram_efficient_loading"] = cpu_ram_efficient_loading
+            fsdp_plugin_args["cpu_ram_efficient_loading"] = str_to_bool(cpu_ram_efficient_loading)
             os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
-            fsdp_plugin_args["sync_module_states"] = sync_module_states
-            fsdp_plugin_args["use_orig_params"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
+            fsdp_plugin_args["sync_module_states"] = str_to_bool(sync_module_states)
 
         return fsdp_plugin_args
 
@@ -2783,3 +2784,18 @@ class ParallelMode(Enum):
     SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
     SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"
+
+
+def str_to_bool(value, to_bool: bool = True) -> int | bool:
+    """
+    Converts a string representation of truth to `True` (1) or `False` (0).
+
+    True values are `y`, `yes`, `t`, `true`, `on`, and `1`; False value are `n`, `no`, `f`, `false`, `off`, and `0`;
+    """
+    value = value.lower()
+    if value in ("y", "yes", "t", "true", "on", "1"):
+        return 1 if not to_bool else True
+    elif value in ("n", "no", "f", "false", "off", "0"):
+        return 0 if not to_bool else False
+    else:
+        raise ValueError(f"invalid truth value {value}")

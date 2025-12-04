@@ -244,6 +244,7 @@ class Ernie4_5_MoeAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -317,51 +318,41 @@ class Ernie4_5_MoeStatics(nn.Module):
 
 
 class Ernie4_5_MoeExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.moe_num_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
-        self.use_bias = config.use_bias
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
-        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        if self.use_bias:
-            self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.intermediate_dim))
-            self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-        else:
-            self.gate_up_proj_bias = None
-            self.down_proj_bias = None
-
     def forward(
-        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        if selected_experts.numel() == 0:
-            return final_hidden_states
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
-            expert_idx = int(expert_idx.item())
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            gate_inputs = F.linear(
-                current_state,
-                self.gate_up_proj[expert_idx],
-                None if self.gate_up_proj_bias is None else self.gate_up_proj_bias[expert_idx],
-            )
-            gate, up = gate_inputs.chunk(2, dim=-1)
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = F.linear(
-                current_hidden_states,
-                self.down_proj[expert_idx],
-                None if self.down_proj_bias is None else self.down_proj_bias[expert_idx],
-            )
-            current_hidden_states = current_hidden_states * routing_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
         return final_hidden_states
 
 
@@ -382,14 +373,14 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
 
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             router_logits = F.linear(hidden_states.float(), self.weight)
-            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
-            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
-            routing_weights = routing_weights / torch.clamp(
-                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
+            router_logits = F.softmax(router_logits, dim=1, dtype=torch.float)
+            router_top_value, router_indices = torch.topk(self.moe_statics(router_logits), self.top_k, dim=-1)
+            router_top_value = router_top_value / torch.clamp(
+                router_top_value.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-        routing_weights = routing_weights.to(router_logits.dtype)
-        return routing_weights, selected_experts
+            router_scores = router_top_value
+        router_scores = router_scores.to(hidden_states.dtype)
+        return router_logits, router_scores, router_indices
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
@@ -412,8 +403,8 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        routing_weights, selected_experts = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         if self.shared_experts is not None:
             final_hidden_states = final_hidden_states + shared_output
@@ -488,7 +479,7 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_MoeTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Ernie4_5_MoeTopKRouter, index=0),
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
@@ -504,9 +495,6 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, Ernie4_5_MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-            if module.gate_up_proj_bias is not None:
-                init.zeros_(module.gate_up_proj_bias)
-                init.zeros_(module.down_proj_bias)
 
 
 @auto_docstring
@@ -527,7 +515,7 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

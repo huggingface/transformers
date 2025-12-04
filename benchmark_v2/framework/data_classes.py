@@ -9,12 +9,12 @@ from .hardware_metrics import GPURawMetrics, HardwareInfo
 
 def compute_basic_statistics(measurements: list[float]) -> dict[str, float]:
     return {
-        "avg": np.mean(measurements),
-        "std": np.std(measurements),
-        "min": np.min(measurements),
-        "med": np.median(measurements),
-        "max": np.max(measurements),
-        "p95": np.percentile(measurements, 95),
+        "avg": np.mean(measurements) if measurements else 0,
+        "std": np.std(measurements) if measurements else 0,
+        "min": np.min(measurements) if measurements else 0,
+        "med": np.median(measurements) if measurements else 0,
+        "max": np.max(measurements) if measurements else 0,
+        "p95": np.percentile(measurements, 95) if measurements else 0,
     }
 
 
@@ -64,14 +64,18 @@ class BenchmarkMetadata:
     commit_id: str
     commit_message: str
     hardware_info: HardwareInfo
+    success: bool
 
-    def __init__(self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "") -> None:
+    def __init__(
+        self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "", success: bool = True
+    ) -> None:
         self.model_id = model_id
         self.timestamp = datetime.now(timezone.utc).isoformat()
         self.branch_name = branch_name
         self.commit_id = commit_id
         self.commit_message = commit_message
         self.hardware_info = HardwareInfo()
+        self.success = success
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +85,7 @@ class BenchmarkMetadata:
             "commit_id": self.commit_id,
             "commit_message": self.commit_message,
             "hardware_info": self.hardware_info.to_dict(),
+            "success": self.success,
         }
 
 
@@ -89,31 +94,35 @@ class BenchmarkResult:
 
     def __init__(self) -> None:
         self.e2e_latency = []
+        self._timestamps = []
         self.time_to_first_token = []
         self.inter_token_latency = []
         self.shape_and_decoded_outputs = []
         self.gpu_metrics = []
 
-    def compute_itl(self, token_generation_times: list[float]) -> list[float]:
-        return (token_generation_times[-1] - token_generation_times[0]) / len(token_generation_times)
-
     def accumulate(
         self,
         e2e_latency: float,
-        token_generation_times: list[float],
+        timestamps: list[float],
         shape_and_decoded_output: str,
         gpu_metrics: GPURawMetrics | None,
     ) -> None:
         self.e2e_latency.append(e2e_latency)
-        self.time_to_first_token.append(token_generation_times[0])
-        # inter-token latency is already an average in itself
-        self.inter_token_latency.append(self.compute_itl(token_generation_times))
+        self._timestamps.append(timestamps)
+        self._accumulate_ttft_and_itl(timestamps)
         self.shape_and_decoded_outputs.append(shape_and_decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 
-    def to_dict(self) -> dict[str, None | int | float]:
-        # Save GPU metrics as None if it contains only None values
-        if all(gm is None for gm in self.gpu_metrics):
+    def _accumulate_ttft_and_itl(self, timestamps: list[float]) -> None:
+        timestamps = np.array(timestamps)
+        tftt = np.min(timestamps[:, 0])
+        itl = np.mean(timestamps[:, -1] - timestamps[:, 0]) / (timestamps.shape[1] - 1)
+        self.time_to_first_token.append(tftt)
+        self.inter_token_latency.append(itl)
+
+    def to_dict(self, summarized: bool = False) -> dict[str, Any]:
+        # Save GPU metrics as None if it contains only None values or if we are summarizing
+        if summarized or all(gm is None for gm in self.gpu_metrics):
             gpu_metrics = None
         else:
             gpu_metrics = [gm.to_dict() for gm in self.gpu_metrics]
@@ -123,6 +132,7 @@ class BenchmarkResult:
             "inter_token_latency": self.inter_token_latency,
             "shape_and_decoded_outputs": self.shape_and_decoded_outputs,
             "gpu_metrics": gpu_metrics,
+            "timestamps": None if summarized else self._timestamps,
         }
 
     @classmethod
@@ -132,16 +142,19 @@ class BenchmarkResult:
             gpu_metrics = [None for _ in range(len(data["e2e_latency"]))]
         else:
             gpu_metrics = [GPURawMetrics.from_dict(gm) for gm in data["gpu_metrics"]]
+        # Handle timestamps, which can be saved as None to reduce file size
+        if data["timestamps"] is None:
+            timestamps = [None for _ in range(len(data["e2e_latency"]))]
+        else:
+            timestamps = data["timestamps"]
         # Create a new instance and accumulate the data
         new_instance = cls()
-        for i in range(len(data["e2e_latency"])):
-            new_instance.accumulate(
-                e2e_latency=data["e2e_latency"][i],
-                time_to_first_token=data["time_to_first_token"][i],
-                inter_token_latency=data["inter_token_latency"][i],
-                shape_and_decoded_output=data["shape_and_decoded_outputs"][i],
-                gpu_metrics=gpu_metrics[i],
-            )
+        new_instance.e2e_latency = data["e2e_latency"]
+        new_instance._timestamps = timestamps
+        new_instance.time_to_first_token = data["time_to_first_token"]
+        new_instance.inter_token_latency = data["inter_token_latency"]
+        new_instance.shape_and_decoded_outputs = data["shape_and_decoded_outputs"]
+        new_instance.gpu_metrics = gpu_metrics
         return new_instance
 
     def get_throughput(self, total_generated_tokens: int) -> list[float]:
