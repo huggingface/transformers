@@ -1417,7 +1417,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             if hasattr(input_ids, "tolist"):
                 input_ids = input_ids.tolist()
             batch["input_ids"] += input_ids
-    
+
             if is_labels_provided:
                 labels = sample["labels"]
                 # Convert to list if tensor
