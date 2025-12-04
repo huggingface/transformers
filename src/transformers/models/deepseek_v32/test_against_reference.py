@@ -161,6 +161,223 @@ class RefGate(nn.Module):
         return weights, indices
 
 
+class RefIndexer(nn.Module):
+    """
+    Reference Indexer from model.py lines 482-519.
+
+    Computes index scores: I_{t,s} = Σ w^I_{t,j} · ReLU(q^I_{t,j} · k^I_s)
+    and selects top-k tokens for sparse attention.
+
+    Key behaviors from reference:
+    - RoPE is NOT interleaved (line 490-491, 496-497)
+    - Q split order: rope FIRST, then nope (line 489)
+    - K split order: rope FIRST, then nope (line 495)
+    - Hadamard transform is optional (skipped here for simplicity)
+    """
+
+    def __init__(self, hidden_size: int, q_lora_rank: int, num_heads: int,
+                 head_dim: int, qk_rope_head_dim: int, index_topk: int):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
+        self.index_topk = index_topk
+
+        # Reference: line 463-467
+        self.wq_b = nn.Linear(q_lora_rank, num_heads * head_dim, bias=False)
+        self.wk = nn.Linear(hidden_size, head_dim, bias=False)
+        self.k_norm = nn.LayerNorm(head_dim)
+        self.weights_proj = nn.Linear(hidden_size, num_heads, bias=False)
+
+        self.softmax_scale = head_dim ** -0.5
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_compressed: torch.Tensor,
+        freqs_cis: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Compute top-k indices for sparse attention.
+
+        Args:
+            hidden_states: [batch, seq_len, hidden_size]
+            q_compressed: [batch, seq_len, q_lora_rank]
+            freqs_cis: Complex frequencies [seq_len, rope_dim // 2]
+            mask: Optional causal mask [batch, seq_len, seq_len]
+
+        Returns:
+            topk_indices: [batch, seq_len, topk]
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+
+        # Reference: lines 487-488
+        q_states = self.wq_b(q_compressed)
+        q_states = q_states.view(batch_size, seq_len, self.num_heads, self.head_dim)
+
+        # Reference: line 489 - rope FIRST, then nope (opposite of main attention!)
+        q_pe = q_states[..., :self.qk_rope_head_dim]
+        q_nope = q_states[..., self.qk_rope_head_dim:]
+
+        # Reference: lines 490-492 - interleaved=False for indexer
+        q_pe = ref_apply_rotary_emb(q_pe, freqs_cis, interleaved=False)
+        q_states = torch.cat([q_pe, q_nope], dim=-1)
+
+        # Reference: lines 493-494
+        k_states = self.k_norm(self.wk(hidden_states))
+
+        # Reference: line 495 - rope FIRST, then nope
+        k_pe = k_states[..., :self.qk_rope_head_dim]
+        k_nope = k_states[..., self.qk_rope_head_dim:]
+
+        # Reference: lines 496-498 - interleaved=False, single-head
+        k_pe = ref_apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis, interleaved=False).squeeze(2)
+        k_states = torch.cat([k_pe, k_nope], dim=-1)
+
+        # Skip Hadamard transform (rotate_activation) - it's optional
+
+        # Reference: line 505 - head weights
+        weights = F.linear(hidden_states.float(), self.weights_proj.weight.float()) * (self.num_heads ** -0.5)
+
+        # Compute scores: einsum("bshd,btd->bsht", q, k) * scale
+        # Then apply ReLU and weight by head weights
+        # Reference: fp8_index does: sum_j(w_j * relu(q_j @ k^T * scale))
+        scores = torch.einsum("bshd,btd->bsht", q_states.float(), k_states.float()) * self.softmax_scale
+        scores = torch.relu(scores)
+        scores = scores * weights.unsqueeze(-1)
+        index_scores = scores.sum(dim=2)  # [B, S, T]
+
+        # Apply mask
+        if mask is not None:
+            index_scores = index_scores + mask
+
+        # Select top-k
+        topk = min(self.index_topk, seq_len)
+        topk_indices = index_scores.topk(topk, dim=-1).indices
+
+        return topk_indices
+
+
+class RefMLA(nn.Module):
+    """
+    Reference Multi-head Latent Attention from model.py lines 594-661.
+
+    This implements the prefill path (mask is not None) which is what we test.
+
+    Key behaviors from reference:
+    - Q split order: nope FIRST, then rope (line 612)
+    - RoPE is interleaved (default, line 613, 617)
+    - K is expanded to all heads (line 628)
+    - Indexer mask is applied (lines 631-637)
+    """
+
+    def __init__(self, hidden_size: int, num_heads: int, q_lora_rank: int,
+                 kv_lora_rank: int, qk_nope_head_dim: int, qk_rope_head_dim: int,
+                 v_head_dim: int, index_n_heads: int, index_head_dim: int, index_topk: int):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
+        self.q_lora_rank = q_lora_rank
+        self.kv_lora_rank = kv_lora_rank
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
+        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.v_head_dim = v_head_dim
+
+        # Q path (reference: lines 571-573)
+        self.wq_a = nn.Linear(hidden_size, q_lora_rank, bias=False)
+        self.q_norm = RefRMSNorm(q_lora_rank)
+        self.wq_b = nn.Linear(q_lora_rank, num_heads * self.qk_head_dim, bias=False)
+
+        # KV path (reference: lines 574-576)
+        self.wkv_a = nn.Linear(hidden_size, kv_lora_rank + qk_rope_head_dim, bias=False)
+        self.kv_norm = RefRMSNorm(kv_lora_rank)
+        self.wkv_b = nn.Linear(kv_lora_rank, num_heads * (qk_nope_head_dim + v_head_dim), bias=False)
+
+        # Output (reference: line 577)
+        self.wo = nn.Linear(num_heads * v_head_dim, hidden_size, bias=False)
+
+        # Softmax scale (reference: line 578)
+        self.softmax_scale = self.qk_head_dim ** -0.5
+
+        # Indexer
+        self.indexer = RefIndexer(
+            hidden_size, q_lora_rank, index_n_heads, index_head_dim,
+            qk_rope_head_dim, index_topk
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        freqs_cis: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Forward pass for MLA (prefill path).
+
+        Args:
+            hidden_states: [batch, seq_len, hidden_size]
+            freqs_cis: Complex frequencies [seq_len, rope_dim // 2]
+            mask: Causal mask [batch, seq_len, seq_len]
+
+        Returns:
+            output: [batch, seq_len, hidden_size]
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+
+        # Q path (reference: lines 609-611)
+        qr = self.q_norm(self.wq_a(hidden_states))
+        q = self.wq_b(qr)
+        q = q.view(batch_size, seq_len, self.num_heads, self.qk_head_dim)
+
+        # Reference: line 612 - nope FIRST, then rope
+        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        # Reference: line 613 - interleaved=True (default)
+        q_pe = ref_apply_rotary_emb(q_pe, freqs_cis, interleaved=True)
+
+        # KV path (reference: lines 614-616)
+        kv_all = self.wkv_a(hidden_states)
+        kv, k_pe = torch.split(kv_all, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv = self.kv_norm(kv)
+
+        # Reference: line 617 - interleaved=True (default)
+        k_pe = ref_apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis, interleaved=True)
+
+        # Reference: line 624
+        q = torch.cat([q_nope, q_pe], dim=-1)
+
+        # Reference: lines 625-627
+        kv_proj = self.wkv_b(kv)
+        kv_proj = kv_proj.view(batch_size, seq_len, self.num_heads, self.qk_nope_head_dim + self.v_head_dim)
+        k_nope, v = torch.split(kv_proj, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        # Reference: line 628 - expand k_pe to all heads
+        k = torch.cat([k_nope, k_pe.expand(-1, -1, self.num_heads, -1)], dim=-1)
+
+        # Reference: line 629
+        scores = torch.einsum("bshd,bthd->bsht", q.float(), k.float()) * self.softmax_scale
+
+        # Reference: lines 632-637 - indexer
+        topk_indices = self.indexer(hidden_states, qr, freqs_cis, mask)
+        index_mask = torch.full((batch_size, seq_len, seq_len), float("-inf"), device=hidden_states.device)
+        index_mask.scatter_(-1, topk_indices, 0.0)
+        index_mask = index_mask + mask
+        # scores shape is [B, S, H, T], need to unsqueeze at dim=2 for head broadcast
+        scores = scores + index_mask.unsqueeze(2)
+
+        # Reference: lines 639-640
+        scores = scores.softmax(dim=-1)
+        output = torch.einsum("bsht,bthd->bshd", scores.to(v.dtype), v)
+
+        # Reference: line 660
+        output = self.wo(output.flatten(2))
+
+        return output
+
+
 # =============================================================================
 # Fuzz Test Framework
 # =============================================================================
@@ -558,6 +775,181 @@ def fuzz_attention_components(stats: FuzzStats, num_iterations: int = 30):
             stats.record_fail(f"attn_dims_{i}", f"Exception: {e}")
 
 
+def fuzz_attention_forward(stats: FuzzStats, num_iterations: int = 30):
+    """
+    Fuzz test attention forward pass behavior.
+
+    This verifies that:
+    1. Attention produces valid outputs (no NaN/Inf)
+    2. With seq_len > 1, the indexer sparse mask is applied
+    3. The sparse mask actually restricts attention to top-k positions
+    """
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+
+    print("\nFuzzing Attention Forward...")
+
+    for i in range(num_iterations):
+        torch.manual_seed(i)
+        random.seed(i)
+
+        hidden_size = random.choice([128, 256])
+        num_heads = random.choice([2, 4])
+        q_lora_rank = random.choice([32, 64])
+        kv_lora_rank = random.choice([32, 64])
+        qk_nope_head_dim = random.choice([16, 32])
+        qk_rope_head_dim = random.choice([8, 16])
+        v_head_dim = random.choice([16, 32])
+        index_topk = random.choice([4, 8, 16])
+
+        batch = random.randint(1, 2)
+        # Use seq_len > 1 to trigger indexer path
+        seq_len = random.randint(2, 16)
+
+        config = DeepseekV32Config(
+            hidden_size=hidden_size,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_heads,
+            q_lora_rank=q_lora_rank,
+            kv_lora_rank=kv_lora_rank,
+            qk_nope_head_dim=qk_nope_head_dim,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            num_hidden_layers=1,
+            index_n_heads=2,
+            index_head_dim=32,
+            index_topk=index_topk,
+        )
+
+        try:
+            attn = DeepseekV32Attention(config, layer_idx=0)
+            attn.eval()
+
+            x = torch.randn(batch, seq_len, hidden_size)
+            freqs_cis = random_freqs_cis(seq_len, qk_rope_head_dim)
+
+            # Create causal mask
+            causal_mask = torch.full((seq_len, seq_len), float("-inf"))
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask = causal_mask[None, None, :, :]
+
+            with torch.no_grad():
+                output, _, _ = attn(x, position_embeddings=freqs_cis, attention_mask=causal_mask)
+
+            # Check output validity
+            has_nan = torch.isnan(output).any().item()
+            has_inf = torch.isinf(output).any().item()
+            shape_correct = output.shape == x.shape
+
+            if not has_nan and not has_inf and shape_correct:
+                stats.record_pass(f"attn_forward_{i}")
+            else:
+                stats.record_fail(f"attn_forward_{i}",
+                    f"NaN={has_nan}, Inf={has_inf}, shape={output.shape} vs {x.shape}")
+        except Exception as e:
+            stats.record_fail(f"attn_forward_{i}", f"Exception: {e}")
+
+
+def fuzz_attention_indexer_effect(stats: FuzzStats, num_iterations: int = 20):
+    """
+    Fuzz test that the indexer actually affects attention output.
+
+    This catches bugs like `if seq_len < 1:` which would disable the indexer.
+    We verify by comparing outputs with different index_topk values.
+    """
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+
+    print("\nFuzzing Attention Indexer Effect...")
+
+    for i in range(num_iterations):
+        torch.manual_seed(i)
+
+        hidden_size = 128
+        num_heads = 4
+        q_lora_rank = 32
+        kv_lora_rank = 32
+        qk_nope_head_dim = 16
+        qk_rope_head_dim = 8
+        v_head_dim = 16
+
+        batch = 1
+        # Must use seq_len > 1 and seq_len > index_topk for sparse effect
+        seq_len = 16
+
+        # Create two configs with very different topk values
+        config_sparse = DeepseekV32Config(
+            hidden_size=hidden_size,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_heads,
+            q_lora_rank=q_lora_rank,
+            kv_lora_rank=kv_lora_rank,
+            qk_nope_head_dim=qk_nope_head_dim,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            num_hidden_layers=1,
+            index_n_heads=2,
+            index_head_dim=32,
+            index_topk=4,  # Very sparse - only attend to 4 positions
+        )
+
+        config_dense = DeepseekV32Config(
+            hidden_size=hidden_size,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_heads,
+            q_lora_rank=q_lora_rank,
+            kv_lora_rank=kv_lora_rank,
+            qk_nope_head_dim=qk_nope_head_dim,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            num_hidden_layers=1,
+            index_n_heads=2,
+            index_head_dim=32,
+            index_topk=seq_len,  # Dense - attend to all positions
+        )
+
+        try:
+            torch.manual_seed(i)
+            attn_sparse = DeepseekV32Attention(config_sparse, layer_idx=0)
+            torch.manual_seed(i)
+            attn_dense = DeepseekV32Attention(config_dense, layer_idx=0)
+
+            # Copy weights to ensure identical except for topk behavior
+            with torch.no_grad():
+                for (name_s, param_s), (name_d, param_d) in zip(
+                    attn_sparse.named_parameters(), attn_dense.named_parameters()
+                ):
+                    param_d.copy_(param_s)
+
+            attn_sparse.eval()
+            attn_dense.eval()
+
+            torch.manual_seed(i + 1000)
+            x = torch.randn(batch, seq_len, hidden_size)
+            freqs_cis = random_freqs_cis(seq_len, qk_rope_head_dim)
+
+            causal_mask = torch.full((seq_len, seq_len), float("-inf"))
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask = causal_mask[None, None, :, :]
+
+            with torch.no_grad():
+                out_sparse, _, _ = attn_sparse(x, position_embeddings=freqs_cis, attention_mask=causal_mask)
+                out_dense, _, _ = attn_dense(x, position_embeddings=freqs_cis, attention_mask=causal_mask)
+
+            # The outputs SHOULD be different because sparse attention restricts
+            # which positions can be attended to
+            outputs_differ = not torch.allclose(out_sparse, out_dense, atol=1e-5)
+
+            if outputs_differ:
+                stats.record_pass(f"attn_indexer_effect_{i}")
+            else:
+                # If outputs are identical, the indexer isn't working!
+                stats.record_fail(f"attn_indexer_effect_{i}",
+                    "Sparse and dense attention produced identical outputs - indexer not applied!")
+        except Exception as e:
+            stats.record_fail(f"attn_indexer_effect_{i}", f"Exception: {e}")
+
+
 def fuzz_indexer_components(stats: FuzzStats, num_iterations: int = 30):
     """Fuzz test indexer dimension calculations."""
     from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
@@ -611,6 +1003,426 @@ def fuzz_indexer_components(stats: FuzzStats, num_iterations: int = 30):
                     f"Q: {actual_q_out} vs {expected_q_out}, K: {actual_k_out} vs {expected_k_out}")
         except Exception as e:
             stats.record_fail(f"indexer_dims_{i}", f"Exception: {e}")
+
+
+def fuzz_indexer_vs_reference(stats: FuzzStats, num_iterations: int = 30):
+    """
+    Fuzz test HF Indexer output against reference implementation.
+
+    This is the core "mock inference" test for the indexer - it verifies
+    that the HF implementation produces the exact same top-k indices as
+    the reference implementation.
+    """
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+
+    print("\nFuzzing Indexer vs Reference...")
+
+    for i in range(num_iterations):
+        torch.manual_seed(i)
+        random.seed(i)
+
+        hidden_size = random.choice([128, 256])
+        q_lora_rank = random.choice([32, 64])
+        index_n_heads = random.choice([2, 4])
+        index_head_dim = random.choice([32, 64])
+        qk_rope_head_dim = random.choice([8, 16])
+        index_topk = random.choice([4, 8, 16])
+        batch = random.randint(1, 2)
+        seq_len = random.randint(4, 32)
+
+        # Ensure rope fits in head dim
+        if qk_rope_head_dim >= index_head_dim:
+            qk_rope_head_dim = index_head_dim // 2
+
+        # Ensure topk <= seq_len
+        index_topk = min(index_topk, seq_len)
+
+        config = DeepseekV32Config(
+            hidden_size=hidden_size,
+            q_lora_rank=q_lora_rank,
+            qk_rope_head_dim=qk_rope_head_dim,
+            index_n_heads=index_n_heads,
+            index_head_dim=index_head_dim,
+            index_topk=index_topk,
+            num_attention_heads=4,
+            num_hidden_layers=1,
+        )
+
+        try:
+            # Create both implementations
+            hf_indexer = DeepseekV32Indexer(config, layer_idx=0)
+            ref_indexer = RefIndexer(
+                hidden_size, q_lora_rank, index_n_heads, index_head_dim,
+                qk_rope_head_dim, index_topk
+            )
+
+            # Copy weights from HF to reference
+            with torch.no_grad():
+                ref_indexer.wq_b.weight.copy_(hf_indexer.wq_b.weight)
+                ref_indexer.wk.weight.copy_(hf_indexer.wk.weight)
+                ref_indexer.k_norm.weight.copy_(hf_indexer.k_norm.weight)
+                ref_indexer.k_norm.bias.copy_(hf_indexer.k_norm.bias)
+                ref_indexer.weights_proj.weight.copy_(hf_indexer.weights_proj.weight)
+
+            hf_indexer.eval()
+            ref_indexer.eval()
+
+            # Generate inputs
+            torch.manual_seed(i + 1000)
+            hidden_states = torch.randn(batch, seq_len, hidden_size)
+            q_compressed = torch.randn(batch, seq_len, q_lora_rank)
+            freqs_cis = random_freqs_cis(seq_len, qk_rope_head_dim)
+
+            # Create causal mask
+            causal_mask = torch.full((seq_len, seq_len), float("-inf"))
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask = causal_mask.unsqueeze(0).expand(batch, -1, -1)
+
+            with torch.no_grad():
+                ref_indices = ref_indexer(hidden_states, q_compressed, freqs_cis, causal_mask)
+                hf_indices, _ = hf_indexer(hidden_states, q_compressed, freqs_cis, causal_mask)
+
+            # Compare indices (sorted, since order within topk may differ due to ties)
+            ref_sorted = ref_indices.sort(dim=-1)[0]
+            hf_sorted = hf_indices.sort(dim=-1)[0]
+
+            indices_match = torch.equal(ref_sorted, hf_sorted)
+
+            if indices_match:
+                stats.record_pass(f"indexer_vs_ref_{i}")
+            else:
+                # Count how many indices differ
+                diff_count = (ref_sorted != hf_sorted).sum().item()
+                stats.record_fail(f"indexer_vs_ref_{i}",
+                    f"Indices differ in {diff_count}/{ref_sorted.numel()} positions")
+        except Exception as e:
+            stats.record_fail(f"indexer_vs_ref_{i}", f"Exception: {e}")
+
+
+def fuzz_attention_vs_reference(stats: FuzzStats, num_iterations: int = 30):
+    """
+    Fuzz test HF Attention output against reference MLA implementation.
+
+    This is the core "mock inference" test for attention - it verifies
+    that the HF implementation produces numerically equivalent outputs
+    to the reference implementation.
+    """
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+
+    print("\nFuzzing Attention vs Reference...")
+
+    for i in range(num_iterations):
+        torch.manual_seed(i)
+        random.seed(i)
+
+        hidden_size = random.choice([128, 256])
+        num_heads = random.choice([2, 4])
+        q_lora_rank = random.choice([32, 64])
+        kv_lora_rank = random.choice([32, 64])
+        qk_nope_head_dim = random.choice([16, 32])
+        qk_rope_head_dim = random.choice([8, 16])
+        v_head_dim = random.choice([16, 32])
+        index_n_heads = random.choice([2, 4])
+        index_head_dim = random.choice([32, 64])
+        index_topk = random.choice([4, 8, 16])
+
+        batch = random.randint(1, 2)
+        seq_len = random.randint(4, 16)
+
+        # Ensure rope fits in index head dim
+        if qk_rope_head_dim >= index_head_dim:
+            qk_rope_head_dim = index_head_dim // 2
+
+        # Ensure topk <= seq_len
+        index_topk = min(index_topk, seq_len)
+
+        config = DeepseekV32Config(
+            hidden_size=hidden_size,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_heads,
+            q_lora_rank=q_lora_rank,
+            kv_lora_rank=kv_lora_rank,
+            qk_nope_head_dim=qk_nope_head_dim,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            index_n_heads=index_n_heads,
+            index_head_dim=index_head_dim,
+            index_topk=index_topk,
+            num_hidden_layers=1,
+        )
+
+        try:
+            # Create both implementations
+            hf_attn = DeepseekV32Attention(config, layer_idx=0)
+            ref_attn = RefMLA(
+                hidden_size, num_heads, q_lora_rank, kv_lora_rank,
+                qk_nope_head_dim, qk_rope_head_dim, v_head_dim,
+                index_n_heads, index_head_dim, index_topk
+            )
+
+            # Copy weights from HF to reference
+            with torch.no_grad():
+                # Q path
+                ref_attn.wq_a.weight.copy_(hf_attn.q_a_proj.weight)
+                ref_attn.q_norm.weight.copy_(hf_attn.q_a_layernorm.weight)
+                ref_attn.wq_b.weight.copy_(hf_attn.q_b_proj.weight)
+                # KV path
+                ref_attn.wkv_a.weight.copy_(hf_attn.kv_a_proj_with_mqa.weight)
+                ref_attn.kv_norm.weight.copy_(hf_attn.kv_a_layernorm.weight)
+                ref_attn.wkv_b.weight.copy_(hf_attn.kv_b_proj.weight)
+                # Output
+                ref_attn.wo.weight.copy_(hf_attn.o_proj.weight)
+                # Indexer
+                ref_attn.indexer.wq_b.weight.copy_(hf_attn.indexer.wq_b.weight)
+                ref_attn.indexer.wk.weight.copy_(hf_attn.indexer.wk.weight)
+                ref_attn.indexer.k_norm.weight.copy_(hf_attn.indexer.k_norm.weight)
+                ref_attn.indexer.k_norm.bias.copy_(hf_attn.indexer.k_norm.bias)
+                ref_attn.indexer.weights_proj.weight.copy_(hf_attn.indexer.weights_proj.weight)
+
+            hf_attn.eval()
+            ref_attn.eval()
+
+            # Generate inputs
+            torch.manual_seed(i + 1000)
+            hidden_states = torch.randn(batch, seq_len, hidden_size)
+            freqs_cis = random_freqs_cis(seq_len, qk_rope_head_dim)
+
+            # Create causal mask for HF (4D) and reference (3D)
+            causal_mask_3d = torch.full((seq_len, seq_len), float("-inf"))
+            causal_mask_3d = torch.triu(causal_mask_3d, diagonal=1)
+            causal_mask_3d = causal_mask_3d.unsqueeze(0).expand(batch, -1, -1)
+
+            causal_mask_4d = causal_mask_3d.unsqueeze(1)  # [B, 1, S, S]
+
+            with torch.no_grad():
+                ref_out = ref_attn(hidden_states, freqs_cis, causal_mask_3d)
+                hf_out, _, _ = hf_attn(hidden_states, position_embeddings=freqs_cis, attention_mask=causal_mask_4d)
+
+            # Compare outputs
+            if torch.allclose(ref_out, hf_out, atol=1e-4, rtol=1e-3):
+                stats.record_pass(f"attn_vs_ref_{i}")
+            else:
+                max_diff = (ref_out - hf_out).abs().max().item()
+                mean_diff = (ref_out - hf_out).abs().mean().item()
+                stats.record_fail(f"attn_vs_ref_{i}",
+                    f"max_diff={max_diff:.6f}, mean_diff={mean_diff:.6f}")
+        except Exception as e:
+            stats.record_fail(f"attn_vs_ref_{i}", f"Exception: {e}")
+
+
+def fuzz_indexer_backward_vs_reference(stats: FuzzStats, num_iterations: int = 30):
+    """
+    Fuzz test HF Indexer gradients against reference implementation.
+
+    This is the "mock training" test for the indexer.
+    Note: Indexer is typically used with @torch.no_grad() in inference,
+    but we test gradients flow for completeness.
+    """
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+
+    print("\nFuzzing Indexer Backward vs Reference...")
+
+    for i in range(num_iterations):
+        torch.manual_seed(i)
+        random.seed(i)
+
+        hidden_size = random.choice([128, 256])
+        q_lora_rank = random.choice([32, 64])
+        index_n_heads = random.choice([2, 4])
+        index_head_dim = random.choice([32, 64])
+        qk_rope_head_dim = random.choice([8, 16])
+        index_topk = random.choice([4, 8])
+        batch = random.randint(1, 2)
+        seq_len = random.randint(4, 16)
+
+        if qk_rope_head_dim >= index_head_dim:
+            qk_rope_head_dim = index_head_dim // 2
+        index_topk = min(index_topk, seq_len)
+
+        config = DeepseekV32Config(
+            hidden_size=hidden_size,
+            q_lora_rank=q_lora_rank,
+            qk_rope_head_dim=qk_rope_head_dim,
+            index_n_heads=index_n_heads,
+            index_head_dim=index_head_dim,
+            index_topk=index_topk,
+            num_attention_heads=4,
+            num_hidden_layers=1,
+        )
+
+        try:
+            hf_indexer = DeepseekV32Indexer(config, layer_idx=0)
+            ref_indexer = RefIndexer(
+                hidden_size, q_lora_rank, index_n_heads, index_head_dim,
+                qk_rope_head_dim, index_topk
+            )
+
+            # Copy weights
+            with torch.no_grad():
+                ref_indexer.wq_b.weight.copy_(hf_indexer.wq_b.weight)
+                ref_indexer.wk.weight.copy_(hf_indexer.wk.weight)
+                ref_indexer.k_norm.weight.copy_(hf_indexer.k_norm.weight)
+                ref_indexer.k_norm.bias.copy_(hf_indexer.k_norm.bias)
+                ref_indexer.weights_proj.weight.copy_(hf_indexer.weights_proj.weight)
+
+            # Generate inputs that require grad
+            torch.manual_seed(i + 1000)
+            hidden_ref = torch.randn(batch, seq_len, hidden_size, requires_grad=True)
+            hidden_hf = hidden_ref.clone().detach().requires_grad_(True)
+            q_comp_ref = torch.randn(batch, seq_len, q_lora_rank, requires_grad=True)
+            q_comp_hf = q_comp_ref.clone().detach().requires_grad_(True)
+            freqs_cis = random_freqs_cis(seq_len, qk_rope_head_dim)
+
+            causal_mask = torch.full((seq_len, seq_len), float("-inf"))
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask = causal_mask.unsqueeze(0).expand(batch, -1, -1)
+
+            # Forward (indices are not differentiable, so we test intermediate scores)
+            # We'll compute a loss based on the index computation and backprop
+
+            # For ref, we need to expose intermediate scores
+            # Simplified test: just verify no gradient issues
+            ref_indices = ref_indexer(hidden_ref, q_comp_ref, freqs_cis, causal_mask)
+            hf_indices, _ = hf_indexer(hidden_hf, q_comp_hf, freqs_cis, causal_mask)
+
+            # Create a pseudo-loss from the float indices (for gradient testing)
+            ref_loss = ref_indices.float().sum()
+            hf_loss = hf_indices.float().sum()
+
+            # Backward
+            ref_loss.backward()
+            hf_loss.backward()
+
+            # Check gradients exist and are valid
+            ref_h_grad = hidden_ref.grad
+            hf_h_grad = hidden_hf.grad
+
+            grads_valid = (
+                ref_h_grad is not None and hf_h_grad is not None and
+                not torch.isnan(ref_h_grad).any() and not torch.isnan(hf_h_grad).any()
+            )
+
+            if grads_valid:
+                stats.record_pass(f"indexer_backward_{i}")
+            else:
+                stats.record_fail(f"indexer_backward_{i}",
+                    f"ref_grad={ref_h_grad is not None}, hf_grad={hf_h_grad is not None}")
+        except Exception as e:
+            stats.record_fail(f"indexer_backward_{i}", f"Exception: {e}")
+
+
+def fuzz_attention_backward_vs_reference(stats: FuzzStats, num_iterations: int = 30):
+    """
+    Fuzz test HF Attention gradients against reference MLA implementation.
+
+    This is the core "mock training" test for attention - it verifies
+    that gradients computed through the HF implementation match
+    those computed through the reference implementation.
+    """
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+
+    print("\nFuzzing Attention Backward vs Reference...")
+
+    for i in range(num_iterations):
+        torch.manual_seed(i)
+        random.seed(i)
+
+        hidden_size = random.choice([128, 256])
+        num_heads = random.choice([2, 4])
+        q_lora_rank = random.choice([32, 64])
+        kv_lora_rank = random.choice([32, 64])
+        qk_nope_head_dim = random.choice([16, 32])
+        qk_rope_head_dim = random.choice([8, 16])
+        v_head_dim = random.choice([16, 32])
+        index_n_heads = random.choice([2, 4])
+        index_head_dim = random.choice([32, 64])
+        index_topk = random.choice([4, 8])
+
+        batch = random.randint(1, 2)
+        seq_len = random.randint(4, 12)
+
+        if qk_rope_head_dim >= index_head_dim:
+            qk_rope_head_dim = index_head_dim // 2
+        index_topk = min(index_topk, seq_len)
+
+        config = DeepseekV32Config(
+            hidden_size=hidden_size,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_heads,
+            q_lora_rank=q_lora_rank,
+            kv_lora_rank=kv_lora_rank,
+            qk_nope_head_dim=qk_nope_head_dim,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            index_n_heads=index_n_heads,
+            index_head_dim=index_head_dim,
+            index_topk=index_topk,
+            num_hidden_layers=1,
+        )
+
+        try:
+            hf_attn = DeepseekV32Attention(config, layer_idx=0)
+            ref_attn = RefMLA(
+                hidden_size, num_heads, q_lora_rank, kv_lora_rank,
+                qk_nope_head_dim, qk_rope_head_dim, v_head_dim,
+                index_n_heads, index_head_dim, index_topk
+            )
+
+            # Copy weights
+            with torch.no_grad():
+                ref_attn.wq_a.weight.copy_(hf_attn.q_a_proj.weight)
+                ref_attn.q_norm.weight.copy_(hf_attn.q_a_layernorm.weight)
+                ref_attn.wq_b.weight.copy_(hf_attn.q_b_proj.weight)
+                ref_attn.wkv_a.weight.copy_(hf_attn.kv_a_proj_with_mqa.weight)
+                ref_attn.kv_norm.weight.copy_(hf_attn.kv_a_layernorm.weight)
+                ref_attn.wkv_b.weight.copy_(hf_attn.kv_b_proj.weight)
+                ref_attn.wo.weight.copy_(hf_attn.o_proj.weight)
+                ref_attn.indexer.wq_b.weight.copy_(hf_attn.indexer.wq_b.weight)
+                ref_attn.indexer.wk.weight.copy_(hf_attn.indexer.wk.weight)
+                ref_attn.indexer.k_norm.weight.copy_(hf_attn.indexer.k_norm.weight)
+                ref_attn.indexer.k_norm.bias.copy_(hf_attn.indexer.k_norm.bias)
+                ref_attn.indexer.weights_proj.weight.copy_(hf_attn.indexer.weights_proj.weight)
+
+            # Generate inputs
+            torch.manual_seed(i + 1000)
+            hidden_ref = torch.randn(batch, seq_len, hidden_size, requires_grad=True)
+            hidden_hf = hidden_ref.clone().detach().requires_grad_(True)
+            freqs_cis = random_freqs_cis(seq_len, qk_rope_head_dim)
+
+            causal_mask_3d = torch.full((seq_len, seq_len), float("-inf"))
+            causal_mask_3d = torch.triu(causal_mask_3d, diagonal=1)
+            causal_mask_3d = causal_mask_3d.unsqueeze(0).expand(batch, -1, -1)
+            causal_mask_4d = causal_mask_3d.unsqueeze(1)
+
+            # Forward
+            ref_out = ref_attn(hidden_ref, freqs_cis, causal_mask_3d)
+            hf_out, _, _ = hf_attn(hidden_hf, position_embeddings=freqs_cis, attention_mask=causal_mask_4d)
+
+            # Create gradient target
+            torch.manual_seed(i + 2000)
+            grad_output = torch.randn_like(ref_out)
+
+            # Backward
+            ref_out.backward(grad_output)
+            hf_out.backward(grad_output)
+
+            # Compare input gradients
+            ref_grad = hidden_ref.grad
+            hf_grad = hidden_hf.grad
+
+            if torch.allclose(ref_grad, hf_grad, atol=1e-4, rtol=1e-3):
+                stats.record_pass(f"attn_backward_{i}")
+            else:
+                max_diff = (ref_grad - hf_grad).abs().max().item()
+                mean_diff = (ref_grad - hf_grad).abs().mean().item()
+                stats.record_fail(f"attn_backward_{i}",
+                    f"max_grad_diff={max_diff:.6f}, mean_grad_diff={mean_diff:.6f}")
+        except Exception as e:
+            stats.record_fail(f"attn_backward_{i}", f"Exception: {e}")
 
 
 def fuzz_full_forward(stats: FuzzStats, num_iterations: int = 20):
@@ -1675,7 +2487,11 @@ def main():
     fuzz_expert(stats, num_iterations=50)
     fuzz_gate(stats, num_iterations=50)
     fuzz_attention_components(stats, num_iterations=30)
+    fuzz_attention_forward(stats, num_iterations=30)
+    fuzz_attention_indexer_effect(stats, num_iterations=20)
     fuzz_indexer_components(stats, num_iterations=30)
+    fuzz_indexer_vs_reference(stats, num_iterations=30)
+    fuzz_attention_vs_reference(stats, num_iterations=30)
     fuzz_moe_routing(stats, num_iterations=30)
     fuzz_full_forward(stats, num_iterations=20)
 
@@ -1688,6 +2504,9 @@ def main():
     fuzz_mlp_backward(stats, num_iterations=50)
     fuzz_expert_backward(stats, num_iterations=50)
     fuzz_gate_backward(stats, num_iterations=50)
+    # Note: fuzz_indexer_backward_vs_reference skipped - indexer uses @torch.no_grad()
+    # and topk indices are not differentiable. Gradients flow through attention instead.
+    fuzz_attention_backward_vs_reference(stats, num_iterations=30)
     fuzz_moe_backward(stats, num_iterations=30)
     fuzz_full_backward(stats, num_iterations=20)
 
