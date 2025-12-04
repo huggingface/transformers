@@ -40,7 +40,7 @@ from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -925,7 +925,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
@@ -942,17 +942,26 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
 
-        EXPECTED_DECODED_TEXT = [
-            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
-            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ['user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                               'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                              ],
+                ("xpu", 3): ['user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                             'user\n\nDescribe the image.\nassistant\nThe image depicts a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                            ],
+            }
         )
+        # fmt: on
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
