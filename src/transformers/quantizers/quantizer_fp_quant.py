@@ -184,3 +184,25 @@ class FPQuantHfQuantizer(HfQuantizer):
     def get_quantize_ops(self):
         from ..integrations.fp_quant import FpQuantQuantize
         return FpQuantQuantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.fp_quant import FpQuantDeserialize
+        from ..core_model_loading import WeightConverter
+        if self.pre_quantized:
+            if self.quantization_config.pseudoquantization:
+                return [
+                    WeightConverter(
+                        source_patterns=[".dqweight"],
+                        target_patterns=".dqweight",
+                        operations=[FpQuantDeserialize(self)],
+                    ),
+                ]
+            else:
+                return [
+                    WeightConverter(
+                        source_patterns=[".qweight"],
+                        target_patterns=".qweight",
+                        operations=[FpQuantDeserialize(self)],
+                    ),
+                ]
+        return []

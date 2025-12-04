@@ -34,53 +34,16 @@ class FpQuantQuantize(ConversionOps):
 
     def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, missing_keys: Optional[list[str]] = None, **kwargs) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
-        value = value[0] if isinstance(value, list) else value
-
-        module, _ = get_module_from_name(model, target_key)
-
-        # TODO: check if we need this or not, commented for now
-        # if target_device == "cpu" and param_name.endswith("weight"):
-        #     # Works agains hard-coded missing key dispatch to CPU
-        #     return
-        # The module holds either:
-        #  * `weight` when `store_master_weights=True`
-        #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
-        #  * `dqweight` when `store_master_weights=False` and `pseudoquantization=True`
-        if target_key.endswith(".qweight"):
-            # Loading a real quantized checkpoint without master weights
-            qweight = torch.nn.Parameter(
-                value,
-                requires_grad=False,
-            )
-            
-            weight_key = target_key.rsplit(".", 1)[0] + ".weight"
-            dqweight_key = target_key.rsplit(".", 1)[0] + ".dqweight"
-
-            return {f"{target_key}": qweight}
-
-        if target_key.endswith(".dqweight"):
-            print(f"target_key: {target_key}")
-            # Loading a pseudo-quantized checkpoint without master weights
-            dqweight = torch.nn.Parameter(value)
-            
-            weight_key = target_key.rsplit(".", 1)[0] + ".weight"
-            dqweight_key = target_key.rsplit(".", 1)[0] + ".dqweight"
-            scales_key = target_key.rsplit(".", 1)[0] + ".scales"
-            
-            return {
-                f"{target_key}": dqweight,
-                f"{weight_key}": torch.nn.Parameter(torch.empty(0)),
-                f"{dqweight_key}": torch.nn.Parameter(torch.empty(0)),
-                f"{scales_key}": torch.nn.Parameter(torch.empty(0))
-                }
-
+        value = value[0]
         # Loading master weights or an unquantized checkpoint
         weight = torch.nn.Parameter(value)
+        module, _ = get_module_from_name(model, target_key)
         module.weight = weight
 
-        # print(f"module.state_dict(): {module.state_dict()}")
         # Let pre-forward handle the quantization and set None where necessary
-        module.pre_forward()
+        # This operation will quantize the weights internally
+        with torch.cuda.device(value.device):
+            module.pre_forward()
 
         prefix_target_key = target_key.rsplit(".", 1)[0]
 
@@ -94,6 +57,46 @@ class FpQuantQuantize(ConversionOps):
         missing_keys.discard(f"{prefix_target_key}.scales")
         missing_keys.discard(f"{prefix_target_key}.dqweight")
         return {}
+
+class FpQuantDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict: torch.Tensor, model: Optional[torch.nn.Module] = None, full_layer_name: str | None = None, missing_keys: Optional[list[str]] = None, **kwargs) -> dict[str, torch.Tensor]:
+        target_key, value = tuple(input_dict.items())[0]
+        value = value[0] if isinstance(value, list) else value
+        module, _ = get_module_from_name(model, target_key)
+        # The module holds either:
+        #  * `weight` when `store_master_weights=True`
+        #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
+        #  * `dqweight` when `store_master_weights=False` and `pseudoquantization=True`
+        if target_key == ".qweight":
+            # Loading a real quantized checkpoint without master weights
+            qweight = torch.nn.Parameter(
+                value,
+                requires_grad=False,
+            )
+
+            return {
+                ".qweight": qweight,
+                # the way the FPQuantLinear module is designed, these parameters are expected in the model
+                # even though they are not used so we need to set them to zeros
+                ".weight": torch.nn.Parameter(torch.zeros(0)),
+                ".qweight": torch.nn.Parameter(torch.zeros(0)),
+            }
+
+        if target_key == ".dqweight":
+            # Loading a pseudo-quantized checkpoint without master weights
+            dqweight = torch.nn.Parameter(value)
+
+            return {
+                    ".dqweight": dqweight,
+                    # the way the FPQuantLinear module ips designed, these parameters are expected in the model
+                    # even though they are not used so we need to set them to zeros
+                    ".weight": torch.nn.Parameter(torch.zeros(0)),
+                    ".qweight": torch.nn.Parameter(torch.zeros(0)),
+                    ".scales": torch.nn.Parameter(torch.zeros(0))
+                }
 
 def adapt_fp_quant_config(config: FPQuantConfig):
     if config.forward_dtype == "mxfp4":
