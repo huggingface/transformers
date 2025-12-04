@@ -603,7 +603,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForConditionalGeneration"),
         ("t5gemma", "T5GemmaForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
-        ("transfo-xl", "TransfoXLLMHeadModel"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
         ("whisper", "WhisperForConditionalGeneration"),
@@ -1774,6 +1773,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
+        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
     ]
 )
 

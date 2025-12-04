@@ -91,6 +91,10 @@ def update_state_dict_for_hf_model(state_dict):
         if "diffusion_head.layers." in key and ".adaLN_modulation." in key:
             if ".adaLN_modulation.1." in key:
                 new_key = new_key.replace(".adaLN_modulation.1.", ".linear.")
+        if "model.speech_scaling_factor" in key:
+            new_key = new_key.replace("model.speech_scaling_factor", "latent_scaling_factor")
+        if "model.speech_bias_factor" in key:
+            new_key = new_key.replace("model.speech_bias_factor", "latent_bias_factor")
 
         updated_state_dict[new_key] = value
 
@@ -448,9 +452,7 @@ def convert_checkpoint(
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
     VibeVoiceProcessor.from_pretrained(output_dir)
-    VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16)
-    # TODO (ebezzam) "auto" not working for: model.speech_scaling_factor, model.speech_bias_factor
-    # VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 

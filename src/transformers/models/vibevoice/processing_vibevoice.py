@@ -76,7 +76,6 @@ class VibeVoiceProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-        # Handle speech tokens like CSM
         if not hasattr(tokenizer, "speech_start_token"):
             self.speech_start_token = "<|vision_start|>"
             self.speech_start_id = tokenizer.convert_tokens_to_ids(self.speech_start_token)
@@ -125,7 +124,6 @@ class VibeVoiceProcessor(ProcessorMixin):
                 - **input_features** -- Processed audio tensors (if audio provided)
                 - **input_features_mask** -- Masks for valid speech tokens (if audio provided)
         """
-        # Merge defaults with user kwargs
         output_kwargs = self._merge_kwargs(
             VibeVoiceProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,

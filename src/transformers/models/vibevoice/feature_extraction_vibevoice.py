@@ -32,7 +32,7 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
-            The feature dimension of the extracted features. Use 1 for mono, 2 for stereo.
+            The number of channels.
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio waveform should be digitalized, expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
@@ -105,19 +105,12 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         # Ensure batch
         audio = make_list_of_audio(audio)
 
-        # Ensure numpy arrays and mono
+        # Ensure numpy float arrays and mono
         for idx, example in enumerate(audio):
-            if not isinstance(example, np.ndarray):
-                example = np.asarray(example, dtype=np.float32)
-            elif example.dtype != np.float32:
-                example = example.astype(np.float32)
-            if example.ndim == 1:
-                audio[idx] = example  # Already mono
-            elif example.ndim == 2:
-                # Convert to mono by averaging across channels (works for any channel dimension)
-                audio[idx] = np.mean(example, axis=0 if example.shape[0] <= 2 else 1)
-            else:
-                raise ValueError(f"Audio should be 1D or 2D, got shape: {example.shape}")
+            example = np.asarray(example, dtype=np.float32)
+            if example.ndim != 1:
+                raise ValueError(f"Audio should be mono, got shape: {example.shape}")
+            audio[idx] = example
 
         if self.normalize_audio:
             for idx, example in enumerate(audio):
@@ -127,7 +120,6 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
                 max_val = np.max(np.abs(example))
                 if max_val > 1.0:
                     example = example / (max_val + self.eps)
-
                 audio[idx] = example
 
         output_values = BatchFeature({"input_features": audio})

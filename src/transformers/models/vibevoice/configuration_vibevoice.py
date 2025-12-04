@@ -170,9 +170,6 @@ class VibeVoiceConfig(PretrainedConfig):
         speech_diffusion_id=151654,
         **kwargs,
     ):
-        # TODO (ebezzam) check this setting
-        kwargs["_attn_implementation_autoset"] = False
-
         if isinstance(acoustic_tokenizer_config, dict):
             acoustic_tokenizer_config["model_type"] = acoustic_tokenizer_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer"

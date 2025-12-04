@@ -15,6 +15,7 @@
 
 import importlib
 import queue
+import time
 from dataclasses import dataclass
 from queue import Queue
 from typing import Optional, Union
@@ -93,10 +94,9 @@ class AudioStreamer(BaseStreamer):
         self.stop_signal = stop_signal
         self.timeout = timeout
 
-        # Create a queue for each sample in the batch
         self.audio_queues = [Queue() for _ in range(batch_size)]
         self.finished_flags = [False for _ in range(batch_size)]
-        self.sample_indices_map = {}  # Maps from sample index to queue index
+        self.sample_indices_map = {}  # Map from sample index to queue index
 
     def put(self, audio_chunks: torch.Tensor, sample_indices: torch.Tensor):
         """
@@ -121,13 +121,11 @@ class AudioStreamer(BaseStreamer):
             sample_indices: Optional tensor of sample indices to end. If None, ends all.
         """
         if sample_indices is None:
-            # End all samples
             for idx in range(self.batch_size):
                 if not self.finished_flags[idx]:
                     self.audio_queues[idx].put(self.stop_signal, timeout=self.timeout)
                     self.finished_flags[idx] = True
         else:
-            # End specific samples
             for sample_idx in sample_indices:
                 idx = sample_idx.item() if torch.is_tensor(sample_idx) else sample_idx
                 if idx < self.batch_size and not self.finished_flags[idx]:
@@ -178,8 +176,6 @@ class AudioBatchIterator:
 
         batch_chunks = {}
         samples_to_remove = set()
-
-        # Try to get chunks from all active samples
         for idx in self.active_samples:
             try:
                 value = self.streamer.audio_queues[idx].get(block=False)
@@ -188,19 +184,14 @@ class AudioBatchIterator:
                 else:
                     batch_chunks[idx] = value
             except queue.Empty:
-                # Queue is empty for this sample, skip it this iteration
                 pass
 
-        # Remove finished samples
         self.active_samples -= samples_to_remove
 
         if batch_chunks:
             return batch_chunks
         elif self.active_samples:
-            # If no chunks were ready but we still have active samples,
-            # wait a bit and try again
-            import time
-
+            # If no chunks were ready but we still have active samples, wait a bit and try again
             time.sleep(0.01)
             return self.__next__()
         else:
@@ -218,8 +209,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         kept_criteria = StoppingCriteriaList()
         for criterion in criteria:
             if not isinstance(criterion, MaxLengthCriteria):
-                # Use debug level for EosTokenCriteria since VibeVoice always has eos_token_id configured
-                # and handles EOS detection internally
                 if isinstance(criterion, EosTokenCriteria):
                     logger.debug(
                         f"VibeVoice handles EOS tokens internally, ignoring {criterion.__class__.__name__} stopping criteria."
@@ -267,7 +256,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         )
 
         # try creating VibeVoice noise scheduler
-        # TODO (ebezzam) ok with this so user doesn't need to defined noise scheduler each time?
+        # TODO (ebezzam) ok with this? so user doesn't need to defined noise scheduler each time?
         # Alternatively, require user to create noise scheduler outside
         if (
             noise_scheduler is None
@@ -521,10 +510,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # *************** VibeVoice specific ***************
             # token selection
-            # NOTE: For VibeVoice, we always use deterministic token selection (argmax)
+            # NOTE (ebezzam): For VibeVoice, we always use deterministic token selection
             # regardless of do_sample setting. The real sampling happens in the diffusion
-            # process for audio generation, not in token selection. Using multinomial
-            # sampling here can cause numerical issues with the constrained token set.
+            # process for audio generation, not in token selection.
             if do_sample:
                 logger.warning(
                     "VibeVoice generation does not support sampling-based token selection. "
@@ -685,10 +673,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     speech = noise_scheduler.step(eps, timestep, speech).prev_sample
                 speech_latent = speech[: len(speech) // 2].unsqueeze(1)
 
-                # Decode to audio and encode to features
-                scaled_latent = speech_latent / self.speech_scaling_factor.to(
+                # Decode to audio
+                scaled_latent = speech_latent / self.latent_scaling_factor.to(
                     speech_latent.device
-                ) - self.speech_bias_factor.to(speech_latent.device)
+                ) - self.latent_bias_factor.to(speech_latent.device)
                 if len(diffusion_indices) != batch_size:
                     # pad non-diffusion samples with zeros
                     padded_latent = torch.zeros(batch_size, scaled_latent.shape[1], scaled_latent.shape[2]).to(
@@ -712,7 +700,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 if streamer is not None:
                     streamer.put(audio_chunk, diffusion_indices)
 
-                # Encode to semantic features
+                # Get semantic features for next step
                 semantic_outputs = self.semantic_tokenizer.encode(
                     audio_chunk,
                     padding_cache=semantic_cache,
@@ -727,10 +715,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 diffusion_embeds = acoustic_embed + semantic_embed
                 next_inputs_embeds[diffusion_indices] = diffusion_embeds
 
-            # Set embeddings for next iteration
             inputs_embeds = next_inputs_embeds
-
-            # Update stopping state
             unfinished_sequences = unfinished_sequences & ~finished_tags.long()
             step += 1
             # ============================================
