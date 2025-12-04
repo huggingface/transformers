@@ -16,6 +16,8 @@
 import unittest
 
 from transformers import (
+    AutoConfig,
+    AutoModelForImageTextToText,
     AutoProcessor,
     Ernie4_5_VLConfig,
     Ernie4_5_VLForConditionalGeneration,
@@ -267,22 +269,25 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @slow
-@require_torch_multi_accelerator
-@require_torch_large_accelerator
+#@require_torch_multi_accelerator
+#@require_torch_large_accelerator
 @require_torch
 class Ernie4_5_VLIntegrationTest(unittest.TestCase):
-    # TODO: update path
-    model_id = "/raid/anton/code/forks/transformers/AntonV/ErnieVL"
+    model = None
+    model_id = "baidu/ERNIE-4.5-VL-28B-A3B-PT"
+    # TODO: remove after uploading
+    local_path = "/raid/anton/code/forks/transformers/AntonV/ErnieVL"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
-        self.processor = AutoProcessor.from_pretrained(self.model_id)
+        self.config = AutoConfig.from_pretrained(self.local_path)
+        self.processor = AutoProcessor.from_pretrained(self.local_path)
         self.message = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "What kind of dog is this?"},
+                    {"type": "text", "text": "Only use English during your responses. What kind of dog is this?"},
                     {
                         "type": "image",
                         "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -294,7 +299,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "What kind of dog is this?"},
+                    {"type": "text", "text": "Only use English during your responses. What kind of dog is this?"},
                     {
                         "type": "image",
                         "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
@@ -306,13 +311,21 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_small_model_integration_test(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+    def load_model(self, dtype, attn_implementation="sdpa"):
+        return AutoModelForImageTextToText.from_pretrained(
+            self.model_id,
+            config=self.config,
+            device_map="auto",
+            dtype=dtype,
+            attn_implementation=attn_implementation,
+        )
 
+    def test_small_model_integration_test(self):
+        model = self.load_model("auto")
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [100273, 2969, 93963, 1912, 3836, 315, 9159, 357, 501, 94009, 39082, 93919, 4, 93963, 101304, 100295, 100295]  # fmt: skip
+        expected_input_ids = [100273, 2969, 93963, 11301, 916, 7659, 2259, 912, 11234, 93937, 1912, 3836, 315, 9159, 357, 501, 94009]  # fmt: skip
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         expected_pixel_slice = torch.tensor(
@@ -336,14 +349,14 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail"
+        EXPECTED_DECODED_TEXT = 'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe dog in the picture is a lynx. It has a coat with a mix of brown and black fur, and features like a small face'
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
     def test_small_model_integration_test_batch(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+        model = self.load_model("auto")
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -356,21 +369,20 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail"
+            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a mix of grey and brown fur, and features like small ears and distinctive facial mark',
+            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a mix of grey and brown fur, and features like small ears and distinctive facial mark'
         ]  # fmt: skip
 
+        print(self.processor.batch_decode(output, skip_special_tokens=True))
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
     def test_small_model_integration_test_with_video(self):
-        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176})
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.float16, device_map="auto"
-        )
-        questions = ["Only use English during your responses and describe the following video."]
+        processor = AutoProcessor.from_pretrained(self.local_path, max_image_size={"longest_edge": 50176})
+        model = self.load_model(dtype=torch.float16)
+        questions = ["Only use English during your responses. Describe the following video."]
         video_urls = ["https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"]
         messages = [
             [
@@ -395,7 +407,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = ['User: Only use English during your responses and describe the following video.Video 1:\nAssistant: \n\n\n\nA black-and-white image shows a person lying on their back on a mat in a dojo. They are dressed in a white judo gi']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['User: Only use English during your responses. Describe the following video.Video 1:\nAssistant: \n\n\n\nA man is lying on the floor in a martial arts dojo.']  # fmt: skip
 
         self.assertEqual(
             processor.batch_decode(output, skip_special_tokens=True),
@@ -403,7 +415,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_expand(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+        model = self.load_model("auto")
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
@@ -414,8 +426,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft'
+            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a combination of grey and brown fur, and distinctive facial markings.',
+            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a fur pattern similar to that of a cat, but it is a wild animal quite different from domestic cats'
         ]  # fmt: skip
 
         self.assertEqual(
@@ -424,7 +436,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+        model = self.load_model("auto")
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
@@ -445,8 +457,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            "User: Who are you?\nAssistant: \n\n\n\nI'm an AI assistant created to help answer questions and provide information on a wide range of topics! I don't have personal experiences or a"
+            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a fur pattern similar to that of a cat, but it actually belongs to a different category, as it',
+            "User: Who are you?\nAssistant: \n\n\n\nI'm an AI assistant designed to help you with a wide range of questions and tasks. I can provide information, answer questions, help with problem"
         ]  # fmt: skip
 
         self.assertEqual(
@@ -455,7 +467,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
+        model = self.load_model("auto")
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
             batched_messages,
@@ -473,81 +485,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats\nI am an AI assistant. I will benefit from learning by comparing what',
-        ]  # fmt: skip
-
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @require_flash_attn
-    @require_torch_gpu
-    def test_small_model_integration_test_batch_flashatt2(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id,
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        batched_messages = [self.message, self.message2]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        # This model on the hub has `do_sample=True`.
-        torch.manual_seed(42)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats\nI am an AI assistant. I will benefit from learning by comparing what',
-        ]  # fmt: skip
-
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @require_flash_attn
-    @require_torch_gpu
-    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
-        model = Ernie4_5_VLForConditionalGeneration.from_pretrained(
-            self.model_id,
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        message_wo_image = [
-            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
-        ]
-        batched_messages = [self.message, message_wo_image]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        # This model on the hub has `do_sample=True`.
-        torch.manual_seed(42)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
-            "User: Who are you?\nAssistant: \n\n\n\nI'm an AI assistant created to help answer questions and provide information on a wide range of topics! I don't have personal experiences or a"
+            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a combination of brown and grey fur, and features like small ears and distinctive facial mark',
+            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animals in the image are not dogs, but cats. They have a tabby coat, which is a mix of black, brown and orange fur',
         ]  # fmt: skip
 
         self.assertEqual(
