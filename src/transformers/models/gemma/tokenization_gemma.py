@@ -73,19 +73,15 @@ class GemmaTokenizer(TokenizersBackend):
     ):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
-
-        self._vocab = (
-            vocab
-            if vocab is not None
-            else {
+        if vocab is None:
+            vocab = {
                 str(pad_token): 0,
                 str(eos_token): 1,
                 str(bos_token): 2,
                 str(unk_token): 3,
                 str(mask_token): 4,
             }
-        )
-
+        self._vocab = vocab
         self._merges = merges or []
 
         self._tokenizer = Tokenizer(

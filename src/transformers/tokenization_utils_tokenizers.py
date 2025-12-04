@@ -104,7 +104,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         fast_tokenizer_file = local_kwargs.get("tokenizer_file")
 
         if fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file) and cls is TokenizersBackend:
-            return {"tokenizer_object": TokenizerFast.from_file(fast_tokenizer_file)}
+            local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
+            return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:

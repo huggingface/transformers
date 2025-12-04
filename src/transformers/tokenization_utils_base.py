@@ -1632,11 +1632,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
                 )
-            # Use first vocab file that's not tokenizer_file
-            file_id = list(cls.vocab_files_names.keys())[0]
-            if file_id == "tokenizer_file" and vocab_files_count > 1:
-                file_id = [k for k in cls.vocab_files_names.keys() if k != "tokenizer_file"][0]
-
+            file_id = "vocab_file"
+            if pretrained_model_name_or_path.endswith("tokenizer.json"):
+                file_id = "tokenizer_file"
             vocab_files[file_id] = pretrained_model_name_or_path
             single_file_id = file_id
         else:
