@@ -18,7 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Optional, Union
 
 import torch
@@ -258,7 +258,7 @@ class MLCDAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -315,8 +315,9 @@ class MLCDEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
+        rotary_position_tensor: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
@@ -324,17 +325,19 @@ class MLCDEncoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
                 Represents the hidden states from the previous layer or the input embeddings.
-            position_embeddings (`torch.Tensor` of shape `(seq_len, embed_dim)`):
-                Rotary position embeddings used to derive sine and cosine components for attention.
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`):
+                A tuple of two tensors, each of shape `(batch, seq_len, embed_dim)`.
+                Represents absolute positional embeddings for the query and key in the attention mechanism.
             attention_mask (`torch.FloatTensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        cos_position_embeddings = position_embeddings.cos()
-        sin_position_embeddings = position_embeddings.sin()
-        rotary_embeddings = (cos_position_embeddings, sin_position_embeddings)
+        rotary_embeddings = position_embeddings
+        if rotary_position_tensor is not None:
+            rotary_embeddings = (rotary_position_tensor.cos(), rotary_position_tensor.sin())
+
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=rotary_embeddings,
@@ -372,6 +375,7 @@ class MLCDEncoder(nn.Module):
         inputs_embeds: torch.FloatTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
+        rotary_position_tensor: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -390,12 +394,12 @@ class MLCDEncoder(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
         """
         hidden_states = inputs_embeds
-        position_embeddings_tensor = position_embeddings
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
-                position_embeddings_tensor,
+                position_embeddings,
                 attention_mask,
+                rotary_position_tensor=rotary_position_tensor,
                 **kwargs,
             )
 
@@ -418,6 +422,54 @@ class MLCDPreTrainedModel(PreTrainedModel):
         "hidden_states": MLCDEncoderLayer,
         "attentions": MLCDAttention,
     }
+
+    def enable_input_require_grads(self, raise_on_missing_embeddings: bool = False):
+        """
+        MLCD mixes multiple embedding modules (class token + patch embeddings) so we need to walk through tuples/lists
+        returned by hooks and flag every tensor as requiring gradients.
+        """
+
+        def make_inputs_require_grads(module, inputs, output):
+            def _set_requires_grad(tensor_like):
+                if isinstance(tensor_like, torch.Tensor):
+                    tensor_like.requires_grad_(True)
+                elif isinstance(tensor_like, Mapping):
+                    for value in tensor_like.values():
+                        _set_requires_grad(value)
+                elif isinstance(tensor_like, (tuple, list)):
+                    for value in tensor_like:
+                        _set_requires_grad(value)
+
+            _set_requires_grad(output)
+
+        hooks = []
+        seen_modules = set()
+        found_embeddings = False
+
+        for module in self.modules():
+            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+                continue
+
+            input_embeddings = module.get_input_embeddings()
+            if input_embeddings is None or not hasattr(input_embeddings, "register_forward_hook"):
+                continue
+
+            embedding_id = id(input_embeddings)
+            if embedding_id in seen_modules:
+                continue
+
+            seen_modules.add(embedding_id)
+            hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+            found_embeddings = True
+
+        self._require_grads_hooks = hooks
+        if hooks:
+            self._require_grads_hook = hooks[0]
+        if raise_on_missing_embeddings and not found_embeddings:
+            raise RuntimeError(
+                f"{self.__class__.__name__} does not expose input embeddings. "
+                "Override `get_input_embeddings` to enable gradient checkpointing with adapters."
+            )
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -479,7 +531,8 @@ class MLCDVisionTransformer(nn.Module):
         rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
         rotary_pos_emb = rotary_pos_emb.to(self.class_pos_emb.device)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
-        position_embeddings = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        rotary_position_tensor = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (rotary_position_tensor.cos(), rotary_position_tensor.sin())
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
@@ -487,6 +540,7 @@ class MLCDVisionTransformer(nn.Module):
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             position_embeddings=position_embeddings,
+            rotary_position_tensor=rotary_position_tensor,
             **kwargs,
         )
 
