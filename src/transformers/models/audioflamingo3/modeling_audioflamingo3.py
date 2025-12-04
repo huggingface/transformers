@@ -323,6 +323,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         self,
         input_features: torch.Tensor,
         input_features_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         r"""
         Args:

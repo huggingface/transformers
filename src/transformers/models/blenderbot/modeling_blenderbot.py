@@ -493,6 +493,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -643,6 +644,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -885,6 +887,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1039,6 +1042,7 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1196,6 +1200,7 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
