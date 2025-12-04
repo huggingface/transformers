@@ -74,6 +74,7 @@ class AwqFormat(str, Enum):
 class AwqBackend(str, Enum):
     LEGACY_AWQ = "autoawq"
     AUTO = "auto"
+    AUTO_TRAINABLE = "auto_trainable"
     MACHETE = "machete"
     MARLIN = "marlin"
     EXLLAMA_V2 = "exllama_v2"
