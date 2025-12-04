@@ -570,7 +570,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        print("heeeere :", decoded_output)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
