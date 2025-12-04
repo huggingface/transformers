@@ -78,7 +78,7 @@ try:
                 )
             return lambda func: func
 
-    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository]] = {
+    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
@@ -253,6 +253,7 @@ except ImportError:
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": "clean-mamba-ssm"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -328,7 +329,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
         return mapping[kernel_name]
     if kernel_name not in _HUB_KERNEL_MAPPING:
-        logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
+        logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
     if _kernels_available:
