@@ -354,14 +354,14 @@ class Ernie4_5_VLMoeTopKRouter(nn.Module):
 
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             router_logits = F.linear(hidden_states.float(), self.weight)
-            router_logits = F.softmax(router_logits, dim=1, dtype=torch.float)
-            router_top_value, router_indices = torch.topk(self.moe_statics(router_logits), self.top_k, dim=-1)
-            router_top_value = router_top_value / torch.clamp(
-                router_top_value.sum(dim=-1, keepdim=True), min=self.norm_min
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-            router_scores = router_top_value
-        router_scores = router_scores.to(hidden_states.dtype)
-        return router_logits, router_indices, router_scores
+        routing_weights = routing_weights.to(router_logits.dtype)
+        return router_logits, selected_experts, routing_weights
 
 
 class Ernie4_5_VLMoeExperts(nn.Module):

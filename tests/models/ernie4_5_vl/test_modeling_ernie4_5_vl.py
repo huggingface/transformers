@@ -285,7 +285,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "Only use English during your responses. What kind of dog is this?"},
+                    {"type": "text", "text": "What kind of dog is this?"},
                     {
                         "type": "image",
                         "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -297,7 +297,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "Only use English during your responses. What kind of dog is this?"},
+                    {"type": "text", "text": "What kind of dog is this?"},
                     {
                         "type": "image",
                         "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
@@ -323,7 +323,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [100273, 2969, 93963, 11301, 916, 7659, 2259, 912, 11234, 93937, 1912, 3836, 315, 9159, 357, 501, 94009]  # fmt: skip
+        expected_input_ids = [100273, 2969, 93963, 1912, 3836, 315, 9159, 357, 501, 94009, 39082, 93919, 4, 93963, 101304, 100295, 100295]  # fmt: skip
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         expected_pixel_slice = torch.tensor(
@@ -347,7 +347,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe dog in the picture is a lynx. It has a coat with a mix of brown and black fur, and features like a small face"
+        EXPECTED_DECODED_TEXT = 'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft'
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -367,8 +367,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a mix of grey and brown fur, and features like small ears and distinctive facial mark',
-            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a mix of grey and brown fur, and features like small ears and distinctive facial mark'
+            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and",
+            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species characterized by its distinctive ear tufts,"
         ]  # fmt: skip
 
         self.assertEqual(
@@ -404,7 +404,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = ['User: Only use English during your responses. Describe the following video.Video 1:\nAssistant: \n\n\n\nA man is lying on the floor in a martial arts dojo.']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['User: Only use English during your responses. Describe the following video.Video 1:\nAssistant: \n\n\n\nA black-and-white image shows a person lying on their back on a mat in a dojo. They are dressed in a white judo gi']  # fmt: skip
 
         self.assertEqual(
             processor.batch_decode(output, skip_special_tokens=True),
@@ -423,8 +423,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a combination of grey and brown fur, and distinctive facial markings.',
-            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a fur pattern similar to that of a cat, but it is a wild animal quite different from domestic cats'
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as its short'
         ]  # fmt: skip
 
         self.assertEqual(
@@ -454,8 +454,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a fur pattern similar to that of a cat, but it actually belongs to a different category, as it',
-            "User: Who are you?\nAssistant: \n\n\n\nI'm an AI assistant designed to help you with a wide range of questions and tasks. I can provide information, answer questions, help with problem"
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
+            "User: Who are you?\nAssistant: \n\n\n\nI'm an AI assistant created to help answer questions and provide information on a wide range of topics! I don't have personal experiences or emotions"
         ]  # fmt: skip
 
         self.assertEqual(
@@ -482,8 +482,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThis is a lynx. It has a unique appearance with a combination of brown and grey fur, and features like small ears and distinctive facial mark',
-            'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animals in the image are not dogs, but cats. They have a tabby coat, which is a mix of black, brown and orange fur',
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats',
         ]  # fmt: skip
 
         self.assertEqual(

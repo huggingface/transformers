@@ -240,7 +240,7 @@ class Ernie4_5_VLConfig(PreTrainedConfig):
             The video token index to encode the start of video.
         video_end_token_id (`int`, *optional*, defaults to 101307):
             The video token index to encode the end of video.
-        video_token_id (`int`, *optional*, defaults to 100296):
+        video_token_id (`int`, *optional*, defaults to 103367):
             The video token index to encode the video prompt.
 
     ```python
