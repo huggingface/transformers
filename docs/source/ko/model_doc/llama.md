@@ -86,17 +86,13 @@ LLaMA를 시작하는 데 도움이 될 Hugging Face 및 커뮤니티(🌎로 �
 ## LlamaTokenizer [[llamatokenizer]]
 
 [[autodoc]] LlamaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## LlamaTokenizerFast [[llamatokenizerfast]]
 
 [[autodoc]] LlamaTokenizerFast
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - update_post_processor
     - save_vocabulary
 

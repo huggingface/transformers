@@ -11,14 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
-
 import asyncio
 import base64
 import copy
-import datetime
 import enum
-import functools
 import gc
 import io
 import json
@@ -29,17 +25,18 @@ import time
 import uuid
 from collections.abc import Generator, Iterable
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from io import BytesIO
 from threading import Thread
 from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
 
 import typer
-from huggingface_hub import model_info
-from huggingface_hub.constants import HF_HUB_OFFLINE
+from huggingface_hub import scan_cache_dir
 from tokenizers.decoders import DecodeStream
+from tqdm import tqdm
 
 import transformers
-from transformers import BitsAndBytesConfig, GenerationConfig
+from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, PreTrainedTokenizerBase
 from transformers.utils.import_utils import (
     is_fastapi_available,
     is_librosa_available,
@@ -316,9 +313,9 @@ class TimedModel:
 
     def __init__(
         self,
-        model: PreTrainedModel,
+        model: "PreTrainedModel",
         timeout_seconds: int,
-        processor: Union[ProcessorMixin, PreTrainedTokenizerFast] | None = None,
+        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -666,7 +663,7 @@ class Serve:
         finish_reason: str | None = None,
         tool_calls: list[ChoiceDeltaToolCall] | None = None,
         decode_stream: DecodeStream | None = None,
-        tokenizer: PreTrainedTokenizerFast | None = None,
+        tokenizer: Optional["PreTrainedTokenizerFast"] = None,
     ) -> ChatCompletionChunk:
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
@@ -732,51 +729,54 @@ class Serve:
         """
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    @functools.cache
-    def get_gen_models(self) -> list[dict[str, any]]:
+    @staticmethod
+    @lru_cache
+    def get_gen_models(cache_dir: str | None = None) -> list[dict[str, any]]:
         """
-        This is by no means a limit to which models may be instantiated with `transformers serve`: any chat-based
-        model working with generate can work.
-
-        This is a limited list of models to ensure we have a discoverable /v1/models endpoint for third-party
-        integrations.
+        List LLMs and VLMs in the cache.
         """
-        models = [
-            "Menlo/Jan-nano",
-            "Menlo/Jan-nano-128k",
-            "Qwen/Qwen2.5-0.5B-Instruct",
-            "Qwen/Qwen2.5-3B-Instruct",
-            "Qwen/Qwen2.5-7B-Instruct",
-            "Qwen/Qwen2.5-14B-Instruct",
-            "meta-llama/Llama-3.1-8B-Instruct",
-            "meta-llama/Llama-3.2-1B-Instruct",
-            "meta-llama/Llama-3.3-70B-Instruct",
-            "HuggingFaceTB/SmolVLM-Instruct",
-            "ibm-granite/granite-vision-3.2-2b",
-            "Qwen/Qwen2.5-VL-7B-Instruct",
-        ]
+        from transformers.models.auto.modeling_auto import (
+            MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+            MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+        )
 
-        if HF_HUB_OFFLINE:
-            return [
-                {
-                    "id": model,
-                    "object": "model",
-                    "created": datetime.datetime.now().timestamp(),
-                    "owned_by": model.split("/")[0],
-                }
-                for model in models
-            ]
-        else:
-            model_infos = [model_info(model) for model in models]
-            return [
-                {
-                    "id": model.id,
-                    "object": "model",
-                    "created": model.created_at.timestamp(),
-                    "owned_by": model.author,
-                }
-                for model in model_infos
-            ]
+        generative_models = []
+
+        logger.warning("Scanning the cache directory for LLMs and VLMs.")
+        for repo in tqdm(scan_cache_dir(cache_dir).repos):
+            if repo.repo_type != "model":
+                continue
+
+            refs = repo.refs
+            for ref, revision_info in refs.items():
+                files = revision_info.files
+                config_path = next((f.file_path for f in files if f.file_name == "config.json"), None)
+
+                if not config_path:
+                    continue
+
+                config = json.loads(config_path.open().read())
+
+                if not (isinstance(config, dict) and "architectures" in config):
+                    continue
+
+                architectures = config["architectures"]
+                llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
+                vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
+
+                if any(arch for arch in architectures if arch in [*llms, *vlms]):
+                    author = repo.repo_id.split("/") if "/" in repo.repo_id else ""
+                    repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
+                    generative_models.append(
+                        {
+                            "owned_by": author,
+                            "id": repo_handle,
+                            "object": "model",
+                            "created": repo.last_modified,
+                        }
+                    )
+
+        return generative_models
 
     def continuous_batching_chat_completion(self, req: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """
@@ -823,9 +823,9 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
-        inputs = processor.apply_chat_template(req["messages"], return_tensors="pt", add_generation_prompt=True).to(
-            model.device
-        )["input_ids"][0]
+        inputs = processor.apply_chat_template(
+            req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)["input_ids"][0]
 
         def stream_chat_completion(request_id, decode_stream):
             from ..generation.continuous_batching import RequestStatus
@@ -835,11 +835,23 @@ class Serve:
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
+                n_tokens_generated = 0
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
+                    n_tokens_generated += 1
+
                     if result.status == RequestStatus.FINISHED:
+                        generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+
+                        # If the tokenizer has an eos_token, we can have a more robust check.
+                        if hasattr(tokenizer, "eos_token"):
+                            final_token_is_eos = result == tokenizer.eos_token
+                            generated_all_tokens = generated_all_tokens and not final_token_is_eos
+
+                        reason = "length" if generated_all_tokens else "stop"
+
                         yield self.build_chat_completion_chunk(
                             request_id,
-                            finish_reason="stop",
+                            finish_reason=reason,
                             model=model_id_and_revision,
                         )
                         break
@@ -914,7 +926,11 @@ class Serve:
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
-    def get_model_modality(model: PreTrainedModel) -> Modality:
+    def get_model_modality(model: "PreTrainedModel", processor=None) -> Modality:
+        if processor is not None:
+            if isinstance(processor, PreTrainedTokenizerBase):
+                return Modality.LLM
+
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
@@ -1004,7 +1020,7 @@ class Serve:
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        modality = self.get_model_modality(model)
+        modality = self.get_model_modality(model, processor=processor)
         processor_inputs = self.get_processor_inputs_from_inbound_messages(messages, modality)
 
         # ====== TOOL PREPROCESSING LOGIC ======
@@ -1080,8 +1096,13 @@ class Serve:
                 # they come from the assistant.
                 yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
 
+                result = ""
+                n_tokens_generated = 0
+
                 for result in streamer:
-                    # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
+                    n_tokens_generated += 1
+
+                    # Temporary hack for GPT-OSS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
                         result = result.removesuffix("<|return|>")
                     results += result
@@ -1170,7 +1191,17 @@ class Serve:
                         yield self.build_chat_completion_chunk(
                             _request_id, content=result, model=model_id_and_revision
                         )
-                yield self.build_chat_completion_chunk(_request_id, finish_reason="stop", model=model_id_and_revision)
+
+                generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+
+                # If the tokenizer has an eos_token, we can have a more robust check.
+                if hasattr(streamer.tokenizer, "eos_token"):
+                    final_token_is_eos = result == streamer.tokenizer.eos_token
+                    generated_all_tokens = generated_all_tokens and not final_token_is_eos
+
+                reason = "length" if generated_all_tokens else "stop"
+
+                yield self.build_chat_completion_chunk(_request_id, finish_reason=reason, model=model_id_and_revision)
 
                 thread.join()
             except Exception as e:
@@ -1256,7 +1287,9 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
+        inputs = processor.apply_chat_template(
+            inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        )["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
@@ -1560,7 +1593,9 @@ class Serve:
         else:
             raise ValueError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")["input_ids"]
+        inputs = processor.apply_chat_template(
+            inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        )["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
@@ -1759,11 +1794,22 @@ class Serve:
         else:
             model_id, revision = model_id_and_revision, "main"
 
-        data_processor = AutoProcessor.from_pretrained(
-            model_id,
-            revision=revision,
-            trust_remote_code=self.trust_remote_code,
-        )
+        try:
+            data_processor = AutoProcessor.from_pretrained(
+                model_id,
+                revision=revision,
+                trust_remote_code=self.trust_remote_code,
+            )
+        except OSError:
+            try:
+                data_processor = AutoTokenizer.from_pretrained(
+                    model_id,
+                    revision=revision,
+                    trust_remote_code=self.trust_remote_code,
+                )
+            except OSError:
+                raise OSError("Failed to load processor with `AutoProcessor` and `AutoTokenizer`.")
+
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
@@ -1792,7 +1838,9 @@ class Serve:
         logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
-    def load_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+    def load_model_and_processor(
+        self, model_id_and_revision: str
+    ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
 
@@ -1817,7 +1865,7 @@ class Serve:
 
         return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 

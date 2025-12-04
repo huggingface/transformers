@@ -20,7 +20,7 @@ from typing import Optional
 
 import regex as re
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -96,7 +96,9 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
         super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
+        self.special_tokens_pattern = None
 
     @property
     def vocab_size(self) -> int:
