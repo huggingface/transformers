@@ -119,7 +119,6 @@ class SplinterTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.WordPiece(prefix="##")
 
-
         super().__init__(
             unk_token=unk_token,
             sep_token=sep_token,
@@ -132,7 +131,6 @@ class SplinterTokenizer(TokenizersBackend):
             strip_accents=strip_accents,
             **kwargs,
         )
-
 
         self.do_lower_case = do_lower_case
         self.tokenize_chinese_chars = tokenize_chinese_chars

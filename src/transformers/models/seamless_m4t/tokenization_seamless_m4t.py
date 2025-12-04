@@ -24,7 +24,6 @@ from ...tokenization_python import (
     PreTokenizedInput,
     TextInput,
 )
-from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import PaddingStrategy, logging
 

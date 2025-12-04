@@ -27,10 +27,10 @@ import os
 import re
 import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import Callable, Mapping, Sequence, Sized
+from collections.abc import Callable, Collection, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Collection, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
 
 import numpy as np
 from huggingface_hub import create_repo, list_repo_files

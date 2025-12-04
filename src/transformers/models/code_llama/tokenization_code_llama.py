@@ -19,7 +19,7 @@ from typing import Optional, Union
 from tokenizers import AddedToken, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
+from ...tokenization_utils_base import _get_prepend_scheme
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -189,7 +189,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
 
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
-        self.vocab_file = vocab_file
 
         self._prefix_token = prefix_token
         self._middle_token = middle_token

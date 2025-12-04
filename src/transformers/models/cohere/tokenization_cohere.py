@@ -20,7 +20,6 @@ from typing import Literal, Optional, Union
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -191,7 +190,6 @@ class CohereTokenizer(TokenizersBackend):
         )
 
         self._post_init()
-
 
     def apply_tool_use_template(
         self,

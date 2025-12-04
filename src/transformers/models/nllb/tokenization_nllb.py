@@ -19,7 +19,6 @@ from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, 
 from tokenizers.models import BPE
 
 from ...tokenization_python import AddedToken, BatchEncoding
-from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 

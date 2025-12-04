@@ -90,6 +90,7 @@ class LlamaTokenizer(TokenizersBackend):
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
     model = BPE
+
     def __init__(
         self,
         vocab: Optional[Union[str, dict, list]] = None,

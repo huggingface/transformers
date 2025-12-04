@@ -18,7 +18,6 @@ from typing import Optional, Union
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 

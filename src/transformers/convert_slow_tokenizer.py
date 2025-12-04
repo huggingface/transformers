@@ -19,8 +19,9 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
+from collections.abc import Collection
 from functools import lru_cache
-from typing import Collection, Optional
+from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -102,7 +103,7 @@ class SentencePieceExtractor:
             m.ParseFromString(f.read())
         self.proto = m
 
-    def extract(self,model_type, **kwargs) -> tuple[dict[str, int], list[tuple]]:
+    def extract(self, model_type, **kwargs) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -110,6 +111,7 @@ class SentencePieceExtractor:
         self.proto.trainer_spec.unk_id
         if model_type is None:
             from tokenizers.models import BPE, Unigram
+
             model_type = Unigram if self.proto.trainer_spec.model_type == 2 else BPE
         vocab = [(piece.piece, piece.score) for piece in self.proto.pieces]
 

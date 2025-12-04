@@ -147,17 +147,9 @@ class BlenderbotTokenizer(TokenizersBackend):
                 str(mask_token): 4,
             }
         )
-        special_tokens = {
-            str(bos_token),
-            str(eos_token),
-            str(sep_token),
-            str(cls_token),
-            str(unk_token),
-            str(pad_token),
-            str(mask_token),
-        }
+
         if merges is None:
-            self._merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
+            self._merges = ()
         else:
             self._merges = merges
 

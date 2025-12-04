@@ -19,8 +19,7 @@ from typing import Optional, Union
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import generate_merges
-from ...tokenization_utils_tokenizers import TokenizersBackend, AddedToken
+from ...tokenization_utils_tokenizers import AddedToken, TokenizersBackend
 from ...utils import logging
 
 
@@ -126,7 +125,6 @@ class GPT2Tokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-
 
         self._add_bos_token = add_bos_token
         self._add_eos_token = False

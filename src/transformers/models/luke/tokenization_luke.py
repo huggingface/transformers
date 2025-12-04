@@ -34,8 +34,8 @@ from ...tokenization_utils_base import (
     TextInput,
     TextInputPair,
     TruncationStrategy,
+    generate_merges,
     to_py_obj,
-    generate_merges
 )
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import add_end_docstrings, is_torch_tensor, logging

@@ -70,7 +70,6 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Qwen2IntegrationTest(unittest.TestCase):
-
     @slow
     def test_model_450m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]

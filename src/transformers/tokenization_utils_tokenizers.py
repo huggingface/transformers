@@ -20,8 +20,9 @@ import copy
 import json
 import os
 from collections import defaultdict
+from collections.abc import Iterable
 from shutil import copyfile
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Optional, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import AddedToken, processors
@@ -40,6 +41,7 @@ from .tokenization_utils_base import (
     PreTrainedTokenizerBase,
     TextInput,
     TruncationStrategy,
+    generate_merges,
 )
 from .utils import PaddingStrategy, add_end_docstrings, is_offline_mode, logging
 
@@ -110,14 +112,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
             if cls.model is None:
                 if isinstance(vocab, list):
-                    vocab = list(map(tuple, vocab)) # TODO just for now
+                    vocab = list(map(tuple, vocab))  # TODO just for now
             elif cls.model.__name__ == "Unigram":
                 vocab = list(map(tuple, vocab))
             elif cls.model.__name__ == "WordLevel":
                 vocab = {token: i for i, token in enumerate(vocab)}
             elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
                 if isinstance(vocab, list):
-                    vocab =  {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
+                    vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
             local_kwargs["vocab"] = vocab
 
             if hasattr(tokenizer_json.get("model", {}), "merges") and cls.model.__name__ == "BPE":

@@ -275,7 +275,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             ],
         )
 
-
         # additional properties
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
@@ -300,7 +299,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             only_label_first_subword=only_label_first_subword,
             **kwargs,
         )
-
 
     def _get_token_id(self, token: str) -> int:
         """Helper to get token ID from vocab."""

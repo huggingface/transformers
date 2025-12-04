@@ -458,7 +458,6 @@ class NougatTokenizer(TokenizersBackend):
         self._tokenizer.enable_truncation(max_length=4096)
         self._tokenizer.enable_padding(length=4096, pad_id=pad_token_id, pad_token=str(pad_token))
 
-
         super().__init__(
             errors=errors,
             unk_token=unk_token,

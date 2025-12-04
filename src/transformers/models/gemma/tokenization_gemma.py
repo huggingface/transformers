@@ -17,7 +17,6 @@ from typing import Optional, Union
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -74,8 +73,6 @@ class GemmaTokenizer(TokenizersBackend):
     ):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
-
-        special_tokens = {str(pad_token), str(eos_token), str(bos_token), str(unk_token), str(mask_token)}
 
         self._vocab = (
             vocab
