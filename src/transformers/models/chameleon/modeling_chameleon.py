@@ -859,23 +859,18 @@ class ChameleonModel(ChameleonPreTrainedModel):
         them with text embeddings layer
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
             return_dict (`bool`, *optional*, default to `False`):
                 Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         image_tokens = self.get_image_tokens(pixel_values)
         image_embeddings = self.get_input_embeddings()(image_tokens)
-        image_features = image_embeddings.mean(dim=1)
 
         if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=image_embeddings,
-                pooler_output=image_features,
-            )
+            return BaseModelOutputWithPooling(last_hidden_state=image_embeddings)
 
-        # NOTE: @Tom Not easily converted to the standard format, this one breaks backward compatibility
-        return image_features
+        return image_embeddings
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -937,8 +932,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_tokens = self.get_image_tokens(pixel_values)
-            image_embeds = self.get_input_embeddings()(image_tokens)
+            image_embeds = self.get_image_features(pixel_values)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )

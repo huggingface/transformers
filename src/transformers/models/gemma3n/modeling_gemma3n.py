@@ -2125,7 +2125,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
                 pooler_output=image_features,
             )
 
-        # NOTE: @Tom I'm not sure the image_features here is 2-dimensional as we'd like
         return image_features
 
     def get_placeholder_mask(

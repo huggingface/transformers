@@ -42,7 +42,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -1939,18 +1938,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 The tensors corresponding to the input images.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=image_embeds,
-                # pooler_output=image_features,  # NOTE: @Tom no pooled embeddings here
-            )
-
-        # NOTE: @Tom Not easily converted to the standard format
-        return image_embeds
+        return self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=return_dict)
 
     def get_audio_features(
         self,

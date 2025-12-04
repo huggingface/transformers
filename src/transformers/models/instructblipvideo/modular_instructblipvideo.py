@@ -353,7 +353,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = False,
     ):
-        # NOTE: @Tom perhaps we should just raise an error here instead?
         pass
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):

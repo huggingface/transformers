@@ -211,7 +211,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
             image_features.append(img_embedding)
 
-        # NOTE: @Tom Not easily converted to the standard format due to variable lengths
         if return_dict:
             return BaseModelOutputWithPooling(
                 last_hidden_state=image_outputs.last_hidden_state,

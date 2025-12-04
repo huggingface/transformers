@@ -34,7 +34,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -733,11 +733,14 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
+        return_dict: bool = False,
         **kwargs,
     ) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
+        return_dict (`bool`, *optional*, defaults to `False`):
+            Whether to return a `ModelOutput` instead of exclusively the merged hidden states.
         """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
@@ -760,6 +763,14 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
                 **kwargs,
+            )
+
+        merged_hidden_states = self.merger(hidden_states)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=hidden_states,
+                pooler_output=merged_hidden_states,
             )
 
         return self.merger(hidden_states)
@@ -1111,7 +1122,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         video_embeds = torch.split(video_embeds, split_sizes)
         return video_embeds
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -1120,12 +1131,20 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                 The tensors corresponding to the input images.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        # NOTE: @Tom Not easily converted to the standard format
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_embeds,
+            )
+
         return image_embeds
 
     def get_placeholder_mask(

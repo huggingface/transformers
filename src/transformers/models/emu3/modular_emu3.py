@@ -25,7 +25,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -925,7 +925,7 @@ class Emu3Model(Emu3PreTrainedModel):
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, return_dict: bool = False):
         """
         Tokenizes images into discrete tokens with VQGAN module and embeds
         them with text embeddings layer
@@ -939,9 +939,15 @@ class Emu3Model(Emu3PreTrainedModel):
             (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
             for height, width in image_sizes
         ]
-        image_features = self.get_input_embeddings()(image_tokens)
-        image_features = torch.split(image_features, split_sizes)
-        # NOTE: @Tom Not easily converted to the standard format
+        image_embeddings = self.get_input_embeddings()(image_tokens)
+        image_features = torch.split(image_embeddings, split_sizes)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_embeddings,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     @torch.no_grad()
