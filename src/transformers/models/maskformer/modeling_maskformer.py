@@ -1496,6 +1496,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> MaskFormerModelOutput:
         r"""
         Examples:
@@ -1667,6 +1668,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> MaskFormerForInstanceSegmentationOutput:
         r"""
         mask_labels (`list[torch.Tensor]`, *optional*):
