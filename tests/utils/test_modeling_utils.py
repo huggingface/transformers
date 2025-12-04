@@ -2228,6 +2228,41 @@ class ModelUtilsTest(TestCasePlus):
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
+    def test_loading_respect_env_variable_for_threading(self):
+        """Test that we can correctly control threading during loading"""
+        model = BaseModel(PreTrainedConfig())
+
+        # Monkey patch Thread.__init__ to add a counter of launched threads
+        original_init = threading.Thread.__init__
+        counter = 0
+
+        def tracking_init(self, *args, **kwargs):
+            nonlocal counter
+            counter += 1
+            original_init(self, *args, **kwargs)
+
+        threading.Thread.__init__ = tracking_init
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # Use threading
+            os.environ["HF_DEACTIVATE_ASYNC_LOAD"] = "0"
+            before = counter
+            _ = BaseModel.from_pretrained(tmpdirname)
+            after = counter
+            self.assertTrue(after - before > 0, "Loading should have spawned new threads!")
+
+            # Deactivate threading
+            os.environ["HF_DEACTIVATE_ASYNC_LOAD"] = "1"
+            before = counter
+            _ = BaseModel.from_pretrained(tmpdirname)
+            after = counter
+            self.assertTrue(after == before, "It looks like loading did spawn new threads, but it should not have!")
+
+        # Reverse monkey patch
+        threading.Thread.__init__ = original_init
+
 
 @slow
 @require_torch
