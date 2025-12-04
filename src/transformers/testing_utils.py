@@ -4173,25 +4173,33 @@ _warn_once_logged: set[str] = set()
 
 
 def init_test_logger() -> logging.Logger:
-    """Initialize the root logger with colored stdout handler and INFO level for tests."""
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    root_logger.handlers.clear()
+    """Initialize a test-specific logger with colored stderr handler and INFO level for tests.
 
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.INFO)
+    Uses a named logger instead of root logger to avoid conflicts with pytest-xdist parallel execution.
+    Uses stderr instead of stdout to avoid deadlocks with pytest-xdist output capture.
+    """
+    logger = logging.getLogger("transformers.training_test")
+    logger.setLevel(logging.INFO)
 
-    # Use colored formatter if terminal supports it, plain otherwise
-    if sys.stdout.isatty():
-        formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
-    else:
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-        )
+    # Only add handler if not already present (avoid duplicate handlers on repeated calls)
+    if not logger.handlers:
+        # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
+        ch = logging.StreamHandler(sys.stderr)
+        ch.setLevel(logging.INFO)
 
-    ch.setFormatter(formatter)
-    root_logger.addHandler(ch)
-    return root_logger
+        # Use colored formatter if terminal supports it, plain otherwise
+        if sys.stderr.isatty():
+            formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            )
+
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+
+    logger.propagate = False  # Don't propagate to root logger to avoid duplicate output
+    return logger
 
 
 def warn_once(logger_instance: logging.Logger, msg: str) -> None:

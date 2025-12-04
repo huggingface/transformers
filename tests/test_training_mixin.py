@@ -13,7 +13,7 @@ from transformers import set_seed
 from transformers.testing_utils import Colors, build_cpu_memory_monitor, init_test_logger, is_training_test
 
 
-logger = logging.getLogger()
+logger = logging.getLogger("transformers.training_test")
 
 
 class TrainingTesterMixin(ABC):
