@@ -107,7 +107,6 @@ class FPQuantHfQuantizer(HfQuantizer):
         #  * `dqweight` when `store_master_weights=False` and `pseudoquantization=True`
 
         if param_name.endswith(".qweight"):
-            print(f"param_value qweight: {param_value.shape}")
             # Loading a real quantized checkpoint without master weights
             module.qweight = torch.nn.Parameter(
                 param_value.to(target_device),
@@ -118,7 +117,6 @@ class FPQuantHfQuantizer(HfQuantizer):
             return
 
         if param_name.endswith(".dqweight"):
-            print(f"param_value dqweight: {param_value.shape}")
             # Loading a pseudo-quantized checkpoint without master weights
             module.dqweight = torch.nn.Parameter(param_value.to(target_device))
             module.weight = None
