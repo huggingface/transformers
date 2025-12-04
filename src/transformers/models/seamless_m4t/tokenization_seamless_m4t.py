@@ -105,15 +105,15 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
-    prefix_tokens: list[int] = []
-    suffix_tokens: list[int] = []
+    prefix_tokens: list[int] = None
+    suffix_tokens: list[int] = None
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -215,7 +215,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             kwargs.setdefault("additional_special_tokens", additional_special_tokens)
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

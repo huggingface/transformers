@@ -19,6 +19,7 @@ from typing import Optional, Union
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
+from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -110,10 +111,12 @@ class RobertaTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors: str = "replace",
         bos_token: str = "<s>",
         eos_token: str = "</s>",
@@ -124,29 +127,24 @@ class RobertaTokenizer(TokenizersBackend):
         mask_token: str = "<mask>",
         add_prefix_space: bool = False,
         trim_offsets: bool = True,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
 
-        self._vocab = (
-            vocab
-            if vocab is not None
-            else {
+        if vocab is None:
+            vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
-        )
+        self._vocab = vocab
 
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
+        if merges is None:
+            merges = generate_merges(self._vocab)
+        self._merges = merges
 
         self._tokenizer = Tokenizer(
             BPE(
@@ -168,10 +166,8 @@ class RobertaTokenizer(TokenizersBackend):
             trim_offsets=trim_offsets,
         )
 
-        tokenizer_object = self._tokenizer
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
