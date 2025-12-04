@@ -462,9 +462,15 @@ class WeightConverter(WeightTransform):
         full_name = layer_name
         if ".*." in layer_name:
             full_name = layer_name.replace(".*.", ".0.")
-        prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
-        # Rename the tensors
-        collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
+
+        try:
+            prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
+            # Rename the tensors
+            collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
+        # some quantizers need to already rename in `convert` as they cannot only rely on prefix and suffix
+        except StopIteration:
+            pass
+
         if hf_quantizer is not None and self.quantization_operation is not None:
             with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
