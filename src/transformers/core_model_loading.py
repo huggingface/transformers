@@ -376,6 +376,21 @@ class WeightTransform:
         return reverse_transform
 
 
+def gather_tensors(tensors: list[torch.Tensor | Future | Callable]) -> list[torch.Tensor]:
+    """
+    Gather the tensors that were added to a WeightConverter. We basically have 3 cases here:
+    - default async loading: the tensors are Future instances that we need to gather
+    - sync loading: the tensors are Callable, we need to call the Callable to load them from disk
+    - saving: the tensors are already torch.Tensor instances (the existing model weights)
+    """
+    if isinstance(tensors[0], Future):
+        return [future.result() for future in tensors]
+    elif callable(tensors[0]):
+        return [func() for func in tensors]
+    else:
+        return tensors
+
+
 @dataclass(slots=True)
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
@@ -389,11 +404,9 @@ class WeightRenaming(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensors here - they are either Future instances, or Callable that will load when called
+        # Collect the tensors here - they are either Future instances, or Callable that will load when called, or Tensors
         for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = (
-                [future() for future in futures] if callable(futures[0]) else [future.result() for future in futures]
-            )
+            self.collected_tensors[pattern] = gather_tensors(futures)
 
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
@@ -437,11 +450,9 @@ class WeightConverter(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensors here - they are either Future instances, or Callable that will load when called
+        # Collect the tensors here - they are either Future instances, or Callable that will load when called, or Tensors
         for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = (
-                [future() for future in futures] if callable(futures[0]) else [future.result() for future in futures]
-            )
+            self.collected_tensors[pattern] = gather_tensors(futures)
 
         collected_tensors = self.collected_tensors
         for op in self.operations:
