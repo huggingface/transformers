@@ -27,9 +27,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -349,7 +347,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = 'User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe dog in the picture is a lynx. It has a coat with a mix of brown and black fur, and features like a small face'
+        EXPECTED_DECODED_TEXT = "User: Only use English during your responses. What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe dog in the picture is a lynx. It has a coat with a mix of brown and black fur, and features like a small face"
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
