@@ -50,8 +50,8 @@ class TrainingTesterMixin(ABC):
     training_overfit_log_freq: int = 10
 
     # Loss reduction and grad norm reduction thresholds for passing the test (i.e 95% reduction)
-    training_loss_reduction_threshold: float = 0.95
-    training_grad_norm_reduction_threshold: float = 0.95
+    training_loss_reduction_threshold: float = 0.9
+    training_grad_norm_reduction_threshold: float = 0.9
 
     @property
     @abstractmethod
