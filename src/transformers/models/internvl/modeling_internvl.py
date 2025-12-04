@@ -37,10 +37,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -485,7 +488,7 @@ class InternVLPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
 
-    def enable_input_require_grads(self, raise_on_missing_embeddings: bool = False):
+    def enable_input_require_grads(self):
         """
         InternVL's vision embeddings return tuples, so we override the base logic to recurse into the tensor outputs.
         The alternative is modifying enable_input_require_grads for every model which is unreasonable.
@@ -528,10 +531,11 @@ class InternVLPreTrainedModel(PreTrainedModel):
         self._require_grads_hooks = hooks
         if hooks:
             self._require_grads_hook = hooks[0]
-        if raise_on_missing_embeddings and not found_embeddings:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not expose input embeddings. "
-                "Override `get_input_embeddings` to enable gradient checkpointing with adapters."
+        if not found_embeddings:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
+                "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
+                "support those features."
             )
 
 

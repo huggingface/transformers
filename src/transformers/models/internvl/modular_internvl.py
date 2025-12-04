@@ -430,7 +430,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
     input_modalities = ("image", "text", "video")
 
-    def enable_input_require_grads(self, raise_on_missing_embeddings: bool = False):
+    def enable_input_require_grads(self):
         """
         InternVL's vision embeddings return tuples, so we override the base logic to recurse into the tensor outputs.
         The alternative is modifying enable_input_require_grads for every model which is unreasonable.
@@ -473,10 +473,11 @@ class InternVLPreTrainedModel(LlavaPreTrainedModel):
         self._require_grads_hooks = hooks
         if hooks:
             self._require_grads_hook = hooks[0]
-        if raise_on_missing_embeddings and not found_embeddings:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not expose input embeddings. "
-                "Override `get_input_embeddings` to enable gradient checkpointing with adapters."
+        if not found_embeddings:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
+                "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
+                "support those features."
             )
 
 

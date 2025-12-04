@@ -362,7 +362,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
         "attentions": MLCDAttention,
     }
 
-    def enable_input_require_grads(self, raise_on_missing_embeddings: bool = False):
+    def enable_input_require_grads(self):
         """
         MLCD mixes multiple embedding modules (class token + patch embeddings) so we need to walk through tuples/lists
         returned by hooks and flag every tensor as requiring gradients.
@@ -404,10 +404,11 @@ class MLCDPreTrainedModel(PreTrainedModel):
         self._require_grads_hooks = hooks
         if hooks:
             self._require_grads_hook = hooks[0]
-        if raise_on_missing_embeddings and not found_embeddings:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not expose input embeddings. "
-                "Override `get_input_embeddings` to enable gradient checkpointing with adapters."
+        if not found_embeddings:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
+                "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
+                "support those features."
             )
 
     @torch.no_grad()

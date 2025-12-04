@@ -1967,12 +1967,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
 
-    def enable_input_require_grads(self, raise_on_missing_embeddings: bool = False):
+    def enable_input_require_grads(self):
         """
         Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
         the model weights fixed.
-        Args:
-            raise_on_missing_embeddings (`bool`, *optional*, defaults to `False`): whether to raise if no input embeddings can be located.
         """
 
         def make_inputs_require_grads(module, input, output):
@@ -2006,10 +2004,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hooks:
             # for BC
             self._require_grads_hook = hooks[0]
-        if raise_on_missing_embeddings and not found_embeddings:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not expose input embeddings. "
-                "Override `get_input_embeddings` to enable gradient checkpointing with adapters."
+        if not found_embeddings:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
+                "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
+                "support those features."
             )
 
     def disable_input_require_grads(self):
@@ -2954,18 +2953,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         needs_embedding_grads = self.main_input_name == "input_ids"
-        if needs_embedding_grads:
-            try:
-                embeddings = self.get_input_embeddings()
-            except NotImplementedError as exc:
-                raise RuntimeError(
-                    f"{self.__class__.__name__} must implement `get_input_embeddings` to enable gradient checkpointing."
-                ) from exc
-            if embeddings is None:
-                raise RuntimeError(
-                    f"{self.__class__.__name__} returned `None` from `get_input_embeddings`, "
-                    "gradient checkpointing cannot be enabled."
-                )
         # we use that also to detect whether or not we have to raise if embeddings are missing (the submodel might not have embeddings at all)
         enable_input_grads = needs_embedding_grads or getattr(self, "_hf_peft_config_loaded", False)
         if enable_input_grads:
@@ -2973,7 +2960,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # we do it also on PEFT: https://github.com/huggingface/peft/blob/85013987aa82aa1af3da1236b6902556ce3e483e/src/peft/peft_model.py#L334
             # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
             # the gradients to make sure the gradient flows.
-            self.enable_input_require_grads(raise_on_missing_embeddings=needs_embedding_grads)
+            self.enable_input_require_grads()
 
     def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
         is_gradient_checkpointing_set = False
