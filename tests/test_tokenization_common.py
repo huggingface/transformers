@@ -950,7 +950,9 @@ Hey how are you doing"""  # noqa: W293
             dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=False
         )
         dict_output = tokenizer.apply_chat_template(
-            dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=True
+            dummy_conversation,
+            chat_template=dummy_template,
+            tokenize=True,  # This also checks return_dict=True is the default
         )
         self.assertEqual(dict_output["input_ids"], output)  # Test return_dict behaviour matches
 

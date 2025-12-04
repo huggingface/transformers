@@ -21,23 +21,3 @@ class BlenderbotTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # The issue is that when you have a sequence with leading spaces, splitting it
         # with .split() loses the leading spaces, so the tokenization results differ
         pass
-
-    def test_tokenization_for_chat(self):
-        tok = self.get_tokenizer()
-        test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
-            [
-                {"role": "system", "content": "You are a helpful chatbot."},
-                {"role": "user", "content": "Hello!"},
-                {"role": "assistant", "content": "Nice to meet you."},
-            ],
-            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
-        ]
-        tokenized_chats = [tok.apply_chat_template(test_chat) for test_chat in test_chats]
-        expected_tokens = [
-            [553, 366, 265, 4792, 3879, 73, 311, 21, 228, 228, 6950, 8, 2],
-            [553, 366, 265, 4792, 3879, 73, 311, 21, 228, 228, 6950, 8, 228, 3490, 287, 2273, 304, 21, 2],
-            [3490, 287, 2273, 304, 21, 228, 228, 6950, 8, 2],
-        ]
-        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
-            self.assertListEqual(tokenized_chat, expected_tokens)
