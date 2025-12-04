@@ -32,6 +32,8 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
+    from ..core_model_loading import WeightConverter
+
 logger = logging.get_logger(__name__)
 triton_kernels_hub = None
 
@@ -157,6 +159,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..integrations import Mxfp4GptOssExperts
         from ..models.gpt_oss.modeling_gpt_oss import GptOssExperts
 
+        if self.pre_quantized:
+            return False
         # if we are dequantizing, the model doesn't have scales, and blocks only params like gate_up_proj and down_proj so we need to handle this case differently
         if self.quantization_config.dequantize and ("blocks" in param_name or "scales" in param_name):
             module, tensor_name = get_module_from_name(model, param_name[: -len("_blocks")])
@@ -297,6 +301,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         keep_in_fp32_modules: list[str] | None = None,
+        use_kernels: bool = False,
         **kwargs,
     ):
         from ..integrations import replace_with_mxfp4_linear
@@ -305,7 +310,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        use_kernels = kwargs.get("use_kernels", False)
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         if use_kernels:
             logger.warning_once(
@@ -314,12 +318,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
             self.quantization_config.dequantize = True
 
-        config = model.config
         model = replace_with_mxfp4_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            config=config,
+            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
 
         model.config.quantization_config = self.quantization_config
@@ -426,3 +426,30 @@ class Mxfp4HfQuantizer(HfQuantizer):
             "MXFP4 quantization don't support training, please consider dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()"
         )
         return False
+
+    def get_quantize_ops(self):
+        from ..integrations.mxfp4 import Mxfp4Quantize
+
+        return Mxfp4Quantize(self)
+
+    def get_weight_conversions(self):
+        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
+
+        if self.pre_quantized:
+            if self.quantization_config.dequantize:
+                return [
+                    WeightConverter(
+                        source_patterns=["_blocks", "_scales"],
+                        target_patterns="",
+                        operations=[Mxfp4Dequantize(self)],
+                    )
+                ]
+            else:
+                return [
+                    WeightConverter(
+                        source_patterns=["_blocks", "_scales"],
+                        target_patterns="",
+                        operations=[Mxfp4Deserialize(self)],
+                    )
+                ]
+        return []
