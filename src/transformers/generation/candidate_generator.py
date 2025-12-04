@@ -339,11 +339,15 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 "logits_processor": self.logits_processor,
             }
         )
+
+        generation_args.update(
+            {k: self.assistant_kwargs[k] for k in self.assistant_kwargs if k not in generation_args}
+        )
         return generation_args
 
     def _generate_candidates(self, generation_args: dict) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """Generate candidate sequences using the assistant model."""
-        assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
+        assistant_output = self.assistant_model.generate(**generation_args)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         if (
             is_sklearn_available()
@@ -554,7 +558,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         )
         self.assistant_kwargs.pop("attention_mask", None)
 
-        assistant_output = self.assistant_model.generate(**self.assistant_kwargs, **generation_args)
+        assistant_output = self.assistant_model.generate(**generation_args)
         new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences)
 
         # Update state
