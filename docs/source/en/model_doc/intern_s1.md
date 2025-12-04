@@ -58,8 +58,6 @@ min_p = 0.0
 temperature = 0.8
 ```
 
-> **Please use transformers>=4.55.2 to ensure the model works normally.**
-
 ### Text input
 
 ```python
@@ -142,7 +140,6 @@ inputs = processor.apply_chat_template(
         messages,
         return_tensors="pt",
         add_generation_prompt=True,
-        video_load_backend="decord",
         tokenize=True,
         return_dict=True,
     ).to(model.device, dtype=torch.float16)
