@@ -34,6 +34,12 @@ if is_torch_available():
     import torch
 
 
+if is_gptqmodel_available():
+    from gptqmodel import BACKEND
+    from gptqmodel.quantization import METHOD
+    from gptqmodel.utils.importer import hf_select_quant_linear_v2
+
+
 class GPTQConfigTest(unittest.TestCase):
     def test_bits(self):
         with self.assertRaises(ValueError):
@@ -106,6 +112,9 @@ class GPTQTest(unittest.TestCase):
     sym = True
     group_size = 128
     desc_act = False
+    act_group_aware = True
+    quant_backend = BACKEND.AUTO
+    load_backend = BACKEND.AUTO
     dataset = [
         "gptqmodel is an easy-to-use model quantization library with user-friendly APIs, based on the GPTQ algorithm."
     ]
@@ -132,7 +141,9 @@ class GPTQTest(unittest.TestCase):
             tokenizer=cls.tokenizer,
             group_size=cls.group_size,
             desc_act=cls.desc_act,
+            act_group_aware=cls.act_group_aware,
             sym=cls.sym,
+            backend=cls.quant_backend,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -178,9 +189,6 @@ class GPTQTest(unittest.TestCase):
         Simple test to check if the model conversion has been done correctly by checking on
         the class type of the linear layers of the converted models
         """
-        from gptqmodel.quantization import METHOD
-        from gptqmodel.utils.importer import hf_select_quant_linear_v2
-
         if hasattr(self.config, "quantization_config"):
             checkpoint_format = self.config.quantization_config.get("checkpoint_format")
             meta = self.config.quantization_config.get("meta")
@@ -238,8 +246,6 @@ class GPTQTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.tokenizer.save_pretrained(tmpdirname)
             self.quantized_model.save_pretrained(tmpdirname)
-            if not is_gptqmodel_available():
-                self.skipTest("gptqmodel not available")
             if self.device_map == "cpu":
                 quant_type = "ipex" if is_ipex_available() else "torch_fused"
             else:
@@ -271,8 +277,6 @@ class GPTQTestCUDA(GPTQTest):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            if not is_gptqmodel_available():
-                self.skipTest("gptqmodel not available")
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                 tmpdirname,
                 quantization_config=GPTQConfig(bits=self.bits),
@@ -290,24 +294,22 @@ class GPTQTestDeviceMap(GPTQTestCUDA):
     device_map = "auto"
 
 
-@require_accelerate
-@require_torch_multi_gpu
-class GPTQTestDeviceMapExllama(GPTQTestCUDA):
-    device_map = "auto"
-    use_exllama = True
-
-
 @slow
 @require_optimum
 @require_gptqmodel
 @require_torch_gpu
 @require_accelerate
-class GPTQTestActOrderExllama(unittest.TestCase):
+class GPTQTestActOrderExllamaV2(unittest.TestCase):
     """
-    Test GPTQ model with exllama kernel and desc_act=True (also known as act-order).
+    Test GPTQ model with exllamav2 kernel and desc_act=True (also known as act-order).
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
+
+    # `act_group_aware` == `True` requires `desc_act` == `False` when both are explicitly set
+    desc_act = True
+    act_group_aware = False
+    load_backend = BACKEND.EXLLAMA_V2
 
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
@@ -321,7 +323,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028, backend="exllama_v1")
+        cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028, desc_act=cls.desc_act, act_group_aware=cls.act_group_aware, backend=cls.load_backend)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,
@@ -347,30 +349,13 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_quantized_layers_type(self):
-        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllama")
+        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllamav2")
 
     def test_generate_quality(self):
         """
         Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model)
-
-    def test_max_input_length(self):
-        """
-        Test if the max_input_length works. It modifies the maximum input length that of the model that runs with exllama backend.
-        """
-
-        prompt = "I am in Paris and" * 1000
-        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertGreater(inp["input_ids"].shape[1], 4028)
-        with self.assertRaises(RuntimeError) as cm:
-            self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
-            self.assertIn("temp_state buffer is too small", str(cm.exception))
-
-        prompt = "I am in Paris and"
-        inp = self.tokenizer(prompt, return_tensors="pt").to(0)
-        self.assertLess(inp["input_ids"].shape[1], 4028)
-        self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
 
 
 @slow
@@ -384,7 +369,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
-
+    load_backend = BACKEND.EXLLAMA_V2
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
@@ -397,7 +382,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, backend="exllama_v2")
+        cls.quantization_config = GPTQConfig(bits=4, backend=cls.load_backend)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,
@@ -407,10 +392,6 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
 
     def test_quantized_layers_type(self):
-        if not is_gptqmodel_available():
-            self.skipTest("gptqmodel not available")
-        # We expect tritonv2 to be used here, because gptqmodel exllama backend doesn't support packing https://github.com/ModelCloud/GPTQModel/issues/1354
-        # TODO: Remove this once GPTQModel exllama kernels supports packing
         self.assertEqual(
             self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE,
             "exllamav2",
