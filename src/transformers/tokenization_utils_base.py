@@ -3195,7 +3195,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
+        return_dict: bool = True,
         return_assistant_tokens_mask: bool = False,
         tokenizer_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
@@ -3268,14 +3268,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             set, will return a dict of tokenizer outputs instead.
         """
 
-        if return_dict and not tokenize:
-            raise ValueError(
-                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
-                "of tokenizer outputs to return."
-            )
+        if not tokenize:
+            return_dict = False  # dicts are only returned by the tokenizer anyway
 
-        if return_assistant_tokens_mask and not return_dict:
-            raise ValueError("`return_assistant_tokens_mask=True` is incompatible with `return_dict=False`")
+        if return_assistant_tokens_mask and not (return_dict and tokenize):
+            raise ValueError("`return_assistant_tokens_mask=True` requires `return_dict=True` and `tokenize=True`")
 
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
@@ -3390,13 +3387,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             )
 
         if conversation_history is None or len(conversation_history) == 0:
-            return self.apply_chat_template([message], add_generation_prompt=False, tokenize=True, **kwargs)
+            return self.apply_chat_template(
+                [message], add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
+            )
 
         conversation = conversation_history + [message]
-        tokens = self.apply_chat_template(conversation, add_generation_prompt=False, tokenize=True, **kwargs)
+        tokens = self.apply_chat_template(
+            conversation, add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
+        )
 
         prefix_tokens = self.apply_chat_template(
-            conversation_history, add_generation_prompt=False, tokenize=True, **kwargs
+            conversation_history, add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
         )
         # It's possible that the prefix tokens are not a prefix of the full list of tokens.
         # For example, if the prefix is `<s>User: Hi` and the full conversation is `<s>User: Hi</s><s>Assistant: Hello`.
