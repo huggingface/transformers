@@ -440,6 +440,15 @@ else:
         "convert_and_export_with_cache",
     ]
 
+    _import_structure["core_model_loading"] = [
+        "Chunk",
+        "Concatenate",
+        "ConversionOps",
+        "MergeModulelist",
+        "PermuteForRope",
+        "SplitModulelist",
+        "WeightConverter",
+    ]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
@@ -619,6 +628,13 @@ if TYPE_CHECKING:
     from .modelcard import ModelCard as ModelCard
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
+    from .core_model_loading import Chunk as Chunk
+    from .core_model_loading import Concatenate as Concatenate
+    from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import MergeModulelist as MergeModulelist
+    from .core_model_loading import PermuteForRope as PermuteForRope
+    from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import WeightConverter as WeightConverter
     from .modeling_rope_utils import RopeParameters as RopeParameters
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
     from .modeling_utils import AttentionInterface as AttentionInterface
