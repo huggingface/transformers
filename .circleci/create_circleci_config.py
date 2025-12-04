@@ -326,6 +326,7 @@ training_ci_job = CircleCIJob(
     marker="is_training_test",
     pytest_options={"s": None},
     parallelism=6,
+    pytest_num_workers=4,
 )
 
 # We also include a `dummy.py` file in the files to be doc-tested to prevent edge case failure. Otherwise, the pytest
