@@ -17,7 +17,7 @@ from typing import Optional, Union
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
+from ...tokenization_utils_base import _get_prepend_scheme
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -106,10 +106,9 @@ class LlamaTokenizer(TokenizersBackend):
         add_prefix_space=None,
         **kwargs,
     ):
-        special_tokens = {str(eos_token), str(bos_token), str(unk_token)}
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
         self._vocab = vocab
-        self._merges = merges
+        self._merges = merges or []
         if vocab is None:
             self._vocab = {
                 str(unk_token): 0,
@@ -117,14 +116,7 @@ class LlamaTokenizer(TokenizersBackend):
                 str(eos_token): 2,
             }
 
-        if merges is None:
-            if isinstance(self._vocab, dict):
-                self._merges = generate_merges(self._vocab, skip_tokens=special_tokens)
-            else:
-                self._merges = {}
-        else:
-            self._merges = merges
-
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             self.model(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )

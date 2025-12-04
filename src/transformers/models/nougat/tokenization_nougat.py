@@ -413,7 +413,7 @@ class NougatTokenizer(TokenizersBackend):
                 "[START_REF]": 4,
             }
         )
-        self._merges = merges
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

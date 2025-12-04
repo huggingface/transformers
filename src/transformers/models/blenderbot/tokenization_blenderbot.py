@@ -151,7 +151,7 @@ class BlenderbotTokenizer(TokenizersBackend):
         if merges is None:
             self._merges = ()
         else:
-            self._merges = merges
+            self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(

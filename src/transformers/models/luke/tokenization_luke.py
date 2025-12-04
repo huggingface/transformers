@@ -264,31 +264,11 @@ class LukeTokenizer(TokenizersBackend):
 
         # Handle entity vocab file for backward compatibility
         entity_vocab_file = kwargs.pop("entity_vocab_file", None)
-
-        # Check if vocab/merges/entity_vocab are in kwargs
-        if vocab is None and "vocab" in kwargs:
-            vocab = kwargs.pop("vocab")
-        if merges is None and "merges" in kwargs:
-            merges = kwargs.pop("merges")
         if entity_vocab is None and "entity_vocab" in kwargs:
             entity_vocab = kwargs.pop("entity_vocab")
 
-        if vocab is None:
-            vocab = {}
-
-        self._vocab = vocab
-        special_tokens = {
-            str(bos_token),
-            str(eos_token),
-            str(sep_token),
-            str(cls_token),
-            str(unk_token),
-            str(pad_token),
-            str(mask_token),
-        }
-        if merges is None:
-            merges = generate_merges(self._vocab, skip_tokens=special_tokens) if isinstance(self._vocab, dict) else []
-        self._merges = merges
+        self._vocab = vocab or {}
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,

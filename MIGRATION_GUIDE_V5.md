@@ -105,7 +105,7 @@ class Llama5Tokenizer(TokenizersBackend):
             self._vocab = vocab
 
         if merges is not None:
-            self._merges = merges
+            self._merges = merges or []
         else:
             self._merges = generate_merges(filtered_vocab)
 

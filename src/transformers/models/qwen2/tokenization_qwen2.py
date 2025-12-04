@@ -55,7 +55,6 @@ class Qwen2Tokenizer(TokenizersBackend):
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False
-
         self._vocab = (
             vocab
             if vocab is not None
@@ -63,11 +62,7 @@ class Qwen2Tokenizer(TokenizersBackend):
                 "<|endoftext|>": 0,
             }
         )
-        special_tokens = {str(unk_token), str(eos_token), str(pad_token)}
-        if bos_token is not None:
-            special_tokens.add(str(bos_token))
         self._merges = merges or []
-
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
