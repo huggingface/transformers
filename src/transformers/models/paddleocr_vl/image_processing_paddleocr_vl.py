@@ -228,6 +228,7 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         images = make_list_of_images(images)
+        images = self.fetch_images(images)
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
@@ -253,7 +254,7 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
-                    factor=self.patch_size * self.merge_size,
+                    factor=patch_size * merge_size,
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
                 )
@@ -281,26 +282,27 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] == 1:
-            patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
+            patches = np.tile(patches, (temporal_patch_size, 1, 1, 1))
 
         channel = patches.shape[1]
-        grid_t = patches.shape[0] // self.temporal_patch_size
+        grid_t = patches.shape[0] // temporal_patch_size
         grid_h, grid_w = (
-            resized_height // self.patch_size,
-            resized_width // self.patch_size,
+            resized_height // patch_size,
+            resized_width // patch_size,
         )
         patches = patches.reshape(
             grid_t,
-            self.temporal_patch_size,
+            temporal_patch_size,
             channel,
             grid_h,
-            self.patch_size,
+            patch_size,
             grid_w,
-            self.patch_size,
+            patch_size,
         )
         patches = patches.transpose(0, 3, 5, 2, 1, 4, 6)
-        assert self.temporal_patch_size == 1
-        flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size)
+        if temporal_patch_size != 1:
+            raise ValueError("temporal_patch_size must be 1!")
+        flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, patch_size, patch_size)
         return flatten_patches, (grid_t, grid_h, grid_w)
 
     def preprocess(

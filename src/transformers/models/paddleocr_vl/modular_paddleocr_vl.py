@@ -18,7 +18,6 @@
 # limitations under the License.
 
 import math
-from functools import partial
 from typing import Optional, Union
 
 import numpy as np
@@ -46,7 +45,6 @@ from ...image_utils import (
 )
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_rope_utils import rope_config_validation as _rope_config_validation
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...processing_utils import (
@@ -88,7 +86,6 @@ from ..video_llama_3.modeling_video_llama_3 import (
 
 
 logger = logging.get_logger(__name__)
-rope_config_validation = partial(_rope_config_validation, ignore_keys={"mrope_section"})
 
 
 def smart_resize(
@@ -220,6 +217,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         images = make_list_of_images(images)
+        images = self.fetch_images(images)
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
@@ -245,7 +243,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
-                    factor=self.patch_size * self.merge_size,
+                    factor=patch_size * merge_size,
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
                 )
@@ -273,26 +271,27 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] == 1:
-            patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
+            patches = np.tile(patches, (temporal_patch_size, 1, 1, 1))
 
         channel = patches.shape[1]
-        grid_t = patches.shape[0] // self.temporal_patch_size
+        grid_t = patches.shape[0] // temporal_patch_size
         grid_h, grid_w = (
-            resized_height // self.patch_size,
-            resized_width // self.patch_size,
+            resized_height // patch_size,
+            resized_width // patch_size,
         )
         patches = patches.reshape(
             grid_t,
-            self.temporal_patch_size,
+            temporal_patch_size,
             channel,
             grid_h,
-            self.patch_size,
+            patch_size,
             grid_w,
-            self.patch_size,
+            patch_size,
         )
         patches = patches.transpose(0, 3, 5, 2, 1, 4, 6)
-        assert self.temporal_patch_size == 1
-        flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size)
+        if temporal_patch_size != 1:
+            raise ValueError("temporal_patch_size must be 1!")
+        flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, patch_size, patch_size)
         return flatten_patches, (grid_t, grid_h, grid_w)
 
 
@@ -346,8 +345,15 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
         **kwargs,
     ):
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
+        merge_size = merge_size if merge_size is not None else self.merge_size
+
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -356,7 +362,7 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
-                    factor=self.patch_size * self.merge_size,
+                    factor=patch_size * merge_size,
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
                 )
@@ -383,29 +389,29 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
             if patches.ndim == 4:
                 # add a temporal dimension if we have images
                 patches = patches.unsqueeze(1)
-            if patches.shape[1] % self.temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
+            if patches.shape[1] % temporal_patch_size != 0:
+                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
                 patches = torch.cat([patches, repeats], dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // self.temporal_patch_size
+            grid_t = grid_t // temporal_patch_size
             grid_h, grid_w = (
-                resized_height // self.patch_size,
-                resized_width // self.patch_size,
+                resized_height // patch_size,
+                resized_width // patch_size,
             )
             patches = patches.view(
                 batch_size,
                 grid_t,
-                self.temporal_patch_size,
+                temporal_patch_size,
                 channel,
                 grid_h,
-                self.patch_size,
+                patch_size,
                 grid_w,
-                self.patch_size,
+                patch_size,
             )
             patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
             flatten_patches = patches.reshape(
-                batch_size, grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size
+                batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size
             )
 
             processed_images_grouped[shape] = flatten_patches
@@ -540,6 +546,10 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
+    def __init__(self, **super_kwargs):
+        kwargs["ignore_keys_at_rope_validation"] = {"mrope_section"}
+        super().__init__()
+
 
 class PaddleOCRVLConfig(Qwen2VLConfig):
     sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
@@ -548,16 +558,14 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
 class PaddleOCRProjector(nn.Module):
     def __init__(self, config: PaddleOCRVLConfig):
         super().__init__()
-        self.text_config = config.text_config
-        self.vision_config = config.vision_config
-        self.merge_kernel_size = (self.vision_config.spatial_merge_size, self.vision_config.spatial_merge_size)
+        self.merge_kernel_size = (config.vision_config.spatial_merge_size, config.vision_config.spatial_merge_size)
 
-        self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
+        hidden_size = config.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
 
-        self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
-        self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        self.pre_norm = torch.nn.LayerNorm(config.vision_config.hidden_size, eps=1e-05)
+        self.linear_1 = nn.Linear(hidden_size, hidden_size, bias=True)
         self.act = GELUActivation()
-        self.linear_2 = nn.Linear(self.hidden_size, self.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(hidden_size, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         image_features_chunks = image_features.split(image_grid_thw.prod(dim=1).tolist(), dim=0)
@@ -972,14 +980,9 @@ class PaddleOCRVLModel(Qwen2VLModel):
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
-        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
-            # calculate RoPE index once per generation in the pre-fill stage only
-            if (
-                (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            ):
+        if position_ids is None:
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if self.rope_deltas is None or past_key_values_length == 0:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids=input_ids,
                     image_grid_thw=image_grid_thw,
@@ -989,17 +992,11 @@ class PaddleOCRVLModel(Qwen2VLModel):
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
-                delta = (
-                    (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
-                    if cache_position is not None
-                    else 0
-                )
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                if cache_position is not None:  # otherwise `deltas` is an int `0`
-                    delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
+                delta = (past_key_values_length + self.rope_deltas).to(inputs_embeds.device)
+                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
+                position_ids = position_ids + delta.to(position_ids.device)
 
         outputs = self.language_model(
             input_ids=None,

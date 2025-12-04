@@ -23,12 +23,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import partial
+import inspect
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, standardize_rope_params
-from ...modeling_rope_utils import rope_config_validation as _rope_config_validation
+from ...modeling_rope_utils import RopeParameters
 
 
 class PaddleOCRVisionConfig(PreTrainedConfig):
@@ -114,9 +113,6 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
         self.temporal_patch_size = temporal_patch_size
 
 
-rope_config_validation = partial(_rope_config_validation, ignore_keys={"mrope_section"})
-
-
 class PaddleOCRTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PaddleOCRTextModel`]. It is used to instantiate an Ernie 4.5
@@ -167,7 +163,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_bias (`bool`, *optional*, defaults to `False`):
@@ -190,6 +186,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
 
     model_type = "paddleocr_vl_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     # Default tensor parallel plan for base model `PaddleOCRTextModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -228,6 +225,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
         head_dim: Optional[int] = 128,
         **kwargs,
     ):
+        kwargs["ignore_keys_at_rope_validation"] = {"mrope_section"}
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -246,14 +244,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -316,11 +307,6 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         vision_end_token_id=151653,
         **kwargs,
     ):
-        # We need to init super() here so that it does not reset values
-        # that are in text config to the BaseClass defaults. The Base
-        # config has many text related defaults and not all defaults are same as for `PaddleOCRVLTextConfig`
-        super().__init__(**kwargs)
-
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -329,39 +315,21 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
-            # For BC use all kwargs to init `TextConfig`
-            self.text_config = self.sub_configs["text_config"](**kwargs)
+            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
+            text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
+            text_params = list(text_params) + ["rope_scaling", "rope_theta"]
+            text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+            text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
+            self.text_config = self.sub_configs["text_config"](**text_config)
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
-        # Attention implementation to use. It sets it recursively on sub-configs so we call it again in the end
-        self._attn_implementation = kwargs.pop("attn_implementation", None)
-
-    def __setattr__(self, key, value):
-        if (
-            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
-            and key not in ["_name_or_path", "model_type", "dtype", "_attn_implementation_internal"]
-            and key in text_config.__dict__
-        ):
-            setattr(text_config, key, value)
-        else:
-            super().__setattr__(key, value)
-
-    def __getattribute__(self, key):
-        if "text_config" in super().__getattribute__("__dict__") and key not in [
-            "_name_or_path",
-            "model_type",
-            "dtype",
-            "_attn_implementation_internal",
-        ]:
-            text_config = super().__getattribute__("text_config")
-            if key in text_config.__dict__:
-                return getattr(text_config, key)
-
-        return super().__getattribute__(key)
+        # FIXME: arthur/cyril - tying has to be used from the text config
+        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["PaddleOCRVLConfig", "PaddleOCRVisionConfig", "PaddleOCRTextConfig"]

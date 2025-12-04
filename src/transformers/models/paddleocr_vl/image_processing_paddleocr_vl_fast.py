@@ -117,8 +117,15 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
         **kwargs,
     ):
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
+        merge_size = merge_size if merge_size is not None else self.merge_size
+
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -127,7 +134,7 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
-                    factor=self.patch_size * self.merge_size,
+                    factor=patch_size * merge_size,
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
                 )
@@ -154,30 +161,28 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
             if patches.ndim == 4:
                 # add a temporal dimension if we have images
                 patches = patches.unsqueeze(1)
-            if patches.shape[1] % self.temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
+            if patches.shape[1] % temporal_patch_size != 0:
+                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
                 patches = torch.cat([patches, repeats], dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // self.temporal_patch_size
+            grid_t = grid_t // temporal_patch_size
             grid_h, grid_w = (
-                resized_height // self.patch_size,
-                resized_width // self.patch_size,
+                resized_height // patch_size,
+                resized_width // patch_size,
             )
             patches = patches.view(
                 batch_size,
                 grid_t,
-                self.temporal_patch_size,
+                temporal_patch_size,
                 channel,
                 grid_h,
-                self.patch_size,
+                patch_size,
                 grid_w,
-                self.patch_size,
+                patch_size,
             )
             patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
-            flatten_patches = patches.reshape(
-                batch_size, grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size
-            )
+            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
 
             processed_images_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size

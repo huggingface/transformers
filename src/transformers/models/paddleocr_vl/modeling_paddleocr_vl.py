@@ -52,16 +52,14 @@ logger = logging.get_logger(__name__)
 class PaddleOCRProjector(nn.Module):
     def __init__(self, config: PaddleOCRVLConfig):
         super().__init__()
-        self.text_config = config.text_config
-        self.vision_config = config.vision_config
-        self.merge_kernel_size = (self.vision_config.spatial_merge_size, self.vision_config.spatial_merge_size)
+        self.merge_kernel_size = (config.vision_config.spatial_merge_size, config.vision_config.spatial_merge_size)
 
-        self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
+        hidden_size = config.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
 
-        self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
-        self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        self.pre_norm = torch.nn.LayerNorm(config.vision_config.hidden_size, eps=1e-05)
+        self.linear_1 = nn.Linear(hidden_size, hidden_size, bias=True)
         self.act = GELUActivation()
-        self.linear_2 = nn.Linear(self.hidden_size, self.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(hidden_size, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         image_features_chunks = image_features.split(image_grid_thw.prod(dim=1).tolist(), dim=0)
@@ -459,7 +457,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -483,8 +481,8 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             )
 
         if position_ids is None:
@@ -509,6 +507,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )
@@ -998,7 +997,7 @@ class PaddleOCRVLCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring
 class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {"^model": "language_model"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1019,12 +1018,6 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_rope_index(
         self,
@@ -1280,14 +1273,9 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
-        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
-            # calculate RoPE index once per generation in the pre-fill stage only
-            if (
-                (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            ):
+        if position_ids is None:
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if self.rope_deltas is None or past_key_values_length == 0:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids=input_ids,
                     image_grid_thw=image_grid_thw,
@@ -1297,17 +1285,11 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
-                delta = (
-                    (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
-                    if cache_position is not None
-                    else 0
-                )
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                if cache_position is not None:  # otherwise `deltas` is an int `0`
-                    delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
+                delta = (past_key_values_length + self.rope_deltas).to(inputs_embeds.device)
+                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
+                position_ids = position_ids + delta.to(position_ids.device)
 
         outputs = self.language_model(
             input_ids=None,
@@ -1337,7 +1319,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         "^mlp_AR": "model.projector",
         r"^model(?!(\.visual|\.projector))": "model.language_model",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config):
@@ -1353,12 +1335,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -1366,15 +1342,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def visual(self):
-        return self.model.visual
 
     @can_return_tuple
     @auto_docstring
