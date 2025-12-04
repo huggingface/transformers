@@ -826,6 +826,7 @@ class MraModel(MraPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -919,6 +920,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1007,6 +1009,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1086,6 +1089,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
@@ -1189,6 +1193,7 @@ class MraForTokenClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1263,6 +1268,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         end_positions: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
