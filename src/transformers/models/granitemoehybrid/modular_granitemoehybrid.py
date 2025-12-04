@@ -25,7 +25,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
@@ -276,10 +276,23 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             1. Cached forward
             2. Attending to all inputs
         """
-        mamba_mask = attention_mask
-        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
-            mamba_mask = None
-        return mamba_mask
+        cached = cache_position[0] > 0
+        all_attend = torch.all(attention_mask == 1)
+        pred = cached | all_attend
+
+        if not is_torchdynamo_compiling:
+            # keep original None if not exporting
+            return None if bool(pred) else attention_mask
+
+        # compiling/exporting -> always return tensor
+        def true_fn(mask):
+            # return a tensor of ones instead of None
+            return torch.ones_like(mask)
+
+        def false_fn(mask):
+            return mask
+
+        return torch.cond(pred, true_fn, false_fn, (attention_mask,))
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
