@@ -1313,9 +1313,7 @@ def _process_parameter_type(param, param_name, func):
     if param_annotation is not inspect._empty:
         param_str: str = str(param)
         if "=" in param_str:
-            type_hint_str = (
-                param_str.split(":", maxsplit=1)[1].split("=", maxsplit=1)[0].strip()
-            )
+            type_hint_str = param_str.split(":", maxsplit=1)[1].split("=", maxsplit=1)[0].strip()
         else:
             type_hint_str = param_str.split(":", maxsplit=1)[1].strip()
 
