@@ -16,9 +16,9 @@
 import inspect
 import os
 import textwrap
-from pathlib import Path
-from typing import get_args, get_origin, Union
 import types
+from pathlib import Path
+from typing import Union, get_args, get_origin
 
 import regex as re
 
