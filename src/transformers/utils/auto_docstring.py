@@ -17,7 +17,8 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import get_args
+from typing import get_args, get_origin, Union
+import types
 
 import regex as re
 
@@ -1288,34 +1289,35 @@ def _process_parameter_type(param, param_name, func):
         param_name (`str`): The name of the parameter
         func (`function`): The function the parameter belongs to
     """
-    # a parameter for a function might have three basic elements: name, type
-    # for example, it would be like (there are some whitespaces)
-    # age: int = 18 (if a param has no type hint, it would be like age=18)
-    parameter_str: str = str(param)
-    # see if there is type hint for given parameter
-    if ":" in parameter_str:
-        name, type_hint_and_default_value = parameter_str.split(":")
-        type_hint_and_default_value = type_hint_and_default_value.strip()
-        if "=" in type_hint_and_default_value:
-            type_hint, default_value = type_hint_and_default_value.split("=")
-            type_hint = type_hint.strip()
-            return type_hint, True
+    param_annotation = param.annotation
+    default_value = param.default
+    origin = get_origin(param_annotation)
+    args = get_args(param_annotation)
+    optional_flag = False
+    type_hint_str = ""
+    # Optional[sth], under the hood is equivalent to Union[sth, None]
+    # if the type hint is None, I mean something like age:None, it would be considered optional, very few developers would write it though.
+    # if the type hint is Optional[None] or Union[None], it would be considered optional, very few developers would write it though.
+    if (
+        (origin is Union and type(None) in args)
+        or default_value is not inspect._empty
+        or (origin is types.UnionType and type(None) in args)
+        or param_annotation is types.NoneType
+        or param_annotation is None
+    ):
+        optional_flag = True
+    """
+    to get the string representation of type hint int, param.annotation.__name__ has to be accessed BUT
+    types.UnionType, like int|str, before python 3.14 has no attribute __name__, to get the string representation of int|str, access param.annotation ONLY.
+    """
+    if param_annotation is not inspect._empty:
+        param_str: str = str(param)
+        if "=" in param_str:
+            type_hint_str = param_str.split(":", maxsplit=1)[1].split("=", maxsplit=1)[0].strip()
         else:
-            type_hint = type_hint_and_default_value
-            type_hint = type_hint.strip()
-            if "Optional" in type_hint:
-                return type_hint, True
-            else:
-                return type_hint, False
-    else:
-        # if there is no type hint
-        # see if there is a default value
-        if "=" in parameter_str:
-            # keep this line for debugging, if necessary
-            name, default_value = parameter_str.split("=")
-            return "", True
-        else:
-            return "", False
+            type_hint_str = param_str.split(":", maxsplit=1)[1].strip()
+
+    return type_hint_str, optional_flag
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
