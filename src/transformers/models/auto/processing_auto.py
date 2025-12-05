@@ -93,6 +93,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2Processor"),
         ("kosmos-2.5", "Kosmos2_5Processor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
+        ("lasr_ctc", "LasrProcessor"),
+        ("lasr_encoder", "LasrProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
