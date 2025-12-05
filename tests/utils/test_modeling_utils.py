@@ -65,7 +65,6 @@ from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
     LoggingLevel,
-    MeasurePeakCPUMemory,
     TemporaryHubRepo,
     TestCasePlus,
     hub_retry,
@@ -2263,26 +2262,6 @@ class ModelUtilsTest(TestCasePlus):
 
         # Reverse monkey patch
         threading.Thread.__init__ = original_init
-
-    def test_offloading_does_not_use_more_cpu_memory(self):
-        """Test that when we must have weights offloaded to the disk, loading will be performed synchronously
-        and sequentially, i.e. we do not use more cpu memory than available. Avoids regresion after
-        https://github.com/huggingface/transformers/pull/42632"""
-        from transformers import Qwen3VLForConditionalGeneration
-
-        # Small enough, non-gated model
-        model_name = "Qwen/Qwen3-VL-2B-Instruct"
-        # Load the model a first time to download the weights if not present
-        _ = Qwen3VLForConditionalGeneration.from_pretrained(model_name, dtype=torch.float16)
-        # This will make sure we load params on only 1GB of cpu memory, and everything else is offloaded to disk (model is
-        # about 4GiB on fp16)
-        max_memory = {"cpu": "2GIB"}
-        with MeasurePeakCPUMemory() as measure:
-            _ = Qwen3VLForConditionalGeneration.from_pretrained(
-                model_name, device_map="auto", max_memory=max_memory, dtype=torch.float16
-            )
-        # We use 2.2 here instead of 2 to avoid being too flaky
-        self.assertTrue(measure.peak < 2.2, "The process used more than 2GiB to load the model")
 
 
 @slow

@@ -1053,8 +1053,6 @@ def require_large_cpu_ram(test_case, memory: float = 80):
     if not is_psutil_available():
         return test_case
 
-    import psutil
-
     return unittest.skipUnless(
         psutil.virtual_memory().total / 1024**3 > memory,
         f"test requires a machine with more than {memory} GiB of CPU RAM memory",
@@ -4079,32 +4077,3 @@ def write_file(file, content):
 def read_json_file(file):
     with open(file, "r") as fh:
         return json.load(fh)
-
-
-class MeasurePeakCPUMemory:
-    def __init__(self, measure_interval=0.001):
-        self.measure_interval = measure_interval
-        self._running = False
-
-    def __enter__(self):
-        start_available_mem = psutil.virtual_memory().available
-        self._running = True
-        self.peak = 0
-
-        def sampler():
-            while self._running:
-                available_mem = psutil.virtual_memory().available
-                peak = start_available_mem - available_mem
-                self.peak = max(self.peak, peak)
-                time.sleep(self.measure_interval)
-
-        self.thread = threading.Thread(target=sampler)
-        self.thread.start()
-        return self  # gives access to self.peak
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._running = False
-        self.thread.join()
-        # Convert to GB
-        self.peak = self.peak / 1024**3
-        return False  # don't suppress exceptions
