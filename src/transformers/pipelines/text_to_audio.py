@@ -169,6 +169,7 @@ class TextToAudioPipeline(Pipeline):
                 text.messages,
                 tokenize=True,
                 return_dict=True,
+                sampling_rate=self.sampling_rate,
                 **kwargs,
             )
         else:
@@ -178,6 +179,8 @@ class TextToAudioPipeline(Pipeline):
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
+        model_dtype = next(self.model.parameters()).dtype
+        output = output.to(dtype=model_dtype)
 
         return output
 

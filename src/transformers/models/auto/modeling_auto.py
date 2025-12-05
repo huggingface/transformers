@@ -401,6 +401,10 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatModel"),
         ("univnet", "UnivNetModel"),
         ("vaultgemma", "VaultGemmaModel"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
+        ("vibevoice_diffusion_head", "VibeVoiceDiffusionHead"),
+        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
         ("video_llama_3", "VideoLlama3Model"),
         ("video_llama_3_vision", "VideoLlama3VisionModel"),
         ("video_llava", "VideoLlavaModel"),
@@ -605,6 +609,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("t5gemma", "T5GemmaForConditionalGeneration"),
         ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
         ("whisper", "WhisperForConditionalGeneration"),
         ("xlm", "XLMWithLMHeadModel"),
@@ -1190,6 +1195,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("whisper", "WhisperForConditionalGeneration"),
     ]
 )
@@ -1640,6 +1646,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
     ]
 )
@@ -1781,6 +1788,8 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
+        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
     ]
 )
 
