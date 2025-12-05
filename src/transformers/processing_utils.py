@@ -119,9 +119,9 @@ class _LazyAutoProcessorMapping(dict):
         return self._MAPPING_NAMES.keys()
 
 
-MODALITY_TO_AUTOPROCESSOR_MAPPING = _LazyAutoProcessorMapping()
+SUBPROCESSOR_TO_AUTO_CLASS_MAPPING = _LazyAutoProcessorMapping()
 
-MODALITY_TO_BASE_CLASS_MAPPING = {
+SUBPROCESSOR_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": "DacModel",
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
@@ -131,9 +131,9 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
 }
 
 
-def _get_modality_for_attribute(attribute_name: str) -> str:
+def _get_subprocessor_type(attribute_name: str) -> str:
     """
-    Get the canonical modality type for a given attribute name.
+    Get the canonical sub-processor type for a given attribute name.
 
     For example:
     - "image_processor" -> "image_processor"
@@ -141,12 +141,13 @@ def _get_modality_for_attribute(attribute_name: str) -> str:
     - "text_tokenizer" -> "tokenizer"
     - "my_feature_extractor" -> "feature_extractor"
     """
-    for modality in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys():
-        if modality in attribute_name:
-            return modality
+    subprocessor_types = SUBPROCESSOR_TO_AUTO_CLASS_MAPPING.keys()
+    for subprocessor_type in subprocessor_types:
+        if subprocessor_type in attribute_name:
+            return subprocessor_type
     raise ValueError(
-        f"Cannot determine modality for attribute '{attribute_name}'. "
-        f"Attribute name must contain one of: {list(MODALITY_TO_AUTOPROCESSOR_MAPPING.keys())}"
+        f"Cannot determine sub-processor type for attribute '{attribute_name}'. "
+        f"Attribute name must contain one of: {list(subprocessor_types)}"
     )
 
 
@@ -684,11 +685,11 @@ class ProcessorMixin(PushToHubMixin):
         mismatch between expected and actual class, an error is raise. Otherwise, the proper retrieved class
         is returned.
         """
-        # If the exact attribute name is not in the mapping, use its canonical modality
+        # If the exact attribute name is not in the mapping, use its canonical sub-processor type
         # (e.g., "encoder_tokenizer" -> "tokenizer")
-        if argument_name not in MODALITY_TO_BASE_CLASS_MAPPING:
-            argument_name = _get_modality_for_attribute(argument_name)
-        class_name = MODALITY_TO_BASE_CLASS_MAPPING.get(argument_name)
+        if argument_name not in SUBPROCESSOR_TO_BASE_CLASS_MAPPING:
+            argument_name = _get_subprocessor_type(argument_name)
+        class_name = SUBPROCESSOR_TO_BASE_CLASS_MAPPING.get(argument_name)
         if isinstance(class_name, tuple):
             proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
         else:
@@ -722,8 +723,8 @@ class ProcessorMixin(PushToHubMixin):
         # All other sub-processors (image_processor, feature_extractor, etc.) are kept in processor_config.json.
         for attribute in self.__class__.get_attributes():
             if attribute in output:
-                modality = _get_modality_for_attribute(attribute)
-                if modality == "tokenizer":
+                subprocessor_type = _get_subprocessor_type(attribute)
+                if subprocessor_type == "tokenizer":
                     del output[attribute]
 
         if "chat_template" in output:
@@ -846,9 +847,9 @@ class ProcessorMixin(PushToHubMixin):
             if hasattr(attribute, "_set_processor_class"):
                 attribute._set_processor_class(self.__class__.__name__)
 
-            modality = _get_modality_for_attribute(attribute_name)
-            is_primary = attribute_name == modality
-            if modality == "tokenizer":
+            subprocessor_type = _get_subprocessor_type(attribute_name)
+            is_primary = attribute_name == subprocessor_type
+            if subprocessor_type == "tokenizer":
                 # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
                 if is_primary:
                     attribute.save_pretrained(save_directory)
@@ -1429,30 +1430,63 @@ class ProcessorMixin(PushToHubMixin):
 
     @classmethod
     def get_attributes(cls):
-        args_in_init = inspect.signature(cls.__init__).parameters.keys()
-        attributes = []
-        for sub_processor_type in args_in_init:
-            # don't treat audio_tokenizer as an attribute
-            if sub_processor_type == "audio_tokenizer":
-                continue
-            if any(modality in sub_processor_type for modality in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys()):
-                attributes.append(sub_processor_type)
+        """
+        Detect the sub-processor attributes for this processor class.
 
+        Detection priority:
+        1. Auto-detection from `__init__` signature parameters across the full class hierarchy (MRO)
+        2. `<subprocessor_type>_class` class attributes (legacy pattern, checks full class hierarchy)
+
+        Returns:
+            List of attribute names corresponding to sub-processors.
+        """
+        subprocessor_types = SUBPROCESSOR_TO_AUTO_CLASS_MAPPING.keys()
+
+        # Priority 1: Auto-detect from __init__ signatures across the full MRO
+        # This handles inheritance where child classes use *args/**kwargs
+        attributes = []
+        seen_params = set()
+        for base_class in cls.__mro__:
+            if not hasattr(base_class, "__init__"):
+                continue
+            sig = inspect.signature(base_class.__init__)
+            for param_name, param in sig.parameters.items():
+                # Skip self, *args, **kwargs
+                if param_name in ("self",) or param.kind in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                ):
+                    continue
+                if param_name in seen_params or param_name == "audio_tokenizer":
+                    continue
+                seen_params.add(param_name)
+                if any(sp_type in param_name for sp_type in subprocessor_types):
+                    attributes.append(param_name)
+
+        if attributes:
+            return attributes
+
+        # Priority 2: Check for <subprocessor_type>_class attributes in the full class hierarchy
         # Legacy processors may not override `__init__` and instead expose modality
         # attributes via `<attribute>_class`. In that case, `args_in_init` only exposes
         # `*args`/`**kwargs`, so we need to infer the attributes from those class-level
         # hints to keep backward compatibility (e.g. dynamic processors stored on the Hub).
-        if not attributes:
-            for attribute_name, value in cls.__dict__.items():
-                if value is None or attribute_name == "audio_tokenizer_class" or not attribute_name.endswith("_class"):
+        attributes_from_class_hints = []
+        for base_class in cls.__mro__:
+            for attribute_name in base_class.__dict__:
+                if not attribute_name.endswith("_class") or attribute_name == "audio_tokenizer_class":
+                    continue
+                value = getattr(base_class, attribute_name, None)
+                if value is None:
                     continue
                 inferred_attribute = attribute_name[: -len("_class")]
                 if inferred_attribute == "audio_tokenizer":
                     continue
-                if any(modality in inferred_attribute for modality in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys()):
-                    attributes.append(inferred_attribute)
+                if any(sp_type in inferred_attribute for sp_type in subprocessor_types):
+                    if inferred_attribute not in attributes_from_class_hints:
+                        attributes_from_class_hints.append(inferred_attribute)
 
-        return attributes
+        return attributes_from_class_hints
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoProcessor"):
@@ -1481,8 +1515,8 @@ class ProcessorMixin(PushToHubMixin):
         """
         Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
         and feature extractors. This method inspects the processor's `__init__` signature to identify parameters
-        that correspond to known modality types (image_processor, tokenizer, feature_extractor, etc.) or contain
-        modality names in their attribute name.
+        that correspond to known sub-processor types (image_processor, tokenizer, feature_extractor, etc.) or
+        contain sub-processor type names in their attribute name.
 
         For tokenizers: Uses the appropriate Auto class (AutoTokenizer) to load via `.from_pretrained()`.
         Additional tokenizers (e.g., "decoder_tokenizer") are loaded from subfolders.
@@ -1501,35 +1535,35 @@ class ProcessorMixin(PushToHubMixin):
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
-        for sub_processor_type in sub_processors:
-            modality = _get_modality_for_attribute(sub_processor_type)
-            is_primary = sub_processor_type == modality
+        for sub_processor_name in sub_processors:
+            subprocessor_type = _get_subprocessor_type(sub_processor_name)
+            is_primary = sub_processor_name == subprocessor_type
 
             if is_primary:
                 # Primary non-tokenizer sub-processor: load via Auto class
-                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
+                auto_processor_class = SUBPROCESSOR_TO_AUTO_CLASS_MAPPING[sub_processor_name]
                 sub_processor = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
                 args.append(sub_processor)
-            elif "tokenizer" in sub_processor_type:
+            elif "tokenizer" in sub_processor_name:
                 # Special case: tokenizer-like parameters not in the mapping (e.g., "protein_tokenizer")
                 # Load using AutoTokenizer with subfolder
-                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+                auto_processor_class = SUBPROCESSOR_TO_AUTO_CLASS_MAPPING["tokenizer"]
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=sub_processor_type, **kwargs
+                    pretrained_model_name_or_path, subfolder=sub_processor_name, **kwargs
                 )
                 args.append(sub_processor)
 
-            elif sub_processor_type in processor_dict:
+            elif sub_processor_name in processor_dict:
                 # Additional non-tokenizer sub-processor: instantiate from config in processor_dict
-                sub_processor_config = processor_dict[sub_processor_type]
+                sub_processor_config = processor_dict[sub_processor_name]
                 if isinstance(sub_processor_config, dict):
                     # Determine the class to instantiate
                     # Image processors have 'image_processor_type', feature extractors have 'feature_extractor_type'
-                    type_key = f"{modality}_type"
+                    type_key = f"{subprocessor_type}_type"
                     class_name = sub_processor_config.get(type_key)
                     if class_name is None:
                         raise ValueError(
-                            f"Cannot instantiate {sub_processor_type}: missing '{type_key}' in config. "
+                            f"Cannot instantiate {sub_processor_name}: missing '{type_key}' in config. "
                             f"Config keys: {list(sub_processor_config.keys())}"
                         )
                     processor_class = cls.get_possibly_dynamic_module(class_name)
@@ -1537,12 +1571,12 @@ class ProcessorMixin(PushToHubMixin):
                     args.append(sub_processor)
                 else:
                     raise ValueError(
-                        f"Expected dict for {sub_processor_type} in processor_config.json, "
+                        f"Expected dict for {sub_processor_name} in processor_config.json, "
                         f"got {type(sub_processor_config)}"
                     )
             else:
                 raise ValueError(
-                    f"Cannot find config for {sub_processor_type} in processor_config.json. "
+                    f"Cannot find config for {sub_processor_name} in processor_config.json. "
                     f"Available keys: {list(processor_dict.keys())}"
                 )
 
