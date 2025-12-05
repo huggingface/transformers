@@ -333,6 +333,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         for name, child in module._modules.items():
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
+                child._is_hf_initialized = True
 
     load(model_to_load, state_dict, assign_to_params_buffers=False)
 

@@ -2302,7 +2302,9 @@ Hey how are you doing"""  # noqa: W293
 
         encoded_sequences = [tokenizer(sequence) for sequence in sequences]
         encoded_sequences_batch = tokenizer(sequences, padding=False)
-        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
+        self.assertListEqual(
+            encoded_sequences, TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch)
+        )
 
         maximum_length = len(max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len))
 
@@ -2316,7 +2318,7 @@ Hey how are you doing"""  # noqa: W293
         encoded_sequences_batch_padded = tokenizer(sequences, padding=True)
         self.assertListEqual(
             encoded_sequences_padded,
-            self.convert_batch_to_list_format(encoded_sequences_batch_padded),
+            TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch_padded),
         )
 
         # check 'longest' is unsensitive to a max length
@@ -2357,7 +2359,9 @@ Hey how are you doing"""  # noqa: W293
             tokenizer(sequence, max_length=max_length, padding="max_length") for sequence in sequences
         ]
         encoded_sequences_batch = tokenizer(sequences, max_length=max_length, padding="max_length")
-        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
+        self.assertListEqual(
+            encoded_sequences, TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch)
+        )
 
         # Left padding tests
         tokenizer = self.get_tokenizer(do_lower_case=False)
@@ -2377,7 +2381,9 @@ Hey how are you doing"""  # noqa: W293
             tokenizer(sequence, max_length=max_length, padding="max_length") for sequence in sequences
         ]
         encoded_sequences_batch = tokenizer(sequences, max_length=max_length, padding="max_length")
-        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
+        self.assertListEqual(
+            encoded_sequences, TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch)
+        )
 
     def test_pretokenized_inputs(self):
         # Test when inputs are pretokenized
