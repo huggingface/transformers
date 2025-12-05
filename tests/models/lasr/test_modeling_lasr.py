@@ -371,7 +371,7 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         # fmt: on
 
         samples = self._load_datasamples(5)
-        model = LasrForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
+        model = LasrForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device, attn_implementation="eager")
         model.eval()
         model.to(torch_device)
 
