@@ -91,7 +91,6 @@ from .hub import (
     extract_commit_hash,
     has_file,
     http_user_agent,
-    is_offline_mode,
     list_repo_templates,
     try_to_load_from_cache,
 )

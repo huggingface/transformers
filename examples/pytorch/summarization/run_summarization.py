@@ -45,6 +45,7 @@ import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 from datasets import load_dataset
 from filelock import FileLock
+from huggingface_hub import is_offline_mode
 
 import transformers
 from transformers import (
@@ -61,7 +62,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from transformers.utils import check_min_version, is_offline_mode
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 

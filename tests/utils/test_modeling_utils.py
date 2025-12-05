@@ -315,16 +315,16 @@ if is_torch_available():
         def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
                 # First offline load should fail
-                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                     with pytest.raises(OSError):
                         AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
                 # Enable online mode for download
-                with patch("transformers.utils.hub.is_offline_mode", return_value=False):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
                     snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
                 # Load again in offline mode - should work now
-                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                     AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
