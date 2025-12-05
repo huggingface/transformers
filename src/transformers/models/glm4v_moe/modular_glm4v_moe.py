@@ -227,7 +227,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
         self.norm_topk_prob = norm_topk_prob
         self.router_aux_loss_coef = router_aux_loss_coef
         PreTrainedConfig.__init__(
-            self, tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope"}, **kwargs
+            self, tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
         )
 
 
