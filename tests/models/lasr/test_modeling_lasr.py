@@ -296,7 +296,7 @@ class LasrForCTCModelTest(ModelTesterMixin, unittest.TestCase):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
 
-class LASRForCTCIntegrationTest(unittest.TestCase):
+class LasrForCTCIntegrationTest(unittest.TestCase):
     _dataset = None
 
     @classmethod
