@@ -664,6 +664,7 @@ class RotaryEmbeddingConfigMixin:
 
         # Case 0: no RoPE params defined
         if rope_parameters is None:
+            logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
             return
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
         elif getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
