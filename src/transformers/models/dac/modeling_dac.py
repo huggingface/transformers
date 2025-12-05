@@ -264,7 +264,7 @@ class DacDecoderBlock(nn.Module):
         return hidden_state
 
 
-class DacResidualVectorQuantize(nn.Module):
+class DacResidualVectorQuantizer(nn.Module):
     """
     ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://huggingface.co/papers/2107.03312)
     """
@@ -568,7 +568,7 @@ class DacModel(DacPreTrainedModel):
         self.encoder = DacEncoder(config)
         self.decoder = DacDecoder(config)
 
-        self.quantizer = DacResidualVectorQuantize(config)
+        self.quantizer = DacResidualVectorQuantizer(config)
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
