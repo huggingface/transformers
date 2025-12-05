@@ -56,7 +56,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        self.image_token = "<|IMAGE_PLACEHOLDER|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.image_token = tokenizer.image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(

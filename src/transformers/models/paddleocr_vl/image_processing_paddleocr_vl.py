@@ -301,7 +301,7 @@ class PaddleOCRVLImageProcessor(BaseImageProcessor):
         )
         patches = patches.transpose(0, 3, 5, 2, 1, 4, 6)
         if temporal_patch_size != 1:
-            raise ValueError("temporal_patch_size must be 1!")
+            raise ValueError(f"temporal_patch_size must be 1!, but got {temporal_patch_size}!")
         flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, patch_size, patch_size)
         return flatten_patches, (grid_t, grid_h, grid_w)
 

@@ -225,7 +225,6 @@ class PaddleOCRTextConfig(PreTrainedConfig):
         head_dim: Optional[int] = 128,
         **kwargs,
     ):
-        kwargs["ignore_keys_at_rope_validation"] = {"mrope_section"}
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

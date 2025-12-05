@@ -290,7 +290,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         )
         patches = patches.transpose(0, 3, 5, 2, 1, 4, 6)
         if temporal_patch_size != 1:
-            raise ValueError("temporal_patch_size must be 1!")
+            raise ValueError(f"temporal_patch_size must be 1!, but got {temporal_patch_size}!")
         flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, patch_size, patch_size)
         return flatten_patches, (grid_t, grid_h, grid_w)
 
@@ -452,7 +452,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        self.image_token = "<|IMAGE_PLACEHOLDER|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.image_token = tokenizer.image_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -546,10 +546,6 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
-    def __init__(self, **super_kwargs):
-        kwargs["ignore_keys_at_rope_validation"] = {"mrope_section"}
-        super().__init__()
-
 
 class PaddleOCRVLConfig(Qwen2VLConfig):
     sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
@@ -580,7 +576,8 @@ class PaddleOCRProjector(nn.Module):
             w_block = w // m2
 
             image_feature = image_feature.reshape(t, h_block, m1, w_block, m2, d)
-            image_feature = image_feature.reshape((t * h_block * w_block), (m1 * m2 * d))
+            image_feature = image_feature.transpose(2, 3)
+            image_feature = image_feature.reshape(t * h_block * w_block, m1 * m2 * d)
 
             hidden_states = self.linear_1(image_feature)
             hidden_states = self.act(hidden_states)

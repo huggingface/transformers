@@ -74,7 +74,8 @@ class PaddleOCRProjector(nn.Module):
             w_block = w // m2
 
             image_feature = image_feature.reshape(t, h_block, m1, w_block, m2, d)
-            image_feature = image_feature.reshape((t * h_block * w_block), (m1 * m2 * d))
+            image_feature = image_feature.transpose(2, 3)
+            image_feature = image_feature.reshape(t * h_block * w_block, m1 * m2 * d)
 
             hidden_states = self.linear_1(image_feature)
             hidden_states = self.act(hidden_states)
