@@ -20,7 +20,6 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
-    TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
     LxmertConfig,
     is_torch_available,
@@ -36,13 +35,10 @@ if is_torch_available():
 @is_pipeline_test
 class FeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
-    tf_model_mapping = TF_MODEL_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
-        feature_extractor = pipeline(
-            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        feature_extractor = pipeline(task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert")
         outputs = feature_extractor("This is a test")
         self.assertEqual(
             nested_simplify(outputs),
@@ -50,9 +46,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_tokenization_small_model_pt(self):
-        feature_extractor = pipeline(
-            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        feature_extractor = pipeline(task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert")
         # test with empty parameters
         outputs = feature_extractor("This is a test")
         self.assertEqual(
@@ -90,9 +84,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_return_tensors_pt(self):
-        feature_extractor = pipeline(
-            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
-        )
+        feature_extractor = pipeline(task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert")
         outputs = feature_extractor("This is a test", return_tensors=True)
         self.assertTrue(torch.is_tensor(outputs))
 
@@ -119,7 +111,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if tokenizer is None:
             self.skipTest(reason="No tokenizer")
@@ -145,7 +137,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return feature_extractor_pipeline, ["This is a test", "This is another test"]
 

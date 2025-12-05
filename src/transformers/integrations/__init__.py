@@ -32,12 +32,9 @@ _import_structure = {
         "unpack_weights",
     ],
     "bitsandbytes": [
+        "Bnb4bitQuantize",
         "dequantize_and_replace",
-        "get_keys_to_not_convert",
-        "replace_8bit_linear",
         "replace_with_bnb_linear",
-        "set_module_8bit_tensor_to_device",
-        "set_module_quantized_tensor_to_device",
         "validate_bnb_backend_availability",
     ],
     "deepspeed": [
@@ -75,6 +72,7 @@ _import_structure = {
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
+        "use_kernel_func_from_hub",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -108,7 +106,6 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
-        "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
         "is_trackio_available",
@@ -116,7 +113,6 @@ _import_structure = {
         "rewrite_logs",
         "run_hp_search_optuna",
         "run_hp_search_ray",
-        "run_hp_search_sigopt",
         "run_hp_search_wandb",
     ],
     "mxfp4": [
@@ -126,6 +122,7 @@ _import_structure = {
         "load_and_swizzle_mxfp4",
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
+        "swizzle_mxfp4",
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
@@ -181,12 +178,9 @@ if TYPE_CHECKING:
         unpack_weights,
     )
     from .bitsandbytes import (
+        Bnb4bitQuantize,
         dequantize_and_replace,
-        get_keys_to_not_convert,
-        replace_8bit_linear,
         replace_with_bnb_linear,
-        set_module_8bit_tensor_to_device,
-        set_module_quantized_tensor_to_device,
         validate_bnb_backend_availability,
     )
     from .deepspeed import (
@@ -219,6 +213,7 @@ if TYPE_CHECKING:
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
+        use_kernel_func_from_hub,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
@@ -252,7 +247,6 @@ if TYPE_CHECKING:
         is_optuna_available,
         is_ray_available,
         is_ray_tune_available,
-        is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
         is_trackio_available,
@@ -260,7 +254,6 @@ if TYPE_CHECKING:
         rewrite_logs,
         run_hp_search_optuna,
         run_hp_search_ray,
-        run_hp_search_sigopt,
         run_hp_search_wandb,
     )
     from .mxfp4 import (
@@ -269,6 +262,7 @@ if TYPE_CHECKING:
         load_and_swizzle_mxfp4,
         quantize_to_mxfp4,
         replace_with_mxfp4_linear,
+        swizzle_mxfp4,
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers

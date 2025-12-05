@@ -284,7 +284,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
 
     text_config = Emu3TextConfig(
         max_position_embeddings=model_llm.config.max_position_embeddings,
-        rope_scaling={"rope_type": "default"},
+        rope_parameters={"rope_type": "default"},
     )
     config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 
@@ -313,7 +313,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         # Short inference on a few examples to check if generation makes sense
         print("Loading the checkpoint in a Emu3 model...")
         print("*" * 100)
-        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
         processor = Emu3Processor.from_pretrained(output_dir)
 
         conversation = [
@@ -348,7 +348,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         print("*" * 100)
     elif test_inference and llm_model_id.endswith("Gen"):
         processor = Emu3Processor.from_pretrained(output_dir)
-        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
 
         inputs = processor(
             text=[

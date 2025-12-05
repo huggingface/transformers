@@ -103,7 +103,7 @@ def get_last_daily_ci_artifacts(
         token, workflow_run_id=workflow_run_id, workflow_id=workflow_id, commit_sha=commit_sha
     )
     if workflow_run_id is not None:
-        artifacts_links = get_artifacts_links(worflow_run_id=workflow_run_id, token=token)
+        artifacts_links = get_artifacts_links(workflow_run_id=workflow_run_id, token=token)
 
         if artifact_names is None:
             artifact_names = artifacts_links.keys()

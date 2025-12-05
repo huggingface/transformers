@@ -19,7 +19,6 @@ import random
 import tempfile
 import unittest
 from collections.abc import Sequence
-from typing import Optional
 
 import numpy as np
 from parameterized import parameterized
@@ -78,8 +77,8 @@ class Gemma3nAudioFeatureExtractionTester:
         dither: float = 0.0,
         input_scale_factor: float = 1.0,
         mel_floor: float = 1e-5,
-        per_bin_mean: Optional[Sequence[float]] = None,
-        per_bin_stddev: Optional[Sequence[float]] = None,
+        per_bin_mean: Sequence[float] | None = None,
+        per_bin_stddev: Sequence[float] | None = None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -229,6 +228,13 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
             for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
                 self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_call_unbatched(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        np_audio = floats_list((1, 800))[0]
+        input_features = feature_extractor(np_audio, return_tensors="np").input_features
+        expected_input_features = feature_extractor([np_audio], return_tensors="np").input_features
+        np.testing.assert_allclose(input_features, expected_input_features)
+
     def test_audio_features_attn_mask_consistent(self):
         # regression test for https://github.com/huggingface/transformers/issues/39911
         # Test input_features and input_features_mask have consistent shape
@@ -277,10 +283,12 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         diff = input_features_dither - input_features_no_dither
 
         # features are not identical
-        self.assertTrue(np.abs(diff).mean() > 1e-6)
+        assert np.abs(diff).mean() > 1e-6
         # features are not too different
-        self.assertTrue(np.abs(diff).mean() <= 1e-4)
-        self.assertTrue(np.abs(diff).max() <= 5e-3)
+        # the heuristic value `7e-4` is obtained by running 50000 times (maximal value is around 3e-4).
+        assert np.abs(diff).mean() < 7e-4
+        # the heuristic value `8e-1` is obtained by running 50000 times (maximal value is around 5e-1).
+        assert np.abs(diff).max() < 8e-1
 
     @require_torch
     def test_double_precision_pad(self):

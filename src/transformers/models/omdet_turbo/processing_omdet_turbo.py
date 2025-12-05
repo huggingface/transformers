@@ -65,7 +65,6 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "task": None,
         },
-        "images_kwargs": {},
     }
 
 
@@ -216,19 +215,13 @@ class OmDetTurboProcessor(ProcessorMixin):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("DetrImageProcessor", "DetrImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Optional[Union[list[str], list[list[str]]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -289,21 +282,17 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         return encoding
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        tokenizer_input_names = [
+            "classes_attention_mask",
+            "tasks_attention_mask",
+            "tasks_input_ids",
+            "classes_input_ids",
+            "classes_structure",
+        ]
+        return tokenizer_input_names + image_processor_input_names
 
     def _get_default_image_size(self) -> tuple[int, int]:
         height = (

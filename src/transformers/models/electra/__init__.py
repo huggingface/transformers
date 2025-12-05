@@ -18,12 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from ..bert.tokenization_bert import BertTokenizer as ElectraTokenizer
     from .configuration_electra import *
     from .modeling_electra import *
-    from .modeling_flax_electra import *
-    from .modeling_tf_electra import *
-    from .tokenization_electra import *
-    from .tokenization_electra_fast import *
 else:
     import sys
 

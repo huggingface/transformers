@@ -30,9 +30,25 @@ You can find all the original LightGlue checkpoints under the [ETH-CVG](https://
 >
 > Click on the LightGlue models in the right sidebar for more examples of how to apply LightGlue to different computer vision tasks.
 
-The example below demonstrates how to match keypoints between two images with the [`AutoModel`] class.
+The example below demonstrates how to match keypoints between two images with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+from transformers import pipeline
+
+keypoint_matcher = pipeline(task="keypoint-matching", model="ETH-CVG/lightglue_superpoint")
+
+url_0 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+url_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+
+results = keypoint_matcher([url_0, url_1], threshold=0.9)
+print(results[0])
+# {'keypoint_image_0': {'x': ..., 'y': ...}, 'keypoint_image_1': {'x': ..., 'y': ...}, 'score': ...}
+```
+
+</hfoption>
 <hfoption id="AutoModel">
 
 ```py
@@ -52,7 +68,7 @@ processor = AutoImageProcessor.from_pretrained("ETH-CVG/lightglue_superpoint")
 model = AutoModel.from_pretrained("ETH-CVG/lightglue_superpoint")
 
 inputs = processor(images, return_tensors="pt")
-with torch.no_grad():
+with torch.inference_mode():
     outputs = model(**inputs)
 
 # Post-process to get keypoints and matches
@@ -72,15 +88,16 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     import torch
     from PIL import Image
     import requests
-    
+
     processor = AutoImageProcessor.from_pretrained("ETH-CVG/lightglue_superpoint")
     model = AutoModel.from_pretrained("ETH-CVG/lightglue_superpoint")
-    
+
     # LightGlue requires pairs of images
     images = [image1, image2]
     inputs = processor(images, return_tensors="pt")
-    outputs = model(**inputs)
-    
+    with torch.inference_mode():
+        outputs = model(**inputs)
+
     # Extract matching information
     keypoints0 = outputs.keypoints0  # Keypoints in first image
     keypoints1 = outputs.keypoints1  # Keypoints in second image
@@ -95,7 +112,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     # Process outputs for visualization
     image_sizes = [[(image.height, image.width) for image in images]]
     processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
-    
+
     for i, output in enumerate(processed_outputs):
         print(f"For the image pair {i}")
         for keypoint0, keypoint1, matching_score in zip(
@@ -126,18 +143,18 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## LightGlueImageProcessor
 
 [[autodoc]] LightGlueImageProcessor
+    - preprocess
+    - post_process_keypoint_matching
+    - visualize_keypoint_matching
 
-- preprocess
-- post_process_keypoint_matching
-- visualize_keypoint_matching
+## LightGlueImageProcessorFast
 
-<frameworkcontent>
-<pt>
+[[autodoc]] LightGlueImageProcessorFast
+    - preprocess
+    - post_process_keypoint_matching
+    - visualize_keypoint_matching
+
 ## LightGlueForKeypointMatching
 
 [[autodoc]] LightGlueForKeypointMatching
-
-- forward
-
-</pt>
-</frameworkcontent>
+    - forward

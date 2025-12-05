@@ -3,7 +3,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-check_dirs := examples tests src utils
+check_dirs := examples tests src utils scripts benchmark benchmark_v2
 
 exclude_folders :=  ""
 
@@ -45,6 +45,7 @@ repo-consistency:
 	python utils/check_modular_conversion.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
+	python utils/check_init_weights_data.py
 	python utils/check_inits.py
 	python utils/check_pipeline_typing.py
 	python utils/check_config_docstrings.py

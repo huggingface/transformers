@@ -23,12 +23,12 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaMLP,
-    LlamaRotaryEmbedding,
 )
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
 from .configuration_ernie4_5 import Ernie4_5Config
 
 
-class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
+class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -84,7 +84,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 class Ernie4_5MLP(LlamaMLP):
     def __init__(self, config: Ernie4_5Config):
-        super().__init__()
+        super().__init__(config)
 
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)

@@ -22,14 +22,13 @@ Rust library [🤗 Tokenizers](https://github.com/huggingface/tokenizers). The "
 
 1. a significant speed-up in particular when doing batched tokenization and
 2. additional methods to map between the original string (character and words) and the token space (e.g. getting the
-   index of the token comprising a given character or the span of characters corresponding to a given token). 
+   index of the token comprising a given character or the span of characters corresponding to a given token).
 
 The base classes [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`]
 implement the common methods for encoding string inputs in model inputs (see below) and instantiating/saving python and
 "Fast" tokenizers either from a local file or directory or from a pretrained tokenizer provided by the library
 (downloaded from HuggingFace's AWS S3 repository). They both rely on
-[`~tokenization_utils_base.PreTrainedTokenizerBase`] that contains the common methods, and
-[`~tokenization_utils_base.SpecialTokensMixin`].
+[`~tokenization_utils_base.PreTrainedTokenizerBase`] that contains the common methods.
 
 [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`] thus implement the main
 methods for using all the tokenizers:
@@ -50,15 +49,14 @@ several advanced alignment methods which can be used to map between the original
 token space (e.g., getting the index of the token comprising a given character or the span of characters corresponding
 to a given token).
 
-
-# Multimodal Tokenizer
+## Multimodal Tokenizer
 
 Apart from that each tokenizer can be a "multimodal" tokenizer which means that the tokenizer will hold all relevant special tokens
 as part of tokenizer attributes for easier access. For example, if the tokenizer is loaded from a vision-language model like LLaVA, you will
-be able to access `tokenizer.image_token_id` to obtain the special image token used as a placeholder. 
+be able to access `tokenizer.image_token_id` to obtain the special image token used as a placeholder.
 
 To enable extra special tokens for any type of tokenizer, you have to add the following lines and save the tokenizer. Extra special tokens do not
-have to be modality related and can ne anything that the model often needs access to. In the below code, tokenizer at `output_dir` will have direct access
+have to be modality related and can be anything that the model often needs access to. In the below code, tokenizer at `output_dir` will have direct access
 to three more special tokens.  
 
 ```python
@@ -98,6 +96,18 @@ loaded very simply into 🤗 transformers. Take a look at the [Using tokenizers 
     - encode
     - push_to_hub
     - all
+
+## PythonBackend
+
+[[autodoc]] PythonBackend
+
+## TokenizersBackend
+
+[[autodoc]] TokenizersBackend
+
+## SentencePieceBackend
+
+[[autodoc]] SentencePieceBackend
 
 ## BatchEncoding
 

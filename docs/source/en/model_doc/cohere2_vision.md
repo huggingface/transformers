@@ -48,7 +48,7 @@ model_id = "CohereLabs/command-a-vision-07-2025"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", torch_dtype=torch.float16
+    model_id, device_map="auto", dtype=torch.float16
 )
 
 # Format message with the Command-A-Vision chat template
@@ -113,6 +113,7 @@ outputs = pipe(text=messages, max_new_tokens=300, return_full_text=False)
 
 print(outputs)
 ```
+
 </hfoption>
 </hfoptions>
 

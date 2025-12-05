@@ -39,6 +39,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -160,7 +161,7 @@ class Ovis2VisionText2TextModelTester:
 
 
 @require_torch
-class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Model tester for `Ovis2ForConditionalGeneration`.
     """
@@ -173,11 +174,12 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": Ovis2ForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-text-to-text": Ovis2ForConditionalGeneration, "any-to-any": Ovis2ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     _is_composite = True
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Ovis2VisionText2TextModelTester(self)
@@ -255,7 +257,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
         inputs = self.processor(images=self.image, text=self.text, return_tensors="pt").to(
@@ -276,7 +278,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_batch(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
         inputs = self.processor(
@@ -298,7 +300,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         # related to (#29835)
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
-            torch_dtype="bfloat16",
+            dtype="bfloat16",
             device_map=torch_device,
         )
 
@@ -329,7 +331,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
-            "thisisiron/Ovis2-2B-hf", torch_dtype="bfloat16", device_map=torch_device
+            "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
         lowres_url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
@@ -357,7 +359,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch_matches_single(self):
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
-            torch_dtype="bfloat16",
+            dtype="bfloat16",
             device_map=torch_device,
         )
 

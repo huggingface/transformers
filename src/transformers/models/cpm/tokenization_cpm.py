@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import SPIECE_UNDERLINE, logging
 from ...utils.import_utils import requires
 
@@ -33,7 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 @requires(backends=("sentencepiece",))
 class CpmTokenizer(PreTrainedTokenizer):
-    """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
+    """Runs pre-tokenization with Jieba-RS segmentation tool. It is used in CPM models."""
 
     vocab_files_names = VOCAB_FILES_NAMES
 
@@ -55,7 +55,7 @@ class CpmTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         """
-        Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and
+        Construct a CPM tokenizer. Based on [Jieba-RS](https://pypi.org/project/rjieba/) and
         [SentencePiece](https://github.com/google/sentencepiece).
 
         This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should
@@ -129,13 +129,13 @@ class CpmTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
         try:
-            import jieba
+            import rjieba
         except ModuleNotFoundError as error:
             raise error.__class__(
-                "You need to install jieba to use CpmTokenizer or CpmTokenizerFast. "
-                "See https://pypi.org/project/jieba/ for installation."
+                "You need to install rjieba to use CpmTokenizer or CpmTokenizerFast. "
+                "See https://pypi.org/project/rjieba/ for installation."
             )
-        self.jieba = jieba
+        self.jieba = rjieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
 
         super().__init__(
@@ -157,23 +157,19 @@ class CpmTokenizer(PreTrainedTokenizer):
         self._pad_token_type_id = 3
 
     @property
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.vocab_size
     def vocab_size(self):
         return len(self.sp_model)
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.get_vocab
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.__getstate__
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
         return state
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.__setstate__
     def __setstate__(self, d):
         self.__dict__ = d
 
@@ -184,7 +180,6 @@ class CpmTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.preprocess_text
     def preprocess_text(self, inputs):
         if self.remove_space:
             outputs = " ".join(inputs.strip().split())
@@ -200,7 +195,6 @@ class CpmTokenizer(PreTrainedTokenizer):
 
         return outputs
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer._tokenize
     def _tokenize(self, text: str) -> list[str]:
         """Tokenize a string."""
         text = self.preprocess_text(text)
@@ -221,23 +215,19 @@ class CpmTokenizer(PreTrainedTokenizer):
 
         return new_pieces
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.sp_model.PieceToId(token)
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index)
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
     ) -> list[int]:
@@ -263,7 +253,6 @@ class CpmTokenizer(PreTrainedTokenizer):
             return token_ids_0 + sep + cls
         return token_ids_0 + sep + token_ids_1 + sep + cls
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
     ) -> list[int]:
@@ -292,7 +281,6 @@ class CpmTokenizer(PreTrainedTokenizer):
             return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1, 1]
         return ([0] * len(token_ids_0)) + [1, 1]
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
     ) -> list[int]:
@@ -323,7 +311,6 @@ class CpmTokenizer(PreTrainedTokenizer):
             return len(token_ids_0 + sep) * [0] + cls_segment_id
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")

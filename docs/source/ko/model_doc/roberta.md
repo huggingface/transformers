@@ -102,18 +102,13 @@ RoBERTa를 처음 다룰 때 도움이 되는 Hugging Face 공식 자료와 커�
 ## RobertaTokenizer
 
 [[autodoc]] RobertaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## RobertaTokenizerFast
 
 [[autodoc]] RobertaTokenizerFast
-    - build_inputs_with_special_tokens
 
-<frameworkcontent>
-<pt>
 
 ## RobertaModel
 
@@ -150,81 +145,3 @@ RoBERTa를 처음 다룰 때 도움이 되는 Hugging Face 공식 자료와 커�
 [[autodoc]] RobertaForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFRobertaModel
-
-[[autodoc]] TFRobertaModel
-    - call
-
-## TFRobertaForCausalLM
-
-[[autodoc]] TFRobertaForCausalLM
-    - call
-
-## TFRobertaForMaskedLM
-
-[[autodoc]] TFRobertaForMaskedLM
-    - call
-
-## TFRobertaForSequenceClassification
-
-[[autodoc]] TFRobertaForSequenceClassification
-    - call
-
-## TFRobertaForMultipleChoice
-
-[[autodoc]] TFRobertaForMultipleChoice
-    - call
-
-## TFRobertaForTokenClassification
-
-[[autodoc]] TFRobertaForTokenClassification
-    - call
-
-## TFRobertaForQuestionAnswering
-
-[[autodoc]] TFRobertaForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxRobertaModel
-
-[[autodoc]] FlaxRobertaModel
-    - __call__
-
-## FlaxRobertaForCausalLM
-
-[[autodoc]] FlaxRobertaForCausalLM
-    - __call__
-
-## FlaxRobertaForMaskedLM
-
-[[autodoc]] FlaxRobertaForMaskedLM
-    - __call__
-
-## FlaxRobertaForSequenceClassification
-
-[[autodoc]] FlaxRobertaForSequenceClassification
-    - __call__
-
-## FlaxRobertaForMultipleChoice
-
-[[autodoc]] FlaxRobertaForMultipleChoice
-    - __call__
-
-## FlaxRobertaForTokenClassification
-
-[[autodoc]] FlaxRobertaForTokenClassification
-    - __call__
-
-## FlaxRobertaForQuestionAnswering
-
-[[autodoc]] FlaxRobertaForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

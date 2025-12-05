@@ -19,7 +19,7 @@ import tempfile
 import unittest
 import warnings
 
-from huggingface_hub import HfFolder, create_pull_request
+from huggingface_hub import create_pull_request
 from parameterized import parameterized
 
 from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
@@ -39,7 +39,6 @@ from transformers.generation import (
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
     GenerationMode,
-    HammingDiversityLogitsProcessor,
     MinLengthLogitsProcessor,
     MinNewTokensLengthLogitsProcessor,
     MinPLogitsWarper,
@@ -190,14 +189,9 @@ class GenerationConfigTest(unittest.TestCase):
             generation_config_bad_temperature.update(temperature=None)
         self.assertEqual(len(captured_logs.out), 0)
 
-        # Impossible sets of constraints/parameters will raise an exception
+        # Impossible sets of parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
-        with self.assertRaises(ValueError):
-            # dummy constraint
-            GenerationConfig(do_sample=True, num_beams=2, constraints=["dummy"])
-        with self.assertRaises(ValueError):
-            GenerationConfig(do_sample=True, num_beams=2, force_words_ids=[[[1, 2, 3]]])
 
         # Passing `generate()`-only flags to `validate` will raise an exception
         with self.assertRaises(ValueError):
@@ -289,6 +283,7 @@ class GenerationConfigTest(unittest.TestCase):
         config = GenerationConfig(num_beams=2)
         self.assertEqual(config.get_generation_mode(), GenerationMode.BEAM_SEARCH)
 
+        # TODO joao, manuel: remove this in v4.62.0
         config = GenerationConfig(top_k=10, do_sample=False, penalty_alpha=0.6)
         self.assertEqual(config.get_generation_mode(), GenerationMode.CONTRASTIVE_SEARCH)
 
@@ -535,31 +530,6 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         )
         self.assertEqual(prefix_constrained_logits_proc._num_beams, num_beams)
 
-    def test_serialize_generation_diversity_penalty_and_num_bean_groups(self):
-        """Tests that GenerationConfig is serialized and HammingDiversityLogitsProcessor is initialized with diversity_penalty_and_num_bean_groups"""
-        num_beams = 2
-        num_beam_groups = 2
-        diversity_penalty = 1.0
-
-        generation_config = GenerationConfig(
-            num_beams=num_beams, diversity_penalty=diversity_penalty, num_beam_groups=num_beam_groups
-        )
-        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
-            generation_config.save_pretrained(tmp_dir)
-            new_config = GenerationConfig.from_pretrained(tmp_dir)
-        self.assertEqual(new_config.num_beams, num_beams)
-        self.assertEqual(new_config.diversity_penalty, diversity_penalty)
-        self.assertEqual(new_config.num_beam_groups, num_beam_groups)
-
-        diversity_logits_processor = HammingDiversityLogitsProcessor(
-            diversity_penalty=new_config.diversity_penalty,
-            num_beams=new_config.num_beams,
-            num_beam_groups=new_config.num_beam_groups,
-        )
-        self.assertEqual(diversity_logits_processor._num_beams, num_beams)
-        self.assertEqual(diversity_logits_processor._diversity_penalty, diversity_penalty)
-        self.assertEqual(diversity_logits_processor._num_sub_beams, num_beams // num_beam_groups)
-
     def test_serialize_generation_bos_token_id(self):
         """Tests that GenerationConfig is serialized and ForcedBOSTokenLogitsProcessor is initialized with bos_token_id"""
         bos_token_id = 0
@@ -718,7 +688,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

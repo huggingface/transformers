@@ -17,14 +17,14 @@
 import functools
 import operator
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2ConformerConfig(PretrainedConfig):
+class Wav2Vec2ConformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2ConformerModel`]. It is used to
     instantiate an Wav2Vec2Conformer model according to the specified arguments, defining the model architecture.
@@ -32,8 +32,8 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
     [facebook/wav2vec2-conformer-rel-pos-large](https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

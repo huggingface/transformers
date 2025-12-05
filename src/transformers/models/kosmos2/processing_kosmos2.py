@@ -20,9 +20,9 @@ import re
 from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, is_batched
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
-from ...tokenization_utils import AddedToken
+from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
 
 
@@ -33,15 +33,17 @@ BboxInput = Union[
     list[list[tuple[float, float, float]]],
 ]
 
+NestedList = list[Union[Optional[int], "NestedList"]]
+
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[list[float]]
-    num_image_tokens: Optional[int]
+    bboxes: Optional[NestedList]  # NOTE: hub validators can't accept `Sequence`
+    num_image_tokens: int
     first_image_token_id: Optional[int]
 
 
 class Kosmos2TextKwargs(TextKwargs, total=False):
-    add_eos_token: Optional[bool]
+    add_eos_token: bool
 
 
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -82,10 +84,6 @@ class Kosmos2Processor(ProcessorMixin):
         num_patch_index_tokens (`int`, *optional*, defaults to 1024):
             The number of tokens that represent patch indices.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         tokenizer.return_token_type_ids = False
@@ -134,10 +132,8 @@ class Kosmos2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -342,7 +338,7 @@ class Kosmos2Processor(ProcessorMixin):
     def preprocess_examples(
         self,
         texts: Union[TextInput, list[TextInput]],
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         bboxes: BboxInput = None,
         num_image_tokens: Optional[int] = 64,
     ) -> Union[str, list[str]]:
@@ -372,7 +368,7 @@ class Kosmos2Processor(ProcessorMixin):
 
         if images is None:
             images = [None] * len(texts)
-        elif not is_batched(images):
+        elif not isinstance(images, list):
             images = [images]
         if len(texts) != len(images):
             raise ValueError(
@@ -405,22 +401,6 @@ class Kosmos2Processor(ProcessorMixin):
 
         return result
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def post_process_generation(self, text, cleanup_and_extract=True):
         caption = text.split(self.eoi_token)[-1]
         if cleanup_and_extract:
@@ -447,11 +427,10 @@ class Kosmos2Processor(ProcessorMixin):
         return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
 
     @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return tokenizer_input_names + image_processor_input_names + ["image_embeds_position_mask"]
 
     def _insert_patch_index_tokens(self, text: str, bboxes: Union[list[tuple[int]], list[tuple[float]]]) -> str:
         if bboxes is None or len(bboxes) == 0:
@@ -595,7 +574,7 @@ def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: in
 def extract_entities_with_patch_indices(text):
     """Extract entities contained in `text`. The bounding bboxes is given in the form of patch indices.
 
-    This functioin is only intended to be used within `clean_text_and_extract_entities_with_bboxes` where further
+    This function is only intended to be used within `clean_text_and_extract_entities_with_bboxes` where further
     processing happens, including converting to normalized coordinates and whitespace character cleaning up.
 
     Examples:

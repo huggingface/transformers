@@ -45,7 +45,7 @@ import torch
 from transformers import pipeline
 
 # 텍스트 생성을 위한 파이프라인 생성
-pipeline = pipeline(task="text-generation", model="openai-community/gpt2", torch_dtype=torch.float16, device=0)
+pipeline = pipeline(task="text-generation", model="openai-community/gpt2", dtype=torch.float16, device=0)
 pipeline("Hello, I'm a language model")
 ```
 </hfoption>
@@ -56,7 +56,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # 사전 학습된 모델과 토크나이저 로드
-model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 # 입력 텍스트를 토큰화하고 GPU로 이동
@@ -136,10 +136,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput
 
-[[autodoc]] models.gpt2.modeling_tf_gpt2.TFGPT2DoubleHeadsModelOutput
-
-<frameworkcontent>
-<pt>
 
 ## GPT2Model
 
@@ -171,49 +167,3 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 [[autodoc]] GPT2ForTokenClassification
     - forward
 
-</pt>
-<tf>
-
-## TFGPT2Model
-
-[[autodoc]] TFGPT2Model
-    - call
-
-## TFGPT2LMHeadModel
-
-[[autodoc]] TFGPT2LMHeadModel
-    - call
-
-## TFGPT2DoubleHeadsModel
-
-[[autodoc]] TFGPT2DoubleHeadsModel
-    - call
-
-## TFGPT2ForSequenceClassification
-
-[[autodoc]] TFGPT2ForSequenceClassification
-    - call
-
-## TFSequenceClassifierOutputWithPast
-
-[[autodoc]] modeling_tf_outputs.TFSequenceClassifierOutputWithPast
-
-## TFGPT2Tokenizer
-
-[[autodoc]] TFGPT2Tokenizer
-
-</tf>
-<jax>
-
-## FlaxGPT2Model
-
-[[autodoc]] FlaxGPT2Model
-    - __call__
-
-## FlaxGPT2LMHeadModel
-
-[[autodoc]] FlaxGPT2LMHeadModel
-    - __call__
-
-</jax>
-</frameworkcontent>

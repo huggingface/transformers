@@ -153,8 +153,6 @@ Schließlich möchten Sie, dass der Tokenizer die tatsächlichen Tensoren zurüc
 
 Setzen Sie den Parameter `return_tensors` entweder auf `pt` für PyTorch, oder `tf` für TensorFlow:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> batch_sentences = [
@@ -174,32 +172,6 @@ Setzen Sie den Parameter `return_tensors` entweder auf `pt` für PyTorch, oder `
                            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]])}
 ```
-</pt>
-<tf>
-```py
->>> batch_sentences = [
-...     "But what about second breakfast?",
-...     "Don't think he knows about second breakfast, Pip.",
-...     "What about elevensies?",
-... ]
->>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="tf")
->>> print(encoded_input)
-{'input_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
-array([[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0],
-       [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102],
-       [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]],
-      dtype=int32)>, 
- 'token_type_ids': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
-array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>, 
- 'attention_mask': <tf.Tensor: shape=(2, 9), dtype=int32, numpy=
-array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-       [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-       [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=int32)>}
-```
-</tf>
-</frameworkcontent>
 
 ## Audio
 
@@ -336,12 +308,12 @@ Die Länge der ersten beiden Beispiele entspricht nun der von Ihnen angegebenen 
 
 Ein Merkmalsextraktor wird auch verwendet, um Bilder für Bildverarbeitungsaufgaben zu verarbeiten. Auch hier besteht das Ziel darin, das Rohbild in eine Reihe von Tensoren als Eingabe zu konvertieren.
 
-Laden wir den [food101](https://huggingface.co/datasets/food101) Datensatz für dieses Tutorial. Verwenden Sie den Parameter 🤗 Datasets `split`, um nur eine kleine Stichprobe aus dem Trainingssplit zu laden, da der Datensatz recht groß ist:
+Laden wir den [food101](https://huggingface.co/datasets/ethz/food101) Datensatz für dieses Tutorial. Verwenden Sie den Parameter 🤗 Datasets `split`, um nur eine kleine Stichprobe aus dem Trainingssplit zu laden, da der Datensatz recht groß ist:
 
 ```py
 >>> from datasets import load_dataset
 
->>> dataset = load_dataset("food101", split="train[:100]")
+>>> dataset = load_dataset("ethz/food101", split="train[:100]")
 ```
 
 Als Nächstes sehen Sie sich das Bild mit dem Merkmal 🤗 Datensätze [Bild](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image) an:

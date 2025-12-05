@@ -166,11 +166,8 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SamHQVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -546,11 +543,8 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": SamHQModel, "mask-generation": SamHQModel} if is_torch_available() else {}
     )
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torchscript = False
     test_cpu_offload = False
     test_disk_offload_bin = False
     test_disk_offload_safetensors = False
@@ -714,7 +708,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
         This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
-        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        In contrast to the above test, this one checks if the "config._attn_implementation" is a dict after the model
         is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
         See https://github.com/huggingface/transformers/pull/32238 for more info
 
@@ -807,6 +801,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [-13.1695, -14.6201, -14.8989],
                 ("cuda", 8): [-7.6769, -9.6935, -9.8773],
+                ("xpu", None): [-7.6769, -9.6935, -9.8773],
             }
         )
         EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)

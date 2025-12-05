@@ -34,7 +34,7 @@ The example below demonstrates how to generate text based on an image with [`Pip
 
 ```python
 from transformers import pipeline
-generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", torch_dtype="auto", device=0)
+generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", dtype="auto", device=0)
 
 prompt = "Explain the concept of multimodal AI in simple terms."
 
@@ -48,12 +48,13 @@ print(result[0]['generated_text'])
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from accelerate import Accelerator
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
-device = "cuda:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, torch_dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, dtype=torch.float16)
 
 model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
 
@@ -74,7 +75,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(device)
+).to(model.device)
 
 generate_ids = model.generate(
     **inputs,
@@ -98,12 +99,13 @@ The example below demonstrates inference with an audio and text input.
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from accelerate import Accelerator
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
-device = "cuda:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  torch_dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  dtype=torch.float16)
 
 model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})
 model.set_adapter("speech")
@@ -124,7 +126,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(device)
+).to(model.device)
 
 generate_ids = model.generate(
     **inputs,

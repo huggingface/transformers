@@ -337,7 +337,7 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_pa
 
     hf_config = AutoConfig.from_pretrained(hf_model_id, trust_remote_code=True)
     hf_model = AutoModelForCausalLM.from_pretrained(
-        hf_model_id, trust_remote_code=True, torch_dtype=torch.float16, attn_implementation="eager"
+        hf_model_id, trust_remote_code=True, dtype=torch.float16, attn_implementation="eager"
     )
     hf_processor = AutoProcessor.from_pretrained(hf_model_id, trust_remote_code=True)
     huggingface_weights = OrderedDict()
@@ -473,11 +473,14 @@ def convert_florence2_checkpoint(hf_model_id, pytorch_dump_folder, output_hub_pa
 
     vision_config = convert_config(hf_config.vision_config.__dict__)
     text_config = hf_config.text_config.__dict__
+    if text_config.get("model_type") == "florence2_language":
+        text_config["model_type"] = "bart"
+
     config = Florence2Config(
         text_config=text_config,
         vision_config=vision_config,
         image_token_id=tokenizer.image_token_id,
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
     )
 
     for stage_idx in range(len(config.vision_config.embed_dim)):

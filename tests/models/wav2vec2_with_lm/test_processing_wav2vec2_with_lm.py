@@ -29,7 +29,7 @@ from transformers import AutoFeatureExtractor, AutoProcessor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pyctcdecode, require_torch, require_torchaudio, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, is_pyctcdecode_available, is_torch_available
+from transformers.utils import is_pyctcdecode_available, is_torch_available
 
 from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 
@@ -66,15 +66,16 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         self.tmpdirname = tempfile.mkdtemp()
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(feature_extractor_map) + "\n")
-
         # load decoder from hub
         self.decoder_name = "hf-internal-testing/ngram-beam-search-decoder"
+        feature_extractor = Wav2Vec2FeatureExtractor(**feature_extractor_map)
+        processor = Wav2Vec2ProcessorWithLM(
+            tokenizer=self.get_tokenizer(), feature_extractor=feature_extractor, decoder=self.get_decoder()
+        )
+        processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()
@@ -403,19 +404,6 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         decoded_auto = processor_auto.batch_decode(logits)
 
         self.assertListEqual(decoded_wav2vec2.text, decoded_auto.text)
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-        decoder = self.get_decoder()
-
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
-
-        self.assertListEqual(
-            processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
-        )
 
     @staticmethod
     def get_from_offsets(offsets, key):

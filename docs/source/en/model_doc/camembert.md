@@ -16,11 +16,10 @@ rendered properly in your Markdown viewer.
 *This model was released on 2019-11-10 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
-	<div class="flex flex-wrap space-x-1">
-		<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-		<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
-    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-	</div>
+ <div class="flex flex-wrap space-x-1">
+  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+ </div>
 </div>
 
 # CamemBERT
@@ -48,10 +47,11 @@ The examples below demonstrate how to predict the `<mask>` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("fill-mask", model="camembert-base", torch_dtype=torch.float16, device=0)
+pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
-</hfoption> 
+
+</hfoption>
 
 <hfoption id="AutoModel">
 
@@ -60,8 +60,8 @@ import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 tokenizer = AutoTokenizer.from_pretrained("camembert-base")
-model = AutoModelForMaskedLM.from_pretrained("camembert-base", torch_dtype="auto", device_map="auto", attn_implementation="sdpa")
-inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to("cuda")
+model = AutoModelForMaskedLM.from_pretrained("camembert-base", dtype="auto", device_map="auto", attn_implementation="sdpa")
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -73,7 +73,8 @@ predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
 ```
-</hfoption> 
+
+</hfoption>
 
 <hfoption id="transformers CLI">
 
@@ -81,15 +82,14 @@ print(f"The predicted token is: {predicted_token}")
 echo -e "Le camembert est un délicieux fromage <mask>." | transformers run --task fill-mask --model camembert-base --device 0
 ```
 
-</hfoption> 
+</hfoption>
 
-</hfoptions> 
-
+</hfoptions>
 
 Quantization reduces the memory burden of large models by representing weights in lower precision. Refer to the [Quantization](../quantization/overview) overview for available options.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) quantization to quantize the weights to 8-bits.
-  
+
 ```python
 from transformers import AutoTokenizer, AutoModelForMaskedLM, BitsAndBytesConfig
 import torch
@@ -102,7 +102,7 @@ model = AutoModelForMaskedLM.from_pretrained(
 )
 tokenizer = AutoTokenizer.from_pretrained("almanach/camembert-large")
 
-inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to("cuda")
+inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -122,17 +122,12 @@ print(f"The predicted token is: {predicted_token}")
 ## CamembertTokenizer
 
 [[autodoc]] CamembertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CamembertTokenizerFast
 
 [[autodoc]] CamembertTokenizerFast
-
-<frameworkcontent>
-<pt>
 
 ## CamembertModel
 
@@ -161,37 +156,3 @@ print(f"The predicted token is: {predicted_token}")
 ## CamembertForQuestionAnswering
 
 [[autodoc]] CamembertForQuestionAnswering
-
-</pt>
-<tf>
-
-## TFCamembertModel
-
-[[autodoc]] TFCamembertModel
-
-## TFCamembertForCausalLM
-
-[[autodoc]] TFCamembertForCausalLM
-
-## TFCamembertForMaskedLM
-
-[[autodoc]] TFCamembertForMaskedLM
-
-## TFCamembertForSequenceClassification
-
-[[autodoc]] TFCamembertForSequenceClassification
-
-## TFCamembertForMultipleChoice
-
-[[autodoc]] TFCamembertForMultipleChoice
-
-## TFCamembertForTokenClassification
-
-[[autodoc]] TFCamembertForTokenClassification
-
-## TFCamembertForQuestionAnswering
-
-[[autodoc]] TFCamembertForQuestionAnswering
-
-</tf>
-</frameworkcontent>

@@ -16,10 +16,12 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -34,28 +36,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
-
-
-class JanusFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
+from .image_processing_janus import JanusImageProcessorKwargs
 
 
 @auto_docstring
@@ -68,14 +50,15 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = JanusFastImageProcessorKwargs
+    do_pad = True
+    valid_kwargs = JanusImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[JanusFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[JanusImageProcessorKwargs]):
+        super().__init__(**kwargs)
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
             background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
-        super().__init__(**kwargs)
         self.background_color = tuple(background_color)
 
     def resize(
@@ -83,7 +66,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         min_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -119,7 +102,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
 
         Returns:
             `torch.Tensor`: The padded images.

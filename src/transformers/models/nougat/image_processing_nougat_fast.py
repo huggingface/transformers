@@ -16,10 +16,12 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -38,39 +40,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-    do_crop_margin (`bool`, *optional*, defaults to `True`):
-            Whether to crop the image margins.
-    do_thumbnail (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image using thumbnail method.
-    do_align_long_axis (`bool`, *optional*, defaults to `False`):
-            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-    do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the images to the largest image size in the batch.
-    """
-
-    do_crop_margin: Optional[bool]
-    do_thumbnail: Optional[bool]
-    do_align_long_axis: Optional[bool]
-    do_pad: Optional[bool]
+from .image_processing_nougat import NougatImageProcessorKwargs
 
 
 @auto_docstring
@@ -86,13 +57,13 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
     do_pad: bool = True
     do_rescale = True
     do_crop_margin: bool = True
-    valid_kwargs = NougatFastImageProcessorKwargs
+    valid_kwargs = NougatImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[NougatFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[NougatImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[NougatImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def python_find_non_zero(
@@ -241,7 +212,7 @@ class NougatImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":

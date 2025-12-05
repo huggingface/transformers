@@ -51,7 +51,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="albert-base-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("식물은 광합성이라고 알려진 과정을 통해 [MASK]를 생성합니다.", top_k=5)
@@ -67,7 +67,7 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
 model = AutoModelForMaskedLM.from_pretrained(
     "albert/albert-base-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     attn_implementation="sdpa",
     device_map="auto"
 )
@@ -153,7 +153,9 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## AlbertTokenizer[[alberttokenizer]]
 
-[[autodoc]] AlbertTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
+[[autodoc]] AlbertTokenizer 
+    - get_special_tokens_mask 
+    - save_vocabulary
 
 ## AlbertTokenizerFast[[alberttokenizerfast]]
 
@@ -163,26 +165,26 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-[[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## AlbertModel[[albertmodel]]
 
-[[autodoc]] AlbertModel - forward
+[[autodoc]] AlbertModel 
+    - forward
 
 ## AlbertForPreTraining[[albertforpretraining]]
 
-[[autodoc]] AlbertForPreTraining - forward
+[[autodoc]] AlbertForPreTraining 
+    - forward
 
 ## AlbertForMaskedLM[[albertformaskedlm]]
 
-[[autodoc]] AlbertForMaskedLM - forward
+[[autodoc]] AlbertForMaskedLM 
+    - forward
 
 ## AlbertForSequenceClassification[[albertforsequenceclassification]]
 
-[[autodoc]] AlbertForSequenceClassification - forward
+[[autodoc]] AlbertForSequenceClassification 
+    - forward
 
 ## AlbertForMultipleChoice[[albertformultiplechoice]]
 
@@ -190,74 +192,11 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## AlbertForTokenClassification[[albertfortokenclassification]]
 
-[[autodoc]] AlbertForTokenClassification - forward
+[[autodoc]] AlbertForTokenClassification 
+    - forward
 
 ## AlbertForQuestionAnswering[[albertforquestionanswering]]
 
-[[autodoc]] AlbertForQuestionAnswering - forward
+[[autodoc]] AlbertForQuestionAnswering 
+    - forward
 
-</pt>
-
-<tf>
-
-## TFAlbertModel[[tfalbertmodel]]
-
-[[autodoc]] TFAlbertModel - call
-
-## TFAlbertForPreTraining[[tfalbertforpretraining]]
-
-[[autodoc]] TFAlbertForPreTraining - call
-
-## TFAlbertForMaskedLM[[tfalbertformaskedlm]]
-
-[[autodoc]] TFAlbertForMaskedLM - call
-
-## TFAlbertForSequenceClassification[[tfalbertforsequenceclassification]]
-
-[[autodoc]] TFAlbertForSequenceClassification - call
-
-## TFAlbertForMultipleChoice[[tfalbertformultiplechoice]]
-
-[[autodoc]] TFAlbertForMultipleChoice - call
-
-## TFAlbertForTokenClassification[[tfalbertfortokenclassification]]
-
-[[autodoc]] TFAlbertForTokenClassification - call
-
-## TFAlbertForQuestionAnswering[[tfalbertforquestionanswering]]
-
-[[autodoc]] TFAlbertForQuestionAnswering - call
-
-</tf>
-<jax>
-
-## FlaxAlbertModel[[flaxalbertmodel]]
-
-[[autodoc]] FlaxAlbertModel - **call**
-
-## FlaxAlbertForPreTraining[[flaxalbertforpretraining]]
-
-[[autodoc]] FlaxAlbertForPreTraining - **call**
-
-## FlaxAlbertForMaskedLM[[flaxalbertformaskedlm]]
-
-[[autodoc]] FlaxAlbertForMaskedLM - **call**
-
-## FlaxAlbertForSequenceClassification[[flaxalbertforsequenceclassification]]
-
-[[autodoc]] FlaxAlbertForSequenceClassification - **call**
-
-## FlaxAlbertForMultipleChoice[[flaxalbertformultiplechoice]]
-
-[[autodoc]] FlaxAlbertForMultipleChoice - **call**
-
-## FlaxAlbertForTokenClassification[[flaxalbertfortokenclassification]]
-
-[[autodoc]] FlaxAlbertForTokenClassification - **call**
-
-## FlaxAlbertForQuestionAnswering[[flaxalbertforquestionanswering]]
-
-[[autodoc]] FlaxAlbertForQuestionAnswering - **call**
-
-</jax>
-</frameworkcontent>

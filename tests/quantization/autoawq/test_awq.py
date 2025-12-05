@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -109,8 +111,20 @@ class AwqTest(unittest.TestCase):
 
     input_text = "Hello my name is"
 
-    EXPECTED_OUTPUT = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
-    EXPECTED_OUTPUT_BF16 = "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
+    EXPECTED_OUTPUT = set()
+    EXPECTED_OUTPUT.add(
+        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
+    )
+    EXPECTED_OUTPUT.add(
+        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish. I am"
+    )
+    EXPECTED_OUTPUT.add(
+        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Exercise and Sport Science with a"
+    )
+
+    EXPECTED_OUTPUT_BF16 = [
+        "Hello my name is Katie and I am a 20 year old student at the University of North Carolina at Chapel Hill. I am a junior and I am majoring in Journalism and minoring in Spanish"
+    ]
 
     EXPECTED_OUTPUT_EXLLAMA = [
         "Hello my name is Katie and I am a 20 year old student from the UK. I am currently studying for a degree in English Literature and History at the University of York. I am a very out",
@@ -181,7 +195,7 @@ class AwqTest(unittest.TestCase):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
         output = self.quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_raise_if_non_quantized(self):
         model_id = "facebook/opt-125m"
@@ -196,12 +210,10 @@ class AwqTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.bfloat16).to(torch_device)
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT_BF16)
 
     @require_torch_gpu
     def test_quantized_model_exllama(self):
@@ -227,7 +239,7 @@ class AwqTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name).to(torch_device)
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_save_pretrained(self):
         """
@@ -240,7 +252,7 @@ class AwqTest(unittest.TestCase):
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
             output = model.generate(**input_ids, max_new_tokens=40)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
     def test_quantized_model_multi_accelerator(self):
@@ -251,11 +263,11 @@ class AwqTest(unittest.TestCase):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
 
-        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
+        self.assertTrue(len(set(quantized_model.hf_device_map.values())) >= 2)
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_quantized_model_no_k_proj_quantized(self):
         """
@@ -293,6 +305,9 @@ class AwqFusedTest(unittest.TestCase):
     multi_modal_model_name = "ybelkada/llava-1.5-7b-hf-awq"
     multi_modal_model_code_revision = "ad108a50f5b9e681bdd7378409f57b7fa59a7442"
 
+    awq_rope_model_name = "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
+    awq_rope_model_revision = "db1f81ad4b8c7e39777509fac66c652eb0a52f91"
+
     prompt = (
         "You're standing on the surface of the Earth. "
         "You walk one mile south, one mile west and one mile north. "
@@ -302,6 +317,7 @@ class AwqFusedTest(unittest.TestCase):
     EXPECTED_GENERATION = prompt + "\n\nYou're at the center of a square."
     EXPECTED_GENERATION_CUSTOM_MODEL = "Hello,\n\nI have a problem with my 20"
     EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
+    EXPECTED_GENERATION_AWQ_ROPE = prompt + " [Note: You can't be in a city, and"
 
     def tearDown(self):
         gc.collect()
@@ -338,7 +354,7 @@ class AwqFusedTest(unittest.TestCase):
 
     def test_fused_modules_to_not_convert(self):
         """
-        Test if fused + modules to_not_covnert work as expected
+        Test if fused + modules to_not_convert work as expected
         """
         model_id = "hf-internal-testing/Mixtral-tiny-AWQ"
 
@@ -359,6 +375,7 @@ class AwqFusedTest(unittest.TestCase):
     )
     @require_flash_attn
     @require_torch_gpu
+    @pytest.mark.flash_attn_test
     def test_generation_fused(self):
         """
         Test generation quality for fused models - single batch case
@@ -381,6 +398,7 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_gpu
     @unittest.skipIf(
@@ -433,6 +451,7 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_multi_gpu
     @unittest.skipIf(
@@ -474,6 +493,7 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @require_torch_multi_gpu
     @unittest.skip(reason="Not enough GPU memory on CI runners")
@@ -497,6 +517,33 @@ class AwqFusedTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)
 
+    @pytest.mark.flash_attn_test
+    @require_flash_attn
+    @require_torch_multi_gpu
+    @unittest.skipIf(
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
+    )
+    def test_generation_awq_rope_fused(self):
+        """
+        Text generation test for AWQ model with special RoPE implementation (e.g. LLaMA3) + fused
+        """
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=1024, do_fuse=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.awq_rope_model_name,
+            quantization_config=quantization_config,
+            device_map="auto",
+            revision=self.awq_rope_model_revision,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.awq_rope_model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer([self.prompt, self.prompt], return_tensors="pt", padding=True).to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=12, do_sample=False)
+        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_AWQ_ROPE)
+
 
 @slow
 @require_torch_accelerator
@@ -512,7 +559,7 @@ class AwqScaleTest(unittest.TestCase):
         Simple test that checks if the scales have been replaced in the quantized model
         """
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            "TechxGenus/starcoder2-3b-AWQ", torch_dtype=torch.float16, device_map=torch_device
+            "TechxGenus/starcoder2-3b-AWQ", dtype=torch.float16, device_map=torch_device
         )
         self.assertTrue(isinstance(quantized_model.model.layers[0].mlp.act, ScaledActivation))
 

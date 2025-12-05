@@ -18,7 +18,7 @@ import unittest
 from transformers import SPIECE_UNDERLINE
 from transformers.models.speecht5 import SpeechT5Tokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -76,7 +76,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         token = "<pad>"
         token_id = 1
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
+        self.assertEqual(self.get_tokenizer()._convert_token_to_id_with_added_voc(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
@@ -142,10 +142,6 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertGreater(tokens[-3], tokens[-4])
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
-
-    @unittest.skip
-    def test_pickle_subword_regularization_tokenizer(self):
-        pass
 
     @unittest.skip
     def test_subword_regularization_tokenizer(self):

@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. [Food-101](https://huggingface.co/datasets/food101) データセットの [ViT](model_doc/vit) を微調整して、画像内の食品を分類します。
+1. [Food-101](https://huggingface.co/datasets/ethz/food101) データセットの [ViT](model_doc/vit) を微調整して、画像内の食品を分類します。
 2. 微調整したモデルを推論に使用します。
 
 <Tip>
@@ -58,7 +58,7 @@ Datasets、🤗 データセット ライブラリから Food-101 データセ�
 ```py
 >>> from datasets import load_dataset
 
->>> food = load_dataset("food101", split="train[:5000]")
+>>> food = load_dataset("ethz/food101", split="train[:5000]")
 ```
 
 [`~datasets.Dataset.train_test_split`] メソッドを使用して、データセットの `train` 分割をトレイン セットとテスト セットに分割します。
@@ -111,8 +111,6 @@ Datasets、🤗 データセット ライブラリから Food-101 データセ�
 ```
 
 
-<frameworkcontent>
-<pt>
 
 いくつかの画像変換を画像に適用して、モデルの過学習に対する堅牢性を高めます。ここでは torchvision の [`transforms`](https://pytorch.org/vision/stable/transforms.html) モジュールを使用しますが、任意の画像ライブラリを使用することもできます。
 
@@ -153,96 +151,6 @@ Datasets、🤗 データセット ライブラリから Food-101 データセ�
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-</frameworkcontent>
-
-
-<frameworkcontent>
-<tf>
-
-過剰適合を回避し、モデルをより堅牢にするために、データセットのトレーニング部分にデータ拡張を追加します。
-ここでは、Keras 前処理レイヤーを使用してトレーニング データの変換 (データ拡張を含む) を定義します。
-検証データの変換 (中央のトリミング、サイズ変更、正規化のみ)。 `tf.image` または
-他のライブラリでも構いません。
-
-
-```py
->>> from tensorflow import keras
->>> from tensorflow.keras import layers
-
->>> size = (image_processor.size["height"], image_processor.size["width"])
-
->>> train_data_augmentation = keras.Sequential(
-...     [
-...         layers.RandomCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
-...         layers.RandomFlip("horizontal"),
-...         layers.RandomRotation(factor=0.02),
-...         layers.RandomZoom(height_factor=0.2, width_factor=0.2),
-...     ],
-...     name="train_data_augmentation",
-... )
-
->>> val_data_augmentation = keras.Sequential(
-...     [
-...         layers.CenterCrop(size[0], size[1]),
-...         layers.Rescaling(scale=1.0 / 127.5, offset=-1),
-...     ],
-...     name="val_data_augmentation",
-... )
-```
-
-次に、一度に 1 つの画像ではなく、画像のバッチに適切な変換を適用する関数を作成します。
-
-```py
->>> import numpy as np
->>> import tensorflow as tf
->>> from PIL import Image
-
-
->>> def convert_to_tf_tensor(image: Image):
-...     np_image = np.array(image)
-...     tf_image = tf.convert_to_tensor(np_image)
-...     # `expand_dims()` is used to add a batch dimension since
-...     # the TF augmentation layers operates on batched inputs.
-...     return tf.expand_dims(tf_image, 0)
-
-
->>> def preprocess_train(example_batch):
-...     """Apply train_transforms across a batch."""
-...     images = [
-...         train_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
-...     ]
-...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
-...     return example_batch
-
-
-... def preprocess_val(example_batch):
-...     """Apply val_transforms across a batch."""
-...     images = [
-...         val_data_augmentation(convert_to_tf_tensor(image.convert("RGB"))) for image in example_batch["image"]
-...     ]
-...     example_batch["pixel_values"] = [tf.transpose(tf.squeeze(image)) for image in images]
-...     return example_batch
-```
-
-🤗 データセット [`~datasets.Dataset.set_transform`] を使用して、その場で変換を適用します。
-
-```py
-food["train"].set_transform(preprocess_train)
-food["test"].set_transform(preprocess_val)
-```
-
-最後の前処理ステップとして、`DefaultDataCollat​​or`を使用してサンプルのバッチを作成します。 🤗 Transformers の他のデータ照合機能とは異なり、
-`DefaultDataCollat​​or` は、パディングなどの追加の前処理を適用しません。
-
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -272,8 +180,6 @@ food["test"].set_transform(preprocess_val)
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -310,7 +216,7 @@ food["test"].set_transform(preprocess_val)
 ...     gradient_accumulation_steps=4,
 ...     per_device_eval_batch_size=16,
 ...     num_train_epochs=3,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
@@ -335,119 +241,6 @@ food["test"].set_transform(preprocess_val)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-
-<Tip>
-
-
-Keras を使用したモデルの微調整に慣れていない場合は、まず [基本チュートリアル](./training#train-a-tensorflow-model-with-keras) を確認してください。
-
-</Tip>
-
-
-TensorFlow でモデルを微調整するには、次の手順に従います。
-1. トレーニングのハイパーパラメータを定義し、オプティマイザーと学習率スケジュールを設定します。
-2. 事前トレーニングされたモデルをインスタンス化します。
-3. 🤗 データセットを `tf.data.Dataset` に変換します。
-4. モデルをコンパイルします。
-5. コールバックを追加し、`fit()` メソッドを使用してトレーニングを実行します。
-6. モデルを 🤗 Hub にアップロードしてコミュニティと共有します。
-
-まず、ハイパーパラメーター、オプティマイザー、学習率スケジュールを定義します。
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_epochs = 5
->>> num_train_steps = len(food["train"]) * num_epochs
->>> learning_rate = 3e-5
->>> weight_decay_rate = 0.01
-
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=learning_rate,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=weight_decay_rate,
-...     num_warmup_steps=0,
-... )
-```
-
-次に、ラベル マッピングとともに [`TFAutoModelForImageClassification`] を使用して ViT を読み込みます。
-
-```py
->>> from transformers import TFAutoModelForImageClassification
-
->>> model = TFAutoModelForImageClassification.from_pretrained(
-...     checkpoint,
-...     id2label=id2label,
-...     label2id=label2id,
-... )
-```
-
-Convert your datasets to the `tf.data.Dataset` format using the [`~datasets.Dataset.to_tf_dataset`] and your `data_collator`:
-
-```py
->>> # converting our train dataset to tf.data.Dataset
->>> tf_train_dataset = food["train"].to_tf_dataset(
-...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
-... )
-
->>> # converting our test dataset to tf.data.Dataset
->>> tf_eval_dataset = food["test"].to_tf_dataset(
-...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
-... )
-```
-
-`compile()` を使用してトレーニング用にモデルを設定します。
-
-```py
->>> from tensorflow.keras.losses import SparseCategoricalCrossentropy
-
->>> loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
->>> model.compile(optimizer=optimizer, loss=loss)
-```
-
-予測から精度を計算し、モデルを 🤗 ハブにプッシュするには、[Keras callbacks](../main_classes/keras_callbacks) を使用します。
-`compute_metrics` 関数を [KerasMetricCallback](../main_classes/keras_callbacks#transformers.KerasMetricCallback) に渡します。
-[PushToHubCallback](../main_classes/keras_callbacks#transformers.PushToHubCallback) を使用してモデルをアップロードします。
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback, PushToHubCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_eval_dataset)
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="food_classifier",
-...     tokenizer=image_processor,
-...     save_strategy="no",
-... )
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-ついに、モデルをトレーニングする準備が整いました。トレーニングおよび検証データセット、エポック数、
-モデルを微調整するためのコールバック:
-
-```py
->>> model.fit(tf_train_dataset, validation_data=tf_eval_dataset, epochs=num_epochs, callbacks=callbacks)
-Epoch 1/5
-250/250 [==============================] - 313s 1s/step - loss: 2.5623 - val_loss: 1.4161 - accuracy: 0.9290
-Epoch 2/5
-250/250 [==============================] - 265s 1s/step - loss: 0.9181 - val_loss: 0.6808 - accuracy: 0.9690
-Epoch 3/5
-250/250 [==============================] - 252s 1s/step - loss: 0.3910 - val_loss: 0.4303 - accuracy: 0.9820
-Epoch 4/5
-250/250 [==============================] - 251s 1s/step - loss: 0.2028 - val_loss: 0.3191 - accuracy: 0.9900
-Epoch 5/5
-250/250 [==============================] - 238s 949ms/step - loss: 0.1232 - val_loss: 0.3259 - accuracy: 0.9890
-```
-
-おめでとう！モデルを微調整し、🤗 Hub で共有しました。これで推論に使用できるようになりました。
-</tf>
-</frameworkcontent>
-
 
 <Tip>
 
@@ -462,7 +255,7 @@ Epoch 5/5
 推論を実行したい画像を読み込みます。
 
 ```py
->>> ds = load_dataset("food101", split="validation[:10]")
+>>> ds = load_dataset("ethz/food101", split="validation[:10]")
 >>> image = ds["image"][0]
 ```
 
@@ -486,8 +279,6 @@ Epoch 5/5
 
 必要に応じて、`pipeline`の結果を手動で複製することもできます。
 
-<frameworkcontent>
-<pt>
 
 画像プロセッサをロードして画像を前処理し、`input`を PyTorch テンソルとして返します。
 
@@ -516,38 +307,3 @@ Epoch 5/5
 >>> model.config.id2label[predicted_label]
 'beignets'
 ```
-</pt>
-</frameworkcontent>
-
-<frameworkcontent>
-<tf>
-
-画像プロセッサをロードして画像を前処理し、`input`を TensorFlow テンソルとして返します。
-
-```py
->>> from transformers import AutoImageProcessor
-
->>> image_processor = AutoImageProcessor.from_pretrained("MariaK/food_classifier")
->>> inputs = image_processor(image, return_tensors="tf")
-```
-
-入力をモデルに渡し、ロジットを返します。
-
-```py
->>> from transformers import TFAutoModelForImageClassification
-
->>> model = TFAutoModelForImageClassification.from_pretrained("MariaK/food_classifier")
->>> logits = model(**inputs).logits
-```
-
-最も高い確率で予測されたラベルを取得し、モデルの `id2label` マッピングを使用してラベルに変換します。
-
-
-```py
->>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
->>> model.config.id2label[predicted_class_id]
-'beignets'
-```
-
-</tf>
-</frameworkcontent>

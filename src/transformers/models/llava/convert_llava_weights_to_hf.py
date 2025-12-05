@@ -39,7 +39,7 @@ Example for creating the old state dict file with Python:
     from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
 
     # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
+    kwargs = {"device_map": "auto", "dtype": torch.float16}
     model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", **kwargs)
 
     # load vision tower

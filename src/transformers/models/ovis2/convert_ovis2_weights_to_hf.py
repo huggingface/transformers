@@ -225,7 +225,7 @@ def load_orig_state_dict(model_name_or_path):
     """
     model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         trust_remote_code=True,
     ).eval()
 
@@ -358,13 +358,14 @@ def main():
 
     # Push to hub if requested
     if args.push_to_hub:
-        processor.push_to_hub(args.hub_dir, use_temp_dir=True)
-        model.push_to_hub(args.hub_dir, use_temp_dir=True)
+        model_name = args.hub_dir.split("/")[-1]
+        processor.push_to_hub(model_name)
+        model.push_to_hub(model_name)
 
     model = (
         AutoModelForImageTextToText.from_pretrained(
             args.save_dir,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         .eval()
         .to("cuda:0")

@@ -24,6 +24,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 # OLMo2
+
 [OLMo2](https://huggingface.co/papers/2501.00656) improves on [OLMo](./olmo) by changing the architecture and training recipes of the original models. This includes excluding all biases to improve training stability, non-parametric layer norm, SwiGLU activation function, rotary positional embeddings, and a modified BPE-based tokenizer that masks personal identifiable information. It is pretrained on [Dolma](https://huggingface.co/datasets/allenai/dolma), a dataset of 3T tokens.
 
 You can find all the original OLMo2 checkpoints under the [OLMo2](https://huggingface.co/collections/allenai/olmo-2-674117b93ab84e98afc72edc) collection.
@@ -43,10 +44,10 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-2-0425-1B",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0,
 )
-    
+
 result = pipe("Plants create energy through a process known as")
 print(result)
 ```
@@ -64,7 +65,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -78,7 +79,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/OLMo-2-0425-1B --device 0
+echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model allenai/OLMo-2-0425-1B --device 0
 ```
 
 </hfoption>
@@ -87,6 +88,7 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
+
 ```py
 
 #pip install torchao
@@ -105,7 +107,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/OLMo-2-0425-1B",
     quantization_config=torchao_config,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -116,19 +118,17 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
 
-
 ## Notes
 
 - OLMo2 uses RMSNorm instead of standard layer norm. The RMSNorm is applied to attention queries and keys, and it is applied after the attention and feedforward layers rather than before.
 - OLMo2 requires Transformers v4.48 or higher.
-- Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`]. 
+- Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`].
 
     ```py
     from transformers import AutoModelForCausalLM
-    
+
     model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
     ```
-
 
 ## Olmo2Config
 

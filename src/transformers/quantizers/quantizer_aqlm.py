@@ -39,12 +39,9 @@ class AqlmHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-    required_packages = ["aqlm"]
-    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -53,19 +50,19 @@ class AqlmHfQuantizer(HfQuantizer):
         if not is_aqlm_available():
             raise ImportError("Using `aqlm` quantization requires AQLM: `pip install aqlm[gpu,cpu]`")
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
             if torch.cuda.is_available():
-                torch_dtype = torch.float16
+                dtype = torch.float16
                 logger.info(
-                    "CUDA available. Assuming AQLM inference on GPU and loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually."
+                    "CUDA available. Assuming AQLM inference on GPU and loading the model in `torch.float16`. To overwrite it, set `dtype` manually."
                 )
             else:
-                torch_dtype = torch.float32
+                dtype = torch.float32
                 logger.info(
-                    "CUDA is unavailable. Assuming AQLM inference on CPU and loading the model in `torch.float32`. To overwrite it, set `torch_dtype` manually."
+                    "CUDA is unavailable. Assuming AQLM inference on CPU and loading the model in `torch.float32`. To overwrite it, set `dtype` manually."
                 )
-        return torch_dtype
+        return dtype
 
     def _process_model_before_weight_loading(
         self,
@@ -77,10 +74,6 @@ class AqlmHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
         )
-        model.config.quantization_config = self.quantization_config
-
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
 
     @property
     def is_trainable(self) -> bool:
@@ -93,5 +86,5 @@ class AqlmHfQuantizer(HfQuantizer):
             )
             return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return True

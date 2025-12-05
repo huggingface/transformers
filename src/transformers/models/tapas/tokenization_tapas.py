@@ -22,13 +22,13 @@ import math
 import os
 import re
 import unicodedata
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_python import PreTrainedTokenizer, Trie, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     VERY_LARGE_INTEGER,
@@ -142,7 +142,6 @@ TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 """
@@ -331,6 +330,20 @@ class TapasTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        # Tests override the vocab while reusing a tokenizer_config.json coming from a pretrained model.
+        # This can register base vocab tokens (like [UNK]) as added tokens with mismatched ids (e.g. 100)
+        # and breaks assumptions on token ordering. Drop any added-token entry that overlaps with the vocab
+        # so these tokens rely on the vocab-provided ids.
+        removed_overlap = False
+        for token, added_id in list(self._added_tokens_encoder.items()):
+            if token in self.vocab:
+                self._added_tokens_encoder.pop(token, None)
+                self._added_tokens_decoder.pop(added_id, None)
+                removed_overlap = True
+        if removed_overlap:
+            self.tokens_trie = Trie()
+            self._update_trie()
+
     @property
     def do_lower_case(self):
         return self.basic_tokenizer.do_lower_case
@@ -344,7 +357,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text):
         if format_text(text) == EMPTY_TEXT:
-            return [self.additional_special_tokens[0]]
+            return [self.extra_special_tokens[0]]
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
@@ -505,7 +518,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        table: "pd.DataFrame",
+        table: Union["pd.DataFrame", TextInput, list[TextInput], None],
         queries: Optional[
             Union[
                 TextInput,
@@ -538,9 +551,10 @@ class TapasTokenizer(PreTrainedTokenizer):
         Main method to tokenize and prepare for the model one or several sequence(s) related to a table.
 
         Args:
-            table (`pd.DataFrame`):
+            table (`pd.DataFrame` or `str` or `list[str]`):
                 Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
-                dataframe to convert it to string.
+                dataframe to convert it to string. When passing a string or list of strings, those will be interpreted
+                as queries with an empty table (to support generic tokenizer tests).
             queries (`str` or `list[str]`):
                 Question or batch of questions related to a table to be encoded. Note that in case of a batch, all
                 questions must refer to the **same** table.
@@ -558,7 +572,12 @@ class TapasTokenizer(PreTrainedTokenizer):
                 then the answer_coordinates must be a list of lists of strings (each list corresponding to a single
                 table-question pair).
         """
-        assert isinstance(table, pd.DataFrame), "Table must be of type pd.DataFrame"
+        if not isinstance(table, pd.DataFrame):
+            if queries is not None:
+                raise AssertionError("Table must be of type pd.DataFrame when queries are provided separately.")
+            inferred_queries = table
+            table = pd.DataFrame.from_dict({})
+            queries = inferred_queries
 
         # Input type checking for clearer error
         valid_query = False
@@ -870,7 +889,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING)
     def encode(
         self,
-        table: "pd.DataFrame",
+        table: Union["pd.DataFrame", TextInput, list[TextInput]],
         query: Optional[
             Union[
                 TextInput,
@@ -891,12 +910,19 @@ class TapasTokenizer(PreTrainedTokenizer):
         your own, otherwise refer to `__call__`.
 
         Args:
-            table (`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
-                dataframe to convert it to string.
+            table (`pd.DataFrame` or `str` or `list[str]`):
+                Table containing tabular data. When passing a string or list of strings, those will be interpreted as
+                queries with an empty table (to support generic tokenizer tests).
             query (`str` or `list[str]`):
                 Question related to a table to be encoded.
         """
+        if not isinstance(table, pd.DataFrame):
+            if query is not None:
+                raise AssertionError("Table must be of type pd.DataFrame when queries are provided separately.")
+            inferred_query = table
+            table = pd.DataFrame.from_dict({})
+            query = inferred_query
+
         encoded_inputs = self.encode_plus(
             table,
             query=query,
@@ -913,7 +939,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
-        table: "pd.DataFrame",
+        table: Union["pd.DataFrame", TextInput, list[TextInput]],
         query: Optional[
             Union[
                 TextInput,
@@ -942,9 +968,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         Prepare a table and a string for the model.
 
         Args:
-            table (`pd.DataFrame`):
-                Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
-                dataframe to convert it to string.
+            table (`pd.DataFrame` or `str` or `list[str]`):
+                Table containing tabular data. When passing a string or list of strings, those will be interpreted as
+                queries with an empty table (to support generic tokenizer tests).
             query (`str` or `list[str]`):
                 Question related to a table to be encoded.
             answer_coordinates (`list[Tuple]` or `list[list[Tuple]]`, *optional*):
@@ -974,6 +1000,13 @@ class TapasTokenizer(PreTrainedTokenizer):
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
+
+        if not isinstance(table, pd.DataFrame):
+            if query is not None:
+                raise AssertionError("Table must be of type pd.DataFrame when queries are provided separately.")
+            inferred_query = table
+            table = pd.DataFrame.from_dict({})
+            query = inferred_query
 
         return self._encode_plus(
             table=table,
@@ -1897,9 +1930,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         Args:
             data (`dict`):
                 Dictionary mapping features to actual values. Should be created using [`TapasTokenizer`].
-            logits (`torch.Tensor` or `tf.Tensor` of shape `(batch_size, sequence_length)`):
+            logits (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Tensor containing the logits at the token level.
-            logits_agg (`torch.Tensor` or `tf.Tensor` of shape `(batch_size, num_aggregation_labels)`, *optional*):
+            logits_agg (`torch.Tensor` of shape `(batch_size, num_aggregation_labels)`, *optional*):
                 Tensor containing the aggregation logits.
             cell_classification_threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to be used for cell selection. All table cells for which their probability is larger than
@@ -1914,7 +1947,6 @@ class TapasTokenizer(PreTrainedTokenizer):
             - predicted_aggregation_indices (`list[int]`of length `batch_size`, *optional*, returned when
               `logits_aggregation` is provided): Predicted aggregation operator indices of the aggregation head.
         """
-        # converting to numpy arrays to work with PT/TF
         logits = logits.numpy()
         if logits_agg is not None:
             logits_agg = logits_agg.numpy()
@@ -1987,7 +2019,6 @@ class TapasTokenizer(PreTrainedTokenizer):
     # End of everything related to converting logits to predictions
 
 
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -2149,7 +2180,6 @@ class BasicTokenizer:
         return "".join(output)
 
 
-# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
@@ -2207,7 +2237,7 @@ class WordpieceTokenizer:
         return output_tokens
 
 
-# Below: utilities for TAPAS tokenizer (independent from PyTorch/Tensorflow).
+# Below: utilities for TAPAS tokenizer
 # This includes functions to parse numeric values (dates and numbers) from both the table and questions in order
 # to create the column_ranks, inv_column_ranks, numeric_values, numeric values_scale and numeric_relations in
 # prepare_for_model of TapasTokenizer.

@@ -13,6 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-29 and added to Hugging Face Transformers on 2025-08-14.*
+
+# SAM2
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -20,8 +24,6 @@ rendered properly in your Markdown viewer.
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
-
-# SAM2
 
 ## Overview
 
@@ -68,11 +70,12 @@ You can segment objects by providing a single point click on the object you want
 
 ```python
 >>> from transformers import Sam2Processor, Sam2Model
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = Accelerator().device
 
 >>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
@@ -83,7 +86,7 @@ You can segment objects by providing a single point click on the object you want
 >>> input_points = [[[[500, 375]]]]  # Single point click, 4 dimensions (image_dim, object_dim, point_per_object_dim, coordinates)
 >>> input_labels = [[[1]]]  # 1 for positive click, 0 for negative click, 3 dimensions (image_dim, object_dim, point_label)
 
->>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+>>> inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -156,11 +159,12 @@ Process multiple images simultaneously for improved efficiency:
 
 ```python
 >>> from transformers import Sam2Processor, Sam2Model
+from accelerate import Accelerator
 >>> import torch
 >>> from PIL import Image
 >>> import requests
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = Accelerator().device
 
 >>> model = Sam2Model.from_pretrained("facebook/sam2.1-hiera-large").to(device)
 >>> processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-large")
@@ -176,7 +180,7 @@ Process multiple images simultaneously for improved efficiency:
 >>> input_points = [[[[500, 375]]], [[[770, 200]]]]  # One point for each image
 >>> input_labels = [[[1]], [[1]]]  # Positive clicks for both images
 
->>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+>>> inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs, multimask_output=False)

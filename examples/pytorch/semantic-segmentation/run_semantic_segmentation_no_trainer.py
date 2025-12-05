@@ -57,12 +57,12 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.56.0.dev0")
+check_min_version("4.57.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -118,11 +118,6 @@ def parse_args():
         "--cache_dir",
         type=str,
         help="Path to a folder in which the model and dataset will be cached.",
-    )
-    parser.add_argument(
-        "--use_auth_token",
-        action="store_true",
-        help="Whether to use an authentication token to access the model repository.",
     )
     parser.add_argument(
         "--per_device_train_batch_size",
@@ -252,10 +247,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_semantic_segmentation_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers

@@ -14,8 +14,6 @@
 # limitations under the License.
 
 import json
-import shutil
-import tempfile
 import unittest
 
 from transformers.testing_utils import require_av, require_vision
@@ -27,9 +25,7 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from transformers import (
         AutoProcessor,
-        Ovis2ImageProcessor,
         Ovis2Processor,
-        Qwen2TokenizerFast,
     )
 
 
@@ -37,22 +33,13 @@ if is_vision_available():
 class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2Processor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        image_processor = Ovis2ImageProcessor()
-        tokenizer = Qwen2TokenizerFast.from_pretrained("thisisiron/Ovis2-1B-hf")
-        processor_kwargs = self.prepare_processor_dict()
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("thisisiron/Ovis2-1B-hf")
 
-        processor = Ovis2Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
-        processor.save_pretrained(self.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {
             "chat_template": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n'}}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<image>\n' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{'<|im_end|>\n'}}{% endfor %}{% if add_generation_prompt %}{{'<|im_start|>assistant\n' }}{% endif %}",
         }  # fmt: skip
@@ -76,9 +63,6 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
 
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-1B-hf")

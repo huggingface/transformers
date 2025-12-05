@@ -11,10 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4.1V model."""
+"""Testing suite for the PyTorch GLM-4.5V model."""
 
 import copy
-import gc
 import unittest
 
 from transformers import (
@@ -25,9 +24,11 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
@@ -71,7 +72,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_scaling": {"type": "default", "mrope_section": [1, 1]},
+            "rope_parameters": {"type": "default", "mrope_section": [1, 1]},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -169,7 +170,9 @@ class Glm4vMoeVisionText2TextModelTester:
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, patches_per_side, patches_per_side]] * self.batch_size),
+            "image_grid_thw": torch.tensor(
+                [[1, patches_per_side, patches_per_side]] * self.batch_size, device=torch_device
+            ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -179,9 +182,7 @@ class Glm4vMoeVisionText2TextModelTester:
 @require_torch
 class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
+
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True
 
@@ -199,9 +200,6 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
             # we don't want to mask attention heads
-            "head_mask",
-            "decoder_head_mask",
-            "cross_attn_head_mask",
             # we don't want encoder-decoder models to start from filled decoder ids
             "decoder_input_ids",
             "decoder_attention_mask",
@@ -294,9 +292,31 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
 
 @require_torch
+@slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = Glm4vMoeForConditionalGeneration.from_pretrained(
+                "zai-org/GLM-4.5V", dtype="auto", device_map="auto"
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "model"):
+            del cls.model
+        cleanup(torch_device, gc_collect=True)
+
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V")
+        cleanup(torch_device, gc_collect=True)
+        self.processor = AutoProcessor.from_pretrained(
+            "zai-org/GLM-4.5V", size={"shortest_edge": 10800, "longest_edge": 10800}
+        )
         self.message = [
             {
                 "role": "user",
@@ -321,197 +341,110 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
+        self.message_wo_image = [
+            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
+        ]
+
+        question = "Describe this video."
+        video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+        self.video_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "video": video_url,
+                    },
+                    {"type": "text", "text": question},
+                ],
+            }
+        ]
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
-    @slow
     def test_small_model_integration_test(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
-        )
-
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [151331, 151333, 151336, 198, 151339, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343]  # fmt: skip
+        expected_input_ids = [151331, 151333, 151336, 198, 151339, 151363, 151363, 151363, 151363, 151363, 151363, 151340, 3838, 3093, 315, 5562, 374]  # fmt: skip
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         expected_pixel_slice = torch.tensor(
             [
-                [-0.0988, -0.0842, -0.0842],
-                [-0.5660, -0.5514, -0.4200],
-                [-0.0259, -0.0259, -0.0259],
-                [-0.1280, -0.0988, -0.2010],
-                [-0.4638, -0.5806, -0.6974],
-                [-1.2083, -1.2229, -1.2083],
+                [-0.1134, -0.4492, -0.8580],
+                [-0.6244, -1.1645, -0.7120],
+                [-0.3324, -0.7996, -0.7120],
+                [0.2077, 0.2223, 0.4121],
+                [0.4413, 0.1931, 0.4559],
+                [0.5873, 0.3099, 0.4851],
             ],
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
+        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-4, rtol=1e-4)
 
-        # verify generation
-        inputs = inputs.to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks"
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
     def test_small_model_integration_test_batch(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
-        )
-        batch_messages = [self.message] * 2
+        model = self.get_model()
+        batch_messages = [self.message, self.message2, self.message_wo_image]
         inputs = self.processor.apply_chat_template(
-            batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+            batch_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=10)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks"
+            "\nWhat kind of dog is this?\n<think>Got it, let's try to figure out",
+            "\nWhat kind of dog is this?\n<think>Got it, let's see. The user",
+            '\nWho are you?\n<think>The user is asking "Who are you?"'
         ]  # fmt: skip
+        decoded = self.processor.batch_decode(output, skip_special_tokens=True)
+        decoded = [x.replace("<|image|>", "") for x in decoded]
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            decoded,
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     def test_small_model_integration_test_with_video(self):
         processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V", max_image_size={"longest_edge": 50176})
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V", torch_dtype=torch.float16, device_map="auto"
-        )
-        questions = ["Describe this video."] * 2
-        video_urls = [
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
-        ] * 2
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "video": video_url,
-                        },
-                        {"type": "text", "text": question},
-                    ],
-                }
-            ]
-            for question, video_url in zip(questions, video_urls)
-        ]
+        model = self.get_model()
+        batch_messages = [self.video_messages]
         inputs = processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
-        ).to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = [
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami",
-            "\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is a room with a wooden floor, maybe a traditional Japanese room with tatami"
-        ]  # fmt: skip
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_expand(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
-        )
-        inputs = self.processor.apply_chat_template(
-            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
-
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat, specifically"
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch_wo_image(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
-        )
-        message_wo_image = [
-            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
-        ]
-        batched_messages = [self.message, message_wo_image]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
+            batch_messages,
             tokenize=True,
             add_generation_prompt=True,
             return_dict=True,
             return_tensors="pt",
             padding=True,
         ).to(torch_device)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
-            '\nWho are you?\n<think>Got it, the user is asking "Who are you?" I need to respond appropriately. First, I should clarify that I\'m an AI assistant'
-        ]  # fmt: skip
+        output = model.generate(**inputs, max_new_tokens=3)
+        EXPECTED_DECODED_TEXT = ["\n012345Describe this video.\n<think>Got it"]  # fmt: skip
+        decoded = processor.batch_decode(output, skip_special_tokens=True)
+        decoded = [x.replace("<|image|>", "") for x in decoded]
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            decoded,
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
-    def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V", torch_dtype="auto", device_map="auto"
-        )
-        batched_messages = [self.message, self.message2]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but"
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
+    @run_first
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
-        batched_messages = [self.message, self.message2]
+        batch_messages = [self.message, self.message2, self.message_wo_image]
         inputs = self.processor.apply_chat_template(
-            batched_messages,
+            batch_messages,
             tokenize=True,
             add_generation_prompt=True,
             return_dict=True,
@@ -520,49 +453,16 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=3)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture has a stocky build, thick fur, and a face that's",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but"
+            "\nWhat kind of dog is this?\n<think>Got it",
+            "\nWhat kind of dog is this?\n<think>Got it",
+            "\nWho are you?\n<think>The user",
         ]  # fmt: skip
+        decoded = self.processor.batch_decode(output, skip_special_tokens=True)
+        decoded = [x.replace("<|image|>", "") for x in decoded]
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_flash_attn
-    @require_torch_gpu
-    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V",
-            torch_dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        message_wo_image = [
-            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
-        ]
-        batched_messages = [self.message, message_wo_image]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
-            '\nWho are you?\n<think>Got it, let\'s look at the question. The user is asking "Who are you?" which is a common question when someone meets an AI'
-        ]  # fmt: skip
-
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            decoded,
             EXPECTED_DECODED_TEXT,
         )

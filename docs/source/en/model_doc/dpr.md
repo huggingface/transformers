@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
@@ -45,9 +44,9 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 - DPR consists in three models:
 
-    * Question encoder: encode questions as vectors
-    * Context encoder: encode contexts as vectors
-    * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
+  * Question encoder: encode questions as vectors
+  * Context encoder: encode contexts as vectors
+  * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
 
 ## DPRConfig
 
@@ -85,9 +84,6 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 [[autodoc]] models.dpr.modeling_dpr.DPRReaderOutput
 
-<frameworkcontent>
-<pt>
-
 ## DPRContextEncoder
 
 [[autodoc]] DPRContextEncoder
@@ -102,25 +98,3 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 [[autodoc]] DPRReader
     - forward
-
-</pt>
-<tf>
-
-## TFDPRContextEncoder
-
-[[autodoc]] TFDPRContextEncoder
-    - call
-
-## TFDPRQuestionEncoder
-
-[[autodoc]] TFDPRQuestionEncoder
-    - call
-
-## TFDPRReader
-
-[[autodoc]] TFDPRReader
-    - call
-
-</tf>
-</frameworkcontent>
-

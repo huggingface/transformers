@@ -29,7 +29,7 @@ CodeGen is an autoregressive language model for program synthesis trained sequen
 
 The abstract from the paper is the following:
 
-*Program synthesis strives to generate a computer program as a solution to a given problem specification. We propose a conversational program synthesis approach via large language models, which addresses the challenges of searching over a vast program space and user intent specification faced in prior approaches. Our new approach casts the process of writing a specification and program as a multi-turn conversation between a user and a system. It treats program synthesis as a sequence prediction problem, in which the specification is expressed in natural language and the desired program is conditionally sampled. We train a family of large language models, called CodeGen, on natural language and programming language data. With weak supervision in the data and the scaling up of data size and model size, conversational capacities emerge from the simple autoregressive language modeling. To study the model behavior on conversational program synthesis, we develop a multi-turn programming benchmark (MTPB), where solving each problem requires multi-step synthesis via multi-turn conversation between the user and the model. Our findings show the emergence of conversational capabilities and the effectiveness of the proposed conversational program synthesis paradigm. In addition, our model CodeGen (with up to 16B parameters trained on TPU-v4) outperforms OpenAI's Codex on the HumanEval benchmark. We make the training library JaxFormer including checkpoints available as open source contribution: [this https URL](https://github.com/salesforce/codegen).* 
+*Program synthesis strives to generate a computer program as a solution to a given problem specification. We propose a conversational program synthesis approach via large language models, which addresses the challenges of searching over a vast program space and user intent specification faced in prior approaches. Our new approach casts the process of writing a specification and program as a multi-turn conversation between a user and a system. It treats program synthesis as a sequence prediction problem, in which the specification is expressed in natural language and the desired program is conditionally sampled. We train a family of large language models, called CodeGen, on natural language and programming language data. With weak supervision in the data and the scaling up of data size and model size, conversational capacities emerge from the simple autoregressive language modeling. To study the model behavior on conversational program synthesis, we develop a multi-turn programming benchmark (MTPB), where solving each problem requires multi-step synthesis via multi-turn conversation between the user and the model. Our findings show the emergence of conversational capabilities and the effectiveness of the proposed conversational program synthesis paradigm. In addition, our model CodeGen (with up to 16B parameters trained on TPU-v4) outperforms OpenAI's Codex on the HumanEval benchmark. We make the training library JaxFormer including checkpoints available as open source contribution: [this https URL](https://github.com/salesforce/codegen).*
 
 This model was contributed by [Hiroaki Hayashi](https://huggingface.co/rooa).
 The original code can be found [here](https://github.com/salesforce/codegen).
@@ -39,7 +39,7 @@ The original code can be found [here](https://github.com/salesforce/codegen).
 * CodeGen model [checkpoints](https://huggingface.co/models?other=codegen) are available on different pre-training data with variable sizes.
 * The format is: `Salesforce/codegen-{size}-{data}`, where
   * `size`: `350M`, `2B`, `6B`, `16B`
-  * `data`: 
+  * `data`:
     * `nl`: Pre-trained on the Pile
     * `multi`: Initialized with `nl`, then further pre-trained on multiple programming languages data
     * `mono`: Initialized with `multi`, then further pre-trained on Python data
@@ -77,7 +77,6 @@ hello_world()
 ## CodeGenTokenizer
 
 [[autodoc]] CodeGenTokenizer
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CodeGenTokenizerFast

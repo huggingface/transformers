@@ -48,7 +48,7 @@ pipeline = pipeline(
     task="image-text-to-text",  
     model="llava-hf/llava-v1.6-mistral-7b-hf",  
     device=0,  
-    torch_dtype=torch.bfloat16  
+    dtype=torch.bfloat16  
 )  
 messages = [  
     {  
@@ -73,12 +73,13 @@ pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, LlavaNextForConditionalGeneration, infer_device
+from transformers import AutoProcessor, LlavaNextForConditionalGeneration
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16).to(device)
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16).to(device)
 
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -141,7 +142,6 @@ with torch.inference_mode():
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-
 ## Notes
 
 * Different checkpoints (Mistral, Vicuna, etc.) require a specific prompt format depending on the underlying LLM. Always use [`~ProcessorMixin.apply_chat_template`] to ensure correct formatting. Refer to the [Templates](../chat_templating) guide for more details.
@@ -169,7 +169,7 @@ import requests, torch
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained(
-    "llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, device_map="auto"
+    "llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16, device_map="auto"
 )
 
 # Load multiple images
@@ -188,7 +188,6 @@ inputs = processor([image1, image2], prompt, return_tensors="pt").to(model.devic
 output = model.generate(**inputs, max_new_tokens=100)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
-
 
 ## LlavaNextConfig
 

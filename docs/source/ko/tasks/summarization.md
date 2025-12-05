@@ -124,22 +124,11 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 이제 [`DataCollatorForSeq2Seq`]를 사용하여 예제 배치를 만드세요.
 전체 데이터셋을 최대 길이로 패딩하는 것보다 배치마다 가장 긴 문장 길이에 맞춰 *동적 패딩*하는 것이 더 효율적입니다.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint)
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DataCollatorForSeq2Seq
-
->>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## 평가[[evaluate]]
 
@@ -178,8 +167,6 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 
 ## 학습[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 모델을 [`Trainer`]로 파인튜닝 하는 것이 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인해보세요!
@@ -236,93 +223,6 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras로 모델 파인튜닝을 하는 것이 익숙하지 않다면, [여기](../training#train-a-tensorflow-model-with-keras)에서 기본적인 튜토리얼을 확인하세요!
-
-</Tip>
-TensorFlow에서 모델을 파인튜닝하려면, 먼저 옵티마이저, 학습률 스케줄 그리고 몇 가지 학습 하이퍼파라미터를 설정하세요:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-그런 다음 [`TFAutoModelForSeq2SeqLM`]을 사용하여 T5를 가져오세요:
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`]을 사용하여 데이터셋을 `tf.data.Dataset` 형식으로 변환하세요:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_billsum["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     tokenized_billsum["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method)을 사용하여 모델을 학습할 수 있도록 구성하세요:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-학습을 시작하기 전에 설정해야 할 마지막 두 가지는 예측에서 ROUGE 점수를 계산하고 모델을 Hub에 푸시하는 방법을 제공하는 것입니다.
-두 작업 모두 [Keras callbacks](../main_classes/keras_callbacks)으로 수행할 수 있습니다.
-
-[`~transformers.KerasMetricCallback`]에 `compute_metrics` 함수를 전달하세요:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-[`~transformers.PushToHubCallback`]에서 모델과 토크나이저를 푸시할 위치를 지정하세요:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_billsum_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-그런 다음 콜백을 번들로 묶어줍니다:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-드디어 모델 학습을 시작할 준비가 되었습니다!
-학습 및 검증 데이터셋, 에폭 수 및 콜백과 함께 [`fit`](https://keras.io/api/models/model_training_apis/#fit-method)을 호출하여 모델을 파인튜닝하세요.
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=callbacks)
-```
-
-학습이 완료되면 모델이 자동으로 Hub에 업로드되어 누구나 사용할 수 있게 됩니다!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -355,8 +255,6 @@ TensorFlow에서 모델을 파인튜닝하려면, 먼저 옵티마이저, 학습
 원한다면 수동으로 다음과 같은 작업을 수행하여 [`pipeline`]의 결과와 동일한 결과를 얻을 수 있습니다:
 
 
-<frameworkcontent>
-<pt>
 텍스트를 토크나이즈하고 `input_ids`를 PyTorch 텐서로 반환합니다:
 
 ```py
@@ -382,32 +280,3 @@ TensorFlow에서 모델을 파인튜닝하려면, 먼저 옵티마이저, 학습
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
-</pt>
-<tf>
-텍스트를 토크나이즈하고 `input_ids`를 TensorFlow 텐서로 반환합니다:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_billsum_model")
->>> inputs = tokenizer(text, return_tensors="tf").input_ids
-```
-
-요약문을 생성하려면 [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] 메소드를 사용하세요.
-텍스트 생성에 대한 다양한 전략과 생성을 제어하기 위한 매개변수에 대한 자세한 내용은 [텍스트 생성](../main_classes/text_generation) API를 참조하세요.
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("stevhliu/my_awesome_billsum_model")
->>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=False)
-```
-
-생성된 토큰 ID를 텍스트로 디코딩합니다:
-
-```py
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
-```
-</tf>
-</frameworkcontent>

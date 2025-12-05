@@ -21,7 +21,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ...modeling_utils import PreTrainedModel
+from ... import initialization as init
+from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -449,29 +450,30 @@ class EncodecResidualVectorQuantizer(nn.Module):
 
 
 @auto_docstring
-class EncodecPreTrainedModel(PreTrainedModel):
+class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     config: EncodecConfig
     base_model_prefix = "encodec"
     main_input_name = "input_values"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.GroupNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.LSTM):
             for name, param in module.named_parameters():
                 if "weight" in name:
-                    nn.init.xavier_uniform_(param)
+                    init.xavier_uniform_(param)
                 elif "bias" in name:
-                    nn.init.constant_(param, 0.0)
+                    init.constant_(param, 0.0)
 
 
 @auto_docstring(
@@ -495,12 +497,6 @@ class EncodecModel(EncodecPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def _encode_frame(
         self, input_values: torch.Tensor, bandwidth: float

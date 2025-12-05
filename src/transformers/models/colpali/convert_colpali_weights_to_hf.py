@@ -130,7 +130,7 @@ def convert_colpali_weights_to_hf(
 
     # NOTE: The model was initialized with float32 weights. We need to convert it to the desired precision.
     # There are two ways to set the model's dtype:
-    # - Using `model.from_pretrained(..., torch_dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
+    # - Using `model.from_pretrained(..., dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
     # - Using `model.to(dtype_precision)` converts all values - including the hyperparameters - to the desired precision.
     # The following snippet allows a fine-grained control over the model's dtype, making sure that all
     # the new weights' dtypes match the original model.
@@ -144,7 +144,15 @@ def convert_colpali_weights_to_hf(
 
     # Tie the weights (following ColPali's `__init__`` step)
     if model.vlm.language_model._tied_weights_keys is not None:
-        model._tied_weights_keys = [f"vlm.language_model.{k}" for k in model.vlm.language_model._tied_weights_keys]
+        prefix = "vlm.language_model."
+        prefixed_mapping = {
+            f"{prefix}{target}": f"{prefix}{source}"
+            for target, source in model.vlm.language_model._tied_weights_keys.items()
+        }
+        if isinstance(model._tied_weights_keys, dict):
+            model._tied_weights_keys.update(prefixed_mapping)
+        else:
+            model._tied_weights_keys = prefixed_mapping
 
     # Sanity check: ensure all keys are the same
     state_dict_keys_old = set(original_state_dict.keys())

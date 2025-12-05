@@ -92,7 +92,6 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*, default to 'pt'):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -150,10 +149,11 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             padding=padding,
-            return_attention_mask=False,
+            return_attention_mask=padding,
             pad_to_multiple_of=self.hop_length,
         )
-
+        if padding:
+            padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
         if padding:
             padded_inputs.input_values = padded_inputs.input_values[:, np.newaxis, :]
 

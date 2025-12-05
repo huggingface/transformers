@@ -63,11 +63,6 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 
 [[autodoc]] ViltConfig
 
-## ViltFeatureExtractor
-
-[[autodoc]] ViltFeatureExtractor
-    - __call__
-
 ## ViltImageProcessor
 
 [[autodoc]] ViltImageProcessor

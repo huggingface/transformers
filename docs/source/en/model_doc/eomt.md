@@ -39,7 +39,6 @@ Architecturally, EoMT introduces a small set of **learned queries** and a lightw
        alt="drawing" width="500"/>
 </div>
 
-
 The model supports semantic, instance, and panoptic segmentation using a unified architecture and task-specific post-processing.
 
 ## Usage Examples

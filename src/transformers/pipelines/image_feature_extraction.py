@@ -32,7 +32,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     >>> extractor = pipeline(model="google/vit-base-patch16-224", task="image-feature-extraction")
     >>> result = extractor("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", return_tensors=True)
-    >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input image.
+    >>> result.shape  # This is a tensor of shape [1, sequence_length, hidden_dimension] representing the input image.
     torch.Size([1, 197, 768])
     ```
 
@@ -66,9 +66,8 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None, **image_processor_kwargs) -> dict[str, GenericTensor]:
         image = load_image(image, timeout=timeout)
-        model_inputs = self.image_processor(image, return_tensors=self.framework, **image_processor_kwargs)
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs = self.image_processor(image, return_tensors="pt", **image_processor_kwargs)
+        model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -90,10 +89,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
         if return_tensors:
             return outputs
-        if self.framework == "pt":
-            return outputs.tolist()
-        elif self.framework == "tf":
-            return outputs.numpy().tolist()
+        return outputs.tolist()
 
     def __call__(self, *args: Union[str, "Image.Image", list["Image.Image"], list[str]], **kwargs: Any) -> list[Any]:
         """

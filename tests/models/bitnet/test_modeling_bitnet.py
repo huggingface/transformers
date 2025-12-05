@@ -16,14 +16,10 @@
 import gc
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, BitNetConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -53,7 +49,7 @@ class BitNetModelTester:
         use_input_mask=True,
         vocab_size=99,
         hidden_size=64,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
@@ -145,9 +141,6 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -172,26 +165,6 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_torch_fx_output_loss(self):
-        super().test_torch_fx_output_loss()
-
-    # Ignore copy
-    def test_past_key_values_format(self):
-        super().test_past_key_values_format()
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="BitNet flash attention does not support right padding")
 
 
 @require_torch
@@ -239,7 +212,7 @@ class BitNetIntegrationTest(unittest.TestCase):
             [{"role": "user", "content": "What is your favourite food?"}], add_generation_prompt=True, tokenize=False
         )
         model = BitNetForCausalLM.from_pretrained(
-            "microsoft/bitnet-b1.58-2B-4T", device_map="auto", torch_dtype=torch.bfloat16
+            "microsoft/bitnet-b1.58-2B-4T", device_map="auto", dtype=torch.bfloat16
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 

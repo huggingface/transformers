@@ -36,7 +36,7 @@ Example for creating the old state dict file with Python:
     from video_llava.model.language_model.video_llava import VideoLlavaForCausalLM
 
     # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
+    kwargs = {"device_map": "auto", "dtype": torch.float16}
     model = VideoLlavaForCausalLM.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", **kwargs)
 
     # load vision tower

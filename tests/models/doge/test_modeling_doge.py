@@ -274,10 +274,6 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     has_attentions = False
-    test_headmasking = False
-    test_pruning = False
-    test_torchscript = False
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -341,6 +337,23 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_tp_plan_matches_params(self):
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # They are valid but not always used, depending on config.is_moe flag (the modules are not the same in both cases)
+        problematic_keys = {
+            "layers.*.mlp.router_gate": "colwise_rep",
+            "layers.*.mlp.down_embed": "rowwise_rep",
+            "layers.*.mlp.up_embed": "rowwise_rep",
+        }
+        if not config.is_moe:
+            for key in problematic_keys:
+                config.base_model_tp_plan.pop(key)
+        super().test_tp_plan_matches_params()
+        # Put them back in class attribute
+        config.base_model_tp_plan.update(problematic_keys)
+
 
 @require_torch_accelerator
 class DogeIntegrationTest(unittest.TestCase):
@@ -363,7 +376,7 @@ class DogeIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular"
 
         tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
-        model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", torch_dtype=torch.bfloat16)
+        model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", dtype=torch.bfloat16)
         input_text = ["Here's everything I know about dogs. Dogs is the best animal in the"]
         set_seed(0)
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)

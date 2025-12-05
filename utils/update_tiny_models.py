@@ -21,14 +21,13 @@ version of `tests/utils/tiny_model_summary.json`. That updated file should be me
 """
 
 import argparse
-import copy
 import json
 import multiprocessing
 import os
 import time
 
 from create_dummy_models import COMPOSITE_MODELS, create_tiny_models
-from huggingface_hub import ModelFilter, hf_api
+from huggingface_hub import HfApi
 
 import transformers
 from transformers import AutoFeatureExtractor, AutoImageProcessor, AutoTokenizer
@@ -37,18 +36,12 @@ from transformers.image_processing_utils import BaseImageProcessor
 
 def get_all_model_names():
     model_names = set()
-    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
-    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
-        module = getattr(transformers.models.auto, module_name, None)
-        if module is None:
-            continue
+
+    module_name = "modeling_auto"
+    module = getattr(transformers.models.auto, module_name, None)
+    if module is not None:
         # all mappings in a single auto modeling file
-        mapping_names = [
-            x
-            for x in dir(module)
-            if x.endswith("_MAPPING_NAMES")
-            and (x.startswith("MODEL_") or x.startswith("TF_MODEL_") or x.startswith("FLAX_MODEL_"))
-        ]
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES") and x.startswith("MODEL_")]
         for name in mapping_names:
             mapping = getattr(module, name)
             if mapping is not None:
@@ -62,36 +55,22 @@ def get_all_model_names():
 
 
 def get_tiny_model_names_from_repo():
-    # All model names defined in auto mappings
-    model_names = set(get_all_model_names())
-
     with open("tests/utils/tiny_model_summary.json") as fp:
         tiny_model_info = json.load(fp)
     tiny_models_names = set()
     for model_base_name in tiny_model_info:
         tiny_models_names.update(tiny_model_info[model_base_name]["model_classes"])
 
-    # Remove a tiny model name if one of its framework implementation hasn't yet a tiny version on the Hub.
-    not_on_hub = model_names.difference(tiny_models_names)
-    for model_name in copy.copy(tiny_models_names):
-        if not model_name.startswith("TF") and f"TF{model_name}" in not_on_hub:
-            tiny_models_names.remove(model_name)
-        elif model_name.startswith("TF") and model_name[2:] in not_on_hub:
-            tiny_models_names.remove(model_name)
-
     return sorted(tiny_models_names)
 
 
 def get_tiny_model_summary_from_hub(output_path):
+    api = HfApi()
     special_models = COMPOSITE_MODELS.values()
 
     # All tiny model base names on Hub
     model_names = get_all_model_names()
-    models = hf_api.list_models(
-        filter=ModelFilter(
-            author="hf-internal-testing",
-        )
-    )
+    models = api.list_models(author="hf-internal-testing")
     _models = set()
     for x in models:
         model = x.id
@@ -112,7 +91,7 @@ def get_tiny_model_summary_from_hub(output_path):
         repo_id = f"hf-internal-testing/tiny-random-{model}"
         model = model.split("-")[0]
         try:
-            repo_info = hf_api.repo_info(repo_id)
+            repo_info = api.repo_info(repo_id)
             content = {
                 "tokenizer_classes": set(),
                 "processor_classes": set(),
@@ -149,13 +128,6 @@ def get_tiny_model_summary_from_hub(output_path):
         try:
             time.sleep(1)
             model_class = getattr(transformers, model)
-            m = model_class.from_pretrained(repo_id)
-            content["model_classes"].add(m.__class__.__name__)
-        except Exception:
-            pass
-        try:
-            time.sleep(1)
-            model_class = getattr(transformers, f"TF{model}")
             m = model_class.from_pretrained(repo_id)
             content["model_classes"].add(m.__class__.__name__)
         except Exception:

@@ -43,7 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="ustc-community/hgnet-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
@@ -81,12 +81,10 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] HGNetV2Config
 
-
 ## HGNetV2Backbone
 
 [[autodoc]] HGNetV2Backbone
     - forward
-
 
 ## HGNetV2ForImageClassification
 

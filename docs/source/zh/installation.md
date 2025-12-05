@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
 
 为你正在使用的深度学习框架安装 🤗 Transformers、设置缓存，并选择性配置 🤗 Transformers 以离线运行。
 
-🤗 Transformers 已在 Python 3.6+、PyTorch 1.1.0+、TensorFlow 2.0+ 以及 Flax 上进行测试。针对你使用的深度学习框架，请参照以下安装说明进行安装：
+🤗 Transformers 已在 Python 3.9+ 以及 PyTorch 2.2.0+ 上进行测试。针对你使用的深度学习框架，请参照以下安装说明进行安装：
 
 * [PyTorch](https://pytorch.org/get-started/locally/) 安装说明。
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip) 安装说明。
-* [Flax](https://flax.readthedocs.io/en/latest/) 安装说明。
 
 ## 使用 pip 安装
 
@@ -59,30 +57,6 @@ pip install transformers
 
 ```bash
 pip install 'transformers[torch]'
-```
-
-🤗 Transformers 和 TensorFlow 2.0：
-
-```bash
-pip install 'transformers[tf-cpu]'
-```
-
-<Tip warning={true}>
-
-M1 / ARM用户
-
-在安装 TensorFlow 2.0 前，你需要安装以下库：
-```bash
-brew install cmake
-brew install pkg-config
-```
-
-</Tip>
-
-🤗 Transformers 和 Flax:
-
-```bash
-pip install 'transformers[flax]'
 ```
 
 最后，运行以下命令以检查 🤗 Transformers 是否已被正确安装。该命令将下载一个预训练模型：
@@ -155,17 +129,11 @@ conda install conda-forge::transformers
 
 ## 缓存设置
 
-预训练模型会被下载并本地缓存到 `~/.cache/huggingface/hub`。这是由环境变量 `TRANSFORMERS_CACHE` 指定的默认目录。在 Windows 上，默认目录为 `C:\Users\username\.cache\huggingface\hub`。你可以按照不同优先级改变下述环境变量，以指定不同的缓存目录。
+预训练模型会被下载并本地缓存到 `~/.cache/huggingface/hub`。这是由环境变量 `HF_HUB_CACHE` 指定的默认目录。在 Windows 上，默认目录为 `C:\Users\username\.cache\huggingface\hub`。你可以按照不同优先级改变下述环境变量，以指定不同的缓存目录。
 
-1. 环境变量（默认）: `HF_HUB_CACHE` 或 `TRANSFORMERS_CACHE`。
+1. 环境变量（默认）: `HF_HUB_CACHE`。
 2. 环境变量 `HF_HOME`。
 3. 环境变量 `XDG_CACHE_HOME` + `/huggingface`。
-
-<Tip>
-
-除非你明确指定了环境变量 `TRANSFORMERS_CACHE`，🤗 Transformers 将可能会使用较早版本设置的环境变量 `PYTORCH_TRANSFORMERS_CACHE` 或 `PYTORCH_PRETRAINED_BERT_CACHE`。
-
-</Tip>
 
 ## 离线模式
 

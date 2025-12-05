@@ -20,14 +20,17 @@ The Intel Gaudi AI accelerator family includes [Intel Gaudi 1](https://habana.ai
 [`TrainingArguments`], [`Trainer`] and [`Pipeline`] detect and set the backend device to `hpu` if an Intel Gaudi device is available. No additional changes are required to enable training and inference on your device.
 
 Some modeling code in Transformers is not optimized for HPU lazy mode. If you encounter any errors, set the environment variable below to use eager mode:
-```
-PT_HPU_LAZY_MODE=0
+
+```bash
+export PT_HPU_LAZY_MODE=0
 ```
 
 In some cases, you'll also need to enable int64 support to avoid casting issues with long integers:
+
+```bash
+export PT_ENABLE_INT64_SUPPORT=1
 ```
-PT_ENABLE_INT64_SUPPORT=1
-```
+
 Refer to the [Gaudi docs](https://docs.habana.ai/en/latest/index.html) for more details.
 
 > [!TIP]
