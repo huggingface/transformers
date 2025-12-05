@@ -14,7 +14,6 @@
 """
 Hub utilities: utilities related to download and cache models
 """
-from concurrent.futures import ThreadPoolExecutor
 
 import json
 import os
@@ -22,6 +21,7 @@ import re
 import sys
 import tempfile
 from concurrent import futures
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TypedDict
 from uuid import uuid4
@@ -56,7 +56,7 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
 )
 
-from . import __version__, hf_logging
+from . import __version__  # hf_logging removed from top-level import
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     get_torch_version,
@@ -64,13 +64,20 @@ from .import_utils import (
     is_training_run_on_sagemaker,
 )
 
-
 LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
 CHAT_TEMPLATE_FILE = "chat_template.jinja"
 CHAT_TEMPLATE_DIR = "additional_chat_templates"
 
+# Delay import to avoid circular import
+logger = None
 
-logger = hf_logging.get_logger(__name__)  # pylint: disable=invalid-name
+def get_logger_instance():
+    global logger
+    if logger is None:
+        from .hf_logging import get_logger  # delayed import here
+        logger = get_logger(__name__)
+    return logger
+
 
 
 class DownloadKwargs(TypedDict, total=False):
@@ -365,7 +372,7 @@ def cached_files(
     ```
     """
     if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
+        get_logger_instance().info("Offline mode: forcing local_files_only=True")
         local_files_only = True
     if subfolder is None:
         subfolder = ""
@@ -420,7 +427,7 @@ def cached_files(
 
     user_agent = http_user_agent(user_agent)
     # download the files if needed
-# download the files if needed
+    # download the files if needed
     try:
         if len(full_filenames) == 1:
             resolved_file = hf_hub_download(
@@ -457,8 +464,6 @@ def cached_files(
             with ThreadPoolExecutor(max_workers=min(8, len(full_filenames))) as executor:
                 resolved_files = list(executor.map(download_file, full_filenames))
     except Exception as e:
-    
-
         # We cannot recover from them
         if isinstance(e, RepositoryNotFoundError) and not isinstance(e, GatedRepoError):
             raise OSError(
@@ -611,17 +616,17 @@ def has_file(
         hf_raise_for_status(response)
         return True
     except GatedRepoError as e:
-        logger.error(e)
+        get_logger_instance().error(e)
         raise OSError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
             f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
             "logging in with `hf auth login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
-        logger.error(e)
+        get_logger_instance().error(e)
         raise OSError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.") from e
     except RevisionNotFoundError as e:
-        logger.error(e)
+        get_logger_instance().error(e)
         raise OSError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
             f"model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
@@ -712,7 +717,7 @@ class PushToHubMixin:
                 else:
                     raise
 
-        logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
+        get_logger_instance().info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
             repo_id=repo_id,
             operations=operations,
