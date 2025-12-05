@@ -104,6 +104,8 @@ PRIVATE_MODELS = [
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "Ovis2VisionModel",
+    "T3Model",  # Internal building block of Chatterbox model.
+    "T3PreTrainedModel",  # Internal building block of Chatterbox model.
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -213,6 +215,9 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
     "models/bark/test_modeling_bark.py",
+    "models/s3gen/test_modeling_s3gen.py",
+    "models/t3/test_modeling_t3.py",
+    "models/chatterbox/test_modeling_chatterbox.py",
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
     "models/llama4/test_modeling_llama4.py",
     "models/sam2_video/test_modeling_sam2_video.py",
@@ -403,6 +408,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "S3TokenizerModel",  # Building part of a bigger model
+    "S3GenModel",  # Building part of a bigger model
 ]
 
 
@@ -1007,6 +1014,7 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
+    "T3Cond",  # Internal conditioning class for T3 model
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
