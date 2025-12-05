@@ -981,9 +981,8 @@ class EmbeddingAccessMixin:
         if hasattr(self, "model") and hasattr(self.model, name):
             return getattr(self.model, name)
 
-        base_model = getattr(self, "base_model_prefix", None)
-        if base_model is not None:
-            base_model = getattr(self, base_model, None)
+        if hasattr(self, "base_model"):
+            base_model = self.base_model
             if base_model is not None and base_model is not self:
                 return base_model.get_input_embeddings()
 
@@ -1014,9 +1013,8 @@ class EmbeddingAccessMixin:
         elif hasattr(self, "model") and hasattr(self.model, name):
             setattr(self.model, name, value)
         # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
-        elif getattr(self, self.base_model_prefix, self) is not self:
-            base_model = getattr(self, self.base_model_prefix, self)
-            base_model.set_input_embeddings(value)
+        elif hasattr(self, "base_model") and self.base_model is not self:
+            self.base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError(
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
