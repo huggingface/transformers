@@ -2104,7 +2104,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         possible_module_names = ["language_model", "text_model", "decoder"]
         for name in possible_module_names:
             if hasattr(self, name):
-                print(name)
                 setattr(self, name, decoder)
                 return
 
