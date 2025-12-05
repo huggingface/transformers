@@ -113,7 +113,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIn("new_extra_special_token", after_tokenizer.extra_special_tokens)
 
     def test_no_infilling_init(self):
-        tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, prefix_token=None, keep_accents=True)
+        tokenizer = CodeLlamaTokenizer.from_pretrained(SAMPLE_VOCAB, prefix_token=None, keep_accents=True)
         with self.assertRaises(ValueError):
             tokenizer.tokenize("This is <FILL_ME> prefix")
 

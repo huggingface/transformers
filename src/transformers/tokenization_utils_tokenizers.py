@@ -101,7 +101,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         # Preserve kwargs for possible downstream use
         local_kwargs = dict(kwargs)
-        fast_tokenizer_file = local_kwargs.get("tokenizer_file")
+        fast_tokenizer_file = local_kwargs.pop("tokenizer_file")
 
         if fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file) and cls is TokenizersBackend:
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
@@ -123,7 +123,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
             local_kwargs["vocab"] = vocab
 
-            if hasattr(tokenizer_json.get("model", {}), "merges") and cls.model.__name__ == "BPE":
+            if "merges" in tokenizer_json.get("model", {}) and cls.model.__name__ == "BPE":
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) for merge in merges]
                 local_kwargs["merges"] = merges

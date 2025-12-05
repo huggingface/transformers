@@ -96,7 +96,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
         cls_token="[CLS]",
         mask_token="[MASK]",
         add_prefix_space=True,
-        unk_id=3,
+        unk_id=2,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case

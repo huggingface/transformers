@@ -130,12 +130,11 @@ class CodeLlamaTokenizer(TokenizersBackend):
         add_bos_token: bool = True,
         add_eos_token: bool = False,
         use_default_system_prompt: bool = False,
-        add_prefix_space: Optional[bool] = None,
+        add_prefix_space: Optional[bool] = True,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
         self.use_default_system_prompt = use_default_system_prompt
-
         additional_special_tokens = additional_special_tokens or []
         for token in [prefix_token, middle_token, suffix_token, eot_token, fill_token]:
             additional_special_tokens += [token] if token is not None else []
@@ -161,8 +160,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
                 unk_token=str(unk_token),
             )
         )
+        prepend_scheme = "first" if self.add_prefix_space else "none"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
+            replacement="▁", prepend_scheme=prepend_scheme, split=False
         )
 
         self._tokenizer.decoder = decoders.Sequence(
