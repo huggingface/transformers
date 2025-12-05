@@ -19,9 +19,18 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
+from ..integrations.fbgemm_fp8 import triton_quantize_fp8_row
+from ..utils import (
+    is_accelerate_available,
+    is_fbgemm_gpu_available,
+    is_torch_available,
+    is_torch_xpu_available,
+    logging,
+)
 from .quantizers_utils import get_module_from_name
 
+
+_is_torch_xpu_available = is_torch_xpu_available()
 
 if is_torch_available():
     import torch
@@ -50,7 +59,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "Using fbgemm fp8 quantization requires torch >= 2.1.0"
                 "Please install the latest version of torch ( pip install --upgrade torch )"
             )
-        if not is_fbgemm_gpu_available():
+        if not is_fbgemm_gpu_available() and not _is_torch_xpu_available:
             raise ImportError(
                 "Using fbgemm fp8 quantization requires fbgemm-gpu library"
                 "Please install the latest version of fbgemm-gpu library by following : https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries"
@@ -61,15 +70,17 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "Loading an FP8 quantized model requires accelerate (`pip install --upgrade accelerate`)"
             )
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("Using FP8 quantized models with fbgemm kernels requires a GPU")
+        if not torch.cuda.is_available() and not _is_torch_xpu_available:
+            raise RuntimeError("Using FP8 quantized models with fbgemm kernels requires a GPU or XPU")
 
-        compute_capability = torch.cuda.get_device_capability()
-        major, minor = compute_capability
-        if major < 9:
-            raise ValueError(
-                "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
-            )
+        if torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+
+            if major < 9:
+                raise ValueError(
+                    "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+                )
 
         device_map = kwargs.get("device_map")
         if device_map is None:
@@ -158,7 +169,10 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per row instead of per column
-                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+                if _is_torch_xpu_available:
+                    new_value_flat, weight_scale_flat = triton_quantize_fp8_row(flattened_param.to("xpu"))
+                else:
+                    new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
@@ -174,7 +188,10 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per column
-                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+                if _is_torch_xpu_available:
+                    new_value_flat, weight_scale_flat = triton_quantize_fp8_row(flattened_param.to("xpu"))
+                else:
+                    new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
@@ -183,7 +200,10 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
             module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(weight_scale.to(target_device))
         else:
-            new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
+            if _is_torch_xpu_available:
+                new_value, weight_scale = triton_quantize_fp8_row(param_value.to("xpu"))
+            else:
+                new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(param_value)
             module._parameters[f"{tensor_name}_scale"] = torch.nn.Parameter(
                 weight_scale.view(weight_scale.shape[0], 1).to(target_device)
             )
