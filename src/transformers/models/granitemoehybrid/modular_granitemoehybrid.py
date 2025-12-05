@@ -294,7 +294,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             return torch.ones_like(mask)
 
         def false_fn(mask):
-            return mask
+            return mask.clone()
 
         return torch.cond(pred, true_fn, false_fn, (attention_mask,))
 
