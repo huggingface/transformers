@@ -66,7 +66,7 @@ def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
     interval_size = max_value // nb_intervals
     if interval_size == 0:
         return max_value
-    padded = ceil(size / interval_size) * interval_size
+    padded = ceil(size / interval_size) * interval_size if size > 0 else interval_size
     return min(padded, max_value)
 
 
@@ -869,7 +869,7 @@ class ContinuousBatchingManager:
             logger.warning("\nBatch processor was not initialized.")
         else:
             if self.batch_processor.cache.use_prefix_sharing:
-                logger.warning(
+                logger.info(
                     f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
                 )
 
