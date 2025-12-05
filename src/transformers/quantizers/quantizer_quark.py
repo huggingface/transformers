@@ -45,12 +45,6 @@ class QuarkHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True  # On-the-fly quantization with quark is not supported for now.
-    required_packages = ["quark"]
-
-    # Checkpoints are expected to be already quantized when loading a quark model. However, as some keys from
-    # the checkpoint might mismatch the model parameters keys, we use the `create_quantized_param` method
-    # to load the checkpoints, remapping the keys.
-    requires_parameters_quantization = True
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -78,17 +72,7 @@ class QuarkHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         return True
 
-    def create_quantized_param(self, model, param, param_name, param_device, **kwargs):
-        from ..modeling_utils import _load_parameter_into_model
-
-        postfix = param_name.split(".")[-1]
-
-        if postfix in CHECKPOINT_KEYS:
-            param_name = param_name.replace(postfix, CHECKPOINT_KEYS[postfix])
-
-        _load_parameter_into_model(model, param_name, param.to(param_device))
-
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return False
 
     @property
