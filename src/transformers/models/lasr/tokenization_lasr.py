@@ -114,11 +114,10 @@ class LasrTokenizer(TokenizersBackend):
             ]
             for i in range(extra_ids - 1, -1, -1):
                 self._vocab_scores.append((f"<extra_id_{i}>", 0.0))
-
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
-                unk_id=2,
+                unk_id=3,
                 byte_fallback=False,
             )
         )

@@ -18,6 +18,8 @@ from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
+from tokenizers import Tokenizer
+from tokenizers.models import Unigram
 from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
@@ -40,6 +42,35 @@ from ..t5.tokenization_t5 import T5Tokenizer
 
 
 class LasrTokenizer(T5Tokenizer, TokenizersBackend):
+    def __init__(
+        self,
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        extra_ids=100,
+        additional_special_tokens=None,
+        vocab=None,
+        vocab_file=None,
+        **kwargs,
+    ):
+        super().__init__(
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            extra_ids=extra_ids,
+            additional_special_tokens=additional_special_tokens,
+            vocab=vocab,
+            vocab_file=vocab_file,
+            **kwargs,
+        )
+        self._tokenizer = Tokenizer(
+            Unigram(
+                self._vocab_scores,
+                unk_id=3,
+                byte_fallback=False,
+            )
+        )
+
     def _decode(
         self,
         token_ids: Union[int, list[int]],
