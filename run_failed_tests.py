@@ -53,7 +53,7 @@ for idx, failed_test in enumerate(failed_tests[:3]):
     print(f"Running test {idx}: {failed_test}")
     output_dir = "captured"
     os.makedirs(output_dir, exist_ok=True)
-    output_dir = f'{output_dir}/{failed_test.replace("/", "--").replace("/", "__")}'
+    output_dir = f'{output_dir}/{failed_test.replace("/", "--").replace("::", "__")}'
     os.makedirs(output_dir, exist_ok=True)
     cmd_prefix = f"PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR={output_dir} HF_HOME=/mnt/cache RUN_SLOW=1 python3 -m pytest -v"
     cmd = f"{cmd_prefix} {failed_test}"
