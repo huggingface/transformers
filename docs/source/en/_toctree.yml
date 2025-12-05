@@ -901,6 +901,8 @@
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
         title: Kyutai Speech-To-Text
+      - local: model_doc/lasr
+        title: LASR
       - local: model_doc/mimi
         title: Mimi
       - local: model_doc/mms

@@ -49,6 +49,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
+        ("lasr_ctc", "LasrFeatureExtractor"),
+        ("lasr_encoder", "LasrFeatureExtractor"),
         ("markuplm", "MarkupLMFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
