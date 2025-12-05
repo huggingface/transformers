@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Continuous batching
 
-Continuous batching maximizes GPU utilization. It increases throughput and reduces latency. It uses dynamic scheduling to rearrange the batch at each step. The system removes completed requests and adds new ones immediately to prevent GPU idling. Chunked prefill prevents expensive prefill work from stalling the batch while still allowing new requests to join.
+Continuous batching maximizes GPU utilization. It increases throughput and reduces latency by using dynamic scheduling to rearrange the batch at each step. The system removes completed requests and adds new requests immediately to prevent GPU idling. Chunked prefill prevents expensive prefill work from stalling the batch while still allowing new requests still join.
 
 Continuous batching works with [transformers serve](./serving), a server for deploying local models, and [`~ContinuousMixin.generate_batch`].
 
@@ -75,7 +75,7 @@ manager = model.init_continuous_batching(generation_config=generation_config)
 manager.start()
 ```
 
-Use [`~ContinuousBatchingManager.add_requests`] to asynchronously submit individual requests. Provide a specific request id, or the manager generates one automatically.
+Use [`~ContinuousBatchingManager.add_request`] to asynchronously submit individual requests. Provide a specific request id or the manager wgenerates one automatically.
 
 ```py
 for i, input_ids in enumerate(simple_batch_inputs):
@@ -138,7 +138,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Sliding window attention
 
-Sliding window attention limits the backward context of a token to save compute, keeping generation cost proportional to window size rather than total context. This reduces compute per step and simplifies continuous batching.
+Sliding window attention limits the backward context of a token to save compute. Generation cost stays proportional to window size. This reduces compute per step and simplifies continuous batching.
 
 Transformers models like Mistral and Gemma 2 natively support sliding window attention. Manually enable it in the model config if the architecture supports it. This helps with fine-tuning or running custom experiments.
 
@@ -163,9 +163,9 @@ Usage remains the same with [`~ContinuousMixin.generate_batch`].
 
 The [`ContinuousMixin`] class serves as the main interface for continuous batching through [`~ContinuousMixin.generate_batch`]. This method internally creates a [`ContinuousBatchingManager`].
 
-[`ContinuousBatchingManager`] manages requests by creating a background thread for the generation loop and adding requests to the queue. The manager is thread-safe, allowing asynchronous request addition while the model generates.
+[`ContinuousBatchingManager`] manages requests by creating a background thread for the generation loop and adding requests to the queue. The manager is thread-safe, allowing asynchronous request additions while the model generates.
 
-The [`Scheduler`] selects requests for processing at each step based on the token budget. [`FIFOScheduler`] is the default scheduler. It prioritizes decoding requests over prefilling requests, unlike [`PrefillFirstScheduler`], and assigns them to specific memory blocks.
+The [`Scheduler`] selects requests for processing at each step based on the token budget. [`FIFOScheduler`] is the default scheduler. It prioritizes decoding requests over prefilling requests and assigns them to specific memory blocks. [`PrefillFirstScheduler`] prioritizes prefill requests instead.
 
 [`ContinuousBatchingManager`] runs the model forward pass for the scheduled requests. It then collects and returns the results.
 

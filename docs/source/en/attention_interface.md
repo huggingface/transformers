@@ -15,9 +15,9 @@ rendered properly in your Markdown viewer.
 
 # Attention backends
 
-Basic attention scales poorly. It compares every token in a sequence to *every other* token. These memory-bound computations create bottlenecks and slow down inference. Newer attention functions improve memory efficiency for faster, more affordable inference.
+All attention implementations perform the same computation. Every token is compared to every other token. The difference is *how* the computation is performed. Basic attention scales poorly because it materializes the full attention matrix in memory, creating bottlenecks that slow down inference. Optimized implementations rearrange the math to reduce memory traffic for faster, more affordable inference.
 
-[`AttentionInterface`] provides optimized attention functions. It decouples attention from model implementations to simplify experimentation with different functions. Add new backends easily with this consistent interface.
+The [`AttentionInterface`] provides optimized attention implementations. It decouples the attention implementation from the model implementation to simplify experimentation with different functions. Add new backends easily with this consistent interface.
 
 | attention backend | description |
 |---|---|
@@ -52,7 +52,7 @@ model.set_attn_implementation("sdpa")
 
 Download and load compiled compute kernels directly from the [Hub](https://huggingface.co/models?other=kernels) at runtime with the [Kernels](https://huggingface.co/docs/kernels/index) library. This avoids packaging issues from mismatched PyTorch or CUDA versions.
 
-Kernels automatically register to [`AttentionInterface`] upon detection. This eliminates the need to install the FlashAttention package explicitly.
+Kernels automatically register to [`AttentionInterface`] upon detection. You don't need to install the FlashAttention package explicitly.
 
 ```py
 import torch
@@ -75,7 +75,8 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.2-1B", attn_implementation="sdpa")
+    "meta-llama/Llama-3.2-1B", attn_implementation="sdpa"
+)
 
 with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
@@ -85,7 +86,7 @@ with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
 
 Multimodal models use different backbones for each modality. Optimize performance by assigning specific attention functions to each backbone. Some vision backbones perform better in fp32, for example, which FlashAttention does not support.
 
-Map vision backbones to different attention functions with a dict. The text backbone continues to use FlashAttention. Keys in the attention implementation must match sub-config names.
+Map vision backbones to different attention functions with a dict while the text backbone continues to use FlashAttention. Keys in the attention implementation must match sub-config names.
 
 ```py
 from transformers import AutoModelForImageTextToText
@@ -126,7 +127,7 @@ model = AutoModelForImageTextToText.from_pretrained(
 
 ## Create a new attention function
 
-Customize or create new attention functions. Add them to the attention registry with [`AttentionInterface.register`]. Models use these functions through the `attn_implementation` argument.
+Customize or create new attention functions by adding them to the attention registry with [`AttentionInterface.register`]. Models use these functions through the `attn_implementation` argument.
 
 This example customizes the attention function to print a statement for each layer.
 
@@ -145,7 +146,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B", attn_imp
 model(torch.ones(1, 5, dtype=int))
 ```
 
-Add new arguments to the attention function. Models supporting [`AttentionInterface`] propagate kwargs to attention layers and the attention function. Pass arguments as kwargs in the model's forward function. Custom attention functions must follow this signature and return format.
+You can also add new arguments to the attention function. Models supporting [`AttentionInterface`] propagate kwargs to attention layers and the attention function. Pass arguments as kwargs in the model's forward function. Custom attention functions must follow this signature and return format.
 
 ```python
 import torch
@@ -189,7 +190,7 @@ def my_new_sdpa_mask(*args, **kwargs):
 AttentionMaskInterface.register("my_new_sdpa_mask", my_new_sdpa_mask)
 ```
 
-Registered attention masks automatically correct the mask format for the attention implementation. FlexAttention uses a [BlockMask](https://docs.pytorch.org/docs/stable/nn.attention.flex_attention.html?utm_source=chatgpt.com#torch.nn.attention.flex_attention.BlockMask) format, while SDPA uses a 4D tensor. Failure to register an attention mask function skips mask creation and `attention_mask=None` is passed to the model's attention layers.
+Registered attention masks automatically correct the mask format for the attention implementation. For example, FlexAttention uses a [BlockMask](https://docs.pytorch.org/docs/stable/nn.attention.flex_attention.html?utm_source=chatgpt.com#torch.nn.attention.flex_attention.BlockMask) format, while SDPA uses a 4D tensor. Without a registered attention mask function, mask creation is skipped and `attention_mask=None` passes to the model's attention layers.
 
 This is the default signature for an attention mask function.
 

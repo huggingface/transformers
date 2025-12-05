@@ -50,3 +50,15 @@ like token streaming.
 ## ContinuousBatchingManager
 
 [[autodoc]] generation.ContinuousBatchingManager
+
+## Scheduler
+
+[[autodoc]] generation.Scheduler
+
+## FIFOScheduler
+
+[[autodoc]] generation.FIFOScheduler
+
+## PrefillFirstScheduler
+
+[[autodoc]] generation.PrefillFirstScheduler
