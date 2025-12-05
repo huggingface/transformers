@@ -19,7 +19,6 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..integrations.fbgemm_fp8 import triton_quantize_fp8_row
 from ..utils import (
     is_accelerate_available,
     is_fbgemm_gpu_available,
@@ -35,6 +34,8 @@ _is_torch_xpu_available = is_torch_xpu_available()
 if is_torch_available():
     import torch
 
+if _is_torch_xpu_available:
+    from ..integrations.fbgemm_fp8 import triton_quantize_fp8_row
 
 logger = logging.get_logger(__name__)
 
