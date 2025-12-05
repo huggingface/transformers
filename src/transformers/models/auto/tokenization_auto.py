@@ -212,6 +212,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("metaclip_2", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
         ("minimax", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("minimax_m2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         (
             "ministral3",
             (
