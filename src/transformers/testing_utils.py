@@ -222,10 +222,12 @@ if is_torch_available():
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
     IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
+    IS_NPU_SYSTEM = getattr(torch, "npu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
     IS_XPU_SYSTEM = False
+    IS_NPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -636,6 +638,9 @@ def require_read_token(test_case):
                 if getattr(attr, "__require_read_token__", False):
                     continue
                 wrapped = require_read_token(attr)
+                if isinstance(inspect.getattr_static(test_case, attr_name), staticmethod):
+                    # Don't accidentally bind staticmethods to `self`
+                    wrapped = staticmethod(wrapped)
                 setattr(test_case, attr_name, wrapped)
         return test_case
     else:
@@ -648,10 +653,6 @@ def require_read_token(test_case):
                 with patch("huggingface_hub.utils._headers.get_token", return_value=token):
                     return test_case(*args, **kwargs)
             else:  # Allow running locally with the default token env variable
-                # dealing with static/class methods and called by `self.xxx`
-                if "staticmethod" in inspect.getsource(test_case).strip():
-                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
-                        return test_case(*args[1:], **kwargs)
                 return test_case(*args, **kwargs)
 
         wrapper.__require_read_token__ = True
@@ -3174,6 +3175,8 @@ def get_device_properties() -> DeviceProperties:
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
         return ("xpu", gen, None)
+    elif IS_NPU_SYSTEM:
+        return ("npu", None, None)
     else:
         return (torch_device, None, None)
 
