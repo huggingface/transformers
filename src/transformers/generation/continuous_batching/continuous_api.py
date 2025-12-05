@@ -713,6 +713,7 @@ class ContinuousBatchProcessor:
         # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
         # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
         batch_size, seq_len, vocab_size = logits.shape
+        # NOTE: to be an exact match with generate, we should also convert logits2d to float32 here, but it's not needed in practice
         logits_2d = logits.view(batch_size * seq_len, vocab_size)
         input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
         # Process with 2D tensors
