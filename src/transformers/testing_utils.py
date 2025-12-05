@@ -638,6 +638,9 @@ def require_read_token(test_case):
                 if getattr(attr, "__require_read_token__", False):
                     continue
                 wrapped = require_read_token(attr)
+                if isinstance(inspect.getattr_static(test_case, attr_name), staticmethod):
+                    # Don't accidentally bind staticmethods to `self`
+                    wrapped = staticmethod(wrapped)
                 setattr(test_case, attr_name, wrapped)
         return test_case
     else:
@@ -650,10 +653,6 @@ def require_read_token(test_case):
                 with patch("huggingface_hub.utils._headers.get_token", return_value=token):
                     return test_case(*args, **kwargs)
             else:  # Allow running locally with the default token env variable
-                # dealing with static/class methods and called by `self.xxx`
-                if "staticmethod" in inspect.getsource(test_case).strip():
-                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
-                        return test_case(*args[1:], **kwargs)
                 return test_case(*args, **kwargs)
 
         wrapper.__require_read_token__ = True
