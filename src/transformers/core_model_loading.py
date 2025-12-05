@@ -371,20 +371,31 @@ class WeightTransform:
 
         return reverse_transform
 
+    def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
+        """
+        Materialize all the tensors that were saved in `self.collected_tensors`. This function removes them from the
+        internal attribute to avoid keeping them in memory during the different `self.convert` operations, and return
+        a new dictionary (otherwise we use more memory than needed during loading).
 
-def collect_tensors(tensors: list[torch.Tensor | Future | Callable]) -> list[torch.Tensor]:
-    """
-    Collect the tensors that were added to a WeightConverter. We basically have 3 cases here:
-    - default async loading: the tensors are Future instances that we need to wait for
-    - sync loading: the tensors are Callable, we need to call the Callable to actually load them from disk
-    - saving: the tensors are already torch.Tensor instances (the existing model weights)
-    """
-    if isinstance(tensors[0], Future):
-        return [future.result() for future in tensors]
-    elif callable(tensors[0]):
-        return [func() for func in tensors]
-    else:
-        return tensors
+        We basically have 3 cases here:
+        - async loading (default): the tensors are Future instances that we need to wait for
+        - sync loading: the tensors are Callable, we need to call the Callable to actually load them from disk
+        - saving: the tensors are already torch.Tensor instances (the existing model weights)
+        """
+        collected_tensors = {}
+        for key in set(self.collected_tensors.keys()):
+            # Remove from internal attribute
+            tensors = self.collected_tensors.pop(key)
+            # Async loading
+            if isinstance(tensors[0], Future):
+                tensors = [future.result() for future in tensors]
+            # Sync loading
+            elif callable(tensors[0]):
+                tensors = [func() for func in tensors]
+            # Add them to the new dictionary
+            collected_tensors[key] = tensors
+
+        return collected_tensors
 
 
 @dataclass(slots=True)
@@ -402,9 +413,7 @@ class WeightRenaming(WeightTransform):
     ):
         # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
         # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
-        collected_tensors = {
-            k: collect_tensors(self.collected_tensors.pop(k)) for k in set(self.collected_tensors.keys())
-        }
+        collected_tensors = self.materialize_tensors()
 
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
@@ -450,9 +459,7 @@ class WeightConverter(WeightTransform):
     ):
         # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
         # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
-        collected_tensors = {
-            k: collect_tensors(self.collected_tensors.pop(k)) for k in set(self.collected_tensors.keys())
-        }
+        collected_tensors = self.materialize_tensors()
 
         for op in self.operations:
             with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), op):
