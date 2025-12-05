@@ -138,18 +138,29 @@ jobs:
           # Check if there are changes
           if [ -n "$(git status --porcelain)" ]; then
             echo "changes_detected=true" >> $GITHUB_OUTPUT
-            # Create a patch file with all changes
-            git diff > consistency-fixes.patch
           else
             echo "changes_detected=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Upload patch
+      - name: Save modified files
+        if: steps.run_checks.outputs.changes_detected == 'true'
+        run: |
+          mkdir -p pr-repo
+          git diff --name-only > modified-files.txt
+          # Copy each modified file to pr-repo directory
+          while IFS= read -r file; do
+            mkdir -p "pr-repo/$(dirname "$file")"
+            cp "$file" "pr-repo/$file"
+          done < modified-files.txt
+
+      - name: Upload modified files
         if: steps.run_checks.outputs.changes_detected == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: consistency-fixes-patch
-          path: consistency-fixes.patch
+          name: modified-files
+          path: |
+            modified-files.txt
+            pr-repo/
 
   commit-and-comment:
     runs-on: ubuntu-22.04
@@ -158,37 +169,103 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
-        with:
-          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          ref: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
-          fetch-depth: "1"
-          # Need to specify `token` here, so we can push in `Commit and push changes` below.
-          token: ${{ secrets.HF_STYLE_BOT_ACTION }}
-
-      - name: Download patch
+      - name: Download modified files
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
         uses: actions/download-artifact@v4
         with:
-          name: consistency-fixes-patch
+          name: modified-files
 
-      - name: Apply patch and push
+      - name: Push changes via GitHub API (no checkout)
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
+        uses: actions/github-script@v6
         env:
           PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
-          GITHUB_TOKEN: ${{ secrets.HF_STYLE_BOT_ACTION }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Apply the patch
-          git apply consistency-fixes.patch
-          
-          # Only add updates to tracked files (ignores new untracked files like the patch)
-          git add -u
-          git commit -m "Apply repo. consistency fixes"
-          git push origin HEAD:$PR_HEAD_REF
+          PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
+          PR_HEAD_REPO_OWNER: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}
+          PR_HEAD_REPO_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}
+        with:
+          github-token: ${{ secrets.HF_STYLE_BOT_ACTION }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const owner = process.env.PR_HEAD_REPO_OWNER;
+            const repo = process.env.PR_HEAD_REPO_NAME;
+            const baseSha = process.env.PR_HEAD_SHA;
+            const branch = process.env.PR_HEAD_REF;
+            
+            console.log(`Creating commit on ${owner}/${repo} branch ${branch} from ${baseSha}`);
+            
+            // Read list of modified files
+            const modifiedFiles = fs.readFileSync('modified-files.txt', 'utf8')
+              .trim()
+              .split('\n')
+              .filter(f => f.length > 0);
+            
+            console.log(`Modified files: ${modifiedFiles.join(', ')}`);
+            
+            // Get the base commit to retrieve its tree SHA (metadata only, no checkout)
+            const { data: baseCommit } = await github.rest.git.getCommit({
+              owner,
+              repo,
+              commit_sha: baseSha
+            });
+            
+            console.log(`Base tree SHA: ${baseCommit.tree.sha}`);
+            
+            // Create blobs for each modified file
+            const tree = [];
+            for (const file of modifiedFiles) {
+              const filePath = path.join('pr-repo', file);
+              const content = fs.readFileSync(filePath, 'utf8');
+              
+              console.log(`Creating blob for ${file}`);
+              const { data: blob } = await github.rest.git.createBlob({
+                owner,
+                repo,
+                content: content,
+                encoding: 'utf-8'
+              });
+              
+              tree.push({
+                path: file,
+                mode: '100644',
+                type: 'blob',
+                sha: blob.sha
+              });
+            }
+            
+            // Create new tree based on the base tree
+            console.log(`Creating tree with ${tree.length} modified files`);
+            const { data: newTree } = await github.rest.git.createTree({
+              owner,
+              repo,
+              base_tree: baseCommit.tree.sha,
+              tree: tree
+            });
+            
+            // Create commit
+            console.log(`Creating commit`);
+            const { data: newCommit } = await github.rest.git.createCommit({
+              owner,
+              repo,
+              message: 'Apply repo. consistency fixes',
+              tree: newTree.sha,
+              parents: [baseSha]
+            });
+            
+            console.log(`Created commit: ${newCommit.sha}`);
+            
+            // Update branch ref
+            console.log(`Updating ref heads/${branch} to ${newCommit.sha}`);
+            await github.rest.git.updateRef({
+              owner,
+              repo,
+              ref: `heads/${branch}`,
+              sha: newCommit.sha
+            });
+            
+            console.log(`Successfully pushed commit to ${branch}`);
 
       - name: Prepare final comment message
         id: prepare_final_comment
