@@ -318,7 +318,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # lead to many `ifirst_iteration's`. This way we can call prefill only once per assistant model
         if is_first_iteration:
             generation_args = self.assistant_model._get_initial_cache_position(
-                input_ids.shape[1], input_ids.device, self.assistant_kwargs
+                input_ids.shape[1], input_ids.device, self.assistant_kwargs.copy()
             )
             generation_args = self.assistant_model.prepare_inputs_for_generation(
                 input_ids, is_first_iteration=True, **generation_args
@@ -327,7 +327,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             # therefore we manually re-assign full input ids and other args. It is a known issue, due to legacy reasons we
             # have to pass whole input ids to `generate()` including past tokens which are in encoded in cache
             generation_args[self.input_ids_key] = input_ids
-            for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
+            for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids", "cache_position"]:
                 generation_args.pop(model_input_name, None)
         else:
             generation_args = {self.input_ids_key: input_ids}
