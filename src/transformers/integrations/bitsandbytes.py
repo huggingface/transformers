@@ -223,7 +223,9 @@ def _replace_with_bnb_linear(
                             if pre_quantized:
                                 # this is kind of an edge case when supporting both loading and quantization ...
                                 # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
-                                new_module.weight.data = new_module.weight.data.to(dtype=torch.uint8)
+                                new_module.weight.data = new_module.weight.data.to(
+                                    dtype=quantization_config.bnb_4bit_quant_storage
+                                )
                             model._modules[name] = new_module
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later
