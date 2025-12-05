@@ -128,11 +128,9 @@ class CLIPTokenizer(TokenizersBackend):
             trim_offsets=False,
         )
 
-    def _post_init(self):
-        super()._post_init()
+        # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
         self._wrap_decode_method_backend_tokenizer()
 
-    # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
     def _wrap_decode_method_backend_tokenizer(self):
         orig_decode_method = self.backend_tokenizer.decode
 
