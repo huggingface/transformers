@@ -225,7 +225,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
 
-        config = model.config
         model = replace_with_fbgemm_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
