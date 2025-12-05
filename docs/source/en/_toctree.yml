@@ -66,6 +66,20 @@
       title: Generation features
     - local: tasks/prompting
       title: Prompt engineering
+    - local: perplexity
+      title: Perplexity of fixed-length models
+    title: Generate API
+  - sections:
+    - local: optimization_overview
+      title: Overview
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_one
+      title: GPU
+    - local: perf_infer_gpu_multi
+      title: Distributed inference
+    - local: perf_infer_cpu
+      title: CPU
     - local: llm_optims
       title: Optimizing inference
     - local: cache_explanation
@@ -74,9 +88,7 @@
       title: KV cache strategies
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
-    - local: perplexity
-      title: Perplexity of fixed-length models
-    title: LLMs
+    title: Optimization
   - sections:
     - local: conversations
       title: Chat basics
@@ -101,16 +113,6 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
-  - sections:
-    - local: perf_torch_compile
-      title: torch.compile
-    - local: perf_infer_gpu_one
-      title: GPU
-    - local: perf_infer_gpu_multi
-      title: Distributed inference
-    - local: perf_infer_cpu
-      title: CPU
-    title: Optimization
   - local: agents
     title: Agents
   - local: tools
