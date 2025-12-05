@@ -173,7 +173,7 @@ class RagTestMixin:
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-        t5_tokenizer = T5Tokenizer.from_pretrained("google/t5-small")
+        t5_tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         t5_tokenizer_path = os.path.join(self.tmpdirname, "t5_tokenizer")
         t5_tokenizer.save_pretrained(t5_tokenizer_path)
 
