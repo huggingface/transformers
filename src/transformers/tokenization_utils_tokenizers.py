@@ -92,10 +92,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model = None
+    _tokenizer = None
 
     @classmethod
     def convert_to_native_format(cls, **kwargs):
-        """
+        """s
         Build a `tokenizers.Tokenizer` backend from the available serialization files (tokenizer.json, sentencepiece
         models, tekken.json, vocab/merges).
         """
@@ -103,7 +104,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         local_kwargs = dict(kwargs)
         fast_tokenizer_file = local_kwargs.pop("tokenizer_file", None)
 
-        if fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file) and cls is TokenizersBackend:
+        if fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file) and (cls is TokenizersBackend or "__init__" not in cls.__dict__):
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
@@ -123,7 +124,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
             local_kwargs["vocab"] = vocab
 
-            if "merges" in tokenizer_json.get("model", {}) and cls.model.__name__ == "BPE":
+            if "merges" in tokenizer_json.get("model", {}) and getattr(cls, "model", None) == "BPE":
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
