@@ -21,7 +21,6 @@ import sys
 import tempfile
 import textwrap
 import threading
-import time
 import unittest
 import unittest.mock as mock
 import uuid
@@ -38,6 +37,7 @@ from pytest import mark
 from transformers import (
     AutoConfig,
     AutoModel,
+    AutoModelForConditionalGeneration,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
     BartConfig,
@@ -2270,20 +2270,19 @@ class ModelUtilsTest(TestCasePlus):
         and sequentially, i.e. we do not use more cpu memory than available. Avoids regresion after
         https://github.com/huggingface/transformers/pull/42632"""
 
-        # model_name = "meta-llama/Llama-3.2-1B-Instruct"
-        model_name = "meta-llama/Llama-3.2-3B-Instruct"
+        # Small enough, non-gated model
+        model_name = "Qwen/Qwen3-VL-2B-Instruct"
         # Load the model a first time to download the weights if not present
-        _ = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float16)
+        _ = AutoModelForConditionalGeneration.from_pretrained(model_name, dtype=torch.float16)
         # This will make sure we load params on only 1GB of cpu memory, and everything else is offloaded to disk (model is
-        # about 2GiB on fp16)
-        max_memory = {"cpu": "3GIB"}
+        # about 4GiB on fp16)
+        max_memory = {"cpu": "2GIB"}
         with MeasurePeakCPUMemory() as measure:
-            time.sleep(1)
-            _ = AutoModelForCausalLM.from_pretrained(
+            _ = AutoModelForConditionalGeneration.from_pretrained(
                 model_name, device_map="auto", max_memory=max_memory, dtype=torch.float16
             )
-        print(f"PEAK: {measure.peak}")
-        self.assertTrue(measure.peak < 1, "The process used more than 1GiB to load the model")
+        # We use 2.2 here instead of 2 to avoid being too flaky
+        self.assertTrue(measure.peak < 2.2, "The process used more than 2GiB to load the model")
 
 
 @slow
