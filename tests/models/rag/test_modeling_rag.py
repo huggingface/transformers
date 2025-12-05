@@ -161,7 +161,7 @@ class RagTestMixin:
             if line and not line.startswith("#"):
                 self.bart_merges.append(tuple(line.split()))
 
-        t5_tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
+        t5_tokenizer = T5Tokenizer(vocab_file=T5_SAMPLE_VOCAB)
         t5_tokenizer_path = os.path.join(self.tmpdirname, "t5_tokenizer")
         t5_tokenizer.save_pretrained(t5_tokenizer_path)
 
