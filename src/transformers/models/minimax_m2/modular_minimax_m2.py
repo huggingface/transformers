@@ -22,7 +22,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ..glm4_moe.modeling_glm4_moe import (
@@ -41,6 +41,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
+    MixtralTopKRouter,
 )
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
 
@@ -137,10 +138,10 @@ class MiniMaxM2Config(PreTrainedConfig):
     model_type = "minimax_m2"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "colwise_rep",
+        "layers.*.self_attn.k_proj": "colwise_rep",
+        "layers.*.self_attn.v_proj": "colwise_rep",
+        "layers.*.self_attn.o_proj": "rowwise_rep",
         "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
         "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
         "layers.*.mlp.experts.down_proj": "local_rowwise",
@@ -209,20 +210,11 @@ class MiniMaxM2Config(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
         rotary_dim = kwargs.pop("rotary_dim", head_dim)
 
-        if self.head_dim is not None:
-            self.partial_rotary_factor = rotary_dim / self.head_dim
-        else:
-            self.partial_rotary_factor = 1.0
+        self.rope_parameters = rope_parameters
+        if rotary_dim is not None:
+            kwargs.setdefault("partial_rotary_factor", rotary_dim / self.head_dim)  # assign default for BC
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -237,29 +229,33 @@ class MiniMaxM2Experts(MixtralExperts):
     pass
 
 
-class MiniMaxM2TopKRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts))
-
-    def forward(self, hidden_states):
+class MiniMaxM2TopKRouter(MixtralTopKRouter):
+    def forward(self, hidden_states, e_score_correction_bias):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         routing_weights = nn.functional.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
+        scores_for_choice = routing_weights + e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
         top_k_weights = routing_weights.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
         router_scores = torch.zeros_like(routing_weights).scatter_(1, top_k_index, top_k_weights)
-        return router_scores, top_k_index
+        return router_logits, router_scores, top_k_index
 
 
 class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
-    pass
+    def __init__(self, config):
+        super().__init__()
+        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        _, top_k_weights, top_k_index = self.gate(hidden_states, self.e_score_correction_bias)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
 
 
 class MiniMaxM2RMSNorm(MixtralRMSNorm):

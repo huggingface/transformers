@@ -177,7 +177,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["minimax"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
-        WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.gate.e_score_correction_bias"),
+        WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
     ]
     mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
     mapping["olmoe"] = mapping["qwen2_moe"].copy()
