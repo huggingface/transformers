@@ -208,6 +208,8 @@ class MarkupLMTokenizer(TokenizersBackend):
         )
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
+        self._vocab = vocab
+        self._merges = merges
         self._tokenizer = tokenizer
         super().__init__(
             tags_dict=tags_dict,
