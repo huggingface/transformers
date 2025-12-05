@@ -1045,6 +1045,7 @@ class GroupViTTextModel(GroupViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1145,6 +1146,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1297,6 +1299,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_segmentation: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, GroupViTModelOutput]:
         r"""
         return_loss (`bool`, *optional*):
