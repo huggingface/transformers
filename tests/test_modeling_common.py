@@ -2111,6 +2111,49 @@ class ModelTesterMixin:
                 f"Missing `_tied_weights_keys` for {model_class}: add all of {tied_params} except one.",
             )
 
+    def test_tie_word_embeddings_is_authoritative(self):
+        original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            tied_config = copy.deepcopy(original_config)
+            tied_config.get_text_config().tie_word_embeddings = True
+
+            untied_config = copy.deepcopy(original_config)
+            untied_config.get_text_config().tie_word_embeddings = False
+
+            model_tied = model_class(tied_config)
+            model_untied = model_class(untied_config)
+
+            if not hasattr(model_tied, "_tied_weights_keys") or not model_tied._tied_weights_keys:
+                continue
+
+            tied_keys = model_tied._tied_weights_keys
+            state_dict_tied = model_tied.state_dict()
+            state_dict_untied = model_untied.state_dict()
+
+            for target_key, source_key in tied_keys.items():
+                if target_key not in state_dict_tied or source_key not in state_dict_tied:
+                    continue
+                if target_key not in state_dict_untied or source_key not in state_dict_untied:
+                    continue
+
+                target_tied_ptr = id_tensor_storage(state_dict_tied[target_key])
+                source_tied_ptr = id_tensor_storage(state_dict_tied[source_key])
+                target_untied_ptr = id_tensor_storage(state_dict_untied[target_key])
+                source_untied_ptr = id_tensor_storage(state_dict_untied[source_key])
+
+                self.assertEqual(
+                    target_tied_ptr,
+                    source_tied_ptr,
+                    f"{model_class}: With tie_word_embeddings=True, '{target_key}' should share storage with '{source_key}'",
+                )
+                self.assertNotEqual(
+                    target_untied_ptr,
+                    source_untied_ptr,
+                    f"{model_class}: With tie_word_embeddings=False, '{target_key}' should NOT share storage with '{source_key}'. "
+                    f"Config tie_word_embeddings must be authoritative over class-level _tied_weights_keys.",
+                )
+
     def test_model_weights_reload_no_missing_tied_weights(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
