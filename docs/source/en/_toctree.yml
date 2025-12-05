@@ -107,7 +107,9 @@
     - local: perf_infer_gpu_one
       title: GPU
     - local: perf_infer_gpu_multi
-      title: Distributed inference
+      title: Tensor parallelism
+    - local: expert_parallelism
+      title: Expert parallelism
     - local: perf_infer_cpu
       title: CPU
     title: Optimization
