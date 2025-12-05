@@ -1413,9 +1413,17 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             max_length = 0
         for seq_idx, sample in enumerate(features):
             input_ids = sample["input_ids"]
+            # Convert to list if tensor
+            if hasattr(input_ids, "tolist"):
+                input_ids = input_ids.tolist()
             batch["input_ids"] += input_ids
+
             if is_labels_provided:
-                batch["labels"] += [separator_id] + sample["labels"][1:]
+                labels = sample["labels"]
+                # Convert to list if tensor
+                if hasattr(labels, "tolist"):
+                    labels = labels.tolist()
+                batch["labels"] += [separator_id] + labels[1:]
             else:
                 batch["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
