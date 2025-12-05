@@ -837,6 +837,7 @@ class LukeModel(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseLukeModelOutputWithPooling]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1087,6 +1088,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LukeMaskedLMOutput]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1220,6 +1222,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, EntityClassificationOutput]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1348,6 +1351,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, EntityPairClassificationOutput]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1483,6 +1487,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, EntitySpanClassificationOutput]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1638,6 +1643,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LukeSequenceClassifierOutput]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1764,6 +1770,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LukeTokenClassifierOutput]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1865,6 +1872,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LukeQuestionAnsweringModelOutput]:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
@@ -1982,6 +1990,7 @@ class LukeForMultipleChoice(LukePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, LukeMultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):

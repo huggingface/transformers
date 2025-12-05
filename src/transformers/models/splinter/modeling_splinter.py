@@ -367,6 +367,7 @@ class SplinterModel(SplinterPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `batch_size, sequence_length`, *optional*):
@@ -515,6 +516,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         question_positions: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         token_type_ids (`torch.LongTensor` of shape `batch_size, sequence_length`, *optional*):
@@ -657,6 +659,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         question_positions: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, SplinterForPreTrainingOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_questions, sequence_length)`):
