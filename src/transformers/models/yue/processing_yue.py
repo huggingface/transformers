@@ -18,16 +18,13 @@ import re
 
 import numpy as np
 
+from ...audio_utils import make_list_of_audio
 from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin
-from ...utils import is_torch_available, is_torchaudio_available
-from ...utils.import_utils import requires
+from ...utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_torchaudio_available():
-    import torchaudio
 
 
 class YuEAudioKwargs(AudioKwargs, total=False):
@@ -71,7 +68,6 @@ class YuEProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-@requires(backends=("torchaudio",))
 class YuEProcessor(ProcessorMixin):
     """
     Constructs a YuE processor which wraps a YuE tokenizer and a finetuned XCodec audio tokenizer into a single processor.
@@ -90,9 +86,10 @@ class YuEProcessor(ProcessorMixin):
     audio_tokenizer_class = "XCodecModel"
     attributes = ["tokenizer", "audio_tokenizer"]
 
-    def __init__(self, tokenizer, audio_tokenizer):
+    def __init__(self, tokenizer, audio_tokenizer, feature_extractor):
         self.tokenizer = tokenizer
         self.audio_tokenizer = audio_tokenizer
+        self.feature_extractor = feature_extractor
 
     def __call__(
         self,
@@ -121,7 +118,29 @@ class YuEProcessor(ProcessorMixin):
         head_attention_mask = tokenizer_output["attention_mask"]
 
         if audio is not None and self.audio_tokenizer is not None:
-            head_prompt_ids = self._process_audio_prompt(head_prompt_ids, audio, audio_kwargs)
+            print("first audio: ", [au.shape for au in audio])
+            audio = make_list_of_audio(audio)
+
+            print("after make_list_of_audio: ", [au.shape for au in audio])
+
+            input_audios = self.feature_extractor(audio, sampling_rate=audio_kwargs.get("sample_rate"))
+
+            print("YuEProcessor FE: input_values shape =", input_audios["input_values"].shape)
+            print("YuEProcessor FE: padding_mask shape =", input_audios["padding_mask"].shape)
+
+            with torch.no_grad():
+                encoded = self.audio_tokenizer.encode(
+                    input_values=input_audios["input_values"],  # (B, 1, T)
+                    bandwidth=0.5,
+                )
+                audio_codes = encoded.audio_codes  # (B, num_codebooks, T_frames)
+
+            print("YuEProcessor: audio_codes shape =", audio_codes.shape)
+
+            # update heads with audio prompt tokens, batched
+            head_prompt_ids, head_attention_mask = self._process_audio_prompt(
+                head_prompt_ids, head_attention_mask, audio_codes, audio_kwargs, self.tokenizer.pad_token_id
+            )
 
         # batching segments so that lyrics_segments_ids shape is (batch_size, max_num_segments, max_segment_length)
         # so that the stage 1 generation loop can iterate over lyrics_segments_ids[:, segment_idx, :]
@@ -154,7 +173,7 @@ class YuEProcessor(ProcessorMixin):
             max_segment_length = max(max_segment_length, max_len_seg)
             segment_token_ids.append(ids_per_batch)
 
-        # pad to (batch_size, max_num_segments, max_segment_length), missing segments have all pad
+        # pad to (batch_size, max_num_segments, max_segment_length) with missing segments have all pad
         lyrics_segments_ids = []
         lyrics_attention_mask = []
 
@@ -239,56 +258,65 @@ class YuEProcessor(ProcessorMixin):
 
         return lyrics_segments, genre_tags
 
-    def _process_audio_prompt(self, text_ids, audio, audio_kwargs):
-        target_sample_rate = audio_kwargs.pop("sample_rate", None)
-        if isinstance(audio, str):
-            raw_audio, sample_rate = torchaudio.load(audio)
-        else:
-            raw_audio, sample_rate = audio, target_sample_rate
+    def _process_audio_prompt(self, head_prompt_ids, head_attention_mask, audio_codes, audio_kwargs, pad_token_id):
+        fps = audio_kwargs.get("fps", 50)
+        prompt_start_time = audio_kwargs.get("prompt_start_time", 0.0)
+        prompt_end_time = audio_kwargs.get("prompt_end_time", None)
 
-        if raw_audio.shape[0] > 1:
-            # convert to mono if stereo
-            raw_audio = torch.mean(raw_audio, dim=0, keepdim=True)
+        eoa_token_id = audio_kwargs.get("eoa_token_id")
+        soa_token_id = audio_kwargs.get("soa_token_id")
+        xcodec_marker_token_id = audio_kwargs.get("xcodec_marker_token_id")
 
-        if sample_rate != target_sample_rate:
-            raw_audio = torchaudio.transforms.Resample(sample_rate, target_sample_rate)(raw_audio)
+        batch_size = len(head_prompt_ids)
+        print("YuEProcessor: _process_audio_prompt batch_size =", batch_size)
+        print("YuEProcessor: _process_audio_prompt audio_codes shape =", audio_codes.shape)
 
-        input_audio = raw_audio.unsqueeze(0)
+        audio_augmented_heads = []
 
-        # maybe because xcodec doesn't support batching will loop element
-        with torch.no_grad():
-            audio_codes = self.audio_tokenizer.encode(input_audio, bandwidth=0.5).audio_codes
+        for i in range(batch_size):
+            head_ids = [token for token in head_prompt_ids[i] if token != pad_token_id]
+            print(f" sample {i}: original head len =", len(head_ids))
 
-        # TODO: handle this better
-        eoa_token_id = audio_kwargs.pop("eoa_token_id", None)
-        soa_token_id = audio_kwargs.pop("soa_token_id", None)
-        xcodec_marker_token_id = audio_kwargs.pop("xcodec_marker_token_id", None)
-        prompt_start_time = audio_kwargs.pop("prompt_start_time", None)
-        prompt_end_time = audio_kwargs.pop("prompt_end_time", None)
+            codes_i = audio_codes[i : i + 1, 0, :].cpu().numpy()
+            print(f" sample {i}: codes_i shape =", codes_i.shape)
 
-        # original yue takes only the codes of the first quantizer
-        audio_codes_numpy = audio_codes[:, 0, :].cpu().numpy()
-        audio_ids = self._offset_and_flatten_tokens(audio_codes_numpy, audio_kwargs)
-        start = int(prompt_start_time * 50)
-        end = int(prompt_end_time * 50)
-        audio_ids = audio_ids[start:end]
+            audio_ids_full = self._offset_and_flatten_tokens(codes_i, audio_kwargs)
+            print(f" sample {i}: audio_ids_full len =", len(audio_ids_full))
 
-        # formating audio input
-        audio_ids = [soa_token_id] + [xcodec_marker_token_id] + audio_ids + [eoa_token_id]
-        start_of_reference = self.tokenizer("[start_of_reference]", add_special_tokens=False)["input_ids"]
-        end_of_reference = self.tokenizer("[end_of_reference]", add_special_tokens=False)["input_ids"]
-        audio_ids = start_of_reference + audio_ids + end_of_reference
+            start = int(prompt_start_time * fps)
+            end = int(prompt_end_time * fps)
+            audio_ids = audio_ids_full[start:end]
+            print(f" sample {i}: slicing frames [{start}:{end}] -> len =", len(audio_ids))
 
-        prompt_input_ids = text_ids + audio_ids
-        return prompt_input_ids
+            # [SOA] + <xcodec> + codes + [EOA]
+            audio_ids = [soa_token_id] + [xcodec_marker_token_id] + audio_ids + [eoa_token_id]
+
+            start_of_reference = self.tokenizer("[start_of_reference]", add_special_tokens=False)["input_ids"]
+            end_of_reference = self.tokenizer("[end_of_reference]", add_special_tokens=False)["input_ids"]
+            audio_ids = start_of_reference + audio_ids + end_of_reference
+            print(f" sample {i}: audio prompt tokens len =", len(audio_ids))
+
+            full_ids = head_ids + audio_ids
+            print(f" sample {i}: new head len {len(full_ids)}")
+
+            audio_augmented_heads.append(full_ids)
+
+        encoded = {"input_ids": audio_augmented_heads}
+        padded = self.tokenizer.pad(encoded, padding=True, return_attention_mask=True, return_tensors=None)
+
+        padded_heads = padded["input_ids"]
+        padded_masks = padded["attention_mask"]
+
+        return padded_heads, padded_masks
 
     def _offset_and_flatten_tokens(self, audio_codes, audio_kwargs):
+        print("audio_codes.shape :", audio_codes.shape)
         if audio_codes.ndim != 2 or audio_codes.shape[0] != 1:
             raise ValueError(f"Audio codes shape should be (1, T), got {audio_codes.shape}")
 
         # TODO handle this as well
-        codebook_size = audio_kwargs.pop("codebook_size", None)
-        global_offset = audio_kwargs.pop("global_offset", None)
+        codebook_size = audio_kwargs.get("codebook_size", 1024)
+        global_offset = audio_kwargs.get("global_offset", 45334)
 
         if audio_codes.max() >= codebook_size:
             raise ValueError(f"max(audio_codes)={audio_codes.max()}, codebook_size={codebook_size}")
@@ -305,3 +333,48 @@ class YuEProcessor(ProcessorMixin):
         flattened_tokens = offset_codes.flatten()
 
         return flattened_tokens.tolist()
+
+    @staticmethod
+    def _build_main_prompt(segments: list[str], genres: list[str]) -> str:
+        genres = ", ".join(genres) if genres else ""
+        full_lyrics = "\n".join(segments)
+        return f"Generate music from the given lyrics segment by segment.\n[Genre] {genres}\n{full_lyrics}"
+
+    def _normalize_inputs(self, text, lyrics_segments, genre_tags):
+        if text is None and lyrics_segments is None:
+            raise ValueError("Either `lyrics_segments` or `text` must be provided.")
+
+        if text is not None:
+            if isinstance(text, str):
+                lyrics_segments = [self._split_lyrics_into_segments(text)]
+            elif isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text):
+                lyrics_segments = [self._split_lyrics_into_segments(t) for t in text]
+            else:
+                raise ValueError("Invalid input `text`. Please provide a string or a list of strings")
+
+        if lyrics_segments is not None:
+            if isinstance(lyrics_segments, list):
+                if isinstance(lyrics_segments[0], str):
+                    lyrics_segments = [lyrics_segments]
+                elif all(isinstance(segment_list, list) for segment_list in lyrics_segments):
+                    lyrics_segments = [list(segment_list) for segment_list in lyrics_segments]
+            else:
+                raise ValueError(
+                    "Invalid input lyrics_segments. Please provide a list of strings or a list of list of strings as batch"
+                )
+
+        if genre_tags is not None:
+            if isinstance(genre_tags, str):
+                genre_tags = [[genre_tags]]
+            elif isinstance(genre_tags, (list, tuple)) and all(isinstance(tag, str) for tag in genre_tags):
+                genre_tags = [list(genre_tags)]
+            elif isinstance(genre_tags, (list, tuple)) and all(
+                isinstance(tags, (list, tuple)) and all(isinstance(tag, str) for tag in tags) for tags in genre_tags
+            ):
+                genre_tags = [list(tags) for tags in genre_tags]
+        else:
+            raise ValueError(
+                "Please provide `genre_tags`, it must be str, a list of strings or a list of list of strings as batch"
+            )
+
+        return lyrics_segments, genre_tags
