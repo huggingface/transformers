@@ -18,7 +18,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
+from .core_model_loading import (
+    Chunk,
+    Concatenate,
+    MergeModulelist,
+    ModulelistSplitAndFuse,
+    Transpose,
+    WeightConverter,
+    WeightRenaming,
+)
 from .utils import is_torch_available
 
 
@@ -105,6 +113,57 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "ernie4_5_vl": [
+            # vision
+            WeightRenaming("vision_model", "vision_tower"),
+            # resampler
+            WeightRenaming("spatial_linear.0", "spatial_linear.fc1"),
+            WeightRenaming("spatial_linear.2", "spatial_linear.fc2"),
+            WeightRenaming("spatial_linear.3", "spatial_linear.ln"),
+            WeightRenaming("temporal_linear.0", "temporal_linear.fc1"),
+            WeightRenaming("temporal_linear.2", "temporal_linear.fc2"),
+            WeightRenaming("temporal_linear.3", "temporal_linear.ln"),
+            # language model
+            WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
+            WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
+            WeightConverter(
+                source_patterns="mlp.gate.weight_1",
+                target_patterns="mlp.vision_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.gate.weight",
+                target_patterns="mlp.text_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns=["mlp.moe_statics.e_score_correction_bias"],
+                target_patterns=[
+                    "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
+                    "mlp.vision_moe.gate.moe_statics.e_score_correction_bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["experts.*.down_proj.weight"],
+                target_patterns=[
+                    "text_moe.experts.down_proj",
+                    "vision_moe.experts.down_proj",
+                ],
+                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "experts.*.gate_proj.weight",
+                    "experts.*.up_proj.weight",
+                ],
+                target_patterns=[
+                    "text_moe.experts.gate_up_proj",
+                    "vision_moe.experts.gate_up_proj",
+                ],
+                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
+            ),
+        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
@@ -166,6 +225,9 @@ def _build_checkpoint_conversion_mapping():
     mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
     mapping["dots1"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    ]
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
     mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
@@ -190,32 +252,6 @@ def get_checkpoint_conversion_mapping(model_type):
     return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
 
 
-# DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = [
-    "aria",
-    "ayavision",
-    "colpali",
-    "emu3",
-    "fuyu",
-    "gotocr2",
-    "gemma3",
-    "internvl",
-    "llava",  # all llava prefixed models fall under this check
-    "mistral3",
-    "mllama",
-    "paligemma",
-    "shieldgemma2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "videollava",
-    "vipllava",
-    "sam3_video",
-    "sam3",
-    "sam3_tracker",
-    "sam3_tracker_video",
-]
-
-
 def get_model_conversion_mapping(
     model: PreTrainedModel,
     key_mapping: dict[str, str] | None = None,
@@ -231,11 +267,7 @@ def get_model_conversion_mapping(
     # Load models with key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
-    elif any(
-        allowed_name in class_name.__name__.lower()
-        for class_name in model.__class__.__mro__[:-1]
-        for allowed_name in VLMS
-    ):
+    else:
         weight_conversions = [
             WeightRenaming(source_patterns=k, target_patterns=v)
             for k, v in model._checkpoint_conversion_mapping.items()
