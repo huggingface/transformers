@@ -155,6 +155,16 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 from .convert_slow_tokenizer import SentencePieceExtractor
 
                 local_kwargs = SentencePieceExtractor(vocab_file).extract(cls.model, **local_kwargs)
+                try:
+                    from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
+
+                    converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
+                    if converter_class is not None and hasattr(converter_class, "convert_from_spm"):
+                        local_kwargs = converter_class.convert_from_spm(**local_kwargs)
+                except Exception as e:
+                    logger.warning(
+                        f"Could not reorder vocab using converter for {cls.__name__} due to {e}. Falling back to raw SentencePiece extraction."
+                    )
                 # what used to be in `convert_slow`
                 if hasattr(cls, "convert_from_spm_model"):
                     local_kwargs = cls.convert_from_spm_model(**local_kwargs)

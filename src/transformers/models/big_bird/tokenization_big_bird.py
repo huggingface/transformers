@@ -109,32 +109,14 @@ class BigBirdTokenizer(TokenizersBackend):
 
         # Convert vocab to list of (token, score) tuples
         if vocab is None:
-            vocab = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(bos_token), 0.0)]
+            vocab = [
+                (str(pad_token), 0.0),
+                (str(eos_token), 0.0),
+                (str(bos_token), 0.0),
+                (str(unk_token), 0.0)
+            ]
 
-        # Find unk_id in vocab
-        unk_token_content = str(unk_token)
-        unk_id = next((idx for idx, (token, _) in enumerate(vocab) if token == unk_token_content), None)
-        if unk_id is None:
-            unk_id = min(len(vocab), 100)
-            if len(vocab) > 100:
-                vocab.insert(100, (unk_token_content, 0.0))
-            else:
-                vocab.append((unk_token_content, 0.0))
-
-        # Ensure cls_token and sep_token are in vocab
-        cls_token_str = str(cls_token)
-        sep_token_str = str(sep_token)
-        cls_token_id = next((idx for idx, (token, _) in enumerate(vocab) if token == cls_token_str), None)
-        sep_token_id = next((idx for idx, (token, _) in enumerate(vocab) if token == sep_token_str), None)
-
-        if cls_token_id is None:
-            cls_token_id = len(vocab)
-            vocab.append((cls_token_str, 0.0))
-        if sep_token_id is None:
-            sep_token_id = len(vocab)
-            vocab.append((sep_token_str, 0.0))
-
-        self._tokenizer = Tokenizer(Unigram(vocab, unk_id=unk_id, byte_fallback=False))
+        self._tokenizer = Tokenizer(Unigram(vocab, unk_id=4, byte_fallback=False))
         self._tokenizer.normalizer = normalizers.Sequence(
             [normalizers.Strip(left=False, right=True), normalizers.Replace(Regex(r" {2,}"), SPIECE_UNDERLINE)]
         )
@@ -157,6 +139,12 @@ class BigBirdTokenizer(TokenizersBackend):
         )
 
         self.init_kwargs["add_prefix_space"] = add_prefix_space
+
+        # Ensure cls_token and sep_token are in vocab
+        cls_token_str = str(cls_token)
+        sep_token_str = str(sep_token)
+        cls_token_id = self.convert_tokens_to_ids(cls_token_str)
+        sep_token_id = self.convert_tokens_to_ids(sep_token_str)
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls_token_str}:0 $A:0 {sep_token_str}:0",

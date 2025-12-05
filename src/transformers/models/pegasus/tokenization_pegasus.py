@@ -98,33 +98,11 @@ class PegasusTokenizer(TokenizersBackend):
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
-        if isinstance(vocab, list):
-            # For Pegasus, insert special tokens at the beginning
-            special_tokens_set = {pad_token, eos_token, mask_token_sent, mask_token, unk_token}
-            special_tokens_set.update(additional_special_tokens)
+        if vocab is None:
+            vocab = [(str(unk_token), 0.0)]
 
-            # Build special tokens in correct order
-            _vocab_list = [
-                (str(pad_token), 0.0),
-                (str(eos_token), 0.0),
-            ]
-            if mask_token_sent:
-                _vocab_list.append((str(mask_token_sent), 0.0))
-            for token in additional_special_tokens:
-                if token not in [pad_token, eos_token, mask_token_sent]:
-                    _vocab_list.append((str(token), 0.0))
-            if mask_token not in [t for t, _ in _vocab_list]:
-                _vocab_list.append((str(mask_token), 0.0))
-            _vocab_list.append((str(unk_token), 0.0))
-
-            # Filter out special tokens from main vocab and combine
-            filtered_vocab = [(t, s) for t, s in vocab if t not in special_tokens_set]
-            _vocab_list = _vocab_list + filtered_vocab
-        else:
-            _vocab_list = [(str(unk_token), 0.0)]
-
-        self._vocab = {token: idx for idx, (token, _) in enumerate(_vocab_list)}
-        self._tokenizer = Tokenizer(Unigram(vocab=_vocab_list, unk_id=self._vocab.get(str(unk_token), 0)))
+        self._vocab = vocab
+        self._tokenizer = Tokenizer(Unigram(vocab=vocab, unk_id=self._vocab.index((str(unk_token), 0.0), 1)))
         self._tokenizer.normalizer = normalizers.Sequence(
             [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
         )
@@ -132,7 +110,7 @@ class PegasusTokenizer(TokenizersBackend):
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"$A {eos_token}",
             pair=f"$A $B {eos_token}",
-            special_tokens=[(str(eos_token), self._vocab.get(str(eos_token), 1))],
+            special_tokens=[(str(eos_token), self._vocab.index((str(eos_token), 0.0), 1))],
         )
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)

@@ -34,6 +34,64 @@ from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 logger = logging.get_logger(__name__)
 
+MBART_LANGUAGES = [
+    "ar_AR",
+    "cs_CZ",
+    "de_DE",
+    "en_XX",
+    "es_XX",
+    "et_EE",
+    "fi_FI",
+    "fr_XX",
+    "gu_IN",
+    "hi_IN",
+    "it_IT",
+    "ja_XX",
+    "kk_KZ",
+    "ko_KR",
+    "lt_LT",
+    "lv_LV",
+    "my_MM",
+    "ne_NP",
+    "nl_XX",
+    "ro_RO",
+    "ru_RU",
+    "si_LK",
+    "tr_TR",
+    "vi_VN",
+    "zh_CN",
+]
+
+MBART50_LANGUAGES = MBART_LANGUAGES + [
+    "af_ZA",
+    "az_AZ",
+    "bn_IN",
+    "fa_IR",
+    "he_IL",
+    "hr_HR",
+    "id_ID",
+    "ka_GE",
+    "km_KH",
+    "mk_MK",
+    "ml_IN",
+    "mn_MN",
+    "mr_IN",
+    "pl_PL",
+    "ps_AF",
+    "pt_XX",
+    "sv_SE",
+    "sw_KE",
+    "ta_IN",
+    "te_IN",
+    "th_TH",
+    "tl_XX",
+    "uk_UA",
+    "ur_PK",
+    "xh_ZA",
+    "gl_ES",
+    "sl_SI",
+]
+
 
 def import_protobuf(error_message=""):
     if is_sentencepiece_available():
@@ -582,6 +640,16 @@ class SpmConverter(Converter):
     SpmExtractor = SentencePieceExtractor
     special_tokens = {}
 
+    @classmethod
+    def convert_from_spm(cls, vocab=None, **kwargs):
+        """
+        Hook used when converting directly from a SentencePiece model without a slow tokenizer instance.
+        By default, return kwargs unchanged.
+        """
+        if vocab is not None:
+            kwargs["vocab"] = vocab
+        return kwargs
+
     def __init__(self, *args):
         requires_backends(self, "protobuf")
 
@@ -787,6 +855,25 @@ class CamembertConverter(SpmConverter):
             ],
         )
 
+    @classmethod
+    def convert_from_spm(cls, vocab=None, **kwargs):
+        pad_token = str(kwargs.get("pad_token", "<pad>"))
+        unk_token = str(kwargs.get("unk_token", "<unk>"))
+        mask_token = str(kwargs.get("mask_token", "<mask>"))
+
+        vocab_list = [
+            ("<s>NOTUSED", 0.0),
+            (pad_token, 0.0),
+            ("</s>NOTUSED", 0.0),
+            (unk_token, 0.0),
+            ("<unk>NOTUSED", -100.0),
+        ]
+        if vocab is not None:
+            vocab_list.extend(list(vocab)[1:])
+        vocab_list.append((mask_token, 0.0))
+        kwargs["vocab"] = vocab_list
+        return kwargs
+
 
 class DebertaV2Converter(SpmConverter):
     def pre_tokenizer(self, replacement, add_prefix_space):
@@ -873,6 +960,27 @@ class MBartConverter(SpmConverter):
             ],
         )
 
+    @classmethod
+    def convert_from_spm(cls, vocab=None, **kwargs):
+        bos_token = str(kwargs.get("bos_token", "<s>"))
+        pad_token = str(kwargs.get("pad_token", "<pad>"))
+        eos_token = str(kwargs.get("eos_token", "</s>"))
+        unk_token = str(kwargs.get("unk_token", "<unk>"))
+        mask_token = str(kwargs.get("mask_token", "<mask>"))
+
+        vocab_list = [
+            (bos_token, 0.0),
+            (pad_token, 0.0),
+            (eos_token, 0.0),
+            (unk_token, 0.0),
+        ]
+        if vocab is not None:
+            vocab_list.extend(list(vocab)[3:])
+        vocab_list.extend((lang_code, 0.0) for lang_code in MBART_LANGUAGES)
+        vocab_list.append((mask_token, 0.0))
+        kwargs["vocab"] = vocab_list
+        return kwargs
+
 
 class MBart50Converter(SpmConverter):
     def vocab(self, proto):
@@ -900,6 +1008,27 @@ class MBart50Converter(SpmConverter):
             ],
         )
 
+    @classmethod
+    def convert_from_spm(cls, vocab=None, **kwargs):
+        cls_token = str(kwargs.get("cls_token", "<s>"))
+        pad_token = str(kwargs.get("pad_token", "<pad>"))
+        eos_token = str(kwargs.get("eos_token", "</s>"))
+        unk_token = str(kwargs.get("unk_token", "<unk>"))
+        mask_token = str(kwargs.get("mask_token", "<mask>"))
+
+        vocab_list = [
+            (cls_token, 0.0),
+            (pad_token, 0.0),
+            (eos_token, 0.0),
+            (unk_token, 0.0),
+        ]
+        if vocab is not None:
+            vocab_list.extend(list(vocab)[3:])
+        vocab_list.extend((lang_code, 0.0) for lang_code in MBART50_LANGUAGES)
+        vocab_list.append((mask_token, 0.0))
+        kwargs["vocab"] = vocab_list
+        return kwargs
+
 
 class NllbConverter(SpmConverter):
     def vocab(self, proto):
@@ -924,6 +1053,28 @@ class NllbConverter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
+
+    @classmethod
+    def convert_from_spm(cls, vocab=None, **kwargs):
+        bos_token = str(kwargs.get("bos_token", "<s>"))
+        pad_token = str(kwargs.get("pad_token", "<pad>"))
+        eos_token = str(kwargs.get("eos_token", "</s>"))
+        unk_token = str(kwargs.get("unk_token", "<unk>"))
+
+        reordered_vocab = {
+            bos_token: 0,
+            pad_token: 1,
+            eos_token: 2,
+            unk_token: 3,
+        }
+        if vocab is not None:
+            tokens = vocab.keys() if isinstance(vocab, dict) else [tok for tok, _ in vocab]
+            for token in tokens:
+                if token in reordered_vocab:
+                    continue
+                reordered_vocab[token] = len(reordered_vocab)
+        kwargs["vocab"] = reordered_vocab
+        return kwargs
 
 
 class SeamlessM4TConverter(SpmConverter):
@@ -976,6 +1127,26 @@ class XLMRobertaConverter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
+
+    @classmethod
+    def convert_from_spm(cls, vocab=None, **kwargs):
+        bos_token = str(kwargs.get("bos_token", "<s>"))
+        pad_token = str(kwargs.get("pad_token", "<pad>"))
+        eos_token = str(kwargs.get("eos_token", "</s>"))
+        unk_token = str(kwargs.get("unk_token", "<unk>"))
+        mask_token = str(kwargs.get("mask_token", "<mask>"))
+
+        vocab_list = [
+            (bos_token, 0.0),
+            (pad_token, 0.0),
+            (eos_token, 0.0),
+            (unk_token, 0.0),
+        ]
+        if vocab is not None:
+            vocab_list.extend(list(vocab)[3:])
+        vocab_list.append((mask_token, 0.0))
+        kwargs["vocab"] = vocab_list
+        return kwargs
 
 
 class XLNetConverter(SpmConverter):
@@ -1110,6 +1281,17 @@ class T5Converter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
+
+    @classmethod
+    def convert_from_spm(cls, vocab=None, **kwargs):
+        extra_ids = kwargs.get("extra_ids", 100)
+        extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids - 1, -1, -1)]
+        vocab_list = list(vocab) if vocab is not None else []
+        vocab_list.extend((token, 0.0) for token in extra_tokens)
+
+        kwargs.setdefault("additional_special_tokens", extra_tokens)
+        kwargs["vocab"] = vocab_list
+        return kwargs
 
 
 class UdopConverter(SpmConverter):
