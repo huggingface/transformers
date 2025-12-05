@@ -560,7 +560,7 @@ class ChineseCLIPTextPooler(nn.Module):
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
     config: ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -798,7 +798,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
     config: ChineseCLIPTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
@@ -839,6 +839,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -906,7 +907,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config: ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
 
     def __init__(self, config: ChineseCLIPVisionConfig):
@@ -926,6 +927,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1091,6 +1093,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ChineseCLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):

@@ -383,7 +383,7 @@ def default_flax_embed_init(tensor):
 class Siglip2PreTrainedModel(PreTrainedModel):
     config: Siglip2Config
     base_model_prefix = "siglip2"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
@@ -510,6 +510,7 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
@@ -651,7 +652,7 @@ class Siglip2TextTransformer(nn.Module):
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
     config: Siglip2TextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)
@@ -738,7 +739,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
 class Siglip2VisionModel(Siglip2PreTrainedModel):
     config: Siglip2VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -760,6 +761,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -927,6 +929,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Siglip2Output:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -1028,7 +1031,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 )
 class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: Siglip2Config) -> None:
         super().__init__(config)
@@ -1048,7 +1051,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1058,6 +1061,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> ImageClassifierOutput:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):

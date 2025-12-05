@@ -12,21 +12,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_optimum_quanto_available, is_torch_available, logging
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from ..utils import is_torch_available, logging
 
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 logger = logging.get_logger(__name__)
+
+
+class QuantoQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        missing_keys: list[str] | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        _, value = tuple(input_dict.items())[0]
+        value = value[0]
+
+        from ..modeling_utils import _load_parameter_into_model
+
+        _load_parameter_into_model(model, full_layer_name, value)
+        module, _ = get_module_from_name(model, full_layer_name)
+        module.freeze()
+        module.weight.requires_grad = False
+        module._is_hf_initialized = True
+
+        # need to discard some missing keys we already updated the module in freeze.
+        module_name = full_layer_name.rsplit(".", 1)[0]
+        missing_keys.discard(f"{module_name}.input_scale")
+        missing_keys.discard(f"{module_name}.output_scale")
+        return {}
 
 
 def replace_with_quanto_layers(
     model,
     quantization_config=None,
     modules_to_not_convert=None,
-    current_key_name=None,
-    has_been_replaced=False,
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with Quanto quantized layers.
@@ -35,64 +66,50 @@ def replace_with_quanto_layers(
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
-        quantization_config (`AqlmConfig`, defaults to `None`):
+        quantization_config (`QuantoConfig`, defaults to `None`):
             The quantization config object that contains the quantization parameters.
         modules_to_not_convert (`list`, *optional*, defaults to `None`):
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
             converted.
-        current_key_name (`list`, *optional*, defaults to `None`):
-            A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, *optional*, defaults to `None`):
-            A boolean that indicates if the conversion has been successful or not. This is used for recursion and
-            should not be passed by the user.
     """
     from accelerate import init_empty_weights
-
-    if is_optimum_quanto_available():
-        from optimum.quanto import QLayerNorm, QLinear, qfloat8, qint2, qint4, qint8
+    from optimum.quanto import QLayerNorm, QLinear, qfloat8, qint2, qint4, qint8
 
     w_mapping = {"float8": qfloat8, "int8": qint8, "int4": qint4, "int2": qint2}
     a_mapping = {None: None, "float8": qfloat8, "int8": qint8}
 
-    if modules_to_not_convert is None:
-        modules_to_not_convert = []
+    has_been_replaced = False
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        with init_empty_weights():
+            new_module = None
+            if isinstance(module, nn.Linear):
+                new_module = QLinear(
+                    in_features=module.in_features,
+                    out_features=module.out_features,
+                    bias=module.bias is not None,
+                    dtype=module.weight.dtype,
+                    weights=w_mapping[quantization_config.weights],
+                    activations=a_mapping[quantization_config.activations],
+                )
+            elif isinstance(module, torch.nn.LayerNorm) and quantization_config.activations is not None:
+                new_module = QLayerNorm(
+                    module.normalized_shape,
+                    module.eps,
+                    module.elementwise_affine,
+                    module.bias is not None,
+                    activations=a_mapping[quantization_config.activations],
+                )
+            if new_module is not None:
+                has_been_replaced = True
+                model.set_submodule(module_name, new_module)
 
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
+    if not has_been_replaced:
+        logger.warning(
+            "You are loading your model using quanto but no linear modules were found in your model."
+            " Please double check your model architecture, or submit an issue on github if you think this is"
+            " a bug."
+        )
 
-        if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
-            with init_empty_weights():
-                if isinstance(module, torch.nn.Linear):
-                    model._modules[name] = QLinear(
-                        in_features=module.in_features,
-                        out_features=module.out_features,
-                        bias=module.bias is not None,
-                        dtype=module.weight.dtype,
-                        weights=w_mapping[quantization_config.weights],
-                        activations=a_mapping[quantization_config.activations],
-                    )
-                    model._modules[name].requires_grad_(False)
-                    has_been_replaced = True
-                elif isinstance(module, torch.nn.LayerNorm):
-                    if quantization_config.activations is not None:
-                        model._modules[name] = QLayerNorm(
-                            module.normalized_shape,
-                            module.eps,
-                            module.elementwise_affine,
-                            module.bias is not None,
-                            activations=a_mapping[quantization_config.activations],
-                        )
-                        has_been_replaced = True
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = replace_with_quanto_layers(
-                module,
-                quantization_config=quantization_config,
-                modules_to_not_convert=modules_to_not_convert,
-                current_key_name=current_key_name,
-                has_been_replaced=has_been_replaced,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
+    return model

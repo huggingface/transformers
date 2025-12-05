@@ -189,7 +189,7 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["DINOv3ConvNextLayer"]
 
     @torch.no_grad()
@@ -214,7 +214,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None
+        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 

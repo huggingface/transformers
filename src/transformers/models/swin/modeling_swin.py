@@ -808,7 +808,7 @@ class SwinPreTrainedModel(PreTrainedModel):
     config: SwinConfig
     base_model_prefix = "swin"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwinStage"]
 
@@ -860,6 +860,7 @@ class SwinModel(SwinPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SwinModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -946,6 +947,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SwinMaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
@@ -1059,6 +1061,7 @@ class SwinForImageClassification(SwinPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SwinImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1129,6 +1132,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         """
         Returns:

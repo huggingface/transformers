@@ -2101,7 +2101,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
     config: Mask2FormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -2184,6 +2184,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Mask2FormerModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2305,6 +2306,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         output_auxiliary_logits: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Mask2FormerForUniversalSegmentationOutput:
         r"""
         mask_labels (`list[torch.Tensor]`, *optional*):

@@ -454,7 +454,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     config: RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
 
     @torch.no_grad()
@@ -591,6 +591,7 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1488,6 +1489,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], RTDetrV2ModelOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):

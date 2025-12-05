@@ -302,7 +302,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     config: RTDetrResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
 
     @torch.no_grad()
@@ -342,7 +342,11 @@ class RTDetrResNetBackbone(RTDetrResNetPreTrainedModel, BackboneMixin):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
                         Examples:

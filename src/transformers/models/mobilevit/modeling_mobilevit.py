@@ -604,7 +604,7 @@ class MobileViTPreTrainedModel(PreTrainedModel):
     config: MobileViTConfig
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["MobileViTLayer"]
 
@@ -659,6 +659,7 @@ class MobileViTModel(MobileViTPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -725,6 +726,7 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -889,6 +891,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SemanticSegmenterOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

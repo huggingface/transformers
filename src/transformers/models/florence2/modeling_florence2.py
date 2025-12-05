@@ -485,7 +485,7 @@ class Florence2VisionBlock(nn.Module):
 class Florence2VisionPreTrainedModel(PreTrainedModel):
     config_class = Florence2VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -541,7 +541,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor, **kwargs):
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -616,7 +616,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 class Florence2PreTrainedModel(PreTrainedModel):
     config: Florence2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -708,6 +708,7 @@ class Florence2Model(Florence2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

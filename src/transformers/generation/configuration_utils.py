@@ -20,7 +20,9 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
+
+from huggingface_hub import create_repo
 
 from .. import __version__
 from ..configuration_utils import PreTrainedConfig
@@ -29,9 +31,7 @@ from ..utils import (
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -105,8 +105,9 @@ class GenerationConfig(PushToHubMixin):
         > Parameters that control the length of the output
 
         max_length (`int`, *optional*, defaults to 20):
-            The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
-            `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
+            `max_new_tokens` is recommended for controlling how many tokens the model generates.
+            `max_length` remains for backward compatibility.
+
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         min_length (`int`, *optional*, defaults to 0):
@@ -436,6 +437,13 @@ class GenerationConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
+        # Ensure backward compatibility for models that use `forced_bos_token_id` within their config
+        if self._from_model_config and kwargs.get("force_bos_token_to_be_generated", False):
+            self.forced_bos_token_id = self.bos_token_id
+            logger.warning_once(
+                f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
+            )
+
         # Additional attributes without default values
         if not self._from_model_config:
             # we don't want to copy values from the model config if we're initializing a `GenerationConfig` from a
@@ -703,8 +711,8 @@ class GenerationConfig(PushToHubMixin):
 
     def save_pretrained(
         self,
-        save_directory: Union[str, os.PathLike],
-        config_file_name: Optional[Union[str, os.PathLike]] = None,
+        save_directory: str | os.PathLike,
+        config_file_name: str | os.PathLike | None = None,
         push_to_hub: bool = False,
         **kwargs,
     ):
@@ -743,12 +751,12 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
 
-        self.to_json_file(output_config_file, use_diff=True)
+        self.to_json_file(output_config_file, use_diff=True, keys_to_pop=["compile_config"])
         logger.info(f"Configuration saved in {output_config_file}")
 
         if push_to_hub:
@@ -763,12 +771,12 @@ class GenerationConfig(PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_model_name: Union[str, os.PathLike],
-        config_file_name: Optional[Union[str, os.PathLike]] = None,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name: str | os.PathLike,
+        config_file_name: str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> "GenerationConfig":
@@ -872,9 +880,6 @@ class GenerationConfig(PushToHubMixin):
             # Special case when config_path is a local file
             resolved_config_file = config_path
             is_local = True
-        elif is_remote_url(config_path):
-            configuration_file = config_path
-            resolved_config_file = download_url(config_path)
         else:
             configuration_file = config_file_name
             try:
@@ -930,7 +935,7 @@ class GenerationConfig(PushToHubMixin):
             return config
 
     @classmethod
-    def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
+    def _dict_from_json_file(cls, json_file: str | os.PathLike):
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
         return json.loads(text)
@@ -1018,8 +1023,6 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
-        if "compile_config" in output:
-            del output["compile_config"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -1027,7 +1030,9 @@ class GenerationConfig(PushToHubMixin):
         self.dict_dtype_to_str(output)
         return output
 
-    def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:
+    def to_json_string(
+        self, use_diff: bool = True, ignore_metadata: bool = False, keys_to_pop: list[str] | None = None
+    ) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -1037,6 +1042,8 @@ class GenerationConfig(PushToHubMixin):
                 is serialized to JSON string.
             ignore_metadata (`bool`, *optional*, defaults to `False`):
                 Whether to ignore the metadata fields present in the instance
+            keys_to_pop (`list[str]`, *optional*):
+                Keys to pop from the config dictionary before serializing
 
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -1045,6 +1052,10 @@ class GenerationConfig(PushToHubMixin):
             config_dict = self.to_diff_dict()
         else:
             config_dict = self.to_dict()
+
+        if keys_to_pop is not None:
+            for key in keys_to_pop:
+                config_dict.pop(key, None)
 
         if ignore_metadata:
             for metadata_field in METADATA_FIELDS:
@@ -1071,7 +1082,9 @@ class GenerationConfig(PushToHubMixin):
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
+    def to_json_file(
+        self, json_file_path: str | os.PathLike, use_diff: bool = True, keys_to_pop: list[str] | None = None
+    ) -> None:
         """
         Save this instance to a JSON file.
 
@@ -1081,9 +1094,11 @@ class GenerationConfig(PushToHubMixin):
             use_diff (`bool`, *optional*, defaults to `True`):
                 If set to `True`, only the difference between the config instance and the default `GenerationConfig()`
                 is serialized to JSON file.
+            keys_to_pop (`list[str]`, *optional*):
+                Keys to pop from the config dictionary before serializing
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string(use_diff=use_diff))
+            writer.write(self.to_json_string(use_diff=use_diff, keys_to_pop=keys_to_pop))
 
     @classmethod
     def from_model_config(cls, model_config: PreTrainedConfig | dict) -> "GenerationConfig":
@@ -1182,7 +1197,7 @@ class BaseWatermarkingConfig(ABC):
             kwargs.pop(key, None)
         return config
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -1447,10 +1462,10 @@ class CompileConfig:
     """
 
     fullgraph: bool = False
-    dynamic: Optional[bool] = None
-    backend: Union[str, Callable] = "inductor"
+    dynamic: bool | None = None
+    backend: str | Callable = "inductor"
     mode: str = "reduce-overhead"
-    options: Optional[dict] = None
+    options: dict | None = None
     # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
     _compile_all_devices = None
 

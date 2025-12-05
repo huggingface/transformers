@@ -237,8 +237,8 @@ def convert_yolos_checkpoint(
 
         print("Pushing to the hub...")
         model_name = model_mapping[yolos_name]
-        image_processor.push_to_hub(model_name, organization="hustvl")
-        model.push_to_hub(model_name, organization="hustvl")
+        image_processor.push_to_hub(repo_id=f"hustvl/{model_name}")
+        model.push_to_hub(repo_id=f"hustvl/{model_name}")
 
 
 if __name__ == "__main__":

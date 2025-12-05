@@ -576,7 +576,7 @@ class VitDetPreTrainedModel(PreTrainedModel):
     config: VitDetConfig
     base_model_prefix = "vitdet"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
@@ -630,6 +630,7 @@ class VitDetModel(VitDetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Examples:
@@ -706,6 +707,7 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:

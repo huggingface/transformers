@@ -199,6 +199,7 @@ class LightGlueAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -423,7 +424,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
     config: LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -869,7 +870,8 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[tuple, LightGlueKeypointMatchingOutput]:
+        **kwargs,
+    ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")

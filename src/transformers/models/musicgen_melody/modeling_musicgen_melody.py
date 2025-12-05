@@ -455,6 +455,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -670,6 +671,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -742,7 +744,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
 )
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForCausalLM with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody,MusicGen->Musicgen Melody
 class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config: MusicgenMelodyDecoderConfig):
         super().__init__(config)
@@ -785,6 +787,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, MusicgenMelodyOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -1228,7 +1231,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config: MusicgenMelodyConfig
     main_input_name = "input_ids"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True

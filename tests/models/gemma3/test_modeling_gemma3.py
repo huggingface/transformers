@@ -440,7 +440,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
             self.assertIsInstance(for_causal_lm, Gemma3ForConditionalGeneration)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_from_config(self):

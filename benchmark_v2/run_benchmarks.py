@@ -19,11 +19,12 @@ in the ./benches directory, organizing outputs into model-specific subfolders.
 """
 
 import argparse
+import json
 import logging
 import sys
 import uuid
 
-from framework.benchmark_config import adapt_configs, get_config_by_level
+from framework.benchmark_config import BenchmarkConfig, adapt_configs, get_config_by_level
 from framework.benchmark_runner import BenchmarkRunner
 
 
@@ -31,7 +32,7 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=str, default=None, help="Output dir for benchmark results")
-    parser.add_argument("--log-level", type=str, choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO")
+    parser.add_argument("--log-level", type=str, choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="WARNING")
     parser.add_argument("--model-id", type=str, help="Specific model ID to benchmark (if supported by benchmarks)")
     parser.add_argument("--warmup", "-w", type=int, default=3, help="Number of warmup iterations")
     parser.add_argument("--iterations", "-i", type=int, default=10, help="Number of measurement iterations")
@@ -48,6 +49,7 @@ if __name__ == "__main__":
         " each attn implementation an option, 3: cross-generate all combinations of configs, 4: cross-generate all"
         " combinations of configs w/ all compile modes",
     )
+    parser.add_argument("--config-file", type=str, help="Path to a config file stored as a json or jsonl format")
     parser.add_argument("--num-tokens-to-profile", "-p", type=int, default=0, help="Number of tokens to profile")
 
     parser.add_argument("--branch-name", type=str, help="Git branch name")
@@ -90,8 +92,21 @@ if __name__ == "__main__":
     if any(n <= 1 for n in args.num_tokens_to_generate):
         raise ValueError("--num_tokens_to_generate arguments should be larger than 1")
 
-    # Get the configs for the given coverage level
-    configs = get_config_by_level(args.level)
+    # If a config file is provided, read it and use the configs therein. They will still be adapted to the given arguments.
+    if args.config_file is not None:
+        if args.config_file.endswith(".json"):
+            with open(args.config_file, "r") as f:
+                config_as_dicts = [json.load(f)]
+        elif args.config_file.endswith(".jsonl"):
+            with open(args.config_file, "r") as f:
+                config_as_dicts = [json.loads(line) for line in f if line.startswith("{")]
+        else:
+            raise ValueError(f"Unsupported config file format: {args.config_file}")
+        configs = [BenchmarkConfig.from_dict(config) for config in config_as_dicts]
+    else:
+        # Otherwise, get the configs for the given coverage level
+        configs = get_config_by_level(args.level)
+
     # Adapt the configs to the given arguments
     configs = adapt_configs(
         configs,

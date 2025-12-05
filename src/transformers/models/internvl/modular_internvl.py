@@ -356,7 +356,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
@@ -406,9 +406,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None, **kwargs
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -428,7 +426,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 
 
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
-    input_modalities = ["image", "text", "video"]
+    input_modalities = ("image", "text", "video")
 
 
 INTERNVL_INPUTS_DOCSTRING = None

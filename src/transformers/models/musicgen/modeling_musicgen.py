@@ -482,6 +482,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -716,6 +717,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -788,7 +790,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
     """
 )
 class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
@@ -1284,7 +1286,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
 )
 class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin):
     config: MusicgenConfig
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True

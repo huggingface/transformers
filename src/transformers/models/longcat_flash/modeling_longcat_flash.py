@@ -431,7 +431,7 @@ class LongcatFlashMLA(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if "flash" in self.config._attn_implementation and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         attention_interface: Callable = eager_attention_forward
@@ -449,7 +449,7 @@ class LongcatFlashMLA(nn.Module):
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+        if "flash" in self.config._attn_implementation and self.qk_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
@@ -593,7 +593,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -617,8 +617,8 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             )
 
         if position_ids is None:
