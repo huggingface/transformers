@@ -827,6 +827,17 @@ class WandbCallback(TrainerCallback):
             args.run_name = None
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
+        
+        # Auto log Accelerate parallelism info to wandb.config
+        if self._initialized and state.is_world_process_zero and getattr(self._wandb, "run", None) is not None:
+            acc = getattr(model, "accelerator", None)
+            pc = getattr(acc, "parallelism_config", None) if acc is not None else None
+            sizes = getattr(pc, "_sizes", None) if pc is not None else None
+            if isinstance(sizes, dict) and sizes:
+                try:
+                    self._wandb.config.update({"parallelism": sizes}, allow_val_change=True)
+                except Exception:
+                    pass
 
     def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
         if self._wandb is None:
