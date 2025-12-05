@@ -359,8 +359,7 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
         residual = hidden_states
         hidden_states = self.feed_forward1(self.norm_feed_forward1(hidden_states))
         hidden_states = (
-            self.feed_forward_residual_weights[0] * residual
-            + self.feed_forward_residual_weights[1] * hidden_states
+            self.feed_forward_residual_weights[0] * residual + self.feed_forward_residual_weights[1] * hidden_states
         )
 
         normalized_hidden_states = self.norm_self_att(hidden_states)
@@ -373,15 +372,12 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
         hidden_states = hidden_states + attn_output
 
         conv_output = self.conv(self.norm_conv(hidden_states), attention_mask=attention_mask)
-        hidden_states = (
-            self.conv_residual_weights[0] * hidden_states + self.conv_residual_weights[1] * conv_output
-        )
+        hidden_states = self.conv_residual_weights[0] * hidden_states + self.conv_residual_weights[1] * conv_output
 
         residual = hidden_states
         hidden_states = self.feed_forward2(self.norm_feed_forward2(hidden_states))
         hidden_states = (
-            self.feed_forward_residual_weights[0] * residual
-            + self.feed_forward_residual_weights[1] * hidden_states
+            self.feed_forward_residual_weights[0] * residual + self.feed_forward_residual_weights[1] * hidden_states
         )
 
         hidden_states = self.norm_out(hidden_states)
@@ -481,6 +477,7 @@ class LasrEncoder(LasrPreTrainedModel):
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
+
 class LasrForCTC(ParakeetForCTC):
     def generate(**super_kwargs):
         r"""
@@ -514,5 +511,5 @@ __all__ = [
     "LasrProcessor",
     "LasrEncoderConfig",
     "LasrCTCConfig",
-    "LasrTokenizer"
+    "LasrTokenizer",
 ]
