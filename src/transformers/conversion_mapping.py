@@ -178,31 +178,53 @@ def _build_checkpoint_conversion_mapping():
     deepseek_ocr_mappings = []
 
     for i in range(12):
-        deepseek_ocr_mappings.extend([
-            WeightRenaming(f".sam_model.blocks.{i}.norm1.", f".sam_model.layers.{i}.layer_norm1."),
-            WeightRenaming(f".sam_model.blocks.{i}.norm2.", f".sam_model.layers.{i}.layer_norm2."),
-            WeightRenaming(f".sam_model.blocks.{i}.attn.", f".sam_model.layers.{i}.attn."),
-            WeightRenaming(f".sam_model.blocks.{i}.mlp.", f".sam_model.layers.{i}.mlp."),
-        ])
+        deepseek_ocr_mappings.extend(
+            [
+                WeightRenaming(
+                    rf"^model\.sam_model\.blocks\.{i}\.norm1\.",
+                    f"model.sam_model.layers.{i}.layer_norm1.",
+                ),
+                WeightRenaming(
+                    rf"^model\.sam_model\.blocks\.{i}\.norm2\.",
+                    f"model.sam_model.layers.{i}.layer_norm2.",
+                ),
+                WeightRenaming(
+                    rf"^model\.sam_model\.blocks\.{i}\.attn\.",
+                    f"model.sam_model.layers.{i}.attn.",
+                ),
+                WeightRenaming(
+                    rf"^model\.sam_model\.blocks\.{i}\.mlp\.",
+                    f"model.sam_model.layers.{i}.mlp.",
+                ),
+            ]
+        )
 
-    deepseek_ocr_mappings.extend([
-        WeightRenaming(".sam_model.patch_embed.proj.", ".sam_model.patch_embed.projection."),
-        WeightRenaming(".sam_model.neck.0.", ".sam_model.neck.conv1."),
-        WeightRenaming(".sam_model.neck.1.", ".sam_model.neck.layer_norm1."),
-        WeightRenaming(".sam_model.neck.2.", ".sam_model.neck.conv2."),
-        WeightRenaming(".sam_model.neck.3.", ".sam_model.neck.layer_norm2."),
-        WeightRenaming(".vision_model.transformer.layers.", ".clip_model.vision_model.encoder.layers."),
-        WeightRenaming(".vision_model.", ".clip_model.vision_model."),
-        WeightRenaming(".projector.", ".multi_modal_projector."),
-        WeightRenaming("model.embed_tokens.", "model.language_model.embed_tokens."),
-        WeightRenaming("model.norm.", "model.language_model.norm."),
-        WeightRenaming("model.layers.", "model.language_model.layers."),
-        WeightConverter(
-            source_keys="qkv_proj",
-            target_keys=["q_proj", "k_proj", "v_proj"],
-            operations=[Chunk(dim=0, chunks=3)],
-        ),
-    ])
+    deepseek_ocr_mappings.extend(
+        [
+            WeightRenaming(
+                r"^model\.sam_model\.patch_embed\.proj\.",
+                "model.sam_model.patch_embed.projection.",
+            ),
+            WeightRenaming(r"^model\.sam_model\.neck\.0\.", "model.sam_model.neck.conv1."),
+            WeightRenaming(r"^model\.sam_model\.neck\.1\.", "model.sam_model.neck.layer_norm1."),
+            WeightRenaming(r"^model\.sam_model\.neck\.2\.", "model.sam_model.neck.conv2."),
+            WeightRenaming(r"^model\.sam_model\.neck\.3\.", "model.sam_model.neck.layer_norm2."),
+            WeightRenaming(
+                r"^model\.vision_model\.transformer\.layers\.",
+                "model.clip_model.vision_model.encoder.layers.",
+            ),
+            WeightRenaming(r"^model\.vision_model\.", "model.clip_model.vision_model."),
+            WeightRenaming(r"^model\.projector\.", "model.multi_modal_projector."),
+            WeightRenaming(r"^model\.embed_tokens\.", "model.language_model.embed_tokens."),
+            WeightRenaming(r"^model\.norm\.", "model.language_model.norm."),
+            WeightRenaming(r"^model\.layers\.", "model.language_model.layers."),
+            WeightConverter(
+                source_patterns="qkv_proj",
+                target_patterns=["q_proj", "k_proj", "v_proj"],
+                operations=[Chunk(dim=0, chunks=3)],
+            ),
+        ]
+    )
 
     mapping["deepseek_ocr"] = deepseek_ocr_mappings
     mapping["flex_olmo"] = mapping["qwen2_moe"].copy()

@@ -21,7 +21,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class DeepseekOcrSamConfig(PreTrainedConfig):
@@ -279,6 +279,8 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
         moe_intermediate_size: Optional[int] = 1407,
         **kwargs,
     ):
+        rope_theta = kwargs.get("rope_theta", 10_000.0)
+        norm_topk_prob = kwargs.get("norm_topk_prob", False)
         self.first_k_dense_replace = first_k_dense_replace
         self.n_group = n_group
         self.n_routed_experts = n_routed_experts
@@ -286,6 +288,7 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.topk_group = topk_group
         self.topk_method = topk_method
+        self.norm_topk_prob = norm_topk_prob
         self.num_experts_per_tok = num_experts_per_tok
         self.moe_intermediate_size = moe_intermediate_size
         self.vocab_size = vocab_size
@@ -307,14 +310,7 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = getattr(self, "rope_parameters", None) or {}
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -323,6 +319,9 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.rope_theta = getattr(self, "rope_theta", rope_theta)
+        self.standardize_rope_params()
+        self.validate_rope()
 
 
 DEEPSEEK_OCR_DEFAULT_IMAGE_TOKEN_ID = 128815

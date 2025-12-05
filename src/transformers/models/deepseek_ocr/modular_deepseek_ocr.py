@@ -319,6 +319,8 @@ class DeepseekOcrTextConfig(DeepseekV2Config):
         moe_intermediate_size: Optional[int] = 1407,
         **kwargs,
     ):
+        rope_theta = kwargs.get("rope_theta", 10_000.0)
+        norm_topk_prob = kwargs.get("norm_topk_prob", False)
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -332,6 +334,11 @@ class DeepseekOcrTextConfig(DeepseekV2Config):
         del self.qk_rope_head_dim
         del self.v_head_dim
         del self.head_dim
+        self.norm_topk_prob = norm_topk_prob
+        self.rope_theta = getattr(self, "rope_theta", rope_theta)
+        self.rope_parameters = getattr(self, "rope_parameters", None) or {}
+        self.standardize_rope_params()
+        self.validate_rope()
 
 
 class DeepseekOcrConfig(PreTrainedConfig):

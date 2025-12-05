@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -955,7 +955,7 @@ class DeepseekOcrCLIPVisionTransformer(nn.Module):
 class DeepseekOcrCLIPVisionModel(DeepseekOcrPreTrainedModel):
     config: DeepseekOcrVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["DeepseekOcrCLIPEncoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -1145,6 +1145,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -1209,6 +1210,7 @@ class DeepseekOcrTextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -1403,11 +1405,6 @@ class DeepseekOcrTextPreTrainedModel(PreTrainedModel):
         "attentions": DeepseekOcrTextAttention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
-
 @auto_docstring
 class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
     config: DeepseekOcrTextConfig
@@ -1446,7 +1443,7 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1470,8 +1467,8 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             )
 
         if position_ids is None:
@@ -2044,4 +2041,4 @@ __all__ = [
 ]
 
 
-DeepseekOCRForCausalLM = DeepseekOcrForConditionalGeneration # hack for vLLM, do not merge as is
+DeepseekOCRForCausalLM = DeepseekOcrForConditionalGeneration  # hack for vLLM, do not merge as is
