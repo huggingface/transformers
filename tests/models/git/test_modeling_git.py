@@ -568,7 +568,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        self.assertEqual(generated_captions, ["two cats sleeping on a couch"] * 2)
+        self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
