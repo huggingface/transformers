@@ -37,7 +37,6 @@ from pytest import mark
 from transformers import (
     AutoConfig,
     AutoModel,
-    AutoModelForConditionalGeneration,
     AutoModelForImageClassification,
     AutoModelForSequenceClassification,
     BartConfig,
@@ -2269,16 +2268,17 @@ class ModelUtilsTest(TestCasePlus):
         """Test that when we must have weights offloaded to the disk, loading will be performed synchronously
         and sequentially, i.e. we do not use more cpu memory than available. Avoids regresion after
         https://github.com/huggingface/transformers/pull/42632"""
+        from transformers import Qwen3VLForConditionalGeneration
 
         # Small enough, non-gated model
         model_name = "Qwen/Qwen3-VL-2B-Instruct"
         # Load the model a first time to download the weights if not present
-        _ = AutoModelForConditionalGeneration.from_pretrained(model_name, dtype=torch.float16)
+        _ = Qwen3VLForConditionalGeneration.from_pretrained(model_name, dtype=torch.float16)
         # This will make sure we load params on only 1GB of cpu memory, and everything else is offloaded to disk (model is
         # about 4GiB on fp16)
         max_memory = {"cpu": "2GIB"}
         with MeasurePeakCPUMemory() as measure:
-            _ = AutoModelForConditionalGeneration.from_pretrained(
+            _ = Qwen3VLForConditionalGeneration.from_pretrained(
                 model_name, device_map="auto", max_memory=max_memory, dtype=torch.float16
             )
         # We use 2.2 here instead of 2 to avoid being too flaky
