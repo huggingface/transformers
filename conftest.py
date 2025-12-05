@@ -90,6 +90,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
     config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
     config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
+    config.addinivalue_line("markers", "training_ci: mark test for training CI validation")
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
 
