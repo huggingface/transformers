@@ -113,7 +113,8 @@ def get_optimal_tiled_canvas(
         # Pick the resolution that required the least upscaling so that it most closely fits the image
         required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
         best_grid = possible_resolutions[np.argmin(required_scale)]
-    return best_grid
+    best_grid_row, best_grid_col = best_grid
+    return best_grid_col, best_grid_row  # revere the order to align with boilerplate code
 
 
 @auto_docstring
