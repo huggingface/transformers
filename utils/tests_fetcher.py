@@ -1100,6 +1100,7 @@ JOB_TO_TEST_FILE = {
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
+    "tests_training_ci": r"tests/models/.*/test_modeling_.*",
 }
 
 
