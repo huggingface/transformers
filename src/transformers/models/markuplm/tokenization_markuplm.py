@@ -187,8 +187,6 @@ class MarkupLMTokenizer(TokenizersBackend):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        processed_merges = merges
-
         if vocab is None:
             vocab = {
                 str(pad_token): 0,
@@ -197,24 +195,11 @@ class MarkupLMTokenizer(TokenizersBackend):
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
-
-        normalized_merges = []
-        if processed_merges is not None:
-            for merge in processed_merges:
-                if isinstance(merge, tuple) and len(merge) == 2:
-                    normalized_merges.append((merge[0], merge[1]))
-                elif isinstance(merge, list) and len(merge) == 2:
-                    normalized_merges.append((merge[0], merge[1]))
-                elif isinstance(merge, str):
-                    parts = merge.split()
-                    if len(parts) == 2 and not merge.startswith("#"):
-                        normalized_merges.append((parts[0], parts[1]))
-        processed_merges = normalized_merges if normalized_merges else []
-
+        merges = merges or []
         tokenizer = Tokenizer(
             BPE(
                 vocab=vocab,
-                merges=processed_merges,
+                merges=merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="",
@@ -223,20 +208,9 @@ class MarkupLMTokenizer(TokenizersBackend):
         )
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-
-        sep_token_str = str(sep_token)
-        cls_token_str = str(cls_token)
-        tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(sep_token_str, vocab.get(sep_token_str, vocab.get("</s>", 2))),
-            cls=(cls_token_str, vocab.get(cls_token_str, vocab.get("<s>", 0))),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
-        )
-
+        self._tokenizer = tokenizer
         super().__init__(
             tags_dict=tags_dict,
-            vocab=vocab,
-            merges=merges,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -254,14 +228,14 @@ class MarkupLMTokenizer(TokenizersBackend):
             only_label_first_subword=only_label_first_subword,
             **kwargs,
         )
-        if trim_offsets:
-            # Not implemented yet, because we need to chain two post processors which is not possible yet
-            # We need to wait for https://github.com/huggingface/tokenizers/pull/1005
-            # With `trim_offsets=False` we don't need to do add `processors.ByteLevel(trim_offsets=False)`
-            # because it's not doing anything
-            raise NotImplementedError(
-                "`trim_offsets=True` is not implemented for MarkupLMTokenizer. Please set it to False."
-            )
+        sep_token_str = str(sep_token)
+        cls_token_str = str(cls_token)
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(sep_token_str, self.convert_tokens_to_ids(sep_token_str)),
+            cls=(cls_token_str, self.convert_tokens_to_ids(cls_token_str)),
+            add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
+        )
 
         self.tags_dict = tags_dict
 
