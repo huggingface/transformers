@@ -47,7 +47,6 @@ from unittest import mock
 from unittest.mock import patch
 
 import httpx
-import psutil
 import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
@@ -1052,6 +1051,8 @@ def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
     if not is_psutil_available():
         return test_case
+
+    import psutil
 
     return unittest.skipUnless(
         psutil.virtual_memory().total / 1024**3 > memory,
