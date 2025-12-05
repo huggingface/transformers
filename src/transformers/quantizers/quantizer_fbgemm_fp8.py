@@ -231,7 +231,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
             pre_quantized=self.pre_quantized,
-            config=config,
             tp_plan=tp_plan,
         )
 
