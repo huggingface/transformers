@@ -411,8 +411,8 @@ class WeightRenaming(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
-        # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
+        # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
+        # attribute during the whole process
         collected_tensors = self.materialize_tensors()
 
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
@@ -457,8 +457,8 @@ class WeightConverter(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
-        # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
+        # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
+        # attribute during the whole process
         collected_tensors = self.materialize_tensors()
 
         for op in self.operations:
