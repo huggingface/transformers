@@ -54,7 +54,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def test_tinyllama_w8a8(self):
         expected_out = [
-            "<s> Paris is the capital of which country?\n\n**A) 10** Paris is the capital of which country?\n\n**B) 11** Paris is the capital of which country?\n\n**C) 1",  # CUDA
+            "<s> Paris is the capital of which country?\n\n**A) 10** Paris is the capital of which country?\n\n**B) 11** Paris is the capital of which country?\n\n**C) 1",
             "<s> Paris is the capital of which country?\n\n** 10.** Which country is the capital of which country?\n\n** 11.** Which country is the capital of which country?\n\n** 12.",  # XPU
         ]
         self._test_quantized_model(self.tinyllama_w8a8, expected_out)
