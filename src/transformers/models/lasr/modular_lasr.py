@@ -90,8 +90,6 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
             Whether to use bias in convolutions of the conformer's convolution module.
         conv_kernel_size (`int`, *optional*, defaults to 32):
             The kernel size of the convolution layers in the Conformer block.
-        subsampling_factor (`int`, *optional*, defaults to 4):
-            The factor by which the input sequence is subsampled.
         subsampling_conv_channels (`int`, *optional*, defaults to 256):
             The number of channels in the subsampling convolution layers.
         num_mel_bins (`int`, *optional*, defaults to 128):
@@ -112,8 +110,6 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
             The dropout ratio for the attention layers.
         max_position_embeddings (`int`, *optional*, defaults to 10000):
             The maximum sequence length that this model might ever be used with.
-        scale_input (`bool`, *optional*, defaults to `False`):
-            Whether to scale the input embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
@@ -153,22 +149,20 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         attention_bias=False,
         convolution_bias=False,
         conv_kernel_size=32,
-        subsampling_factor=4,
         subsampling_conv_channels=256,
-        num_mel_bins=128,
         subsampling_conv_kernel_size=5,
         subsampling_conv_stride=2,
+        num_mel_bins=128,
         dropout=0.1,
         dropout_positions=0.0,
         layerdrop=0.1,
         activation_dropout=0.1,
         attention_dropout=0.1,
         max_position_embeddings=10000,
-        scale_input=False,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        feed_forward_residual_weights=(1.5, 0.5),
-        conv_residual_weights=(2.0, 1.0),
+        feed_forward_residual_weights=[1.5, 0.5],
+        conv_residual_weights=[2.0, 1.0],
         batch_norm_momentum=0.01,
         rope_parameters=None,
         **kwargs,
@@ -188,7 +182,6 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
             attention_bias=attention_bias,
             convolution_bias=convolution_bias,
             conv_kernel_size=conv_kernel_size,
-            subsampling_factor=subsampling_factor,
             subsampling_conv_channels=subsampling_conv_channels,
             num_mel_bins=num_mel_bins,
             subsampling_conv_kernel_size=subsampling_conv_kernel_size,
@@ -199,10 +192,12 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
             activation_dropout=activation_dropout,
             attention_dropout=attention_dropout,
             max_position_embeddings=max_position_embeddings,
-            scale_input=scale_input,
             initializer_range=initializer_range,
             **kwargs,
         )
+
+        del self.subsampling_factor
+        del self.scale_input
 
         
 
@@ -371,10 +366,9 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
         return input_lengths
 
 
-# TODO: @eustlb, update this docstring
 @auto_docstring(
     custom_intro="""
-    The Parakeet Encoder model, based on the [Conformer architecture]() ???.
+    The LasrEncoder model, based on the Conformer architecture](https://arxiv.org/abs/2005.08100).
     """
 )
 class LasrEncoder(LasrPreTrainedModel):

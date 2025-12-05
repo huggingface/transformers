@@ -466,10 +466,9 @@ class LasrPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-# TODO: @eustlb, update this docstring
 @auto_docstring(
     custom_intro="""
-    The Parakeet Encoder model, based on the [Conformer architecture]() ???.
+    The LasrEncoder model, based on the Conformer architecture](https://arxiv.org/abs/2005.08100).
     """
 )
 class LasrEncoder(LasrPreTrainedModel):

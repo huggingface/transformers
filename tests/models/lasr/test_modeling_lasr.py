@@ -39,7 +39,6 @@ if is_torch_available():
         LasrForCTC,
     )
 
-
 class LasrEncoderModelTester:
     def __init__(
         self,
@@ -49,16 +48,13 @@ class LasrEncoderModelTester:
         is_training=True,
         hidden_size=64,
         num_hidden_layers=2,
+        num_mel_bins=80,
         num_attention_heads=4,
         intermediate_size=256,
-        hidden_act="silu",
-        dropout=0,  # so gradient checkpointing doesn't fail
-        conv_kernel_size=9,
-        subsampling_factor=8,
+        conv_kernel_size=8,
         subsampling_conv_channels=32,
-        use_bias=True,
-        num_mel_bins=80,
-        scale_input=True,
+        subsampling_conv_kernel_size=5,
+        subsampling_conv_stride=2,
     ):
         # testing suite parameters
         self.parent = parent
@@ -72,19 +68,28 @@ class LasrEncoderModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.dropout = dropout
         self.conv_kernel_size = conv_kernel_size
-        self.subsampling_factor = subsampling_factor
         self.subsampling_conv_channels = subsampling_conv_channels
-        self.use_bias = use_bias
+        self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
+        self.subsampling_conv_stride = subsampling_conv_stride
+        
         self.num_mel_bins = num_mel_bins
-        self.scale_input = scale_input
 
-        # Calculate output sequence length after subsampling
-        self.output_seq_length = seq_length // subsampling_factor
+        # output sequence length after subsampling
+        self.output_seq_length = self._get_output_seq_length(self.seq_length)
         self.encoder_seq_length = self.output_seq_length
         self.key_length = self.output_seq_length
+
+    def _get_output_seq_length(self, seq_length):
+        kernel_size = self.subsampling_conv_kernel_size
+        stride = self.subsampling_conv_stride
+        num_layers = 2
+        
+        input_length = seq_length
+        for _ in range(num_layers):
+            input_length = (input_length - kernel_size) // stride + 1
+        
+        return input_length
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins])
@@ -99,18 +104,11 @@ class LasrEncoderModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            dropout=self.dropout,
-            dropout_positions=self.dropout,
-            layerdrop=self.dropout,
-            activation_dropout=self.dropout,
-            attention_dropout=self.dropout,
             conv_kernel_size=self.conv_kernel_size,
-            subsampling_factor=self.subsampling_factor,
             subsampling_conv_channels=self.subsampling_conv_channels,
-            use_bias=self.use_bias,
+            subsampling_conv_kernel_size=self.subsampling_conv_kernel_size,
+            subsampling_conv_stride=self.subsampling_conv_stride,
             num_mel_bins=self.num_mel_bins,
-            scale_input=self.scale_input,
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
@@ -201,6 +199,7 @@ class LasrForCTCModelTester:
 
         self.vocab_size = vocab_size
         self.pad_token_id = pad_token_id
+        self.encoder_seq_length = self.encoder_model_tester.encoder_seq_length
 
     def prepare_config_and_inputs(self):
         _, input_features, attention_mask = self.encoder_model_tester.prepare_config_and_inputs()
