@@ -99,7 +99,7 @@ class LasrEncoderConfig(PreTrainedConfig):
         ```
 
     This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO](TODO)).
+    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
     """
 
     model_type = "lasr_encoder"
@@ -197,7 +197,7 @@ class LasrCTCConfig(PreTrainedConfig):
         >>> configuration = model.config
         ```
     This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO](TODO)).
+    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
     """
 
     model_type = "lasr_ctc"
