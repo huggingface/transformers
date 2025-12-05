@@ -16,8 +16,6 @@
 import os
 from typing import Optional, Union
 
-import numpy as np
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -195,9 +193,6 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        """
-        Return the list of inputs accepted by the model.
-        """
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
@@ -205,69 +200,43 @@ class VibeVoiceProcessor(ProcessorMixin):
     def save_audio(
         self,
         audio: AudioInput,
-        output_path: str = "output.wav",
-        sampling_rate: Optional[int] = None,
+        output_path: Optional[str] = None,
     ) -> list[str]:
         """
         Save audio data to WAV file(s).
+        TODO eventually move to AudioProcessor base class.
 
         Args:
-            audio: Audio data to save (tensor, array, or list of them)
+            audio: Audio output from the model to be saved
             output_path: Output file path or directory for multiple files
-            sampling_rate: Sampling rate for the saved audio
 
         Returns:
             List[str]: Paths to the saved audio files.
         """
-        if sampling_rate is None:
-            sampling_rate = self.feature_extractor.sampling_rate
+        sampling_rate = self.feature_extractor.sampling_rate
 
         if not is_soundfile_available():
             raise ImportError("Please install `soundfile` to save audio files.")
 
-        # Convert various audio formats to list of 1D numpy arrays
-        if isinstance(audio, list):
-            # List of tensors/arrays
-            audio_arrays = []
-            for item in audio:
-                if isinstance(item, torch.Tensor):
-                    audio_arrays.append(item.detach().cpu().numpy().squeeze())
-                else:
-                    audio_arrays.append(np.array(item).squeeze())
-        else:
-            # Single tensor or array
-            if isinstance(audio, torch.Tensor):
-                audio_np = audio.detach().to(torch.float32).cpu().numpy()
-            else:
-                audio_np = np.array(audio)
+        audio = make_list_of_audio(audio)
+        for idx, item in enumerate(audio):
+            audio[idx] = item.detach().cpu().numpy().squeeze()
 
-            # Handle different shapes
-            if audio_np.ndim == 1:
-                audio_arrays = [audio_np]
-            elif audio_np.ndim == 2:
-                # Could be (batch, time) or (channels, time)
-                if audio_np.shape[0] <= 2:  # Assume channels if <= 2
-                    audio_arrays = [audio_np.mean(axis=0)]  # Convert to mono
-                else:  # Assume batch dimension
-                    audio_arrays = [audio_np[i] for i in range(audio_np.shape[0])]
-            elif audio_np.ndim == 3:
-                # (batch, channels, time) - extract each item and convert to mono
-                audio_arrays = [audio_np[i].mean(axis=0) for i in range(audio_np.shape[0])]
-            else:
-                raise ValueError(f"Unsupported audio shape: {audio_np.shape}")
-
-        # Save audio(s)
-        if len(audio_arrays) == 1:
-            # Single audio file
-            sf.write(output_path, audio_arrays[0], sampling_rate)
+        if len(audio) == 1:
+            if output_path is None:
+                output_path = "vibevoice_output.wav"
+            sf.write(output_path, audio[0], sampling_rate)
+            return [output_path]
         else:
-            # Multiple audio files - save to directory
+            if output_path is None:
+                output_path = "vibevoice_outputs"
             os.makedirs(output_path, exist_ok=True)
             saved_paths = []
-            for i, audio_array in enumerate(audio_arrays):
+            for i, audio_array in enumerate(audio):
                 file_path = os.path.join(output_path, f"audio_{i}.wav")
                 sf.write(file_path, audio_array, sampling_rate)
                 saved_paths.append(file_path)
+        return saved_paths
 
 
 __all__ = ["VibeVoiceProcessor"]

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2025-12-04.*
+*This model was released on 2025-08-26 and added to Hugging Face Transformers on 2025-12-05.*
 
 # VibeVoice
 
@@ -62,6 +62,7 @@ The original VibeVoice-1.5B checkpoint is available under the [Microsoft](https:
 The `diffusers` library is needed as a diffusion process is used to generate chunks of audio.
 ```
 pip install diffusers
+pip install soundfile   # for saving audio
 ```
 
 ### Loading the model
@@ -79,9 +80,7 @@ model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
 
 ```python
 import os
-import soundfile as sf
 import torch
-
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
@@ -107,13 +106,12 @@ inputs = processor.apply_chat_template(
 ).to(device, dtype=model_dtype)
 
 # Generate!
-output = model.generate(**inputs)
+audio = model.generate(**inputs)
 
 # Save to file
-audio = output[0].squeeze().cpu().numpy()
 fn = f"{os.path.basename(model_id)}_tts.wav"
-sf.write(fn, audio, sampling_rate)
-print(f"Audio saved to {fn}")
+processor.save_audio(audio, fn)
+print(f"Saved output to {fn}")
 ```
 
 ### TTS voice cloning example
@@ -124,9 +122,7 @@ A url (`url`), local path (`path`), or loaded audio array (`audio`) can be provi
 
 ```python
 import os
-import soundfile as sf
 import torch
-
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
@@ -164,13 +160,12 @@ inputs = processor.apply_chat_template(
 ).to(device, dtype=model_dtype)
 
 # Generate!
-output = model.generate(**inputs)
+audio = model.generate(**inputs)
 
 # Save to file
-audio = output[0].squeeze().cpu().numpy()
 fn = f"{os.path.basename(model_id)}_tts_clone.wav"
-sf.write(fn, audio, sampling_rate)
-print(f"Audio saved to {fn}")
+processor.save_audio(audio, fn)
+print(f"Saved output to {fn}")
 ```
 
 ### Generating a podcast from a script
@@ -184,14 +179,13 @@ import os
 import time
 import torch
 from tqdm import tqdm
-
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
 model_id = "bezzam/VibeVoice-1.5Bv2"
 # model_id = "bezzam/VibeVoice-7Bv2"
 sampling_rate = 24000
-max_new_tokens = 256    # Set to None for full generation
+max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
 # create conversation with an audio for the first time a speaker appears to clone that particular voice
@@ -251,7 +245,9 @@ model = VibeVoiceForConditionalGeneration.from_pretrained(
 ).eval()
 
 # prepare inputs
-inputs = processor.apply_chat_template(chat_template, tokenize=True, return_dict=True, sampling_rate=sampling_rate).to(device)
+inputs = processor.apply_chat_template(chat_template, tokenize=True, return_dict=True, sampling_rate=sampling_rate).to(
+    device
+)
 
 # Generate audio with a callback to track progress
 start_time = time.time()
@@ -280,18 +276,17 @@ with tqdm(desc="Generating") as pbar:
         pbar.n = int(p[0])
         pbar.update()
 
-    outputs = model.generate(
+    audio = model.generate(
         **inputs,
         max_new_tokens=max_new_tokens,
         monitor_progress=monitor_progress,
-        return_dict_in_generate=True,
     )
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
 
 # Save audio
 fn = f"{os.path.basename(model_id)}_script.wav"
-processor.save_audio(outputs.audio[0], fn)
+processor.save_audio(audio, fn)
 print(f"Saved output to {fn}")
 ```
 
@@ -300,21 +295,19 @@ print(f"Saved output to {fn}")
 For batch processing, a list of conversations can be passed to `processor.apply_chat_template`: 
 
 ```python
-import time
 import os
+import time
 import torch
 from tqdm import tqdm
-
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
 model_id = "bezzam/VibeVoice-1.5Bv2"
 # model_id = "bezzam/VibeVoice-7Bv2"
 sampling_rate = 24000
-max_new_tokens = None    # Set to None for full generation
+max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
-# create conversation with an audio for the first time a speaker appears to clone that particular voice
 chat_template = [
     [
         {
@@ -452,20 +445,18 @@ with tqdm(desc="Generating") as pbar:
         pbar.n = int(p[0])
         pbar.update()
 
-    outputs = model.generate(
+    audio = model.generate(
         **inputs,
         max_new_tokens=max_new_tokens,
         monitor_progress=monitor_progress,
-        return_dict_in_generate=True,
     )
 generation_time = time.time() - start_time
 print(f"Generation time: {generation_time:.2f} seconds")
 
 # Save audio
-for i, audio in enumerate(outputs.audio):
-    output_fp = f"{os.path.basename(model_id)}_output_{i}.wav"
-    processor.save_audio(audio, output_fp)
-    print(f"Saved output to {output_fp}")
+output_dir = f"{os.path.basename(model_id)}_batch"
+processor.save_audio(audio, output_dir)
+print(f"Saved output to {output_dir}")
 ```
 
 ### Pipeline usage
@@ -473,7 +464,7 @@ for i, audio in enumerate(outputs.audio):
 VibeVoice can also be loaded as a pipeline:
 
 ```python
-import soundfile as sf
+import os
 from transformers import pipeline, set_seed
 
 
@@ -501,9 +492,9 @@ chat_template = [
 output = pipe(chat_template)
 
 # Save to file
-fn = "vibevoice_pipeline.wav"
-sf.write(fn, output["audio"], output["sampling_rate"])
-print(f"Audio saved to {fn}")
+fn = f"{os.path.basename(model_id)}_pipeline.wav"
+pipe.processor.save_audio(output["audio"], fn)
+print(f"Saved output to {fn}")
 ```
 
 ### Training
