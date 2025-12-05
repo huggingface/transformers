@@ -13,26 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 import itertools
 from typing import Optional, Union
 
 import torch
 from torch import nn
 
-from transformers.modeling_utils import PreTrainedModel
-
-from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, eager_attention_forward, apply_rotary_pos_emb
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
-from ..parakeet.modeling_parakeet import ParakeetEncoderBlock, ParakeetForCTC, ParakeetPreTrainedModel, ParakeetEncoderConvolutionModule
+from ..parakeet.modeling_parakeet import (
+    ParakeetEncoderBlock,
+    ParakeetEncoderConvolutionModule,
+    ParakeetForCTC,
+    ParakeetPreTrainedModel,
+)
 from ..parakeet.processing_parakeet import ParakeetProcessor
 from ..t5.tokenization_t5 import T5Tokenizer
-from ...masking_utils import create_bidirectional_mask
 
 
 class LasrTokenizer(T5Tokenizer, TokenizersBackend):
@@ -199,7 +203,6 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         del self.subsampling_factor
         del self.scale_input
 
-        
 
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
@@ -289,6 +292,42 @@ class LasrEncoderAttention(LlamaAttention):
     def __init__(self, config: LasrEncoderConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.is_causal = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class LasrEncoderConvolutionModule(ParakeetEncoderConvolutionModule):
@@ -415,9 +454,12 @@ class LasrEncoder(LasrPreTrainedModel):
 
         if attention_mask is not None:
             attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
-            attention_mask = attention_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
-            attention_mask = attention_mask & attention_mask.transpose(1, 2)
-            attention_mask = attention_mask.unsqueeze(1)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
