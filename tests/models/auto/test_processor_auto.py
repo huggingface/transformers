@@ -20,6 +20,8 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
+import pytest  # added for skip logic
+
 from huggingface_hub import snapshot_download, upload_folder
 
 import transformers
@@ -71,6 +73,12 @@ SAMPLE_VOCAB_LLAMA = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
 SAMPLE_CONFIG = get_tests_dir("fixtures/config.json")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
+
+# ---------------------------
+# HF_TOKEN skip setup
+# ---------------------------
+hf_token = os.getenv("HF_TOKEN", None)
+# ---------------------------
 
 
 class AutoFeatureExtractorTest(unittest.TestCase):
@@ -452,8 +460,9 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 self.assertEqual(v, getattr(new_processor.feature_extractor, k))
             self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
 
+    @pytest.mark.skipif(hf_token is None, reason="HF_TOKEN not set, skipping test")
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+        with TemporaryHubRepo(namespace="valid_org", token=hf_token) as tmp_repo:
             processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
             # Push to hub via save_pretrained
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -461,7 +470,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
                     tmp_dir,
                     repo_id=tmp_repo.repo_id,
                     push_to_hub=True,
-                    token=self._token,
+                    token=hf_token,
                 )
 
             new_processor = Wav2Vec2Processor.from_pretrained(tmp_repo.repo_id)
