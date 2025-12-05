@@ -40,8 +40,6 @@ class QuantoHfQuantizer(HfQuantizer):
     Quantizer for the quanto library
     """
 
-    required_packages = ["quanto", "accelerate"]
-    requires_parameters_quantization = True
     requires_calibration = False
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
@@ -57,12 +55,8 @@ class QuantoHfQuantizer(HfQuantizer):
                 "Loading an optimum-quanto quantized model requires accelerate library (`pip install accelerate`)"
             )
         device_map = kwargs.get("device_map")
-        if device_map is not None:
-            if (
-                isinstance(device_map, dict)
-                and len(device_map) >= 2
-                and ("cpu" in device_map.values() or "disk" in device_map.values())
-            ):
+        if isinstance(device_map, dict):
+            if len(device_map) > 1 and "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
                     "You are attempting to load an model with a device_map that contains a CPU or disk device."
                     "This is not supported with quanto when the model is quantized on the fly. "
@@ -113,7 +107,6 @@ class QuantoHfQuantizer(HfQuantizer):
         model = replace_with_quanto_layers(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
-        model.config.quantization_config = self.quantization_config
 
     @property
     def is_trainable(self) -> bool:
