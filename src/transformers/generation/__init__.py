@@ -88,6 +88,9 @@ else:
     _import_structure["continuous_batching"] = [
         "ContinuousBatchingManager",
         "ContinuousMixin",
+        "FIFOScheduler",
+        "PrefillFirstScheduler",
+        "Scheduler",
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
@@ -128,7 +131,13 @@ if TYPE_CHECKING:
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
-        from .continuous_batching import ContinuousBatchingManager, ContinuousMixin
+        from .continuous_batching import (
+            ContinuousBatchingManager,
+            ContinuousMixin,
+            FIFOScheduler,
+            PrefillFirstScheduler,
+            Scheduler,
+        )
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
             ClassifierFreeGuidanceLogitsProcessor,
