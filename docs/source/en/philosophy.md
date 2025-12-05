@@ -21,7 +21,7 @@ Transformers is a PyTorch-first library. It provides models that are faithful to
 A longer, in-depth article with examples, visualizations and timelines is available [here](https://huggingface.co/spaces/transformers-community/Transformers-tenets) as our canonical reference.
 
 > [!NOTE]
-> Our philosophy evolves through practice. What follows are out current, stable principles.
+> Our philosophy evolves through practice. What follows are our current, stable principles.
 
 ## Who this library is for
 
