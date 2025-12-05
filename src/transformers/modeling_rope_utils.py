@@ -818,7 +818,7 @@ class RotaryEmbeddingConfigMixin:
                 f"`rope_parameters`'s long_factor field must have length {dim // 2}, got {len(long_factor)}"
             )
 
-        factor = rope_parameters["factor"]
+        factor = rope_parameters.get("factor")
         original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
 
         # Handle Phi3 divergence: we prefer the use of `attention_factor` and/or `factor` over
@@ -830,17 +830,16 @@ class RotaryEmbeddingConfigMixin:
                 "with this ratio instead -- we recommend the use of this field over `original_max_position_embeddings`, "
                 "as it is compatible with most model architectures."
             )
-        elif original_max_position_embeddings is None:
-            if factor is None:
-                logger.warning("Missing required keys in `rope_parameters`: 'factor'")
-            elif not isinstance(factor, float) or factor < 1.0:
-                logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
-            attention_factor = rope_parameters.get("attention_factor")
-            if attention_factor is not None:
-                if not isinstance(attention_factor, float) or attention_factor < 0.0:
-                    logger.warning(
-                        f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
-                    )
+        elif factor is None and original_max_position_embeddings is None:
+            logger.warning("Missing required keys in `rope_parameters`: 'factor'")
+        elif not isinstance(factor, float) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+
+        attention_factor = rope_parameters.get("attention_factor")
+        if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0.0):
+            logger.warning(
+                f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+            )
 
     def _validate_llama3_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
         required_keys = {
@@ -897,6 +896,10 @@ class RotaryEmbeddingConfigMixin:
             received_keys -= {"type"}
             required_keys.add("rope_type")
 
+        optional_keys = optional_keys or set()
+        if "partial_rotary_factor" not in optional_keys:
+            optional_keys.add("partial_rotary_factor")
+
         # Some models need to store model-specific keys, and we don't want to throw warning at them
         if ignore_keys is not None:
             received_keys -= ignore_keys
@@ -905,10 +908,7 @@ class RotaryEmbeddingConfigMixin:
         if missing_keys:
             raise KeyError(f"Missing required keys in `rope_parameters` for 'rope_type'='{rope_type}': {missing_keys}")
 
-        if optional_keys is not None:
-            unused_keys = received_keys - required_keys - optional_keys
-        else:
-            unused_keys = received_keys - required_keys
+        unused_keys = received_keys - required_keys - optional_keys
         if unused_keys:
             logger.warning(f"Unrecognized keys in `rope_parameters` for 'rope_type'='{rope_type}': {unused_keys}")
 
