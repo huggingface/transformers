@@ -80,6 +80,7 @@ class HqqHfQuantizer(HfQuantizer):
                 self.using_multi_gpu = len(set(device_map.values())) > 1
 
     # TODO: to remove
+    # Kept here in case we see some interest in adding support for it
     # # Adds missing keys for HQQLinear modules that are loaded but the model with initialized with torch.nn.Linear
     # def update_expected_keys(
     #     self, model: "PreTrainedModel", expected_keys: list[str], loaded_keys: list[str]

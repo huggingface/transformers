@@ -64,11 +64,11 @@ Some quantization methods may require "pre-quantizing" the model through data ca
 
 You can define module replacement logic or any other utility method by creating a new file in [transformers/src/integrations/](https://github.com/huggingface/transformers/tree/abbffc4525566a48a9733639797c812301218b83/src/transformers/integrations) and exposing the relevant methods in that folder's `__init__.py` file. 
 
-6. Write the `get_quantize_ops` method if the quantization method supports quantizing on the fly. In transformers, we materialize each tensor and apply a sequence of different operations. In our case, the quantization ops happens at the end. You need to create a `XXXQuantize` class that has a `convert` method. In the `convert` method, you need to quantize the weights and return a dictionary of quantized params.
+6. Add the `get_quantize_ops` method to the quantizer class if the quantization supports quantizing on the fly. In transformers, we materialize each tensor and apply a sequence of different operations on it. In our case, the quantization operation happens at the end. You need to create a `XXXQuantize`,  a subclass of `ConversionOps`, and add a `convert` method. In the `convert` method, you need to quantize the weights and return a dictionary of quantized params.
 
-7. Write the `get_weight_conversions` method if the quantization method supports loading pre-quantized weights. In transformers, we can collect  tensors and apply operations on those collected tensors. This is particularly useful when we have multiple tensors in the checkpoint that requires to be regrouped to re-create the quantized tensors.
+7. Add the `get_weight_conversions` method to the quantizer class if the quantization supports loading pre-quantized weights. In transformers, we can collect multiple tensors and apply operations on them. This is particularly useful when we have tensors in the checkpoint that require to be regrouped to re-create the quantized tensors.
 
-8. Write the `_process_model_after_weight_loading` method. This method enables implementing additional features that require manipulating the model after loading the weights.
+8. Write the `_process_model_after_weight_loading` method if needed. This method enables implementing additional features that require manipulating the model after loading the weights.
 
 9. Document everything! Make sure your quantization method is documented by adding a new file under `docs/source/en/quantization`.
 

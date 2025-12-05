@@ -80,6 +80,7 @@ class HiggsHfQuantizer(HfQuantizer):
         return dtype
 
     # TODO: to remove
+    # Kept here in case we see some interest in adding support for it
     # def create_quantized_param(
     #     self,
     #     model: "PreTrainedModel",
