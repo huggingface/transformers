@@ -222,6 +222,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2Model"),
         ("kosmos-2.5", "Kosmos2_5Model"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextModel"),
+        ("lasr_ctc", "LasrForCTC"),
+        ("lasr_encoder", "LasrEncoder"),
         ("layoutlm", "LayoutLMModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
         ("layoutlmv3", "LayoutLMv3Model"),
@@ -1583,6 +1585,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         # Model for Connectionist temporal classification (CTC) mapping
         ("data2vec-audio", "Data2VecAudioForCTC"),
         ("hubert", "HubertForCTC"),
+        ("lasr_ctc", "LasrForCTC"),
         ("parakeet_ctc", "ParakeetForCTC"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
