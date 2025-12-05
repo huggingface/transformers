@@ -107,6 +107,7 @@ class LlamaTokenizer(TokenizersBackend):
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
+        self.legacy = legacy
         self._vocab = vocab
         if vocab is None:
             self._vocab = {

@@ -124,7 +124,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
             local_kwargs["vocab"] = vocab
 
-            if "merges" in tokenizer_json.get("model", {}) and getattr(cls, "model", None) == "BPE":
+            model_type = getattr(cls, "model", None)
+            if "merges" in tokenizer_json.get("model", {}) and (model_type and model_type.__name__ == "BPE"):
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
