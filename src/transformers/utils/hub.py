@@ -37,6 +37,7 @@ from huggingface_hub import (
     create_repo,
     hf_hub_download,
     hf_hub_url,
+    is_offline_mode,
     list_repo_tree,
     snapshot_download,
     try_to_load_from_cache,
@@ -81,13 +82,6 @@ class DownloadKwargs(TypedDict, total=False):
     revision: str | None
     subfolder: str
     commit_hash: str | None
-
-
-def is_offline_mode():
-    # Import inside the function so test patches on `huggingface_hub.constants` are picked up.
-    from huggingface_hub import constants as hf_hub_constants
-
-    return hf_hub_constants.HF_HUB_OFFLINE
 
 
 # Determine default cache directory.

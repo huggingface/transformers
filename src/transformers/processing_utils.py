@@ -28,7 +28,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -54,7 +54,6 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
-    is_offline_mode,
     is_torch_available,
     list_repo_templates,
     logging,

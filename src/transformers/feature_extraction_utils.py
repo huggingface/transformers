@@ -22,7 +22,7 @@ from collections import UserDict
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
 import numpy as np
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .utils import (
@@ -32,7 +32,6 @@ from .utils import (
     TensorType,
     copy_func,
     is_numpy_array,
-    is_offline_mode,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
