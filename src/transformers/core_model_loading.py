@@ -890,7 +890,7 @@ def convert_and_load_state_dict_in_model(
                             device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                         )
                     shard_index = len(mapping.collected_tensors.get(original_key, []))
-                    future_or_tensor = spawn_tp_materialize(
+                    future = spawn_tp_materialize(
                         thread_pool,
                         tensor,
                         mapping.distributed_operation,
@@ -914,7 +914,7 @@ def convert_and_load_state_dict_in_model(
 
             # In the case of offloading, can still be None as we skip loading the param entirely
             if future is not None:
-                mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
+                mapping.add_tensor(renamed_key, original_key, source_pattern, future)
                 param_name_to_load[renamed_key] = mapping
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]

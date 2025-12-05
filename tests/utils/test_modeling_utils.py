@@ -2267,7 +2267,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_offloading_does_not_use_more_cpu_memory(self):
         """Test that when we must have weights offloaded to the disk, loading will be performed synchronously
         and sequentially, i.e. we do not use more cpu memory than available. Avoids regresion after
-        https://github.com/huggingface/transformers/pull/42632 and"""
+        https://github.com/huggingface/transformers/pull/42632 and https://github.com/huggingface/transformers/pull/42665"""
         from transformers import Qwen3VLForConditionalGeneration
 
         # Small enough, non-gated model
