@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 import itertools
+from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
@@ -27,7 +27,7 @@ from ...processing_utils import Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, eager_attention_forward, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoderBlock,
