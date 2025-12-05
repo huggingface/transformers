@@ -90,6 +90,8 @@ class NllbTokenizer(TokenizersBackend):
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -101,8 +103,6 @@ class NllbTokenizer(TokenizersBackend):
         tgt_lang=None,
         additional_special_tokens=None,
         legacy_behaviour=False,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
         **kwargs,
     ):
         if additional_special_tokens is None:
@@ -116,15 +116,13 @@ class NllbTokenizer(TokenizersBackend):
         self.legacy_behaviour = legacy_behaviour
 
         if vocab is None:
-            self._vocab = {
+            vocab = {
                 str(bos_token): 0,
                 str(pad_token): 1,
                 str(eos_token): 2,
                 str(unk_token): 3,
             }
-        else:
-            self._vocab = vocab
-
+        self._vocab = vocab
         self._merges = merges or []
 
         self._tokenizer = Tokenizer(
