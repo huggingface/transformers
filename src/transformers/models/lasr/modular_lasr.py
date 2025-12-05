@@ -369,6 +369,7 @@ class LasrEncoderConvolutionModule(ParakeetEncoderConvolutionModule):
     def __init__(self, config: LasrEncoderConfig, module_config=None):
         super().__init__(config, module_config)
         self.padding = "same"
+        self.norm = nn.BatchNorm1d(config.hidden_size, momentum=config.batch_norm_momentum)
 
 
 class LasrEncoderBlock(ParakeetEncoderBlock):

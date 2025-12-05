@@ -299,7 +299,7 @@ class LasrEncoderConvolutionModule(nn.Module):
             groups=channels,
             bias=config.convolution_bias,
         )
-        self.norm = nn.BatchNorm1d(channels)
+        self.norm = nn.BatchNorm1d(config.hidden_size, momentum=config.batch_norm_momentum)
         self.pointwise_conv2 = nn.Conv1d(
             channels, channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
         )
