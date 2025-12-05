@@ -101,7 +101,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         # Preserve kwargs for possible downstream use
         local_kwargs = dict(kwargs)
-        fast_tokenizer_file = local_kwargs.pop("tokenizer_file")
+        fast_tokenizer_file = local_kwargs.pop("tokenizer_file", None)
 
         if fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file) and cls is TokenizersBackend:
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
