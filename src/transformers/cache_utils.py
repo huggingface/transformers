@@ -342,7 +342,6 @@ class StaticLayer(CacheLayerMixin):
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
         batch_size = key_states.shape[0]
-        # 3. Dynamic Slicing: Update the view to match current batch
         self.keys = self.keys_[:batch_size]
         self.values = self.values_[:batch_size]
         try:
