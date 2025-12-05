@@ -74,9 +74,9 @@ TODO
 
 TODO
 
-## LasrTokenizerFast
+## LasrTokenizer
 
-[[autodoc]] LasrTokenizerFast
+[[autodoc]] LasrTokenizer
 
 ## LasrFeatureExtractor
 
