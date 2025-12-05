@@ -25,7 +25,7 @@ import numpy as np
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import TensorType
 from ..auto import AutoTokenizer
 
@@ -66,10 +66,6 @@ class AriaProcessor(ProcessorMixin):
         size_conversion (`Dict`, *optional*):
             A dictionary indicating size conversions for images.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AriaImageProcessor"
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,

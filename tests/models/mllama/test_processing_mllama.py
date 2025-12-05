@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import json
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
@@ -34,11 +32,10 @@ if is_vision_available():
 @require_vision
 class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MllamaProcessor
+    model_id = "hf-internal-testing/mllama-11b"
 
     @classmethod
-    def setUpClass(cls):
-        cls.checkpoint = "hf-internal-testing/mllama-11b"
-        processor = MllamaProcessor.from_pretrained(cls.checkpoint)
+    def _setup_test_attributes(cls, processor):
         cls.image1 = Image.new("RGB", (224, 220))
         cls.image2 = Image.new("RGB", (512, 128))
         cls.image_token = processor.image_token
@@ -46,17 +43,18 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.pad_token_id = processor.tokenizer.pad_token_id
         cls.bos_token = processor.bos_token
         cls.bos_token_id = processor.tokenizer.bos_token_id
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor.save_pretrained(cls.tmpdirname)
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.image1.close()
-        cls.image2.close()
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def prepare_processor_dict(self):
+    @staticmethod
+    def prepare_processor_dict():
         return {"chat_template": "{% for message in messages %}{% if loop.index0 == 0 %}{{ bos_token }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}{% if message['content'] is string %}{{ message['content'] }}{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' %}{{ '<|image|>' }}{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}{% endfor %}{% endif %}{{ '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}{% endif %}"}  # fmt: skip
+
+    @unittest.skip("MllamaProcessor does not return tensors")
+    def test_image_processor_defaults(self):
+        pass
+
+    @unittest.skip("MllamaProcessor modifies input text")
+    def test_tokenizer_defaults(self):
+        pass
 
     # Override as Mllama needs images to be an explicitly nested batch
     def prepare_image_inputs(self, batch_size: int | None = None):
@@ -371,7 +369,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_unstructured_kwargs_batched(self):
         # Overridden because Mllama expects images in nested format. For 2 images it can't infer
         # the correct nesting, so we better throw an error
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()

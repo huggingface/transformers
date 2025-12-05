@@ -435,22 +435,7 @@ class BlenderbotPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
     @property
     def dummy_inputs(self):
@@ -474,7 +459,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -485,12 +470,9 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = BlenderbotScaledWordEmbedding(
+            config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -511,6 +493,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -623,7 +606,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: BlenderbotConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -631,12 +614,9 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = BlenderbotScaledWordEmbedding(
-                config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
-            )
+        self.embed_tokens = BlenderbotScaledWordEmbedding(
+            config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
+        )
 
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -664,6 +644,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -852,7 +833,10 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
 
 @auto_docstring
 class BlenderbotModel(BlenderbotPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
@@ -860,8 +844,8 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = BlenderbotScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
-        self.encoder = BlenderbotEncoder(config, self.shared)
-        self.decoder = BlenderbotDecoder(config, self.shared)
+        self.encoder = BlenderbotEncoder(config)
+        self.decoder = BlenderbotDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -887,9 +871,6 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -906,6 +887,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1001,7 +983,9 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
 class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
@@ -1024,12 +1008,6 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMi
             return BlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
@@ -1064,6 +1042,7 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1184,7 +1163,9 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True
@@ -1203,12 +1184,6 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -1225,6 +1200,7 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

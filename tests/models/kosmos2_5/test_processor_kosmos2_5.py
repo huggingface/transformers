@@ -14,8 +14,6 @@
 # limitations under the License.
 
 import os
-import shutil
-import tempfile
 import unittest
 from tempfile import TemporaryDirectory
 
@@ -40,7 +38,6 @@ if is_vision_available():
         AutoTokenizer,
         Kosmos2_5ImageProcessor,
         Kosmos2_5Processor,
-        PreTrainedTokenizerFast,
     )
 
 
@@ -48,22 +45,11 @@ if is_vision_available():
 class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2_5Processor
     images_input_name = "flattened_patches"
+    model_id = "microsoft/kosmos-2.5"
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
-        image_processor = Kosmos2_5ImageProcessor()
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/kosmos-2.5")
-        processor = Kosmos2_5Processor(image_processor, tokenizer)
-        processor.save_pretrained(self.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @unittest.skip("Kosmos2_5Processor removes 'rows' and 'cols' from the output")
+    def test_image_processor_defaults(self):
+        pass
 
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
@@ -74,51 +60,6 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             assert image_processor.to_dict() == reloaded_image_processor.to_dict()
             assert image_processor.to_json_string() == reloaded_image_processor.to_json_string()
 
-    def test_save_load_pretrained_additional_features(self):
-        processor = Kosmos2_5Processor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
-
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
-
-        processor = Kosmos2_5Processor.from_pretrained(
-            self.tmpdirname,
-            bos_token="(BOS)",
-            eos_token="(EOS)",
-            do_normalize=False,
-            padding_value=1.0,
-        )
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, PreTrainedTokenizerFast)
-
-        self.assertEqual(
-            processor.image_processor.to_json_string(),
-            image_processor_add_kwargs.to_json_string(),
-        )
-        self.assertIsInstance(processor.image_processor, Kosmos2_5ImageProcessor)
-
-    @unittest.skip(reason="kosmos-2.5 must have both image and text")
-    def test_image_processor(self):
-        pass
-
-    @unittest.skip(reason="kosmos-2.5 must have both image and text")
-    def test_tokenizer(self):
-        pass
-
-    def test_tokenizer_decode(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Kosmos2_5Processor(tokenizer=tokenizer, image_processor=image_processor)
-
-        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
-
-        decoded_processor = processor.batch_decode(predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
-
-        self.assertListEqual(decoded_tok, decoded_processor)
-
     def test_can_load_various_tokenizers(self):
         for checkpoint in ["microsoft/kosmos-2.5"]:
             processor = AutoProcessor.from_pretrained(checkpoint)
@@ -127,8 +68,8 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
 
         processor = Kosmos2_5Processor(tokenizer=tokenizer, image_processor=image_processor)
 
@@ -156,7 +97,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         # Rewrite as KOSMOS-2.5 processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", max_patches=1024, patch_size={"height": 8, "width": 8})
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
@@ -174,7 +115,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         # Rewrite as KOSMOS-2.5 processor return "flattened_patches" and not "pixel_values"
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", max_patches=4096)
         tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
@@ -192,7 +133,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_unstructured_kwargs(self):
         # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
@@ -218,7 +159,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_unstructured_kwargs_batched(self):
         # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
@@ -245,7 +186,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_structured_kwargs_nested(self):
         # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
@@ -274,7 +215,7 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
         # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         image_processor = self.get_component("image_processor")

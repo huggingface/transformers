@@ -18,7 +18,7 @@ from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -30,10 +30,6 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteSpeechProcessor(ProcessorMixin):
-    attributes = ["audio_processor", "tokenizer"]
-    audio_processor_class = "GraniteSpeechFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         audio_processor,

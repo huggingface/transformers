@@ -26,10 +26,11 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -305,7 +306,6 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
 
 @require_torch
-@unittest.skip("The checkpoint is not yet released")
 class Qwen3VLMoeIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -333,6 +333,18 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                         "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+        self.message3 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                    },
+                    {"type": "text", "text": "Describe the video in short."},
                 ],
             }
         ]
@@ -456,6 +468,27 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    def test_small_model_integration_test_expand_with_video(self):
+        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
+        )
+        inputs = self.processor.apply_chat_template(
+            self.message3, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
+
+        EXPECTED_DECODED_TEXT = [
+            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
+            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book."
+        ]  # fmt: skip
+
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
@@ -514,7 +547,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
@@ -536,18 +569,29 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
-            "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
-        ]  # fmt: skip
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                               "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
+                              ],
+                ("xpu", None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                                'user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the scene:\n-'
+                              ],
+            }
+        )
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        # fmt: on
+
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            DECODED_TEXT,
             EXPECTED_DECODED_TEXT,
         )
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(

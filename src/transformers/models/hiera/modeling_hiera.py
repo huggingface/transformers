@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -773,28 +774,29 @@ class HieraPreTrainedModel(PreTrainedModel):
     config: HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         std = self.config.initializer_range
 
         if isinstance(module, HieraEmbeddings):
-            nn.init.trunc_normal_(module.position_embeddings, std=std)
+            init.trunc_normal_(module.position_embeddings, std=std)
 
         elif isinstance(module, HieraDecoder):
-            nn.init.trunc_normal_(module.mask_token, std=std)
-            nn.init.trunc_normal_(module.decoder_position_embeddings, std=std)
+            init.trunc_normal_(module.mask_token, std=std)
+            init.trunc_normal_(module.decoder_position_embeddings, std=std)
 
         elif isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, std=std)
+            init.trunc_normal_(module.weight, std=std)
             if module.bias is not None:
-                nn.init.constant_(module.bias, std)
+                init.constant_(module.bias, std)
 
         elif isinstance(module, nn.LayerNorm):
-            nn.init.constant_(module.bias, std)
-            nn.init.constant_(module.weight, self.config.layer_norm_init)
+            init.constant_(module.bias, std)
+            init.constant_(module.weight, self.config.layer_norm_init)
 
 
 class HieraPooler(nn.Module):
@@ -846,6 +848,7 @@ class HieraModel(HieraPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
@@ -1130,6 +1133,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, HieraForPreTrainingOutput]:
         r"""
         noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
@@ -1247,6 +1251,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, HieraForImageClassificationOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1323,6 +1328,7 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         """
         Returns:

@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
@@ -248,11 +249,11 @@ class GotOcr2VisionLayer(SamVisionLayer):
 
 
 class GotOcr2PreTrainedModel(SamPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
 
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
-    input_modalities = "image"
+    input_modalities = ("image",)
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -289,15 +290,16 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class GotOcr2Model(LlavaModel):

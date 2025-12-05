@@ -122,7 +122,7 @@ class DeepseekVLAligner(nn.Module):
 class DeepseekVLPreTrainedModel(PreTrainedModel):
     config: DeepseekVLConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -130,15 +130,6 @@ class DeepseekVLPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_param_buffer_assignment = False
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # Required only for Linear layer in DeepseekVLAligner
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
 
 @auto_docstring
@@ -243,8 +234,8 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
 
 
 class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
-    output_modalities = "text"
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    output_modalities = ("text",)
     _can_compile_fullgraph = True
 
     def __init__(self, config: DeepseekVLConfig):

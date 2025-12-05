@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
@@ -102,12 +103,10 @@ class DeepseekV3TopkRouter(nn.Module):
         return router_logits
 
 
-class DeepseekV3NaiveMoe(MixtralExperts, nn.ModuleList):
+class DeepseekV3NaiveMoe(MixtralExperts):
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__(config)
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV3MoE(nn.Module):
@@ -306,10 +305,14 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV3TopkRouter):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, DeepseekV3NaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV3Model(LlamaModel):

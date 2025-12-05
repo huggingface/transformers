@@ -18,7 +18,7 @@ import httpx
 import numpy as np
 
 from ..generation import GenerationConfig
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
