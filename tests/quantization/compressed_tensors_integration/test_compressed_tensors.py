@@ -2,7 +2,13 @@ import gc
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
-from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
+from transformers.testing_utils import (
+    backend_empty_cache,
+    require_compressed_tensors,
+    require_torch,
+    torch_device,
+    require_deterministic_for_xpu,
+)
 from transformers.utils import is_torch_available
 
 
@@ -67,11 +73,12 @@ class CompressedTensorsTest(unittest.TestCase):
 
     def test_llama_8b_fp8(self):
         expected_out = [
-            "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera? ",  # CUDA
-            "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous river that runs through Paris? Seine\nWhat is the name of the famous art museum in Paris? Louvre\nWhat is the name of the famous opera",  # XPU
+            "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera? ",
+            "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera",  # XPU
         ]
         self._test_quantized_model(self.llama3_8b_fp8, expected_out)
 
+    @require_deterministic_for_xpu
     def _test_quantized_model(self, model_name: str, expected_output: list):
         """Carry out generation"""
         quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
