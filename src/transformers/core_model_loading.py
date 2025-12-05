@@ -20,7 +20,7 @@ import os
 import re
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import MutableMapping, MutableSet
+from collections.abc import Callable, MutableMapping, MutableSet
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -327,10 +327,6 @@ class WeightTransform:
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def reset(self) -> None:
-        """Clean-up the collected tensors to make sure we don't keep references to past tensors in memory."""
-        self.collected_tensors = defaultdict(list)
-
     def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
@@ -375,6 +371,32 @@ class WeightTransform:
 
         return reverse_transform
 
+    def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
+        """
+        Materialize all the tensors that were saved in `self.collected_tensors`. This function removes them from the
+        internal attribute to avoid keeping them in memory during the different `self.convert` operations, and return
+        a new dictionary (otherwise we use more memory than needed during loading).
+
+        We basically have 3 cases here:
+        - async loading (default): the tensors are Future instances that we need to wait for
+        - sync loading: the tensors are Callable, we need to call the Callable to actually load them from disk
+        - saving: the tensors are already torch.Tensor instances (the existing model weights)
+        """
+        collected_tensors = {}
+        for key in set(self.collected_tensors.keys()):
+            # Remove from internal attribute
+            tensors = self.collected_tensors.pop(key)
+            # Async loading
+            if isinstance(tensors[0], Future):
+                tensors = [future.result() for future in tensors]
+            # Sync loading
+            elif callable(tensors[0]):
+                tensors = [func() for func in tensors]
+            # Add them to the new dictionary
+            collected_tensors[key] = tensors
+
+        return collected_tensors
+
 
 @dataclass(slots=True)
 class WeightRenaming(WeightTransform):
@@ -389,19 +411,17 @@ class WeightRenaming(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensor if using threading
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = (
-                futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
-            )
+        # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
+        # attribute during the whole process
+        collected_tensors = self.materialize_tensors()
 
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
         target_key = self.target_patterns[0]
-        collected_tensors = {target_key: self.collected_tensors[self.source_patterns[0]]}
+        collected_tensors = {target_key: collected_tensors[self.source_patterns[0]]}
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
+            with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -437,15 +457,12 @@ class WeightConverter(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect all tensors if using threading
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = (
-                futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
-            )
+        # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
+        # attribute during the whole process
+        collected_tensors = self.materialize_tensors()
 
-        collected_tensors = self.collected_tensors
         for op in self.operations:
-            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
+            with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -472,7 +489,7 @@ class WeightConverter(WeightTransform):
             pass
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
+            with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -501,19 +518,26 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
 
 def spawn_materialize(
     thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
-) -> Future | torch.Tensor:
-    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or immediately otherwise."""
-    if thread_pool is not None:
-        return thread_pool.submit(_materialize_copy, tensor, device, dtype)
-    else:
+) -> Future | Callable:
+    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
+    load the tensor synchronously when called."""
+
+    def _job():
         return _materialize_copy(tensor, device, dtype)
+
+    if thread_pool is not None:
+        return thread_pool.submit(_job)
+    else:
+        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
+        # memory during Conversion
+        return _job
 
 
 def spawn_tp_materialize(
     thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, dtype=None
-) -> Future | torch.Tensor:
+) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
-    immediately otherwise."""
+    return a Callable that will load the tensor synchronously when called."""
 
     def _job():
         return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
@@ -521,7 +545,9 @@ def spawn_tp_materialize(
     if thread_pool is not None:
         return thread_pool.submit(_job)
     else:
-        return _job()
+        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
+        # memory during Conversion
+        return _job
 
 
 def dot_natural_key(s: str):
@@ -557,10 +583,10 @@ def log_to_misc(
 
         op_name = _format_op_name(op)
         if isinstance(extras, tuple) and len(extras) == 2:
-            values, target_keys = extras
+            length, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
             misc[first_target_key] = (
-                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
+                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {length}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
@@ -796,11 +822,12 @@ def convert_and_load_state_dict_in_model(
     mismatch_keys = set()
     unexpected_keys = set()
 
-    # We use threading by default, if not explicitly deactivated via env variable
-    if not is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD"):
-        thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-    else:
+    # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
+    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
+    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
         thread_pool = None
+    else:
+        thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
@@ -928,8 +955,8 @@ def convert_and_load_state_dict_in_model(
                                 hf_quantizer,
                             )
 
-                    # Cleanup the tensors that were gathered internally in the mapping
-                    mapping.reset()
+                    # Cleanup all the tensors that were gathered before next iteration
+                    del realized_value
 
                 except SkipLayer:
                     continue
