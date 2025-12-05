@@ -45,11 +45,11 @@ pip install -q transformers accelerate flash_attn torchcodec
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoVideoProcessor, LlavaForConditionalGeneration
+from transformers import AutoProcessor, LlavaForConditionalGeneration
 import torch
 model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
-processor = AutoVideoProcessor.from_pretrained(model_id, device="cuda")
+processor = AutoProcessor.from_pretrained(model_id, device="cuda")
 
 model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```
