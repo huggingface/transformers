@@ -47,8 +47,6 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class LasrProcessor(ProcessorMixin):
-    tokenizer_class = "ParakeetTokenizerFast"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
