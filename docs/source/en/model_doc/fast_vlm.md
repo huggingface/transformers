@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-05-06 and added to Hugging Face Transformers on 2025-10-07.*
+*This model was released on 2025-05-06 and added to Hugging Face Transformers on 2025-12-04.*
 
 # FastVLM
 
