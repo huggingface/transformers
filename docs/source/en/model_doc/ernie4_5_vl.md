@@ -35,12 +35,133 @@ to specific modalities. This becomes especially apparent in the Mixture of Exper
 - Dedicated Text Experts
 - Dedicated Vision Experts
 - Shared Experts
+
 This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. TODO image of the moe?
 
 Other models from the family can be found at [Ernie 4.5](./ernie4_5) and at [Ernie 4.5 MoE](./ernie4_5_moe.md).
 
 
-TODO: tips, usage, etc.
+## Usage
+
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+pipe = pipeline(
+    task="image-text-to-text",
+    model="baidu/ERNIE-4.5-VL-28B-A3B-PT",
+    device=0,
+    dtype="auto"
+)
+self.message = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What kind of dog is this?"},
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+        ],
+    }
+]
+pipe(text=messages, max_new_tokens=20, return_full_text=False)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
+model = AutoModelForImageTextToText.from_pretrained(
+    "baidu/ERNIE-4.5-VL-28B-A3B-PT",
+    dtype="auto",
+    device_map="auto",  # Use tp_plan="auto" instead to enable Multi-GPU inference!
+)
+processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT")
+self.message = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What kind of dog is this?"},
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids_trimmed = [
+    out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+]
+output_text = processor.batch_decode(
+    generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+```
+
+</hfoption>
+</hfoptions>
+
+Using Ernie 4.5 VL with video input is similar to using it with image input.
+The model can process video data and generate text based on the content of the video.
+
+```python
+import torch
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
+model = AutoModelForImageTextToText.from_pretrained(
+    "baidu/ERNIE-4.5-VL-28B-A3B-PT",
+    dtype="auto",
+    device_map="auto",  # Use tp_plan="auto" instead to enable Multi-GPU inference!
+)
+processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT")
+self.message = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Please describe what you can see during this video."},
+            {
+                "type": "video",
+                "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+            },
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids_trimmed = [
+    out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+]
+output_text = processor.batch_decode(
+    generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+```
 
 
 ## Ernie4_5_VLConfig
