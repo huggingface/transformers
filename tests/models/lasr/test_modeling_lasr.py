@@ -382,7 +382,7 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         # -- apply
-        inputs = self.processor(samples, return_attention_mask=True)
+        inputs = self.processor(samples)
         inputs.to(torch_device, dtype=self.dtype)
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKENS)
