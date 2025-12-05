@@ -89,7 +89,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
         cls_token="[CLS]",
         mask_token="[MASK]",
         add_prefix_space=True,
-        unk_id=2,
+        unk_id=3,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case
@@ -99,13 +99,14 @@ class DebertaV2Tokenizer(TokenizersBackend):
         if vocab is None:
             vocab = [
                 (str(pad_token), 0.0),
-                (str(bos_token), 0.0),
                 (str(unk_token), 0.0),
+                (str(bos_token), 0.0),
                 (str(eos_token), 0.0),
                 (str(sep_token), 0.0),
                 (str(cls_token), 0.0),
                 (str(mask_token), 0.0),
             ]
+            unk_id = 1
         self._vocab = vocab
 
         self._tokenizer = Tokenizer(
