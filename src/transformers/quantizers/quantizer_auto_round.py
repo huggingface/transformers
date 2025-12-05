@@ -36,7 +36,6 @@ class AutoRoundQuantizer(HfQuantizer):
 
     # AutoRound requires data calibration - we support only inference
     requires_calibration = True
-    required_packages = ["auto_round"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)

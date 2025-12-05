@@ -32,19 +32,13 @@ logger = logging.get_logger(__name__)
 
 class EetqHfQuantizer(HfQuantizer):
     """
-    8-bit quantization from EETQ quantization method:
-        before loading: converts transformer layers into W8A16Linear during loading: load 16bit weight and pass to the
-        layer object after: quantizes individual weights in Linear8bitLt into 8bit at first .cuda() call
+    8-bit quantization from EETQ quantization method
     """
 
-    requires_parameters_quantization = True
     requires_calibration = False
-
-    required_packages = ["eetq", "accelerate"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_kernels_available():
@@ -62,8 +56,8 @@ class EetqHfQuantizer(HfQuantizer):
                 "You have loaded an EETQ model on CPU and have a CUDA device available, make sure to set "
                 "your model on a GPU device in order to run your model."
             )
-        elif device_map is not None:
-            if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        elif isinstance(device_map, dict):
+            if len(device_map) > 1 and "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
                     "You are attempting to load an EETQ model with a device_map that contains a CPU or disk device."
                     " This is not supported. Please remove the CPU or disk device from the device_map."
@@ -111,9 +105,7 @@ class EetqHfQuantizer(HfQuantizer):
             model, modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized
         )
 
-        model.config.quantization_config = self.quantization_config
-
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return True
 
     @property
