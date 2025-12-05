@@ -38,6 +38,29 @@ from transformers.testing_utils import (
 from transformers.utils import is_flash_attn_2_available, is_kernels_available
 
 
+def flush_memory(flush_compile: bool = True) -> None:
+    gc.collect()
+    # If needed, flush everything related to torch.compile
+    if flush_compile:
+        # Dynamo resets
+        torch._dynamo.reset()
+        torch._dynamo.reset_code_caches()
+        if hasattr(torch._inductor, "codecache"):
+            # Clear FX graph cache
+            if hasattr(torch._inductor.codecache, "FxGraphCache"):
+                torch._inductor.codecache.FxGraphCache.clear()
+            # Clear PyCodeCache
+            if hasattr(torch._inductor.codecache, "PyCodeCache"):
+                torch._inductor.codecache.PyCodeCache.cache_clear()
+            # Clear TritonFuture cache (for async compilation)
+            if hasattr(torch._inductor.codecache, "TritonFuture"):
+                if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
+                    torch._inductor.codecache.TritonFuture._compile_cache.clear()
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
+    gc.collect()
+
 class ContinuousBatchingNonGenerationTest(unittest.TestCase):
     @parameterized.expand(
         [
@@ -226,27 +249,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
                 self.fail(msg)
 
         del model
-        gc.collect()
-        # If needed, flush everything related to torch.compile
-        if use_compile:
-            # Dynamo resets
-            torch._dynamo.reset()
-            torch._dynamo.reset_code_caches()
-            if hasattr(torch._inductor, "codecache"):
-                # Clear FX graph cache
-                if hasattr(torch._inductor.codecache, "FxGraphCache"):
-                    torch._inductor.codecache.FxGraphCache.clear()
-                # Clear PyCodeCache
-                if hasattr(torch._inductor.codecache, "PyCodeCache"):
-                    torch._inductor.codecache.PyCodeCache.cache_clear()
-                # Clear TritonFuture cache (for async compilation)
-                if hasattr(torch._inductor.codecache, "TritonFuture"):
-                    if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
-                        torch._inductor.codecache.TritonFuture._compile_cache.clear()
-        # Clear CUDA cache
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-        gc.collect()
+        flush_memory(flush_compile=use_compile)
 
     @require_torch_accelerator
     @parameterized.expand(
@@ -276,7 +279,10 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         ))
     )
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
-        self._test_continuous_batching_parity(model_id, True, "flash_attention_2", use_cuda_graph, use_compile)
+        try:
+            self._test_continuous_batching_parity(model_id, True, "flash_attention_2", use_cuda_graph, use_compile)
+        finally:
+            flush_memory(flush_compile=use_compile)
 
     @require_torch_accelerator
     def test_continuous_batching_long_generate(self) -> None:
@@ -290,7 +296,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id)
         manager = model.init_continuous_batching()
         manager.logit_processor = LogitsProcessorList()
         manager.start()
@@ -346,7 +352,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         max_new_tokens = 32
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id)
 
         generation_config = GenerationConfig(do_sample=False, block_size=32)
         with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
