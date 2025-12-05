@@ -37,7 +37,6 @@ rendered properly in your Markdown viewer.
 - [`~integrations.WandbCallback`] [wandb](https://www.wandb.com/) がインストールされている場合。
 - [`~integrations.CometCallback`] [comet_ml](https://www.comet.com/site/) がインストールされている場合。
 - [mlflow](https://www.mlflow.org/) がインストールされている場合は [`~integrations.MLflowCallback`]。
-- [`~integrations.NeptuneCallback`] [neptune](https://neptune.ai/) がインストールされている場合。
 - [`~integrations.AzureMLCallback`] [azureml-sdk](https://pypi.org/project/azureml-sdk/) の場合
   インストールされています。
 - [`~integrations.CodeCarbonCallback`] [codecarbon](https://pypi.org/project/codecarbon/) の場合
@@ -81,8 +80,6 @@ rendered properly in your Markdown viewer.
 [[autodoc]] integrations.AzureMLCallback
 
 [[autodoc]] integrations.CodeCarbonCallback
-
-[[autodoc]] integrations.NeptuneCallback
 
 [[autodoc]] integrations.ClearMLCallback
 
