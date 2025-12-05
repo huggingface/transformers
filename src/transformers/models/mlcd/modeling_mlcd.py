@@ -18,7 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
@@ -30,12 +30,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import check_model_inputs
 from .configuration_mlcd import MLCDVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class MLCDMLP(nn.Module):
@@ -425,55 +422,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
         "hidden_states": MLCDEncoderLayer,
         "attentions": MLCDAttention,
     }
-
-    def enable_input_require_grads(self):
-        """
-        MLCD mixes multiple embedding modules (class token + patch embeddings) so we need to walk through tuples/lists
-        returned by hooks and flag every tensor as requiring gradients.
-        """
-
-        def make_inputs_require_grads(module, inputs, output):
-            def _set_requires_grad(tensor_like):
-                if isinstance(tensor_like, torch.Tensor):
-                    tensor_like.requires_grad_(True)
-                elif isinstance(tensor_like, Mapping):
-                    for value in tensor_like.values():
-                        _set_requires_grad(value)
-                elif isinstance(tensor_like, (tuple, list)):
-                    for value in tensor_like:
-                        _set_requires_grad(value)
-
-            _set_requires_grad(output)
-
-        hooks = []
-        seen_modules = set()
-        found_embeddings = False
-
-        for module in self.modules():
-            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
-                continue
-
-            input_embeddings = module.get_input_embeddings()
-            if input_embeddings is None or not hasattr(input_embeddings, "register_forward_hook"):
-                continue
-
-            embedding_id = id(input_embeddings)
-            if embedding_id in seen_modules:
-                continue
-
-            seen_modules.add(embedding_id)
-            hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
-            found_embeddings = True
-
-        self._require_grads_hooks = hooks
-        if hooks:
-            self._require_grads_hook = hooks[0]
-        if not found_embeddings:
-            logger.warning_once(
-                f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
-                "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
-                "support those features."
-            )
 
     @torch.no_grad()
     def _init_weights(self, module):
