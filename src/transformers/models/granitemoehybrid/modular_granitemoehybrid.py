@@ -276,6 +276,10 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             1. Cached forward
             2. Attending to all inputs
         """
+        # eager exit if None
+        if attention_mask is None:
+            return None 
+            
         cached = cache_position[0] > 0
         all_attend = torch.all(attention_mask == 1)
         pred = cached | all_attend
