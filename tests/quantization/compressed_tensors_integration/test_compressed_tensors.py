@@ -5,9 +5,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsC
 from transformers.testing_utils import (
     backend_empty_cache,
     require_compressed_tensors,
+    require_deterministic_for_xpu,
     require_torch,
     torch_device,
-    require_deterministic_for_xpu,
 )
 from transformers.utils import is_torch_available
 
