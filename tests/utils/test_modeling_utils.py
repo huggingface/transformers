@@ -21,6 +21,7 @@ import sys
 import tempfile
 import textwrap
 import threading
+import time
 import unittest
 import unittest.mock as mock
 import uuid
@@ -65,6 +66,7 @@ from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
     LoggingLevel,
+    MeasurePeakCPUMemory,
     TemporaryHubRepo,
     TestCasePlus,
     hub_retry,
@@ -2262,6 +2264,26 @@ class ModelUtilsTest(TestCasePlus):
 
         # Reverse monkey patch
         threading.Thread.__init__ = original_init
+
+    def test_offloading_does_not_use_more_cpu_memory(self):
+        """Test that when we must have weights offloaded to the disk, loading will be performed synchronously
+        and sequentially, i.e. we do not use more cpu memory than available. Avoids regresion after
+        https://github.com/huggingface/transformers/pull/42632"""
+
+        # model_name = "meta-llama/Llama-3.2-1B-Instruct"
+        model_name = "meta-llama/Llama-3.2-3B-Instruct"
+        # Load the model a first time to download the weights if not present
+        _ = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float16)
+        # This will make sure we load params on only 1GB of cpu memory, and everything else is offloaded to disk (model is
+        # about 2GiB on fp16)
+        max_memory = {"cpu": "3GIB"}
+        with MeasurePeakCPUMemory() as measure:
+            time.sleep(1)
+            _ = AutoModelForCausalLM.from_pretrained(
+                model_name, device_map="auto", max_memory=max_memory, dtype=torch.float16
+            )
+        print(f"PEAK: {measure.peak}")
+        self.assertTrue(measure.peak < 1, "The process used more than 1GiB to load the model")
 
 
 @slow
