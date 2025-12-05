@@ -388,13 +388,15 @@ class StaticSlidingWindowLayer(StaticLayer):
             Maximum number of tokens that can be stored, used for tensor preallocation.
         sliding_window (`int`):
             The size of the sliding window.
+        max_batch_size(`int`, *optional*):
+            Maximum batch size that can be stored
     """
 
     is_sliding = True
 
-    def __init__(self, max_cache_len: int, sliding_window: int):
+    def __init__(self, max_cache_len: int, sliding_window: int, max_batch_size: int | None = None):
         effective_max_cache_len = min(sliding_window, max_cache_len)
-        super().__init__(max_cache_len=effective_max_cache_len)
+        super().__init__(max_cache_len=effective_max_cache_len, max_batch_size=max_batch_size)
         self.cumulative_length = 0
 
     def update(
@@ -424,6 +426,10 @@ class StaticSlidingWindowLayer(StaticLayer):
         cache_position = (
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
+
+        batch_size = key_states.shape[0]
+        self.keys = self.keys_[:batch_size]
+        self.values = self.values_[:batch_size]
 
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
