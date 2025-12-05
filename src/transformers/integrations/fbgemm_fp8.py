@@ -17,20 +17,266 @@ from typing import Optional
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
-from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_fbgemm_gpu_available,
+    is_torch_available,
+    is_torch_xpu_available,
+    logging,
+)
 
 
 if is_torch_available():
     import torch
+    import triton
+    import triton.language as tl
     from torch import nn
+    from triton import Config  # @manual
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
-if is_fbgemm_gpu_available():
+_is_torch_xpu_available = is_torch_xpu_available()
+
+if is_fbgemm_gpu_available() and not _is_torch_xpu_available:
     import fbgemm_gpu.experimental.gen_ai  # noqa: F401
 
 logger = logging.get_logger(__name__)
+
+
+def get_fp8_constants() -> tuple[torch.dtype, tl.dtype, float, float]:
+    """
+    Helper function to get constant values for the current platform.
+
+    Returns:
+        pt_dtype (torch.dtype): The correct torch fp8 datatype.
+        tl_dtype (tl.dtype): The correct triton fp8 datatype.
+        max_fp8 (float): The maximum reprsentable value for the fp8 datatype.
+        eps (float): Minimum clip value to prevent divide by zero.
+    """
+    pt_fp8_dtype = torch.float8_e4m3fn
+    tl_fp8_dtype = tl.float8e4nv
+    return pt_fp8_dtype, tl_fp8_dtype, torch.finfo(pt_fp8_dtype).max, 1e-12
+
+
+@triton.autotune(
+    configs=[
+        Config({"BLOCK_SIZE": 512}),
+        Config({"BLOCK_SIZE": 1024}),
+        Config({"BLOCK_SIZE": 2048}),
+        Config({"BLOCK_SIZE": 4096}),
+        Config({"BLOCK_SIZE": 8192}),
+    ],
+    key=["K"],
+)
+@triton.jit
+def _kernel_quantize_fp8_row(
+    A,
+    A_scale,
+    A_fp8,
+    scale_ub,
+    zero_start_index_M,
+    B,
+    M,
+    N,
+    K,
+    K_fp8,  # used when padding
+    stride_ab,
+    stride_am,
+    stride_an,
+    stride_ak,
+    stride_ob,
+    stride_om,
+    stride_on,
+    stride_ok,
+    stride_zb,
+    stride_zm,
+    TL_FP8_DTYPE: tl.constexpr,
+    MAX_FP8: tl.constexpr,
+    EPS: tl.constexpr,
+    CLAMP_MAX: tl.constexpr,
+    JAGGED: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+    USE_INT64: tl.constexpr,
+) -> None:
+    """Quantize and scale each row.
+
+    Scale per row i is computed as MAX_FP8 / max(abs(A[i, :]))
+
+    Kernel naively iterates through  matrix with [1, BLOCK_SIZE] tiles
+    in a max pass then scale/quantize pass.
+
+    Todo:
+        * Better tiling schemes.
+
+    Args:
+        A (Tensor): higher precision input tensor of 4 dimension.
+        A_scale (Tensor): [B * M * N] reciprocal scale tensor per row.
+        A_fp8 (Tensor): fp8 scaled tensor. A_fp8 = A / a_scale
+        scale_ub (Tensor): [1] Maximum value allowed for scale.
+        B (int): Size of dimenion 0
+        M (int): Size of dimenion 1
+        N (int): Size of dimenion 2
+        K (int): Size of dimenion 3 (input row size)
+        K_fp8 (int): Size of dimenion 3 for A_fp8 (output row size, can be >= K)
+        stride_ab (int): Stride of b dimension of A.
+        stride_am (int): Stride of m dimension of A.
+        stride_an (int): Stride of n dimension of A.
+        stride_ak (int): Stride of k dimension of A.
+        stride_ob (int): Stride of b dimension of output.
+        stride_om (int): Stride of m dimension of output.
+        stride_on (int): Stride of n dimension of output.
+        stride_ok (int): Stride of k dimension of output.
+        stride_zb (int): Stride of b dimension of jagged index.
+        stride_zm (int): Stride of m dimension of jagged index.
+        TL_FP8_DTYPE (tl.dtype): Target fp8 datatype.
+        MAX_FP8 (float): Maxmimum expressible value for FP8.
+        EPS (float): Epsilon value for numerical stability.
+        CLAMP_MAX (bool): Whethar to apply scale_ub.
+        JAGGED (bool): Whether to use jagged indexing.
+        BLOCK_SIZE (int): Block size for reduction.
+        USE_INT64 (bool): Whether to use int64 indexing for large inputs.
+    """
+    pid = tl.program_id(0)
+    # Use int64 indexing for large inputs. This is slower, but
+    # needed to avoid index overflows.
+    if USE_INT64:
+        pid = pid.to(tl.int64)
+    n_offset = tl.arange(0, BLOCK_SIZE)
+    a_offset_base = pid // (M * N) * stride_ab + (pid % (M * N)) // N * stride_am + (pid % (M * N)) % N * stride_an
+    a_fp8_offset_base = pid // (M * N) * stride_ob + (pid % (M * N)) // N * stride_om + (pid % (M * N)) % N * stride_on
+
+    K_in = K
+    if JAGGED:
+        z_offset_base = pid // (M * N) * stride_zb + (pid % (M * N)) // N * stride_zm
+        group_rows = tl.load(zero_start_index_M + z_offset_base)
+        current_row = pid % N
+        # If this row is empty, dont process any of it.
+        if current_row >= group_rows:
+            K_in = 0
+
+    # Calculate max.
+    cur_max = 0.0
+    for _k in range(0, tl.cdiv(K_in, BLOCK_SIZE)):
+        a = tl.load(
+            A + a_offset_base + n_offset * stride_ak,
+            mask=n_offset < K_in,
+            other=0.0,
+        )
+        tile_max = tl.max(tl.abs(a))
+        cur_max = tl.maximum(tile_max, cur_max)
+        n_offset += BLOCK_SIZE
+    # Clamp max value appropriately.
+    if CLAMP_MAX:
+        ub = tl.load(scale_ub)
+        cur_max = tl.clamp(cur_max, EPS, ub)
+    else:
+        cur_max = tl.maximum(cur_max, EPS)
+    # Scale and quantize.
+    a_scale = MAX_FP8 / cur_max
+    tl.store(A_scale + pid, 1.0 / a_scale)
+    n_offset = tl.arange(0, BLOCK_SIZE)
+
+    # Write quantized values for the first K elements (from A), and pad the rest with zeros up to K_fp8
+    for _k in range(0, tl.cdiv(K_fp8, BLOCK_SIZE)):
+        # Load from A if in range, else 0 (we're going all the way to K_fp8)
+        a = tl.load(
+            A + a_offset_base + n_offset * stride_ak,
+            mask=n_offset < K_in,
+            other=0.0,
+        )
+        # For elements >= K, a will be 0
+        a_fp8 = a * a_scale
+        # Clamp A to fp8 range to make sure there's no overflow.
+        # This is required for AMD. Nvidia's default saturation
+        # handles it, but it's nice to have anyway.
+        a_fp8 = tl.clamp(a_fp8, -MAX_FP8, MAX_FP8).to(TL_FP8_DTYPE)
+
+        # Store the full new row in its place (for elements >= K, a_fp8 is already 0)
+        tl.store(
+            A_fp8 + a_fp8_offset_base + n_offset * stride_ok,
+            a_fp8,
+            mask=n_offset < K_fp8,
+        )
+        n_offset += BLOCK_SIZE
+
+
+def triton_quantize_fp8_row(
+    a: torch.Tensor,
+    scale_ub: Optional[torch.Tensor] = None,
+    zero_start_index_M: Optional[torch.Tensor] = None,
+    align_rows_to: Optional[int] = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Call the triton quantize fp8 row kernel to quantize a tensor to fp8 with row-wise scalings.
+
+    Args:
+        a (Tensor): higher precision input tensor of 4 dimension.
+        scale_ub (Tensor): Maximum allowed value for scale.
+        zero_start_index_M (Tensor): Indicates number of nonzero elements in each row.
+        align_rows_to: Pad rows to align to this value. Useful for downstream kernels accepting specific sizes (e.g., multiple of 16)
+    Returns:
+        torch.Tensor: fp8 scaled tensor.
+        torch.Tensor: reciprocal scale tensor per row.
+    """
+    if scale_ub is not None and scale_ub.device != a.device:
+        raise Exception("'scale_ub' must be on the same device as 'a'")
+    if zero_start_index_M is not None and zero_start_index_M.device != a.device:
+        raise Exception("'zero_start_index_M' must be on the same device as 'a'")
+
+    assert a.dim() <= 4, "Triton only supports up to 4 dimension input tensor."
+    a_shape = a.shape
+    while a.dim() < 4:
+        a = a.unsqueeze(0)
+    if zero_start_index_M is not None:
+        # There should be one value of zero_start_index_M per NxK matrix.
+        zero_start_index_M = zero_start_index_M.view(a.shape[0], a.shape[1])
+    # Get constant values.
+    pt_dtype, tl_dtype, max_fp8, eps = get_fp8_constants()
+    num_rows = a.numel() // a.shape[-1]
+    a_scale = torch.empty((num_rows), dtype=torch.float32, device=a.device)
+    # If align_rows_to is provided, pad the last dimension to be a multiple of it
+    if align_rows_to is not None:
+        last_dim = a.shape[-1]
+        padded_last_dim = ((last_dim + align_rows_to - 1) // align_rows_to) * align_rows_to
+        a_fp8 = torch.empty((*a.shape[:-1], padded_last_dim), device=a.device, dtype=pt_dtype)
+        a_shape = torch.Size((*a_shape[:-1], padded_last_dim))
+    else:
+        a_fp8 = torch.empty(a.shape, device=a.device, dtype=pt_dtype)
+
+    # If input tensor is sufficiently large, we need to use int64 indexing.
+    use_int64 = a.numel() > (2**31 - 1)
+    grid = (num_rows,)
+    _kernel_quantize_fp8_row[grid](
+        a,
+        a_scale,
+        a_fp8,
+        scale_ub,
+        zero_start_index_M,
+        a.shape[0],
+        a.shape[1],
+        a.shape[2],
+        a.shape[3],
+        a_fp8.shape[3],
+        a.stride(0),
+        a.stride(1),
+        a.stride(2),
+        a.stride(3),
+        a_fp8.stride(0),
+        a_fp8.stride(1),
+        a_fp8.stride(2),
+        a_fp8.stride(3),
+        (zero_start_index_M.stride(0) if zero_start_index_M is not None else None),
+        (zero_start_index_M.stride(1) if zero_start_index_M is not None else None),
+        TL_FP8_DTYPE=tl_dtype,
+        MAX_FP8=max_fp8,
+        EPS=eps,
+        CLAMP_MAX=scale_ub is not None,
+        JAGGED=zero_start_index_M is not None,
+        USE_INT64=use_int64,
+    )
+
+    return a_fp8.view(a_shape), a_scale.view(a_shape[:-1])
 
 
 class FbgemmFp8Quantize(ConversionOps):
@@ -61,7 +307,10 @@ class FbgemmFp8Quantize(ConversionOps):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per row instead of per column
-                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+                if _is_torch_xpu_available:
+                    new_value_flat, weight_scale_flat = triton_quantize_fp8_row(flattened_param)
+                else:
+                    new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
@@ -77,14 +326,20 @@ class FbgemmFp8Quantize(ConversionOps):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per column
-                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+                if _is_torch_xpu_available:
+                    new_value_flat, weight_scale_flat = triton_quantize_fp8_row(flattened_param)
+                else:
+                    new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
                 new_value = new_value.transpose(1, 2)
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
         else:
-            new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(value)
+            if _is_torch_xpu_available:
+                new_value, weight_scale = triton_quantize_fp8_row(value)
+            else:
+                new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(value)
             weight_scale = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1))
 
         return {target_key: torch.nn.Parameter(new_value), f"{target_key}_scale": weight_scale}
@@ -110,18 +365,34 @@ class FbgemmFp8Linear(torch.nn.Linear):
         output_shape = (*x.shape[:-1], -1)
         # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
         # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
-        x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-            x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
-        )
+        if _is_torch_xpu_available:
+            x_quantized, x_scale = triton_quantize_fp8_row(
+                x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
+            )
+        else:
+            x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
+                x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
+            )
+
         # moving x_quantized, x_scale here creates glibberish output ... However, if we move the output, it works
         # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
 
         # The computation still happens on the device where self.weight is even if x_quantized is not on the same device as self.weight
         weight_scale_float32 = self.weight_scale.to(torch.float32)
-        output = torch.ops.fbgemm.f8f8bf16_rowwise(
-            x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
-        )
-        output = output + self.bias if self.bias is not None else output
+        if _is_torch_xpu_available:
+            output = torch._scaled_mm(
+                x_quantized,
+                self.weight.t(),
+                scale_a=x_scale.unsqueeze(-1),
+                scale_b=weight_scale_float32.t(),
+                out_dtype=x.dtype,
+                bias=self.bias,
+            )
+        else:
+            output = torch.ops.fbgemm.f8f8bf16_rowwise(
+                x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
+            )
+            output = output + self.bias if self.bias is not None else output
         # Hacky for now, we have the output to the device of x
         output = output.to(x.device)
         output = output.reshape(output_shape)
@@ -173,42 +444,74 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             expert_hidden = hidden_states[i]
             expert_hidden_reshaped = expert_hidden.reshape(-1, self.hidden_size)
             # Quantize for this expert
-            expert_quantized, expert_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-                expert_hidden_reshaped, num_tokens, self.input_scale_ub
-            )
+            if _is_torch_xpu_available:
+                expert_quantized, expert_scale = triton_quantize_fp8_row(
+                    expert_hidden_reshaped, scale_ub=self.input_scale_ub
+                )
+            else:
+                expert_quantized, expert_scale = torch.ops.fbgemm.quantize_fp8_per_row(
+                    expert_hidden_reshaped, num_tokens, self.input_scale_ub
+                )
             sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
             gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
 
-            gate = torch.ops.fbgemm.f8f8bf16_rowwise(
-                expert_quantized,
-                self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous(),
-                expert_scale,
-                gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(),
-                use_fast_accum=True,
-            )
-
-            up = torch.ops.fbgemm.f8f8bf16_rowwise(
-                expert_quantized,
-                self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous(),
-                expert_scale,
-                gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(),
-                use_fast_accum=True,
-            )
+            if _is_torch_xpu_available:
+                gate = torch._scaled_mm(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous().t(),
+                    scale_a=expert_scale.unsqueeze(-1),
+                    scale_b=gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous().t(),
+                    out_dtype=hidden_states.dtype,
+                )
+                up = torch._scaled_mm(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous().t(),
+                    scale_a=expert_scale.unsqueeze(-1),
+                    scale_b=gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous().t(),
+                    out_dtype=hidden_states.dtype,
+                )
+            else:
+                gate = torch.ops.fbgemm.f8f8bf16_rowwise(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous(),
+                    expert_scale,
+                    gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(),
+                    use_fast_accum=True,
+                )
+                up = torch.ops.fbgemm.f8f8bf16_rowwise(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous(),
+                    expert_scale,
+                    gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(),
+                    use_fast_accum=True,
+                )
 
             activated = up * self.act_fn(gate)
 
-            activated_quantized, activated_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-                activated, num_tokens, self.input_scale_ub
-            )
+            if _is_torch_xpu_available:
+                activated_quantized, activated_scale = triton_quantize_fp8_row(activated, scale_ub=self.input_scale_ub)
+            else:
+                activated_quantized, activated_scale = torch.ops.fbgemm.quantize_fp8_per_row(
+                    activated, num_tokens, self.input_scale_ub
+                )
 
             down_proj_scale_float32 = self.down_proj_scale.to(torch.float32)
-            expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
-                activated_quantized,
-                self.down_proj[i].transpose(0, 1).contiguous(),
-                activated_scale,
-                down_proj_scale_float32[i].view(-1, 1).contiguous(),
-                use_fast_accum=True,
-            )
+            if _is_torch_xpu_available:
+                expert_output = torch._scaled_mm(
+                    activated_quantized,
+                    self.down_proj[i].transpose(0, 1).contiguous(),
+                    scale_a=activated_scale.unsqueeze(-1),
+                    scale_b=down_proj_scale_float32[i].view(-1, 1).contiguous().t(),
+                    out_dtype=hidden_states.dtype,
+                )
+            else:
+                expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
+                    activated_quantized,
+                    self.down_proj[i].transpose(0, 1).contiguous(),
+                    activated_scale,
+                    down_proj_scale_float32[i].view(-1, 1).contiguous(),
+                    use_fast_accum=True,
+                )
 
             next_states[i] = expert_output
         next_states = next_states.to(hidden_states.device)
