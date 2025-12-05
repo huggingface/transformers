@@ -544,6 +544,56 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessorFast)
             self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessorFast)
 
+    def test_processor_inheritance_correctly_detects_subprocessors(self):
+        """Test that sub-processor detection works correctly with inheritance.
+
+        Verifies that get_attributes() detects sub-processors from both parent and child classes
+        when the child class uses *args/**kwargs.
+        """
+
+        class BaseMultimodalProcessor(ProcessorMixin):
+            def __init__(self, tokenizer, image_processor):
+                super().__init__(tokenizer, image_processor)
+
+        class ExtendedMultimodalProcessor(BaseMultimodalProcessor):
+            def __init__(self, feature_extractor, *args, **kwargs):
+                ProcessorMixin.__init__(self, feature_extractor, *args, **kwargs)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertForMaskedLM")
+        image_processor = SiglipImageProcessor()
+        feature_extractor = Wav2Vec2FeatureExtractor()
+
+        attributes = ExtendedMultimodalProcessor.get_attributes()
+        self.assertIn("tokenizer", attributes)
+        self.assertIn("image_processor", attributes)
+        self.assertIn("feature_extractor", attributes)
+        self.assertEqual(len(attributes), 3)
+
+        processor = ExtendedMultimodalProcessor(
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+
+            with open(os.path.join(tmp_dir, "processor_config.json")) as f:
+                processor_config = json.load(f)
+            self.assertIn("image_processor", processor_config)
+            self.assertIn("feature_extractor", processor_config)
+            self.assertNotIn("tokenizer", processor_config)
+
+            loaded_processor = ExtendedMultimodalProcessor.from_pretrained(tmp_dir)
+
+            self.assertTrue(hasattr(loaded_processor, "tokenizer"))
+            self.assertTrue(hasattr(loaded_processor, "image_processor"))
+            self.assertTrue(hasattr(loaded_processor, "feature_extractor"))
+
+            self.assertIsInstance(loaded_processor.tokenizer, type(tokenizer))
+            self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessor)
+            self.assertIsInstance(loaded_processor.feature_extractor, Wav2Vec2FeatureExtractor)
+
 
 @is_staging_test
 class ProcessorPushToHubTester(unittest.TestCase):
