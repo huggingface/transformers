@@ -212,7 +212,9 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope"}, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
+        )
 
 
 class Ernie4_5_VLConfig(PreTrainedConfig):
