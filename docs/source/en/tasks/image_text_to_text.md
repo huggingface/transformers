@@ -296,19 +296,43 @@ VLMs are often large and need to be optimized to fit on smaller hardware. Transf
 First, install dependencies.
 
 ```bash
-pip install -U quanto bitsandbytes
+pip install -U optimum-quanto bitsandbytes
 ```
 
-To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization.
+To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization. On top of this, you can compile a model using `torch.compile()` for additional speed gains.
 
 ```python
 from transformers import AutoModelForImageTextToText, QuantoConfig
 
-model_id = "HuggingFaceM4/idefics2-8b"
+model_id = "Qwen/Qwen3-VL-4B-Instruct"
 quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForImageTextToText.from_pretrained(
     model_id, device_map="auto", quantization_config=quantization_config
 )
+quantized_model = torch.compile(quantized_model)
+```
+
+Infer like usual.
+
+```python
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png"},
+            {"type": "text", "text": "What do we see in this image?"},
+        ]
+    },
+]
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+input_len = len(inputs.input_ids[0])
+
+with torch.no_grad():
+    generated_ids = model.generate(**inputs, max_new_tokens=100)
+generated_texts = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)
+
+print(generated_texts[0])
+## ['In this image, we see two tabby cats resting on a large, tangled pile of fishing nets. The nets are a mix of brown, orange, and red colors, with some blue and green ropes visible in the background. The cats appear relaxed and comfortable, nestled into the fibers of the nets. One cat is in the foreground, looking slightly to the side, while the other is positioned further back, looking directly at the camera. The scene suggests a coastal or fishing-related setting, possibly near']
 ```
 
 And that's it, we can use the model the same way with no changes.
