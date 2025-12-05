@@ -327,10 +327,6 @@ class WeightTransform:
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def reset(self) -> None:
-        """Clean-up the collected tensors to make sure we don't keep references to past tensors in memory."""
-        self.collected_tensors = defaultdict(list)
-
     def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
@@ -376,11 +372,11 @@ class WeightTransform:
         return reverse_transform
 
 
-def gather_tensors(tensors: list[torch.Tensor | Future | Callable]) -> list[torch.Tensor]:
+def collect_tensors(tensors: list[torch.Tensor | Future | Callable]) -> list[torch.Tensor]:
     """
-    Gather the tensors that were added to a WeightConverter. We basically have 3 cases here:
-    - default async loading: the tensors are Future instances that we need to gather
-    - sync loading: the tensors are Callable, we need to call the Callable to load them from disk
+    Collect the tensors that were added to a WeightConverter. We basically have 3 cases here:
+    - default async loading: the tensors are Future instances that we need to wait for
+    - sync loading: the tensors are Callable, we need to call the Callable to actually load them from disk
     - saving: the tensors are already torch.Tensor instances (the existing model weights)
     """
     if isinstance(tensors[0], Future):
@@ -404,17 +400,17 @@ class WeightRenaming(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensors here - they are either Future instances, or Callable that will load when called, or Tensors
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = gather_tensors(futures)
+        # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
+        # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
+        collected_tensors = {k: collect_tensors(self.collected_tensors.pop(k)) for k in self.collected_tensors.keys()}
 
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
         target_key = self.target_patterns[0]
-        collected_tensors = {target_key: self.collected_tensors[self.source_patterns[0]]}
+        collected_tensors = {target_key: collected_tensors[self.source_patterns[0]]}
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
+            with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -450,13 +446,12 @@ class WeightConverter(WeightTransform):
         missing_keys: Optional[MutableSet[str]] = None,
         misc: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensors here - they are either Future instances, or Callable that will load when called, or Tensors
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = gather_tensors(futures)
+        # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
+        # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
+        collected_tensors = {k: collect_tensors(self.collected_tensors.pop(k)) for k in self.collected_tensors.keys()}
 
-        collected_tensors = self.collected_tensors
         for op in self.operations:
-            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
+            with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -483,7 +478,7 @@ class WeightConverter(WeightTransform):
             pass
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
+            with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), self.quantization_operation):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -577,10 +572,10 @@ def log_to_misc(
 
         op_name = _format_op_name(op)
         if isinstance(extras, tuple) and len(extras) == 2:
-            values, target_keys = extras
+            length, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
             misc[first_target_key] = (
-                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
+                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {length}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
@@ -949,8 +944,8 @@ def convert_and_load_state_dict_in_model(
                                 hf_quantizer,
                             )
 
-                    # Cleanup the tensors that were gathered internally in the mapping
-                    mapping.reset()
+                    # Cleanup all the tensors that were gathered before next iteration
+                    del realized_value
 
                 except SkipLayer:
                     continue
