@@ -493,8 +493,26 @@ class LasrEncoder(LasrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        TODO: @eustlb, add docstring
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, LasrEncoder
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = TODO
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> encoder = ParakeetEncoder.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> encoder_outputs = encoder(**inputs)
+
+        >>> print(encoder_outputs.last_hidden_state.shape)
+        ```
         """
+
         hidden_states = self.subsampler(input_features)
         cos, sin = self.rotary_emb(
             hidden_states, torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)

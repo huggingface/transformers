@@ -77,18 +77,18 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
     Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
     Args:
-        feature_size (`int`, *optional*, defaults to 80):
-            The feature dimension of the extracted features.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        hop_length (`int`, *optional*, defaults to 160):
-            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
-        n_fft (`int`, *optional*, defaults to 512):
-            Size of the Fourier transform.
-        win_length (`int`, *optional*, defaults to 400):
-            The window length for the STFT computation.
-        padding_value (`float`, *optional*, defaults to 0.0):
-            Padding value used to pad the audio. Should correspond to silences.
+            feature_size (`int`, *optional*, defaults to 128):
+                The feature dimension of the extracted features.
+            sampling_rate (`int`, *optional*, defaults to 16000):
+                The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+            hop_length (`int`, *optional*, defaults to 160):
+                Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
+            n_fft (`int`, *optional*, defaults to 512):
+                Size of the Fourier transform.
+            win_length (`int`, *optional*, defaults to 400):
+                The window length for the STFT computation.
+            padding_value (`float`, *optional*, defaults to 0.0):
+                Padding value used to pad the audio. Should correspond to silences.
     """
 
     model_input_names = ["input_features", "attention_mask"]
