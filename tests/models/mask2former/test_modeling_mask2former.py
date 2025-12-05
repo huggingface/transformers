@@ -205,7 +205,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     is_encoder_decoder = False
 
     test_missing_keys = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Mask2FormerModelTester(self)

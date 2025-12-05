@@ -196,7 +196,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     additional_model_inputs = ["bool_masked_pos"]
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VideoMAEModelTester(self)
