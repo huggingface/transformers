@@ -4089,10 +4089,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
             disk_offload_index = accelerate_disk_offload(
+                model,
                 disk_offload_folder,
                 checkpoint_files,
                 device_map,
-                expected_keys,
                 sharded_metadata,
                 dtype,
                 weight_mapping,
