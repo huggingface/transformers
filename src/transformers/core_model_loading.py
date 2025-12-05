@@ -402,7 +402,9 @@ class WeightRenaming(WeightTransform):
     ):
         # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
         # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
-        collected_tensors = {k: collect_tensors(self.collected_tensors.pop(k)) for k in self.collected_tensors.keys()}
+        collected_tensors = {
+            k: collect_tensors(self.collected_tensors.pop(k)) for k in set(self.collected_tensors.keys())
+        }
 
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
@@ -448,7 +450,9 @@ class WeightConverter(WeightTransform):
     ):
         # Collect the tensors here - they are either Future instances, Callable that will load when called, or Tensors
         # We use a new dictionary to avoid keeping them in memory in the internal attribute during the whole process
-        collected_tensors = {k: collect_tensors(self.collected_tensors.pop(k)) for k in self.collected_tensors.keys()}
+        collected_tensors = {
+            k: collect_tensors(self.collected_tensors.pop(k)) for k in set(self.collected_tensors.keys())
+        }
 
         for op in self.operations:
             with log_to_misc(layer_name, misc, (len(collected_tensors), layer_name), op):
