@@ -654,13 +654,19 @@ class RotaryEmbeddingConfigMixin:
         Helper to standardize the config's rope params field by ensuring the params are defined for each
         later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
         """
-        # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
+        # Move `rope_theta` and `partial_rotary_factor` to the `rope_parameters`, if not there yet
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
-        rope_parameters = getattr(self, "rope_parameters", None) or {}
+        rope_parameters = getattr(self, "rope_parameters", None)
+        # If `rope_parameters` is not defined, but either `rope_theta` or `partial_rotary_factor` are, create it
+        if rope_parameters is None and (rope_theta is not None or partial_rotary_factor is not None):
+            rope_parameters = {}
 
+        # Case 0: no RoPE params defined
+        if rope_parameters is None:
+            return
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
+        elif getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
