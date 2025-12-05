@@ -47,7 +47,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config: VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -184,6 +184,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], CLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):

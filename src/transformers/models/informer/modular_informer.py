@@ -84,7 +84,7 @@ class InformerPreTrainedModel(PreTrainedModel):
     config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -415,6 +415,7 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:

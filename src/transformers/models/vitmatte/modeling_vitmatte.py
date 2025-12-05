@@ -55,7 +55,7 @@ class ImageMattingOutput(ModelOutput):
 class VitMattePreTrainedModel(PreTrainedModel):
     config: VitMatteConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
@@ -234,6 +234,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

@@ -452,7 +452,7 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     config: TimesformerConfig
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["TimesformerLayer"]
 
@@ -494,6 +494,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         Examples:
@@ -624,6 +625,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

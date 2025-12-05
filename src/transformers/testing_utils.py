@@ -42,7 +42,7 @@ from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
@@ -51,8 +51,13 @@ import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
-from transformers import Trainer
 from transformers import logging as transformers_logging
+
+
+if TYPE_CHECKING:
+    from .trainer import Trainer
+else:
+    Trainer = Any  # type: ignore
 
 from .integrations import (
     is_clearml_available,
@@ -83,7 +88,6 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
-    is_eetq_available,
     is_essentia_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
@@ -218,10 +222,12 @@ if is_torch_available():
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
     IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
+    IS_NPU_SYSTEM = getattr(torch, "npu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
     IS_XPU_SYSTEM = False
+    IS_NPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -632,6 +638,9 @@ def require_read_token(test_case):
                 if getattr(attr, "__require_read_token__", False):
                     continue
                 wrapped = require_read_token(attr)
+                if isinstance(inspect.getattr_static(test_case, attr_name), staticmethod):
+                    # Don't accidentally bind staticmethods to `self`
+                    wrapped = staticmethod(wrapped)
                 setattr(test_case, attr_name, wrapped)
         return test_case
     else:
@@ -644,10 +653,6 @@ def require_read_token(test_case):
                 with patch("huggingface_hub.utils._headers.get_token", return_value=token):
                     return test_case(*args, **kwargs)
             else:  # Allow running locally with the default token env variable
-                # dealing with static/class methods and called by `self.xxx`
-                if "staticmethod" in inspect.getsource(test_case).strip():
-                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
-                        return test_case(*args[1:], **kwargs)
                 return test_case(*args, **kwargs)
 
         wrapper.__require_read_token__ = True
@@ -1232,23 +1237,6 @@ def require_spqr(test_case):
     Decorator marking a test that requires spqr
     """
     return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
-
-
-def require_eetq(test_case):
-    """
-    Decorator marking a test that requires eetq
-    """
-    eetq_available = is_eetq_available()
-    if eetq_available:
-        try:
-            import eetq  # noqa: F401
-        except ImportError as exc:
-            if "shard_checkpoint" in str(exc):
-                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
-                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
-                # TODO: Remove once eetq releases a fix and this release is used in CI
-                eetq_available = False
-    return unittest.skipUnless(eetq_available, "test requires eetq")(test_case)
 
 
 def require_av(test_case):
@@ -3187,6 +3175,8 @@ def get_device_properties() -> DeviceProperties:
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
         return ("xpu", gen, None)
+    elif IS_NPU_SYSTEM:
+        return ("npu", None, None)
     else:
         return (torch_device, None, None)
 

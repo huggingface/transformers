@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
-import importlib
 import os
 import re
 import tempfile
@@ -20,7 +19,6 @@ import unittest
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
-from packaging import version
 from torch import nn
 
 from transformers import (
@@ -432,10 +430,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         Ensure that modules_to_save is accounted for when deleting an adapter.
         """
-        min_version_delete_adapter = "0.18.0"
-        if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_delete_adapter):
-            self.skipTest("Correctly deleting modules_to_save only works with PEFT >= 0.18.0")
-
         from peft import LoraConfig
 
         # the test assumes a specific model architecture, so only test this one:
@@ -455,40 +449,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         self.assertFalse(hasattr(model, "peft_config"))
         self.assertFalse("adapter_1" in model.lm_head.modules_to_save)
         self.assertFalse(model.lm_head.modules_to_save)  # i.e. empty ModuleDict
-
-    def test_delete_adapter_with_modules_to_save_old_peft_warns(self):
-        """
-        When PEFT < 0.18.0 is being used, modules_to_save are not deleted but the user should get a warning.
-        """
-        from peft import LoraConfig
-
-        peft_ge_018 = version.parse(importlib.metadata.version("peft")) >= version.parse("0.18.0")
-        logger = logging.get_logger("transformers.integrations.peft")
-        warn_msg = "The deleted adapter contains modules_to_save"
-        # the test assumes a specific model architecture, so only test this one:
-        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
-
-        # first a sanity check: when there is no modules_to_save, there is also no warning
-        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
-        peft_config_0 = LoraConfig(init_lora_weights=False)
-        model.add_adapter(peft_config_0, adapter_name="adapter_1")
-        with CaptureLogger(logger) as cl:
-            model.delete_adapter("adapter_1")
-        assert warn_msg not in cl.out
-
-        # now test a model with modules_to_save
-        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
-        peft_config_1 = LoraConfig(init_lora_weights=False, modules_to_save=["lm_head"])
-        model.add_adapter(peft_config_1, adapter_name="adapter_1")
-        with CaptureLogger(logger) as cl:
-            model.delete_adapter("adapter_1")
-
-        if peft_ge_018:
-            self.assertTrue("adapter_1" not in model.lm_head.modules_to_save)
-            assert warn_msg not in cl.out
-        else:
-            self.assertTrue("adapter_1" in model.lm_head.modules_to_save)
-            assert warn_msg in cl.out
 
     @require_torch_accelerator
     @require_bitsandbytes
@@ -653,9 +613,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         from peft import LoraConfig
 
-        min_version_lcmu = "0.13.0"
-        is_lcmu_supported = version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu)
-
         for model_id, peft_model_id in zip(self.transformers_test_model_ids, self.peft_test_model_ids):
             for transformers_class in self.transformers_test_model_classes:
                 model = transformers_class.from_pretrained(model_id).to(torch_device)
@@ -670,25 +627,14 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
                 )
 
-                if is_lcmu_supported:
-                    # if supported, this should not raise an error
-                    model.load_adapter(
-                        adapter_state_dict=dummy_state_dict,
-                        adapter_name="other",
-                        peft_config=peft_config,
-                        low_cpu_mem_usage=True,
-                    )
-                    # after loading, no meta device should be remaining
-                    self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
-                else:
-                    err_msg = r"The version of PEFT you are using does not support `low_cpu_mem_usage` yet"
-                    with self.assertRaisesRegex(ValueError, err_msg):
-                        model.load_adapter(
-                            adapter_state_dict=dummy_state_dict,
-                            adapter_name="other",
-                            peft_config=peft_config,
-                            low_cpu_mem_usage=True,
-                        )
+                model.load_adapter(
+                    adapter_state_dict=dummy_state_dict,
+                    adapter_name="other",
+                    peft_config=peft_config,
+                    low_cpu_mem_usage=True,
+                )
+                # after loading, no meta device should be remaining
+                self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
 
     def test_peft_from_pretrained_hub_kwargs(self):
         """

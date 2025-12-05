@@ -431,7 +431,7 @@ class BltCrossAttention(nn.Module):
 class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["BltTransformerLayer"]
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
@@ -587,7 +587,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1057,7 +1057,7 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

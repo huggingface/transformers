@@ -381,7 +381,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

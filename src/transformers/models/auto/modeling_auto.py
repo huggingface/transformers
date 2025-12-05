@@ -43,6 +43,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("afmoe", "AfmoeModel"),
         ("aimv2", "Aimv2Model"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "AlbertModel"),
@@ -150,6 +151,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("falcon", "FalconModel"),
         ("falcon_h1", "FalconH1Model"),
         ("falcon_mamba", "FalconMambaModel"),
+        ("fast_vlm", "FastVlmModel"),
         ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("flaubert", "FlaubertModel"),
@@ -258,6 +260,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("minimax", "MiniMaxModel"),
         ("minimax_m2", "MiniMaxM2Model"),
         ("ministral", "MinistralModel"),
+        ("ministral3", "Ministral3Model"),
         ("mistral", "MistralModel"),
         ("mistral3", "Mistral3Model"),
         ("mixtral", "MixtralModel"),
@@ -280,6 +283,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("musicgen", "MusicgenModel"),
         ("musicgen_melody", "MusicgenMelodyModel"),
         ("mvp", "MvpModel"),
+        ("nanochat", "NanoChatModel"),
         ("nemotron", "NemotronModel"),
         ("nllb-moe", "NllbMoeModel"),
         ("nystromformer", "NystromformerModel"),
@@ -382,6 +386,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("switch_transformers", "SwitchTransformersModel"),
         ("t5", "T5Model"),
         ("t5gemma", "T5GemmaModel"),
+        ("t5gemma2", "T5Gemma2Model"),
         ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
         ("textnet", "TextNetModel"),
@@ -491,6 +496,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mpt", "MptForCausalLM"),
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
+        ("nanochat", "NanoChatForCausalLM"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("paligemma", "PaliGemmaForConditionalGeneration"),
@@ -504,6 +510,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
         ("t5gemma", "T5GemmaForConditionalGeneration"),
+        ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
@@ -597,6 +604,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
         ("t5gemma", "T5GemmaForConditionalGeneration"),
+        ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
         ("whisper", "WhisperForConditionalGeneration"),
@@ -612,6 +620,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("afmoe", "AfmoeForCausalLM"),
         ("apertus", "ApertusForCausalLM"),
         ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
@@ -695,6 +704,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("minimax", "MiniMaxForCausalLM"),
         ("minimax_m2", "MiniMaxM2ForCausalLM"),
         ("ministral", "MinistralForCausalLM"),
+        ("ministral3", "Ministral3ForCausalLM"),
         ("mistral", "MistralForCausalLM"),
         ("mixtral", "MixtralForCausalLM"),
         ("mllama", "MllamaForCausalLM"),
@@ -704,6 +714,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("musicgen", "MusicgenForCausalLM"),
         ("musicgen_melody", "MusicgenMelodyForCausalLM"),
         ("mvp", "MvpForCausalLM"),
+        ("nanochat", "NanoChatForCausalLM"),
         ("nemotron", "NemotronForCausalLM"),
         ("olmo", "OlmoForCausalLM"),
         ("olmo2", "Olmo2ForCausalLM"),
@@ -988,6 +999,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("deepseek_vl_hybrid", "DeepseekVLHybridForConditionalGeneration"),
         ("emu3", "Emu3ForConditionalGeneration"),
         ("evolla", "EvollaForProteinText2Text"),
+        ("fast_vlm", "FastVlmForConditionalGeneration"),
         ("florence2", "Florence2ForConditionalGeneration"),
         ("fuyu", "FuyuForCausalLM"),
         ("gemma3", "Gemma3ForConditionalGeneration"),
@@ -1024,10 +1036,26 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe", "Qwen3VLMoeForConditionalGeneration"),
         ("shieldgemma2", "Gemma3ForConditionalGeneration"),
         ("smolvlm", "SmolVLMForConditionalGeneration"),
+        ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("udop", "UdopForConditionalGeneration"),
         ("video_llama_3", "VideoLlama3ForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+    ]
+)
+
+# Models that accept text and optionally multimodal data in inputs
+# and can generate text and optionally multimodal data.
+MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
+    [
+        *list(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.items()),
+        ("granite_speech", "GraniteSpeechForConditionalGeneration"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
+        ("phi4_multimodal", "Phi4MultimodalForCausalLM"),
+        ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
+        ("qwen2_audio", "Qwen2AudioForConditionalGeneration"),
+        ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
+        ("voxtral", "VoxtralForConditionalGeneration"),
     ]
 )
 
@@ -1146,6 +1174,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
         ("t5gemma", "T5GemmaForConditionalGeneration"),
+        ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
     ]
@@ -1232,6 +1261,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("minimax", "MiniMaxForSequenceClassification"),
         ("minimax_m2", "MiniMaxM2ForSequenceClassification"),
         ("ministral", "MinistralForSequenceClassification"),
+        ("ministral3", "Ministral3ForSequenceClassification"),
         ("mistral", "MistralForSequenceClassification"),
         ("mixtral", "MixtralForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
@@ -1270,6 +1300,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("starcoder2", "Starcoder2ForSequenceClassification"),
         ("t5", "T5ForSequenceClassification"),
         ("t5gemma", "T5GemmaForSequenceClassification"),
+        ("t5gemma2", "T5Gemma2ForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
         ("umt5", "UMT5ForSequenceClassification"),
         ("xlm", "XLMForSequenceClassification"),
@@ -1327,6 +1358,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("minimax", "MiniMaxForQuestionAnswering"),
         ("minimax_m2", "MiniMaxM2ForQuestionAnswering"),
         ("ministral", "MinistralForQuestionAnswering"),
+        ("ministral3", "Ministral3ForQuestionAnswering"),
         ("mistral", "MistralForQuestionAnswering"),
         ("mixtral", "MixtralForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
@@ -1440,6 +1472,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("minimax", "MiniMaxForTokenClassification"),
         ("minimax_m2", "MiniMaxM2ForTokenClassification"),
         ("ministral", "MinistralForTokenClassification"),
+        ("ministral3", "Ministral3ForTokenClassification"),
         ("mistral", "MistralForTokenClassification"),
         ("mixtral", "MixtralForTokenClassification"),
         ("mobilebert", "MobileBertForTokenClassification"),
@@ -1470,6 +1503,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("starcoder2", "Starcoder2ForTokenClassification"),
         ("t5", "T5ForTokenClassification"),
         ("t5gemma", "T5GemmaForTokenClassification"),
+        ("t5gemma2", "T5Gemma2ForTokenClassification"),
         ("umt5", "UMT5ForTokenClassification"),
         ("xlm", "XLMForTokenClassification"),
         ("xlm-roberta", "XLMRobertaForTokenClassification"),
@@ -1787,6 +1821,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FO
 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 )
+MODEL_FOR_MULTIMODAL_LM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES)
 MODEL_FOR_RETRIEVAL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_RETRIEVAL_MAPPING_NAMES)
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
@@ -2131,6 +2166,13 @@ class AutoModelForImageTextToText(_BaseAutoModelClass):
 AutoModelForImageTextToText = auto_class_update(AutoModelForImageTextToText, head_doc="image-text-to-text modeling")
 
 
+class AutoModelForMultimodalLM(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+
+AutoModelForMultimodalLM = auto_class_update(AutoModelForMultimodalLM, head_doc="multimodal generation")
+
+
 class AutoModelForAudioClassification(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
@@ -2281,6 +2323,7 @@ __all__ = [
     "MODEL_FOR_VISION_2_SEQ_MAPPING",
     "MODEL_FOR_RETRIEVAL_MAPPING",
     "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING",
+    "MODEL_FOR_MULTIMODAL_LM_MAPPING",
     "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
     "MODEL_MAPPING",
     "MODEL_WITH_LM_HEAD_MAPPING",
@@ -2308,6 +2351,7 @@ __all__ = [
     "AutoModelForMaskedImageModeling",
     "AutoModelForMaskedLM",
     "AutoModelForMultipleChoice",
+    "AutoModelForMultimodalLM",
     "AutoModelForNextSentencePrediction",
     "AutoModelForObjectDetection",
     "AutoModelForPreTraining",

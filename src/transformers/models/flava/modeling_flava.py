@@ -663,7 +663,7 @@ class FlavaPooler(nn.Module):
 class FlavaPreTrainedModel(PreTrainedModel):
     config: FlavaConfig
     base_model_prefix = "flava"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -690,7 +690,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
     # This override allows us to load FlavaImageModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.image_model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: FlavaImageConfig, add_pooling_layer: bool = True):
         r"""
@@ -725,6 +725,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
@@ -770,7 +771,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
     config: FlavaTextConfig
     # This override allows us to load FlavaTextModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.text_model"
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: FlavaTextConfig, add_pooling_layer: bool = True):
         r"""
@@ -804,6 +805,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
@@ -896,6 +898,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         hidden_states (`torch.FloatTensor` of shape `(batch_size, image_num_patches + text_seq_len, hidden_size)`):
@@ -1103,6 +1106,7 @@ class FlavaModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FlavaOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, image_num_patches + text_seq_len)`):
@@ -1301,7 +1305,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
     base_model_prefix = "model"
     config: FlavaImageCodebookConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
 
     def __init__(
@@ -1380,7 +1384,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         z_logits = self.blocks(pixel_values)
         return nn.Softmax(dim=1)(z_logits)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> torch.Tensor:
         f"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1575,6 +1579,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`):
