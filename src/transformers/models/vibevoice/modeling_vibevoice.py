@@ -30,7 +30,8 @@ from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceDiffusionHeadConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
@@ -214,7 +215,7 @@ class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
 
         self.post_init()
 
-    def forward(self, noisy_images, timesteps, condition):
+    def forward(self, noisy_images, timesteps, condition, **kwargs: Unpack[TransformersKwargs]):
         """
         Forward pass of the prediction head.
 

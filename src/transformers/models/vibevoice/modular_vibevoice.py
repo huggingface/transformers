@@ -23,7 +23,8 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
@@ -183,7 +184,7 @@ class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
 
         self.post_init()
 
-    def forward(self, noisy_images, timesteps, condition):
+    def forward(self, noisy_images, timesteps, condition, **kwargs: Unpack[TransformersKwargs]):
         """
         Forward pass of the prediction head.
 
