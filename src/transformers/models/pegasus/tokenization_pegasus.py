@@ -99,7 +99,7 @@ class PegasusTokenizer(TokenizersBackend):
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         if vocab is None:
-            vocab = [(str(unk_token), 0.0)]
+            vocab = [(str(unk_token), 0.0), (str(pad_token), 0.0), (str(eos_token), 0.0), (str(mask_token), 0.0)]
 
         self._vocab = vocab
         self._tokenizer = Tokenizer(Unigram(vocab=vocab, unk_id=self._vocab.index((str(unk_token), 0.0), 1)))
@@ -107,11 +107,7 @@ class PegasusTokenizer(TokenizersBackend):
             [normalizers.Replace(Regex(r"\n"), " "), normalizers.Replace(Regex(r" {2,}"), " ")]
         )
 
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"$A {eos_token}",
-            pair=f"$A $B {eos_token}",
-            special_tokens=[(str(eos_token), self._vocab.index((str(eos_token), 0.0), 1))],
-        )
+
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
@@ -124,6 +120,11 @@ class PegasusTokenizer(TokenizersBackend):
             offset=offset,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
+        )
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"$A {eos_token}",
+            pair=f"$A $B {eos_token}",
+            special_tokens=[(str(eos_token), self.convert_tokens_to_ids(str(eos_token)))],
         )
 
 
