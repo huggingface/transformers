@@ -317,7 +317,6 @@ class MLCDEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        rotary_position_tensor: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
@@ -334,13 +333,9 @@ class MLCDEncoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        rotary_embeddings = position_embeddings
-        if rotary_position_tensor is not None:
-            rotary_embeddings = (rotary_position_tensor.cos(), rotary_position_tensor.sin())
-
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=rotary_embeddings,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -375,7 +370,6 @@ class MLCDEncoder(nn.Module):
         inputs_embeds: torch.FloatTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        rotary_position_tensor: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -399,7 +393,6 @@ class MLCDEncoder(nn.Module):
                 hidden_states,
                 position_embeddings,
                 attention_mask,
-                rotary_position_tensor=rotary_position_tensor,
                 **kwargs,
             )
 
@@ -483,8 +476,8 @@ class MLCDVisionTransformer(nn.Module):
         rotary_pos_emb = self.vision_rotary_embedding(num_patches_height, num_patches_width)
         rotary_pos_emb = rotary_pos_emb.to(self.class_pos_emb.device)
         rotary_pos_emb = torch.cat([self.class_pos_emb, rotary_pos_emb], dim=0)
-        rotary_position_tensor = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (rotary_position_tensor.cos(), rotary_position_tensor.sin())
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
@@ -492,7 +485,6 @@ class MLCDVisionTransformer(nn.Module):
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             position_embeddings=position_embeddings,
-            rotary_position_tensor=rotary_position_tensor,
             **kwargs,
         )
 
