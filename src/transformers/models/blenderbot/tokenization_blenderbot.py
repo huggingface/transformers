@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
-from typing import Optional, Union
-
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 

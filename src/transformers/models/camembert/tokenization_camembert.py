@@ -116,7 +116,6 @@ class CamembertTokenizer(TokenizersBackend):
         if additional_special_tokens is None:
             additional_special_tokens = ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
 
-
         if vocab is not None:
             self._vocab = vocab
             unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)

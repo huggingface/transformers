@@ -95,7 +95,7 @@ class BertTokenizer(TokenizersBackend):
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
         if vocab is None:
-            vocab ={
+            vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
