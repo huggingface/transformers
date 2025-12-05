@@ -125,7 +125,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
             if "merges" in tokenizer_json.get("model", {}) and cls.model.__name__ == "BPE":
                 merges = tokenizer_json["model"]["merges"]
-                merges = [tuple(merge.split(" ")) for merge in merges]
+                merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
             return local_kwargs
 
