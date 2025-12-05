@@ -311,6 +311,7 @@ class LayoutLMLayer(GradientCheckpointingLayer):
         return layer_output
 
 
+# Copied from transformers.models.align.modeling_align.AlignTextEncoder with AlignText->LayoutLM
 class LayoutLMEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
