@@ -42,3 +42,23 @@ like token streaming.
 [[autodoc]] GenerationMixin
     - generate
     - compute_transition_scores
+
+## ContinuousMixin
+
+[[autodoc]] generation.ContinuousMixin
+
+## ContinuousBatchingManager
+
+[[autodoc]] generation.ContinuousBatchingManager
+
+## Scheduler
+
+[[autodoc]] generation.Scheduler
+
+## FIFOScheduler
+
+[[autodoc]] generation.FIFOScheduler
+
+## PrefillFirstScheduler
+
+[[autodoc]] generation.PrefillFirstScheduler
