@@ -113,26 +113,46 @@ jobs:
     outputs:
       changes_detected: ${{ steps.run_checks.outputs.changes_detected }}
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the trusted base repository (main branch) - this is safe
+      - name: Checkout base repository
+        uses: actions/checkout@v4
         with:
-          repository: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
-          ref: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
-          fetch-depth: "1"
+          ref: main
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
+      - name: Install dependencies from trusted main branch
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[quality]"
           pip install --no-cache-dir --upgrade 'torch' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Run checks
+      - name: Fetch and checkout PR code manually
+        env:
+          PR_HEAD_REPO_FULL_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
+        run: |
+          # Create separate directory for PR code
+          mkdir -p pr-repo
+          cd pr-repo
+          
+          # Initialize git and fetch only the specific commit
+          git init
+          git remote add pr-origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
+          git fetch --depth=1 pr-origin ${PR_HEAD_SHA}
+          git checkout ${PR_HEAD_SHA}
+
+      - name: Run checks with trusted script
         id: run_checks
         run: |
+          # Copy trusted script to PR directory
+          cp utils/check_copies.py pr-repo/utils/check_copies.py
+          
+          # Run the trusted script in PR directory
+          cd pr-repo
           python utils/check_copies.py --fix_and_overwrite
           
           # Check if there are changes
@@ -145,22 +165,21 @@ jobs:
       - name: Save modified files
         if: steps.run_checks.outputs.changes_detected == 'true'
         run: |
-          mkdir -p pr-repo
-          git diff --name-only > modified-files.txt
-          # Copy each modified file to pr-repo directory
+          cd pr-repo
+          mkdir -p ../artifact-staging
+          git diff --name-only > ../artifact-staging/modified-files.txt
+          # Copy each modified file
           while IFS= read -r file; do
-            mkdir -p "pr-repo/$(dirname "$file")"
-            cp "$file" "pr-repo/$file"
-          done < modified-files.txt
+            mkdir -p "../artifact-staging/pr-repo/$(dirname "$file")"
+            cp "$file" "../artifact-staging/pr-repo/$file"
+          done < ../artifact-staging/modified-files.txt
 
       - name: Upload modified files
         if: steps.run_checks.outputs.changes_detected == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: modified-files
-          path: |
-            modified-files.txt
-            pr-repo/
+          path: artifact-staging/
 
   commit-and-comment:
     runs-on: ubuntu-22.04
