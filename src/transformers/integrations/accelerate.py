@@ -394,8 +394,9 @@ def _get_device_map(
             inferred_max_memory = get_max_memory(max_memory)
 
         # If the user does not provide `max_memory`, accelerate sets the WHOLE cpu available memory as available.
-        # This is unwanted, as we don't want to set extremely tight bound and pressure for cpu when using disk offloading,
-        # especially if the model uses WeightConverter (i.e. there will be some cpu memory spikes during the conversions)
+        # This is unwanted, as we don't want to set extremely tight bound and pressure for cpu if we are memory-constrained
+        # (i.e. we will need to offload to disk), especially if the model uses WeightConverter (because there will be some
+        # uncontrollable cpu memory spikes during the conversions)
         if max_memory is None:
             inferred_max_memory["cpu"] *= 0.90
 
