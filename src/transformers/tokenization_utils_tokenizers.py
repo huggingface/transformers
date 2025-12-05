@@ -155,6 +155,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 from .convert_slow_tokenizer import SentencePieceExtractor
 
                 local_kwargs = SentencePieceExtractor(vocab_file).extract(cls.model, **local_kwargs)
+                # what used to be in `convert_slow`
+                if hasattr(cls, "convert_from_spm_model"):
+                    local_kwargs = cls.convert_from_spm_model(**local_kwargs)
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
                     f"Could not extract SentencePiece model from {vocab_file} using sentencepiece library due to {e}. "

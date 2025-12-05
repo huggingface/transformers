@@ -386,12 +386,8 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
-        _, vocab_scores, merges = extractor.extract()
-
-        tokenizer = SeamlessM4TTokenizer(
-            vocab=vocab_scores,
-            merges=merges,
+        tokenizer = SeamlessM4TTokenizer.from_pretrained(
+            SAMPLE_VOCAB
         )
         tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]})
         cls.tokenizer = tokenizer
