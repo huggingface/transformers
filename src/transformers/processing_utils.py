@@ -1423,9 +1423,9 @@ class ProcessorMixin(PushToHubMixin):
             kwargs["token"] = token
 
         # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
-        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
-        return cls.from_args_and_dict(args, processor_dict, **kwargs)
+        return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
 
     @classmethod
     def get_attributes(cls):
@@ -1498,6 +1498,8 @@ class ProcessorMixin(PushToHubMixin):
         """
         args = []
         processor_dict = processor_dict if processor_dict is not None else {}
+        # Remove subfolder from kwargs to avoid duplicate keyword arguments
+        subfolder = kwargs.pop("subfolder", "")
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
@@ -1508,14 +1510,17 @@ class ProcessorMixin(PushToHubMixin):
             if is_primary:
                 # Primary non-tokenizer sub-processor: load via Auto class
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
-                sub_processor = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                sub_processor = auto_processor_class.from_pretrained(
+                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                )
                 args.append(sub_processor)
             elif "tokenizer" in sub_processor_type:
                 # Special case: tokenizer-like parameters not in the mapping (e.g., "protein_tokenizer")
                 # Load using AutoTokenizer with subfolder
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+                tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=sub_processor_type, **kwargs
+                    pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
                 )
                 args.append(sub_processor)
 
