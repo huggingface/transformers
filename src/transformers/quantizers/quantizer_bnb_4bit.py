@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
@@ -38,33 +37,19 @@ if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
 
 
 class Bnb4BitHfQuantizer(HfQuantizer):
     """
-    4-bit quantization from bitsandbytes quantization method:
-        before loading: converts transformer layers into Linear4bit during loading: load 16bit weight and pass to the
-        layer object after: quantizes individual weights in Linear4bit into 4bit at the first .cuda() call
-        saving:
-            from state dict, as usual; saves weights and `quant_state` components
-        loading:
-            need to locate `quant_state` components and pass to Param4bit constructor
+    4-bit quantization from bitsandbytes quantization method
     """
 
-    use_keep_in_fp32_modules = True
-    requires_parameters_quantization = True
     requires_calibration = False
-
-    required_packages = ["bitsandbytes", "accelerate"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-
-        if self.quantization_config.llm_int8_skip_modules is not None:
-            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
         # This describes the additional items that are saved on the state dict (on the params themselves)
         self.bnb_keys = [
@@ -90,17 +75,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         validate_bnb_backend_availability(raise_exception=True)
 
         device_map = kwargs.get("device_map")
-        if (
-            device_map is not None
-            and isinstance(device_map, dict)
-            and not self.quantization_config.llm_int8_enable_fp32_cpu_offload
-        ):
-            device_map_without_lm_head = {
-                key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
-            }
-            if set(device_map.values()) == {"cpu"}:
-                pass
-            elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
+        if not self.quantization_config.llm_int8_enable_fp32_cpu_offload and isinstance(device_map, dict):
+            values = set(device_map.values())
+            if values != {"cpu"} and ("cpu" in values or "disk" in values):
                 raise ValueError(
                     "Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the "
                     "quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules "
@@ -117,13 +94,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
         return CustomDtype.INT4
 
-    def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
-        return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.bnb_keys)]
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
-        # They are on the params themselves, so we cannot easily extract the module from the name
+        # TODO: maybe remove
+        # # They are on the params themselves, so we cannot easily extract the module from the name
         if any(param_name.endswith(x) for x in self.bnb_keys):
             return True
         module, name = get_module_from_name(model, param_name)
@@ -142,71 +117,13 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 )
         return param_name
 
-    def create_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        target_device: "torch.device",
-        **kwargs,
-    ):
-        import bitsandbytes as bnb
-
-        full_name = param_name
-
-        # update param name to get the weights instead of the quantized stats
-        param_name = self.get_param_name(param_name)
-        module, tensor_name = get_module_from_name(model, param_name)
-
-        # `torch.Tensor.to(<int num>)` is not supported by `torch_npu` (see this [issue](https://github.com/Ascend/pytorch/issues/16)).
-        if isinstance(target_device, int) and is_torch_npu_available():
-            target_device = f"npu:{target_device}"
-
-        # construct `new_value` for the module._parameters[tensor_name]
-        if self.pre_quantized:
-            module_name = param_name.rsplit(".", 1)[0]
-            # Save the states for later quantization when they are all gathered
-            if not hasattr(self, "param_quant_stats"):
-                self.param_quant_stats = defaultdict(dict)
-            self.param_quant_stats[module_name].update({full_name: param_value})
-
-            # We are ready for quantization in this case (note, the +1 is for the weight itself)
-            if len(self.param_quant_stats[module_name]) == len(self.bnb_keys) + 1:
-                weight = self.param_quant_stats[module_name].pop(f"{module_name}.weight")
-                new_value = bnb.nn.Params4bit.from_prequantized(
-                    data=weight,
-                    quantized_stats=self.param_quant_stats[module_name],
-                    requires_grad=False,
-                    device=target_device,
-                    module=module,
-                )
-                # Set it
-                module._parameters[tensor_name] = new_value
-                # Delete the states
-                del self.param_quant_stats[module_name]
-        else:
-            new_value = param_value.to("cpu")
-            old_value = getattr(module, tensor_name)
-
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
-            # Since weights are saved in the correct "orientation", we skip transposing when loading.
-            if issubclass(module.source_cls, Conv1D):
-                new_value = new_value.T
-
-            kwargs = old_value.__dict__
-            kwargs.pop("_is_hf_initialized", None)
-            new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(target_device)
-
-            module._parameters[tensor_name] = new_value
-
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_dtype
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        # TODO: remove ? is it still true ? we will move to dtype = "auto" so it will likely be either fp16 or bf16
         if dtype is None:
             # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
             logger.info(
@@ -238,7 +155,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
         return device_map
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_before_weight_loading
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -248,23 +164,15 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_bnb_linear
 
-        llm_int8_enable_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
         )
 
-        # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
-        if isinstance(device_map, dict) and len(device_map.keys()) > 1:
-            keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
+        if self.quantization_config.llm_int8_enable_fp32_cpu_offload:
+            if isinstance(device_map, dict):
+                keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
+                self.modules_to_not_convert.extend(keys_on_cpu)
 
-            if len(keys_on_cpu) > 0 and not llm_int8_enable_fp32_cpu_offload:
-                raise ValueError(
-                    "If you want to offload some keys to `cpu` or `disk`, you need to set "
-                    "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
-                    " converted to 8-bit but kept in 32-bit."
-                )
-            self.modules_to_not_convert.extend(keys_on_cpu)
         model = replace_with_bnb_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
@@ -272,15 +180,12 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-        model.config.quantization_config = self.quantization_config
-
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_after_weight_loading with 8bit->4bit
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         model.is_loaded_in_4bit = True
         model.is_4bit_serializable = self.is_serializable()
         return model
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return True
 
     @property
