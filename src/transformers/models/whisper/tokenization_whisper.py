@@ -19,7 +19,7 @@ import os
 import re
 import warnings
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
@@ -204,10 +204,11 @@ class WhisperTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
-        vocab=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         merges=None,
         normalizer_file=None,
         unk_token="<|endoftext|>",
@@ -253,7 +254,6 @@ class WhisperTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.ByteLevel()
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

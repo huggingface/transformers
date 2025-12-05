@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for ALBERT model."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -73,8 +73,8 @@ class AlbertTokenizer(TokenizersBackend):
             other word.
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        vocab (`str` or `list[tuple[str, float]]`, *optional*):
+            Custom vocabulary with `(token, score)` tuples. If not provided, vocabulary is loaded from `vocab_file`.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
@@ -82,10 +82,11 @@ class AlbertTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         do_lower_case: bool = True,
         keep_accents: bool = False,
         bos_token: str = "[CLS]",
@@ -97,19 +98,15 @@ class AlbertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         add_prefix_space: bool = True,
         trim_offsets: bool = True,
-        vocab: Optional[dict] = None,
-        vocab_file: Optional[str] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
-
         self.do_lower_case = do_lower_case
         self.keep_accents = keep_accents
 
         if vocab is not None:
-            self._vocab_scores = [(token, 0.0) for token in vocab.keys()] if isinstance(vocab, dict) else list(vocab)
+            self._vocab_scores = vocab
         else:
             self._vocab_scores = [
                 (str(pad_token), 0.0),
@@ -163,10 +160,7 @@ class AlbertTokenizer(TokenizersBackend):
             ],
         )
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=self.do_lower_case,
             keep_accents=self.keep_accents,
             bos_token=bos_token,

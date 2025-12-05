@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from typing import Optional, Union
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_python import PreTrainedTokenizer
@@ -167,6 +167,10 @@ class LukeTokenizer(TokenizersBackend):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, the vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
         entity_vocab_file (`str`):
             Path to the entity vocabulary file.
         task (`str`, *optional*):
@@ -228,10 +232,13 @@ class LukeTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
+        entity_vocab: Optional[Union[str, dict, list]] = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -250,37 +257,17 @@ class LukeTokenizer(TokenizersBackend):
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
         entity_mask2_token="[MASK2]",
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
-        entity_vocab: Optional[dict] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
 
         # Handle entity vocab file for backward compatibility
         entity_vocab_file = kwargs.pop("entity_vocab_file", None)
-
-        # Check if vocab/merges/entity_vocab are in kwargs
-        if vocab is None and "vocab" in kwargs:
-            vocab = kwargs.pop("vocab")
-        if merges is None and "merges" in kwargs:
-            merges = kwargs.pop("merges")
         if entity_vocab is None and "entity_vocab" in kwargs:
             entity_vocab = kwargs.pop("entity_vocab")
 
-        # Build vocab and merges (either from data or empty, like GPT2Tokenizer)
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
-
+        self._vocab = vocab or {}
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -365,8 +352,6 @@ class LukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
-        tokenizer_object = self._tokenizer
-
         # Configure default special token behaviors to match LUKE formatting
         token_type_ids_pattern = kwargs.setdefault("token_type_ids_pattern", "all_zeros")
         special_tokens_pattern = kwargs.setdefault("special_tokens_pattern", "cls_double_sep")
@@ -379,7 +364,6 @@ class LukeTokenizer(TokenizersBackend):
         kwargs.setdefault("clean_up_tokenization_spaces", True)
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -400,17 +384,6 @@ class LukeTokenizer(TokenizersBackend):
             entity_mask2_token=entity_mask2_token,
             entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if it was passed as data
             **kwargs,
-        )
-        self._post_init()
-
-    def _post_init(self):
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{self.cls_token}:0 $A:0 {self.sep_token}:0",
-            pair=f"{self.cls_token}:0 $A:0 {self.sep_token}:0 {self.sep_token}:0 $B:1 {self.sep_token}:1",
-            special_tokens=[
-                (self.cls_token, self.cls_token_id),
-                (self.sep_token, self.sep_token_id),
-            ],
         )
 
     def build_inputs_with_special_tokens(

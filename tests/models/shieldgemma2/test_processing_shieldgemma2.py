@@ -79,7 +79,9 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
         }
-        return tokenizer_class(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
+        return tokenizer_class.from_pretrained(
+            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
+        )
 
     @classmethod
     def prepare_processor_dict(cls):

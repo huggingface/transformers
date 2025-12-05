@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for RemBert model."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -74,11 +74,11 @@ class RemBertTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
-        vocab_file: Optional[str] = None,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         do_lower_case: bool = False,
         keep_accents: bool = False,
         bos_token: str = "[CLS]",
@@ -90,11 +90,8 @@ class RemBertTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         add_prefix_space: bool = True,
         remove_space: bool = True,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.remove_space = remove_space
         self.do_lower_case = do_lower_case
         self.keep_accents = keep_accents
@@ -147,11 +144,7 @@ class RemBertTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             add_prefix_space=add_prefix_space,
             do_lower_case=do_lower_case,
             keep_accents=keep_accents,

@@ -44,6 +44,7 @@ from transformers import (
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
     TOKENIZER_MAPPING,
+    AutoTokenizerBackendError,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )
@@ -262,6 +263,18 @@ class AutoTokenizerTest(unittest.TestCase):
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertTrue(tokenizer2.vocab_size > 100_000)
+
+    @require_tokenizers
+    def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
+        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-BloomForCausalLM")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
+
+    @require_tokenizers
+    def test_auto_tokenizer_loads_sentencepiece_only_repo(self):
+        tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-mbart")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
 
     def test_auto_tokenizer_fast_no_slow(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")

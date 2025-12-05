@@ -14,6 +14,8 @@
 # limitations under the License
 """Tokenization classes for Camembert model."""
 
+from typing import Optional, Union
+
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -83,7 +85,7 @@ class CamembertTokenizer(TokenizersBackend):
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
     """
 
@@ -103,7 +105,7 @@ class CamembertTokenizer(TokenizersBackend):
         additional_special_tokens=None,
         add_prefix_space=True,
         vocab_file=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file
@@ -114,9 +116,9 @@ class CamembertTokenizer(TokenizersBackend):
         if additional_special_tokens is None:
             additional_special_tokens = ["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"]
 
-        if vocab is not None and isinstance(vocab, list):
-            self._vocab = list(vocab)
-            unk_index = next(i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token))
+        if vocab is not None:
+            self._vocab = vocab
+            unk_index = next((i for i, (tok, _) in enumerate(self._vocab) if tok == str(unk_token)), 0)
             self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_index, byte_fallback=False))
         else:
             self._vocab = [
@@ -131,11 +133,8 @@ class CamembertTokenizer(TokenizersBackend):
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
-                normalizers.Replace("\n", " "),
-                normalizers.Replace("\r", " "),
-                normalizers.Replace("\t", " "),
+                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
                 normalizers.Strip(left=False, right=True),
-                normalizers.Replace(Regex(" {2,}"), "▁"),
             ]
         )
 
@@ -143,10 +142,7 @@ class CamembertTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

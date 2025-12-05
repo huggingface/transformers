@@ -20,6 +20,7 @@ import copy
 import json
 import os
 from collections import defaultdict
+from collections.abc import Iterable
 from shutil import copyfile
 from typing import Any, Optional, Union
 
@@ -31,7 +32,6 @@ from tokenizers import normalizers as tokenizers_normalizers
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
-from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
@@ -41,6 +41,7 @@ from .tokenization_utils_base import (
     PreTrainedTokenizerBase,
     TextInput,
     TruncationStrategy,
+    generate_merges,
 )
 from .utils import PaddingStrategy, add_end_docstrings, is_offline_mode, logging
 
@@ -90,26 +91,153 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    model = None
+    _tokenizer = None
+
+    @classmethod
+    def convert_to_native_format(cls, **kwargs):
+        """s
+        Build a `tokenizers.Tokenizer` backend from the available serialization files (tokenizer.json, sentencepiece
+        models, tekken.json, vocab/merges).
+        """
+        # Preserve kwargs for possible downstream use
+        local_kwargs = dict(kwargs)
+        fast_tokenizer_file = local_kwargs.pop("tokenizer_file", None)
+
+        if (
+            fast_tokenizer_file is not None
+            and os.path.isfile(fast_tokenizer_file)
+            and (cls is TokenizersBackend or "__init__" not in cls.__dict__)
+        ):
+            local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
+            return local_kwargs
+        elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
+            # we extract vocab / merges from the tokenizer file to pass them to __init__
+            with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
+                tokenizer_json = json.load(tokenizer_handle)
+            vocab = tokenizer_json.get("model", {}).get("vocab", None)
+            if cls.model is None:
+                if isinstance(vocab, list):
+                    vocab = list(map(tuple, vocab))  # TODO just for now
+            elif cls.model.__name__ == "Unigram":
+                vocab = list(map(tuple, vocab))
+            elif cls.model.__name__ == "WordLevel":
+                vocab = {token: i for i, token in enumerate(vocab)}
+            elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
+                if isinstance(vocab, list):
+                    vocab = {token[0] if isinstance(token, list) else token: i for i, token in enumerate(vocab)}
+            local_kwargs["vocab"] = vocab
+
+            model_type = getattr(cls, "model", None)
+            if "merges" in tokenizer_json.get("model", {}) and (model_type and model_type.__name__ == "BPE"):
+                merges = tokenizer_json["model"]["merges"]
+                merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
+                local_kwargs["merges"] = merges
+            return local_kwargs
+
+        vocab_file = local_kwargs.get("vocab_file")
+        merges_file = local_kwargs.get("merges_file")
+        vocab = local_kwargs.get("vocab")
+        merges = local_kwargs.get("merges")
+
+        # Tekken converter (Mistral)
+        if isinstance(vocab_file, str) and vocab_file.endswith("tekken.json") and os.path.isfile(vocab_file):
+            from .convert_slow_tokenizer import MistralConverter
+
+            local_kwargs["vocab"], local_kwargs["merges"] = MistralConverter(
+                vocab_file=vocab_file
+            ).extract_vocab_merges_from_model(vocab_file)
+            return local_kwargs
+
+        # SentencePiece model (with TikToken fallback)
+        if isinstance(vocab_file, str) and os.path.isfile(vocab_file) and vocab_file.endswith(".model"):
+            try:
+                from .convert_slow_tokenizer import SentencePieceExtractor
+
+                local_kwargs = SentencePieceExtractor(vocab_file).extract(cls.model, **local_kwargs)
+                try:
+                    from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
+
+                    converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
+                    if converter_class is not None and hasattr(converter_class, "convert_from_spm"):
+                        local_kwargs = converter_class.convert_from_spm(**local_kwargs)
+                except Exception as e:
+                    logger.warning(
+                        f"Could not reorder vocab using converter for {cls.__name__} due to {e}. Falling back to raw SentencePiece extraction."
+                    )
+                # what used to be in `convert_slow`
+                if hasattr(cls, "convert_from_spm_model"):
+                    local_kwargs = cls.convert_from_spm_model(**local_kwargs)
+            except Exception as e:  # TODO only catch deserialization error here!
+                logger.warning(
+                    f"Could not extract SentencePiece model from {vocab_file} using sentencepiece library due to {e}. "
+                    "Falling back to TikToken extractor."
+                )
+                from .convert_slow_tokenizer import TikTokenConverter
+
+                local_kwargs["vocab"], local_kwargs["merges"] = TikTokenConverter(
+                    vocab_file=vocab_file, extra_special_tokens=local_kwargs.get("extra_special_tokens")
+                ).extract_vocab_merges_from_model(vocab_file)
+            return local_kwargs
+
+        # Fallback to standard vocab/merges files if they existed!
+        if vocab is None and isinstance(vocab_file, str) and os.path.isfile(vocab_file):
+            local_kwargs["vocab"] = vocab_file
+            vocab = local_kwargs["vocab"]
+        if merges is None and isinstance(merges_file, str) and os.path.isfile(merges_file):
+            local_kwargs["merges"] = merges_file
+            merges = local_kwargs["merges"]
+
+        # Generate merges automatically when not provided for BPE tokenizers
+        if merges is None and cls.model is not None and cls.model.__name__ == "BPE" and isinstance(vocab, dict):
+            # Gather special tokens from kwargs to skip in merge generation
+            def _iter_special_tokens(values: Iterable[Any]) -> list[str]:
+                collected: list[str] = []
+                for val in values:
+                    if val is None:
+                        continue
+                    if isinstance(val, (list, tuple)):
+                        collected.extend(_iter_special_tokens(val))
+                    else:
+                        collected.append(str(val))
+                return collected
+
+            special_tokens_keys = [
+                "pad_token",
+                "unk_token",
+                "bos_token",
+                "eos_token",
+                "sep_token",
+                "cls_token",
+                "mask_token",
+                "additional_special_tokens",
+                "extra_special_tokens",
+            ]
+            skip_tokens: set[str] = set()
+            for key in special_tokens_keys:
+                if key in local_kwargs:
+                    skip_tokens.update(_iter_special_tokens([local_kwargs[key]]))
+
+            merges = generate_merges(vocab, skip_tokens=skip_tokens)
+            local_kwargs["merges"] = merges
+        return local_kwargs
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
-        slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
-        from_slow = kwargs.pop("from_slow", False)
         # Note: added_tokens_decoder is NOT popped - it's passed to super().__init__() for processing
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden
         add_prefix_space = kwargs.get("add_prefix_space", False)
+        vocab_file = kwargs.get("vocab_file")
 
+        fast_tokenizer = None
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
-        elif fast_tokenizer_file is not None and not from_slow:
+        elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
-        elif slow_tokenizer:
-            # We need to convert a slow tokenizer to build the backend
-            fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif gguf_file is not None:
             # We need to convert a slow tokenizer to build the backend
             gguf_param = load_gguf_checkpoint(kwargs.get("vocab_file"))
@@ -120,18 +248,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
                 kwargs.update(additional_kwargs)
-        elif self.slow_tokenizer_class is not None and slow_tokenizer is not False:
-            # We need to create and convert a slow tokenizer to build the backend
-            slow_tokenizer = self.slow_tokenizer_class(*args, **kwargs)
-            fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
-        elif not slow_tokenizer:
-            # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
-            self.vocab_file = kwargs.get("vocab_file")
-            # V5: Set _extra_special_tokens directly for converter
-            self._extra_special_tokens = kwargs.get("extra_special_tokens", [])
-            fast_tokenizer = convert_slow_tokenizer(self, from_tiktoken=True)
-            slow_tokenizer = None
-        else:
+        elif self._tokenizer is None:
             raise ValueError(
                 "Couldn't instantiate the backend tokenizer from one of: \n"
                 "(1) a `tokenizers` library serialization file, \n"
@@ -139,11 +256,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 "(3) an equivalent slow tokenizer class to instantiate and convert. \n"
                 "You need to have sentencepiece or tiktoken installed to convert a slow tokenizer to a fast one."
             )
+        if fast_tokenizer is not None:
+            self._tokenizer = fast_tokenizer
 
-        self._tokenizer = fast_tokenizer
-
-        if slow_tokenizer is not None:
-            kwargs.update(slow_tokenizer.init_kwargs)
+        if self._tokenizer is None:
+            raise ValueError("The backend tokenizer is not correctly initialized.")
 
         _truncation = self._tokenizer.truncation
 
@@ -171,6 +288,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+        if vocab_file is not None:
+            self.vocab_file = vocab_file
         # Ensure add_prefix_space is set correctly after parent init
         self.add_prefix_space = add_prefix_space
         self._tokenizer.encode_special_tokens = self.split_special_tokens

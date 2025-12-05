@@ -69,7 +69,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         super().__init__(
-            vocab_file,
+            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             do_lower_case=do_lower_case,
             unk_token=unk_token,

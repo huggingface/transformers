@@ -14,6 +14,8 @@
 # limitations under the License.
 """Fast Tokenization class for model DeBERTa."""
 
+from typing import Optional, Union
+
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -93,12 +95,12 @@ class DebertaTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
+    model = BPE
 
     def __init__(
         self,
-        vocab_file=None,
-        vocab=None,
-        merges=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors="replace",
         bos_token="[CLS]",
         eos_token="[SEP]",
@@ -110,26 +112,21 @@ class DebertaTokenizer(TokenizersBackend):
         add_prefix_space=False,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.add_prefix_space = add_prefix_space
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(unk_token): 0,
                 str(cls_token): 1,
                 str(sep_token): 2,
                 str(pad_token): 3,
                 str(mask_token): 4,
             }
+        )
 
-        if merges is not None and isinstance(merges, list) and len(merges) > 0:
-            self._merges = [tuple(m) if isinstance(m, list) else m for m in merges]
-        else:
-            self._merges = []
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
@@ -148,10 +145,7 @@ class DebertaTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -163,7 +157,6 @@ class DebertaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{self.cls_token} $A {self.sep_token}",
             pair=f"{self.cls_token} $A {self.sep_token} {self.sep_token} $B {self.sep_token}",
@@ -172,8 +165,6 @@ class DebertaTokenizer(TokenizersBackend):
                 (self.sep_token, self.sep_token_id),
             ],
         )
-
-        self._post_init()
 
     @property
     def mask_token(self) -> str:

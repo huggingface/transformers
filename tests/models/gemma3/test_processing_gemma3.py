@@ -50,7 +50,9 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
         }
-        tokenizer = tokenizer_class(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
+        tokenizer = tokenizer_class.from_pretrained(
+            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
+        )
         return tokenizer
 
     def test_get_num_vision_tokens(self):

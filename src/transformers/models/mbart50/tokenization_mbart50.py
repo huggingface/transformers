@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -79,13 +79,14 @@ class MBart50Tokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     prefix_tokens: list[int] = []
     suffix_tokens: list[int] = []
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict, list]] = None,
         src_lang=None,
         tgt_lang=None,
         eos_token="</s>",
@@ -94,21 +95,16 @@ class MBart50Tokenizer(TokenizersBackend):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        vocab=None,
-        merges=None,  # Ignored for Unigram
-        vocab_file=None,
         **kwargs,
     ):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        self.vocab_file = vocab_file
 
         # Do not pass language codes via extra_special_tokens to super().__init__.
         # We will mark them as special AFTER backend construction to avoid re-adding tokens
         # when loading from pretrained files.
 
         # Always construct a tokenizer_object without referencing external tokenizer files
-        if vocab is not None:
+        if isinstance(vocab, list):
             # MBart50 uses fairseq vocab alignment matching MBart50Converter:
             # <s>=0, <pad>=1, </s>=2, <unk>=3, then tokens, lang codes, <mask>
 
@@ -182,7 +178,6 @@ class MBart50Tokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             eos_token=eos_token,
