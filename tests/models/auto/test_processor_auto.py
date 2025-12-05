@@ -522,10 +522,7 @@ class ProcessorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub_with_chat_templates(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Extract vocab and merges from SentencePiece model
-            extractor = SentencePieceExtractor(SAMPLE_VOCAB_LLAMA)
-            vocab_ids, vocab_scores, merges = extractor.extract()
-            tokenizer = LlamaTokenizer(vocab=vocab_scores, merges=merges)
+            tokenizer = LlamaTokenizer.from_pretrained(SAMPLE_VOCAB_LLAMA)
             image_processor = SiglipImageProcessor()
             chat_template = "default dummy template for testing purposes only"
             processor = LlavaProcessor(
