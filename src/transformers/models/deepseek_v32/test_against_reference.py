@@ -6,10 +6,8 @@ This script runs randomized inputs through both implementations to find
 numerical inconsistencies that structured tests might miss.
 """
 
-import math
 import random
 import sys
-from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -401,13 +399,13 @@ class FuzzStats:
 
     def summary(self):
         print(f"\n{'=' * 60}")
-        print(f"Fuzz Test Summary")
+        print("Fuzz Test Summary")
         print(f"{'=' * 60}")
         print(f"  Tests run: {self.tests_run}")
         print(f"  Passed: {self.tests_passed}")
         print(f"  Failed: {len(self.failures)}")
         if self.failures:
-            print(f"\nFailures:")
+            print("\nFailures:")
             for name, details in self.failures[:10]:  # Show first 10
                 print(f"  - {name}: {details}")
             if len(self.failures) > 10:
@@ -509,8 +507,8 @@ def fuzz_rmsnorm(stats: FuzzStats, num_iterations: int = 100):
 
 def fuzz_mlp(stats: FuzzStats, num_iterations: int = 50):
     """Fuzz test MLP implementation."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MLP
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MLP
 
     print("\nFuzzing MLP...")
 
@@ -561,8 +559,8 @@ def fuzz_mlp(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_expert(stats: FuzzStats, num_iterations: int = 50):
     """Fuzz test Expert implementation."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Expert
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Expert
 
     print("\nFuzzing Expert...")
 
@@ -613,8 +611,8 @@ def fuzz_expert(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_gate(stats: FuzzStats, num_iterations: int = 50):
     """Fuzz test Gate routing implementation."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Gate
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Gate
 
     print("\nFuzzing Gate...")
 
@@ -711,8 +709,8 @@ def fuzz_gate(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_attention_components(stats: FuzzStats, num_iterations: int = 30):
     """Fuzz test attention-related dimension splits and projections."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 
     print("\nFuzzing Attention Components...")
 
@@ -784,8 +782,8 @@ def fuzz_attention_forward(stats: FuzzStats, num_iterations: int = 30):
     2. With seq_len > 1, the indexer sparse mask is applied
     3. The sparse mask actually restricts attention to top-k positions
     """
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 
     print("\nFuzzing Attention Forward...")
 
@@ -857,8 +855,8 @@ def fuzz_attention_indexer_effect(stats: FuzzStats, num_iterations: int = 20):
     This catches bugs like `if seq_len < 1:` which would disable the indexer.
     We verify by comparing outputs with different index_topk values.
     """
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 
     print("\nFuzzing Attention Indexer Effect...")
 
@@ -952,8 +950,8 @@ def fuzz_attention_indexer_effect(stats: FuzzStats, num_iterations: int = 20):
 
 def fuzz_indexer_components(stats: FuzzStats, num_iterations: int = 30):
     """Fuzz test indexer dimension calculations."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
 
     print("\nFuzzing Indexer Components...")
 
@@ -1013,8 +1011,8 @@ def fuzz_indexer_vs_reference(stats: FuzzStats, num_iterations: int = 30):
     that the HF implementation produces the exact same top-k indices as
     the reference implementation.
     """
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
 
     print("\nFuzzing Indexer vs Reference...")
 
@@ -1108,8 +1106,8 @@ def fuzz_attention_vs_reference(stats: FuzzStats, num_iterations: int = 30):
     that the HF implementation produces numerically equivalent outputs
     to the reference implementation.
     """
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 
     print("\nFuzzing Attention vs Reference...")
 
@@ -1220,8 +1218,8 @@ def fuzz_indexer_backward_vs_reference(stats: FuzzStats, num_iterations: int = 3
     Note: Indexer is typically used with @torch.no_grad() in inference,
     but we test gradients flow for completeness.
     """
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
 
     print("\nFuzzing Indexer Backward vs Reference...")
 
@@ -1322,8 +1320,8 @@ def fuzz_attention_backward_vs_reference(stats: FuzzStats, num_iterations: int =
     that gradients computed through the HF implementation match
     those computed through the reference implementation.
     """
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 
     print("\nFuzzing Attention Backward vs Reference...")
 
@@ -1427,8 +1425,8 @@ def fuzz_attention_backward_vs_reference(stats: FuzzStats, num_iterations: int =
 
 def fuzz_full_forward(stats: FuzzStats, num_iterations: int = 20):
     """Fuzz test full forward pass for crashes and NaN/Inf."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32ForCausalLM
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32ForCausalLM
 
     print("\nFuzzing Full Forward Pass...")
 
@@ -1543,8 +1541,8 @@ def fuzz_rope_edge_cases(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_moe_routing(stats: FuzzStats, num_iterations: int = 30):
     """Fuzz test MoE routing logic."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MoE
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MoE
 
     print("\nFuzzing MoE Routing...")
 
@@ -1707,8 +1705,8 @@ def fuzz_rmsnorm_backward(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_mlp_backward(stats: FuzzStats, num_iterations: int = 50):
     """Fuzz test MLP backward pass."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MLP
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MLP
 
     print("\nFuzzing MLP Backward...")
 
@@ -1769,8 +1767,8 @@ def fuzz_mlp_backward(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_expert_backward(stats: FuzzStats, num_iterations: int = 50):
     """Fuzz test Expert backward pass."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Expert
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Expert
 
     print("\nFuzzing Expert Backward...")
 
@@ -1826,8 +1824,8 @@ def fuzz_expert_backward(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_gate_backward(stats: FuzzStats, num_iterations: int = 50):
     """Fuzz test Gate backward pass."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Gate
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Gate
 
     print("\nFuzzing Gate Backward...")
 
@@ -1905,8 +1903,8 @@ def fuzz_gate_backward(stats: FuzzStats, num_iterations: int = 50):
 
 def fuzz_full_backward(stats: FuzzStats, num_iterations: int = 20):
     """Fuzz test full model backward pass for training stability."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32ForCausalLM
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32ForCausalLM
 
     print("\nFuzzing Full Backward Pass...")
 
@@ -1988,8 +1986,8 @@ def fuzz_full_backward(stats: FuzzStats, num_iterations: int = 20):
 
 def fuzz_moe_backward(stats: FuzzStats, num_iterations: int = 30):
     """Fuzz test MoE backward pass."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MoE
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32MoE
 
     print("\nFuzzing MoE Backward...")
 
@@ -2093,15 +2091,14 @@ REAL_CONFIG = {
 
 def test_real_config_dimensions(stats: FuzzStats):
     """Test that model components work with exact real config dimensions."""
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
     from transformers.models.deepseek_v32.modeling_deepseek_v32 import (
-        DeepseekV32RMSNorm,
-        DeepseekV32MLP,
+        DeepseekV32Attention,
         DeepseekV32Expert,
         DeepseekV32Gate,
-        DeepseekV32Attention,
-        DeepseekV32MoE,
+        DeepseekV32MLP,
+        DeepseekV32RMSNorm,
     )
-    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 
     print("\nTesting Real Config Dimensions...")
 
@@ -2199,8 +2196,8 @@ def test_real_config_dimensions(stats: FuzzStats):
 
 def test_real_config_gate_routing(stats: FuzzStats):
     """Test Gate routing with exact real config (256 experts, 8 groups, etc.)."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Gate
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32Gate
 
     print("\nTesting Real Config Gate Routing...")
 
@@ -2272,13 +2269,13 @@ def test_real_config_gate_routing(stats: FuzzStats):
 
 def test_real_config_backward(stats: FuzzStats):
     """Test backward pass with real config dimensions."""
+    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
     from transformers.models.deepseek_v32.modeling_deepseek_v32 import (
-        DeepseekV32RMSNorm,
-        DeepseekV32MLP,
         DeepseekV32Expert,
         DeepseekV32Gate,
+        DeepseekV32MLP,
+        DeepseekV32RMSNorm,
     )
-    from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 
     print("\nTesting Real Config Backward...")
 
@@ -2356,8 +2353,8 @@ def test_real_config_backward(stats: FuzzStats):
 
 def test_weight_names_match_safetensors(stats: FuzzStats):
     """Verify that model weight names match the safetensors index."""
-    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32ForCausalLM
     from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+    from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32ForCausalLM
 
     print("\nTesting Weight Names Match Safetensors...")
 

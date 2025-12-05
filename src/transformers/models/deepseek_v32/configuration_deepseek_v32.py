@@ -119,6 +119,8 @@ class DeepseekV32Config(PretrainedConfig):
             Number of top-k tokens to select for sparse attention.
         use_fp8_indexer (`bool`, *optional*, defaults to `False`):
             Whether to use FP8 quantization in the indexer.
+        use_distributed_moe (`bool`, *optional*, defaults to `False`):
+            Whether to enable distributed all-reduce for MoE experts. This mirrors the reference implementation's behavior.
 
     Example:
 
@@ -207,6 +209,7 @@ class DeepseekV32Config(PretrainedConfig):
         index_head_dim: int = 128,
         index_topk: int = 2048,
         use_fp8_indexer: bool = False,
+        use_distributed_moe: bool = False,
         **kwargs,
     ):
         # Core dimensions
@@ -261,6 +264,7 @@ class DeepseekV32Config(PretrainedConfig):
         self.index_head_dim = index_head_dim
         self.index_topk = index_topk
         self.use_fp8_indexer = use_fp8_indexer
+        self.use_distributed_moe = use_distributed_moe
 
         # head_dim for RoPE compatibility
         self.head_dim = qk_rope_head_dim
