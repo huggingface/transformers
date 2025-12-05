@@ -323,6 +323,7 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
+    @unittest.skip(reason="TODO when checkpoint")
     def test_model_integration(self):
         # fmt: off
         EXPECTED_TOKENS = torch.tensor([
@@ -350,6 +351,7 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
+    @unittest.skip(reason="TODO when checkpoint")
     def test_model_integration_batched(self):
         # fmt: off
         EXPECTED_TOKENS = torch.tensor([
@@ -372,7 +374,9 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
 
         samples = self._load_datasamples(5)
         model = LasrForCTC.from_pretrained(
-            self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device, attn_implementation="eager"
+            self.checkpoint_name,
+            torch_dtype=self.dtype,
+            device_map=torch_device,
         )
         model.eval()
         model.to(torch_device)
