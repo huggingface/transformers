@@ -59,6 +59,19 @@ else:
 
 logger = logging.get_logger(__name__)
 
+
+class AutoTokenizerError(ValueError):
+    """Base class for AutoTokenizer loading errors."""
+
+
+class AutoTokenizerBackendError(AutoTokenizerError):
+    """Raised when the requested tokenizer backend cannot be used."""
+
+
+class AutoTokenizerLoadError(AutoTokenizerError):
+    """Raised when no tokenizer can be loaded from a checkpoint."""
+
+
 # V5: Simplified mapping - single tokenizer class per model type (always prefer tokenizers-based)
 REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
 REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
@@ -389,6 +402,10 @@ def load_merges(merges_file):
 
 
 def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
+    # Bloom tokenizer classes were removed but should map to the fast backend for BC
+    if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
+        return TokenizersBackend
+
     if class_name in REGISTERED_FAST_ALIASES:
         return REGISTERED_FAST_ALIASES[class_name]
 
@@ -453,7 +470,7 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
         An instantiated tokenizer object
 
     Raises:
-        ValueError: If tokenizer could not be loaded with tokenizers backend
+        AutoTokenizerLoadError: If tokenizer could not be loaded with tokenizers backend
     """
     files_loaded = []
 
@@ -538,7 +555,8 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                 if "vocab" in fast_sig.parameters:
                     try:
                         vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
-                        files_loaded.append(spm_file)
+                        if spm_file not in files_loaded:
+                            files_loaded.append(spm_file)
                         kwargs["backend"] = "tokenizers"
                         kwargs["files_loaded"] = files_loaded
                         # If tokenizer needs both vocab and merges (BPE models)
@@ -553,6 +571,14 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
                             )
                     except Exception:
                         pass
+                if TokenizersBackend is not None and issubclass(tokenizer_class, TokenizersBackend):
+                    # Provide the SentencePiece model directly when tokenizer.json is absent or extraction fails.
+                    if spm_file not in files_loaded:
+                        files_loaded.append(spm_file)
+                    kwargs["backend"] = "tokenizers"
+                    kwargs["files_loaded"] = files_loaded
+                    kwargs.setdefault("vocab_file", resolved_spm)
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             except ImportError as e:
                 if "sentencepiece" in str(e).lower() or "SentencePiece" in str(e):
                     raise ImportError(
@@ -613,9 +639,9 @@ def _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inp
             pass
 
     # If all methods failed, raise an error
-    raise ValueError(
+    raise AutoTokenizerLoadError(
         f"Could not load tokenizer from {pretrained_model_name_or_path} using tokenizers backend. "
-        "No tokenizer.json, tekken.json, vocab.json+merges.txt, vocab.txt, or compatible SentencePiece model found."
+        "No tokenizer.json, tekken.json, vocab.json/merges.txt, vocab.txt, or compatible SentencePiece model found."
     )
 
 
@@ -643,7 +669,8 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
         An instantiated tokenizer object
 
     Raises:
-        ValueError: If no tokenizer could be loaded
+        AutoTokenizerBackendError: If a requested backend dependency is missing
+        AutoTokenizerLoadError: If no tokenizer could be loaded
     """
     # Extract the backend parameter - default to "tokenizers" to prioritize tokenizers backend
     backend = kwargs.pop("backend", "tokenizers")
@@ -659,7 +686,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
     # Route to SentencePiece backend if requested
     if backend == "sentencepiece":
         if SentencePieceBackend is None:
-            raise ValueError(
+            raise AutoTokenizerBackendError(
                 "SentencePiece backend was requested but sentencepiece is not installed. "
                 "Please install it with: pip install sentencepiece"
             )
@@ -690,6 +717,9 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
 
     # Route to tokenizers backend (default)
     if backend == "tokenizers":
+        if tokenizer_class is None and TokenizersBackend is not None:
+            tokenizer_class = TokenizersBackend
+
         if tokenizer_class is not None:
             # Check if tokenizer_class inherits from PreTrainedTokenizer (but not from TokenizersBackend/SentencePieceBackend)
             # These are edge cases with custom logic (e.g., BioGptTokenizer with Moses tokenization)
@@ -735,54 +765,13 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **custom_kwargs)
 
             if TokenizersBackend is None:
-                raise ValueError(
+                raise AutoTokenizerBackendError(
                     "Tokenizers backend is the default but tokenizers library is not installed. "
                     "Please install it with: pip install tokenizers"
                 )
             logger.info("Loading tokenizer with tokenizers backend")
-            try:
-                return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
-            except ValueError as e:
-                # If tokenizers backend fails, try falling back to SentencePiece backend if available
-                spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
-                if spm_file is not None and SentencePieceBackend is not None:
-                    logger.info(
-                        f"Tokenizers backend failed: {e}. "
-                        f"Falling back to SentencePieceBackend since {spm_file} file was found."
-                    )
-                    files_loaded = [spm_file]
-                    kwargs["backend"] = "sentencepiece"
-                    kwargs["files_loaded"] = files_loaded
-                    # Resolve the SPM file path and pass it as vocab_file
-                    resolved_vocab_file = cached_file(
-                        pretrained_model_name_or_path,
-                        spm_file,
-                        cache_dir=kwargs.get("cache_dir"),
-                        force_download=kwargs.get("force_download", False),
-                        proxies=kwargs.get("proxies"),
-                        token=kwargs.get("token"),
-                        revision=kwargs.get("revision"),
-                        local_files_only=kwargs.get("local_files_only", False),
-                        subfolder=kwargs.get("subfolder", ""),
-                    )
-                    kwargs["vocab_file"] = resolved_vocab_file
-                    if tokenizer_class is not None and issubclass(tokenizer_class, SentencePieceBackend):
-                        logger.info(
-                            "Falling back to SentencePiece backend using tokenizer class that inherits from SentencePieceBackend."
-                        )
-                        return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                    return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                # If no fallback available, try calling tokenizer class directly as last resort
-                if hasattr(tokenizer_class, "from_pretrained"):
-                    logger.info(
-                        f"Tokenizers backend failed: {e}. Trying to load tokenizer directly from tokenizer class."
-                    )
-                    # Filter out AutoTokenizer-specific kwargs that custom tokenizers don't accept
-                    custom_kwargs = {k: v for k, v in kwargs.items() if k not in ["backend", "files_loaded"]}
-                    custom_kwargs["_from_auto"] = True  # Signal that this is called from AutoTokenizer
-                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **custom_kwargs)
-                # Re-raise if no fallback options available
-                raise
+
+            return _load_tokenizers_backend(tokenizer_class, pretrained_model_name_or_path, inputs, kwargs)
 
         # If no tokenizer class but tokenizers backend requested, fall back to SentencePiece if available
         spm_file = _find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
@@ -818,7 +807,7 @@ def _try_load_tokenizer_with_fallbacks(tokenizer_class, pretrained_model_name_or
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             return SentencePieceBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        raise ValueError(
+        raise AutoTokenizerLoadError(
             f"Could not load tokenizer from {pretrained_model_name_or_path}. "
             "No tokenizer class could be determined and no SentencePiece model found."
         )
@@ -1144,16 +1133,10 @@ class AutoTokenizer:
 
         model_type = config_class_to_model_type(type(config).__name__)
         if model_type is not None:
-            tokenizer_class = TOKENIZER_MAPPING[type(config)]
-
+            tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
                 return _try_load_tokenizer_with_fallbacks(
                     tokenizer_class, pretrained_model_name_or_path, inputs, kwargs
-                )
-            else:
-                raise ValueError(
-                    "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
-                    "in order to use this tokenizer."
                 )
 
         raise ValueError(
