@@ -133,7 +133,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             str(eos_token): 3,
         }
 
-
         self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
@@ -202,7 +201,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
     @classmethod
     def convert_from_spm_model(cls, vocab, **kwargs):
-        """SeamlessM4TTokenizer is already based on BPE, so no conversion is needed."""
+        """When converting from spm, offset is needed to account for special tokens."""
         _vocab = {
             "<pad>": 0,
             "<unk>": 1,
