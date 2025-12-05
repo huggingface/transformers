@@ -169,13 +169,13 @@ class TextToAudioPipeline(Pipeline):
                 text.messages,
                 tokenize=True,
                 return_dict=True,
-                sampling_rate=preprocessor.feature_extractor.sampling_rate,
+                sampling_rate=self.sampling_rate,
                 **kwargs,
             )
         else:
             output = preprocessor(text, **kwargs, return_tensors="pt")
         model_dtype = next(self.model.parameters()).dtype
-        output = output.to(device=self.device, dtype=model_dtype)
+        output = output.to(dtype=model_dtype)
 
         return output
 

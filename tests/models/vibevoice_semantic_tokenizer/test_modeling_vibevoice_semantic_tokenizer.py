@@ -278,7 +278,7 @@ class VibeVoiceSemanticTokenizerIntegrationTest(unittest.TestCase):
     @require_torch
     def test_batch_integration(self):
         """
-        Reproducer which also generates expected outputs for acoustic tokenizer and main model:
+        Reproducer which generates JSON expected outputs for acoustic/semantic tokenizers and main model:
         https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
         """
         dtype = torch.bfloat16

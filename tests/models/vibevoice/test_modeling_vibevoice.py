@@ -400,10 +400,9 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_diffusers
     def test_1b5_inference_no_voice(self):
         """
-        reproducer that generates JSON with expected output: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
-        standalone script for this test: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-test_integration_single-py
-
-        diffusers library is needed (working with `diffusers==0.35.2`)
+        Reproducer which generates JSON expected outputs for acoustic/semantic tokenizers and main model:
+        https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
+        diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)
         fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single_noaudio.json"
@@ -461,10 +460,9 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_diffusers
     def test_1b5_inference(self):
         """
-        reproducer that generates JSON with expected output: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
-        standalone script for this test: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-test_integration_single-py
-
-        diffusers library is needed (working with `diffusers==0.35.2`)
+        Reproducer which generates JSON expected outputs for acoustic/semantic tokenizers and main model:
+        https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer-py
+        diffusers library is needed (ran with `diffusers==0.35.2`)
         """
         set_seed(42)
         fixtures_path = Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_results_single.json"

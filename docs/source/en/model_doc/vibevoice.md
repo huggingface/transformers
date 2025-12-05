@@ -465,6 +465,7 @@ VibeVoice can also be loaded as a pipeline:
 
 ```python
 import os
+import soundfile as sf
 from transformers import pipeline, set_seed
 
 
@@ -493,7 +494,7 @@ output = pipe(chat_template)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_pipeline.wav"
-pipe.processor.save_audio(output["audio"], fn)
+sf.write(fn, output["audio"], output["sampling_rate"])
 print(f"Saved output to {fn}")
 ```
 
