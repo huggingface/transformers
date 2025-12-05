@@ -44,7 +44,7 @@ class Bnb4bitQuantize(ConversionOps):
         we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
         value = list(input_dict.values())[0]
-        value = value[0] if isinstance(value, list) else value
+        value = value[0]
 
         # update param name to get the weights instead of the quantized stats
         module, _ = get_module_from_name(model, full_layer_name)
