@@ -93,6 +93,7 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_dmattn_available,
     is_flute_available,
     is_fp_quant_available,
     is_fsdp_available,
@@ -621,6 +622,27 @@ def require_flash_attn(test_case):
         kernels_available = False
 
     return unittest.skipUnless(kernels_available | flash_attn_available, "test requires Flash Attention")(test_case)
+
+
+def require_flash_dmattn(test_case):
+    """
+    Decorator marking a test that requires Flash Dynamic Mask Attention.
+
+    These tests are skipped when Flash Dynamic Mask Attention isn't installed.
+
+    """
+    flash_dmattn_available = is_flash_dmattn_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel("kernels-community/flash-dmattn")
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(
+        kernels_available | flash_dmattn_available, "test requires Flash Dynamic Mask Attention"
+    )(test_case)
 
 
 def require_kernels(test_case):

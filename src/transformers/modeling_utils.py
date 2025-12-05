@@ -68,6 +68,7 @@ from .integrations.accelerate import (
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
+from .integrations.flash_dynamic_mask_attention import flash_dynamic_mask_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import is_kernel
@@ -109,6 +110,7 @@ from .utils import (
     is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_dmattn_available,
     is_kernels_available,
     is_offline_mode,
     is_torch_flex_attn_available,
@@ -1098,6 +1100,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # Flash Attention support
     _supports_flash_attn = False
 
+    # Flash Dynamic Mask Attention support
+    _supports_flash_dmattn = False
+
     # SDPA support
     _supports_sdpa = False
 
@@ -1685,6 +1690,94 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return True
 
+    def _flash_dmattn_can_dispatch(self, is_init_check: bool = False) -> bool:
+        """
+        Check the availability of Flash Dynamic Mask Attention for a given model.
+
+        Args:
+            is_init_check (`bool`, *optional*):
+                Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
+                fully instantiated. This is needed as we also check the devices of the weights, which are only available
+                later after __init__. This allows to raise proper exceptions early before instantiating the full models
+                if we know that the model does not support the requested attention.
+        """
+        dtype = self.config.dtype
+
+        # check `supports_flash_dmattn` for BC with custom code. TODO: remove after a few releases
+        if not (self._supports_flash_dmattn or getattr(self, "_supports_flash_dmattn", False)):
+            raise ValueError(
+                f"{self.__class__.__name__} does not support Flash Dynamic Mask Attention yet. Please request to add support where"
+                f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
+                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+            )
+
+        if not is_flash_dmattn_available():
+            preface = (
+                "FlashDynamicMaskAttention has been toggled on, but it cannot be used due to the following error:"
+            )
+            install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashdynamicmaskattention to install Flash Dynamic Mask Attention."
+
+            # package `flash-dmattn` can not be installed on Ascend NPU, following validation logics can be ignored.
+            if is_torch_npu_available():
+                logger.info("Detect using FlashDynamicMaskAttention on Ascend NPU.")
+                return True
+
+            if importlib.util.find_spec("flash_dmattn") is None:
+                raise ImportError(f"{preface} the package flash_dmattn seems to be not installed. {install_message}")
+            else:
+                # Check FDMA installed version compatibility
+                flash_attention_version = version.parse(importlib.metadata.version("flash_dmattn"))
+                if torch.version.cuda:
+                    if flash_attention_version < version.parse("1.0.0"):
+                        raise ImportError(
+                            f"{preface} you need flash_dmattn package version to be greater or equal than 1.0.0. Detected version {flash_attention_version}. {install_message}"
+                        )
+                    elif not torch.cuda.is_available():
+                        raise ValueError(
+                            f"{preface} Flash Dynamic Mask Attention is not available on CPU. Please make sure torch can access a CUDA device."
+                        )
+                    else:
+                        raise ImportError(
+                            f"{preface} Flash Dynamic Mask Attention is not available. {install_message}"
+                        )
+                elif torch.version.hip:
+                    raise ImportError(f"{preface} Flash Dynamic Mask Attention is not available. {install_message}")
+
+        if dtype is None:
+            logger.warning_once(
+                "You are attempting to use Flash Dynamic Mask Attention without specifying a torch dtype. This might lead to unexpected behaviour"
+            )
+        elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
+            logger.warning_once(
+                "Flash Dynamic Mask Attention only supports torch.float16 and torch.bfloat16 dtypes, but"
+                f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_dynamic_mask_attention", dtype=torch.float16)`'
+            )
+
+        # With the early check, the parameters are not yet initialized correctly
+        if not is_init_check:
+            param_devices = list({param.device for param in self.parameters()})
+            if len(param_devices) == 1 and param_devices[0].type == "cpu":
+                if torch.cuda.is_available():
+                    logger.warning_once(
+                        "You are attempting to use Flash Dynamic Mask Attention with a model not initialized on GPU. Make sure to move the model to GPU"
+                        " after initializing it on CPU with `model.to('cuda')`."
+                    )
+                elif is_torch_mlu_available():
+                    logger.warning_once(
+                        "You are attempting to use Flash Dynamic Mask Attention with a model not initialized on MLU. Make sure to move the model to MLU"
+                        " after initializing it on CPU with `model.to('mlu')`."
+                    )
+                else:
+                    raise ValueError(
+                        "You are attempting to use Flash Dynamic Mask Attention with a model not initialized on GPU and with no GPU available. "
+                        "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                        "or initialising the model on CPU and then moving it to GPU."
+                    )
+
+        # If no error raise by this point, we can return `True`
+        return True
+
     def _sdpa_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of SDPA for a given model.
@@ -1826,6 +1919,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
                 message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`, `"attn_implementation=paged|flash_attention_2"`'
+            if self._supports_flash_dmattn:
+                message += ', `"attn_implementation=flash_dynamic_mask_attention"`'
             if self._supports_sdpa:
                 message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|sdpa"`'
             if self._supports_flex_attn:
@@ -1837,6 +1932,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self._flash_attn_2_can_dispatch(is_init_check)
         elif "flash_attention_3" in applicable_attention:
             self._flash_attn_3_can_dispatch(is_init_check)
+        elif "flash_dynamic_mask_attention" in applicable_attention:
+            self._flash_dmattn_can_dispatch(is_init_check)
         elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
         elif "sdpa" in applicable_attention:
@@ -4662,6 +4759,7 @@ class AttentionInterface(GeneralInterface):
     _global_mapping = {
         "flash_attention_3": flash_attention_forward,
         "flash_attention_2": flash_attention_forward,
+        "flash_dynamic_mask_attention": flash_dynamic_mask_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
         "paged|flash_attention_3": paged_attention_forward,

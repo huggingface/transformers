@@ -22,7 +22,7 @@ supported models.
 
 Most recent models can now switch from one attention function used in the Attention layer to the other, thanks to a simple mapping.
 By default, we provide the implementation for [`sdpa`](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html),
-[`flash_attention_2`](https://github.com/Dao-AILab/flash-attention) and [`flex_attention`](https://pytorch.org/docs/stable/nn.attention.flex_attention.html#module-torch.nn.attention.flex_attention)
+[`flash_attention_2`](https://github.com/Dao-AILab/flash-attention), [`flash_dynamic_mask_attention`](https://github.com/SmallDoges/flash-dmattn) and [`flex_attention`](https://pytorch.org/docs/stable/nn.attention.flex_attention.html#module-torch.nn.attention.flex_attention)
 as well as `eager`, which is a simple matrix multiplication without any optimization on top.  
 This is the setting you can usually choose when instantiating a model:
 

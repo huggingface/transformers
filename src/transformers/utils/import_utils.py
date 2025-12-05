@@ -914,6 +914,24 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
 
 
 @lru_cache
+def is_flash_dmattn_available():
+    is_available, flash_attn_version = _is_package_available("flash_dmattn", return_version=True)
+    if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
+        return False
+
+    import torch
+
+    if torch.version.cuda:
+        return version.parse(flash_attn_version) >= version.parse("1.0.0")
+    elif torch.version.hip:
+        return False
+    elif is_torch_mlu_available():
+        return False
+    else:
+        return False
+
+
+@lru_cache
 def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
     is_available, hub_version = _is_package_available("huggingface_hub", return_version=True)
     if not is_available:
