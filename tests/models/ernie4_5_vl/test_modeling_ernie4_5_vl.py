@@ -347,7 +347,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft"
+        EXPECTED_DECODED_TEXT = "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and"
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -423,7 +423,7 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
+            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, including a short tail',
             'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as its short'
         ]  # fmt: skip
 
@@ -454,8 +454,8 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
-            "User: Who are you?\nAssistant: \n\n\n\nI'm an AI assistant created to help answer questions and provide information on a wide range of topics! I don't have personal experiences or emotions"
+            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and",
+            "User: Who are you?\nAssistant: \n\n\n\nI am an AI assistant designed to help answer questions, provide information, and assist with tasks. I don't have personal experiences or a physical form"
         ]  # fmt: skip
 
         self.assertEqual(
