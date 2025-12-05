@@ -280,7 +280,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         all_attend = torch.all(attention_mask == 1)
         pred = cached | all_attend
 
-        if not is_torchdynamo_compiling:
+        if not is_torchdynamo_compiling():
             # keep original None if not exporting
             return None if bool(pred) else attention_mask
 
