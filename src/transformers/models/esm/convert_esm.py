@@ -14,17 +14,16 @@
 # limitations under the License.
 """Convert ESM checkpoint."""
 
-
 import argparse
 import pathlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import torch
-
 import esm as esm_module
+import torch
 from esm.esmfold.v1.misc import batch_encode_sequences as esmfold_encode_sequences
 from esm.esmfold.v1.pretrained import esmfold_v1
+
 from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig
 from transformers.models.esm.modeling_esm import (
     EsmForMaskedLM,
@@ -131,7 +130,7 @@ def convert_esm_checkpoint_to_pytorch(
         num_attention_heads = esm.args.attention_heads
         intermediate_size = esm.args.ffn_embed_dim
         token_dropout = esm.args.token_dropout
-        emb_layer_norm_before = True if esm.emb_layer_norm_before else False
+        emb_layer_norm_before = bool(esm.emb_layer_norm_before)
         position_embedding_type = "absolute"
         is_folding_model = False
         esmfold_config = None
@@ -284,6 +283,9 @@ def convert_esm_checkpoint_to_pytorch(
         model.lm_head.decoder.weight = esm.lm_head.weight
         model.lm_head.bias = esm.lm_head.bias
 
+    # Contact prediction head
+    transfer_and_check_weights(esm.contact_head, model.esm.contact_head)
+
     # Prepare data (first 2 sequences from ESMStructuralSplitDataset superfamily / 4)
     if is_folding_model:
         # Folding models aren't trained on masked inputs and don't like mask tokens.
@@ -314,7 +316,7 @@ def convert_esm_checkpoint_to_pytorch(
         hf_tokens = hf_tokenizer([row[1] for row in sample_data], return_tensors="pt", padding=True)
         success = torch.all(hf_tokens["input_ids"] == batch_tokens)
 
-    print("Do both models tokenizers output the same tokens?", "🔥" if success else "💩")
+    print("Do both models tokenizers output the same tokens?", "[PASS]" if success else "[FAIL]")
     if not success:
         raise Exception("Tokenization does not match!")
 
@@ -346,10 +348,24 @@ def convert_esm_checkpoint_to_pytorch(
             success = torch.allclose(our_output, their_output, atol=1e-5)
 
         print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
-        print("Do both models output the same tensors?", "🔥" if success else "💩")
+        print("Do both models output the same tensors?", "[PASS]" if success else "[FAIL]")
 
         if not success:
             raise Exception("Something went wRoNg")
+
+        if not is_folding_model:
+            # Let's check contact prediction too
+            our_output = model.predict_contacts(hf_tokens["input_ids"], hf_tokens["attention_mask"])
+            their_output = esm.predict_contacts(hf_tokens["input_ids"])
+            max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
+            success = torch.allclose(our_output, their_output, atol=1e-5)
+
+            print("Contact prediction testing:")
+            print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
+            print("Do both models output the same tensors?", "[PASS]" if success else "[FAIL]")
+
+            if not success:
+                raise Exception("Something went wRoNg")
 
         pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
         print(f"Saving model to {pytorch_dump_folder_path}")
@@ -361,8 +377,8 @@ def convert_esm_checkpoint_to_pytorch(
     hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_repo:
-        model.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
-        hf_tokenizer.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
+        model.push_to_hub(repo_id=push_to_repo, token_token=auth_token)
+        hf_tokenizer.push_to_hub(repo_id=push_to_repo, token_token=auth_token)
 
 
 if __name__ == "__main__":

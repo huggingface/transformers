@@ -15,7 +15,8 @@
 """
 Processor class for LayoutLMv3.
 """
-from typing import List, Optional, Union
+
+from typing import Optional, Union
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
@@ -24,33 +25,34 @@ from ...utils import TensorType
 
 class LayoutLMv3Processor(ProcessorMixin):
     r"""
-    Constructs a LayoutLMv3 processor which combines a LayoutLMv3 feature extractor and a LayoutLMv3 tokenizer into a
+    Constructs a LayoutLMv3 processor which combines a LayoutLMv3 image processor and a LayoutLMv3 tokenizer into a
     single processor.
 
     [`LayoutLMv3Processor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`LayoutLMv3FeatureExtractor`] to resize and normalize document images, and optionally applies OCR to
+    It first uses [`LayoutLMv3ImageProcessor`] to resize and normalize document images, and optionally applies OCR to
     get words and normalized bounding boxes. These are then provided to [`LayoutLMv3Tokenizer`] or
     [`LayoutLMv3TokenizerFast`], which turns the words and bounding boxes into token-level `input_ids`,
     `attention_mask`, `token_type_ids`, `bbox`. Optionally, one can provide integer `word_labels`, which are turned
     into token-level `labels` for token classification tasks (such as FUNSD, CORD).
 
     Args:
-        feature_extractor (`LayoutLMv3FeatureExtractor`):
-            An instance of [`LayoutLMv3FeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`LayoutLMv3Tokenizer` or `LayoutLMv3TokenizerFast`):
+        image_processor (`LayoutLMv3ImageProcessor`, *optional*):
+            An instance of [`LayoutLMv3ImageProcessor`]. The image processor is a required input.
+        tokenizer (`LayoutLMv3Tokenizer` or `LayoutLMv3TokenizerFast`, *optional*):
             An instance of [`LayoutLMv3Tokenizer`] or [`LayoutLMv3TokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "LayoutLMv3FeatureExtractor"
-    tokenizer_class = ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast")
+
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
         images,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -65,38 +67,37 @@ class LayoutLMv3Processor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
-        This method first forwards the `images` argument to [`~LayoutLMv3FeatureExtractor.__call__`]. In case
-        [`LayoutLMv3FeatureExtractor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
+        This method first forwards the `images` argument to [`~LayoutLMv3ImageProcessor.__call__`]. In case
+        [`LayoutLMv3ImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
         bounding boxes along with the additional arguments to [`~LayoutLMv3Tokenizer.__call__`] and returns the output,
-        together with resized and normalized `pixel_values`. In case [`LayoutLMv3FeatureExtractor`] was initialized
-        with `apply_ocr` set to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user
-        along with the additional arguments to [`~LayoutLMv3Tokenizer.__call__`] and returns the output, together with
+        together with resized and normalized `pixel_values`. In case [`LayoutLMv3ImageProcessor`] was initialized with
+        `apply_ocr` set to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along
+        with the additional arguments to [`~LayoutLMv3Tokenizer.__call__`] and returns the output, together with
         resized and normalized `pixel_values`.
 
         Please refer to the docstring of the above two methods for more information.
         """
         # verify input
-        if self.feature_extractor.apply_ocr and (boxes is not None):
+        if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(
-                "You cannot provide bounding boxes "
-                "if you initialized the feature extractor with apply_ocr set to True."
+                "You cannot provide bounding boxes if you initialized the image processor with apply_ocr set to True."
             )
 
-        if self.feature_extractor.apply_ocr and (word_labels is not None):
+        if self.image_processor.apply_ocr and (word_labels is not None):
             raise ValueError(
-                "You cannot provide word labels if you initialized the feature extractor with apply_ocr set to True."
+                "You cannot provide word labels if you initialized the image processor with apply_ocr set to True."
             )
 
-        # first, apply the feature extractor
-        features = self.feature_extractor(images=images, return_tensors=return_tensors)
+        # first, apply the image processor
+        features = self.image_processor(images=images, return_tensors=return_tensors)
 
         # second, apply the tokenizer
-        if text is not None and self.feature_extractor.apply_ocr and text_pair is None:
+        if text is not None and self.image_processor.apply_ocr and text_pair is None:
             if isinstance(text, str):
-                text = [text]  # add batch dimension (as the feature extractor always adds a batch dimension)
+                text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
             text_pair = features["words"]
 
         encoded_inputs = self.tokenizer(
@@ -143,16 +144,9 @@ class LayoutLMv3Processor(ProcessorMixin):
 
         return images_with_overflow
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        return ["input_ids", "bbox", "attention_mask", "pixel_values"]
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+
+__all__ = ["LayoutLMv3Processor"]

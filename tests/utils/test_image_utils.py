@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,16 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import codecs
 import unittest
 
-import datasets
+import httpx
 import numpy as np
 import pytest
+from huggingface_hub.file_download import hf_hub_download
 
+from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
-from transformers.image_utils import ChannelDimension, get_channel_dimension_axis
-from transformers.testing_utils import require_torch, require_vision
+from transformers.image_utils import (
+    ChannelDimension,
+    get_channel_dimension_axis,
+    make_flat_list_of_images,
+    make_list_of_images,
+    make_nested_list_of_images,
+)
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 
 
 if is_torch_available():
@@ -32,6 +39,11 @@ if is_vision_available():
 
     from transformers import ImageFeatureExtractionMixin
     from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
+
+
+def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: str | None = None) -> "PIL.Image.Image":
+    path = hf_hub_download(dataset_id, filename, repo_type="dataset", revision=revision)
+    return PIL.Image.open(path)
 
 
 def get_random_image(height, width):
@@ -101,6 +113,281 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(array5.dtype, np.float32)
         self.assertEqual(array5.shape, (3, 16, 32))
         self.assertTrue(np.array_equal(array5, array1))
+
+    def test_make_list_of_images_pil(self):
+        # Test a single image is converted to a list of 1 image
+        pil_image = get_random_image(16, 32)
+        images_list = make_list_of_images(pil_image)
+        self.assertIsInstance(images_list, list)
+        self.assertEqual(len(images_list), 1)
+        self.assertIsInstance(images_list[0], PIL.Image.Image)
+
+        # Test a list of images is not modified
+        images = [get_random_image(16, 32) for _ in range(4)]
+        images_list = make_list_of_images(images)
+        self.assertIsInstance(images_list, list)
+        self.assertEqual(len(images_list), 4)
+        self.assertIsInstance(images_list[0], PIL.Image.Image)
+
+    def test_make_list_of_images_numpy(self):
+        # Test a single image is converted to a list of 1 image
+        images = np.random.randint(0, 256, (16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 1)
+        self.assertTrue(np.array_equal(images_list[0], images))
+        self.assertIsInstance(images_list, list)
+
+        # Test a batch of images is converted to a list of images
+        images = np.random.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test a list of images is not modified
+        images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test batched masks with no channel dimension are converted to a list of masks
+        masks = np.random.randint(0, 2, (4, 16, 32))
+        masks_list = make_list_of_images(masks, expected_ndims=2)
+        self.assertEqual(len(masks_list), 4)
+        self.assertTrue(np.array_equal(masks_list[0], masks[0]))
+        self.assertIsInstance(masks_list, list)
+
+    @require_torch
+    def test_make_list_of_images_torch(self):
+        # Test a single image is converted to a list of 1 image
+        images = torch.randint(0, 256, (16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 1)
+        self.assertTrue(np.array_equal(images_list[0], images))
+        self.assertIsInstance(images_list, list)
+
+        # Test a batch of images is converted to a list of images
+        images = torch.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test a list of images is left unchanged
+        images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+    def test_make_flat_list_of_images_pil(self):
+        # Test a single image is converted to a list of 1 image
+        pil_image = get_random_image(16, 32)
+        images_list = make_flat_list_of_images(pil_image)
+        self.assertIsInstance(images_list, list)
+        self.assertEqual(len(images_list), 1)
+        self.assertIsInstance(images_list[0], PIL.Image.Image)
+
+        # Test a list of images is not modified
+        images = [get_random_image(16, 32) for _ in range(4)]
+        images_list = make_flat_list_of_images(images)
+        self.assertIsInstance(images_list, list)
+        self.assertEqual(len(images_list), 4)
+        self.assertIsInstance(images_list[0], PIL.Image.Image)
+
+        # Test a nested list of images is flattened
+        images = [[get_random_image(16, 32) for _ in range(2)] for _ in range(2)]
+        images_list = make_flat_list_of_images(images)
+        self.assertIsInstance(images_list, list)
+        self.assertEqual(len(images_list), 4)
+        self.assertIsInstance(images_list[0], PIL.Image.Image)
+
+    def test_make_flat_list_of_images_numpy(self):
+        # Test a single image is converted to a list of 1 image
+        images = np.random.randint(0, 256, (16, 32, 3))
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 1)
+        self.assertTrue(np.array_equal(images_list[0], images))
+        self.assertIsInstance(images_list, list)
+
+        # Test a 4d array of images is changed to a list of images
+        images = np.random.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertIsInstance(images_list, list)
+        self.assertIsInstance(images_list[0], np.ndarray)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+
+        # Test a list of images is not modified
+        images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test list of 4d array images is flattened
+        images = [np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 8)
+        self.assertTrue(np.array_equal(images_list[0], images[0][0]))
+        self.assertIsInstance(images_list, list)
+        self.assertIsInstance(images_list[0], np.ndarray)
+
+        # Test nested list of images is flattened
+        images = [[np.random.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0][0]))
+        self.assertIsInstance(images_list, list)
+
+    @require_torch
+    def test_make_flat_list_of_images_torch(self):
+        # Test a single image is converted to a list of 1 image
+        images = torch.randint(0, 256, (16, 32, 3))
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 1)
+        self.assertTrue(np.array_equal(images_list[0], images))
+        self.assertIsInstance(images_list, list)
+
+        # Test a 4d tensors of images is changed to a list of images
+        images = torch.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertIsInstance(images_list, list)
+        self.assertIsInstance(images_list[0], torch.Tensor)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+
+        # Test a list of images is not modified
+        images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
+        self.assertIsInstance(images_list, list)
+
+        # Test list of 4d tensors of imagess is flattened
+        images = [torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 8)
+        self.assertTrue(np.array_equal(images_list[0], images[0][0]))
+        self.assertIsInstance(images_list, list)
+        self.assertIsInstance(images_list[0], torch.Tensor)
+
+        # Test nested list of images is flattened
+        images = [[torch.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertTrue(np.array_equal(images_list[0], images[0][0]))
+        self.assertIsInstance(images_list, list)
+
+    def test_make_nested_list_of_images_pil(self):
+        # Test a single image is converted to a nested list of 1 image
+        pil_image = get_random_image(16, 32)
+        images_list = make_nested_list_of_images(pil_image)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list[0]), 1)
+        self.assertIsInstance(images_list[0][0], PIL.Image.Image)
+
+        # Test a list of images is converted to a nested list of images
+        images = [get_random_image(16, 32) for _ in range(4)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list), 1)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertIsInstance(images_list[0][0], PIL.Image.Image)
+
+        # Test a nested list of images is not modified
+        images = [[get_random_image(16, 32) for _ in range(2)] for _ in range(2)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list), 2)
+        self.assertEqual(len(images_list[0]), 2)
+        self.assertIsInstance(images_list[0][0], PIL.Image.Image)
+
+    def test_make_nested_list_of_images_numpy(self):
+        # Test a single image is converted to a nested list of 1 image
+        images = np.random.randint(0, 256, (16, 32, 3))
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list), 1)
+        self.assertTrue(np.array_equal(images_list[0][0], images))
+
+        # Test a 4d array of images is converted to a nested list of images
+        images = np.random.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], np.ndarray)
+        self.assertEqual(len(images_list), 1)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0]))
+
+        # Test a list of images is converted to a nested list of images
+        images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list), 1)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0]))
+
+        # Test a nested list of images is left unchanged
+        images = [[np.random.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list), 2)
+        self.assertEqual(len(images_list[0]), 2)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
+
+        # Test a list of 4d array images is converted to a nested list of images
+        images = [np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], np.ndarray)
+        self.assertEqual(len(images_list), 2)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
+
+    @require_torch
+    def test_make_nested_list_of_images_torch(self):
+        # Test a single image is converted to a nested list of 1 image
+        images = torch.randint(0, 256, (16, 32, 3))
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list[0]), 1)
+        self.assertTrue(np.array_equal(images_list[0][0], images))
+
+        # Test a 4d tensor of images is converted to a nested list of images
+        images = torch.randint(0, 256, (4, 16, 32, 3))
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], torch.Tensor)
+        self.assertEqual(len(images_list), 1)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0]))
+
+        # Test a list of images is converted to a nested list of images
+        images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list), 1)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0]))
+
+        # Test a nested list of images is left unchanged
+        images = [[torch.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertEqual(len(images_list), 2)
+        self.assertEqual(len(images_list[0]), 2)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
+
+        # Test a list of 4d tensor images is converted to a nested list of images
+        images = [torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], torch.Tensor)
+        self.assertEqual(len(images_list), 2)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
 
     @require_torch
     def test_conversion_torch_to_array(self):
@@ -426,6 +713,17 @@ class ImageFeatureExtractionTester(unittest.TestCase):
 
 @require_vision
 class LoadImageTester(unittest.TestCase):
+    def test_load_img_url(self):
+        img = load_image(INVOICE_URL)
+        img_arr = np.array(img)
+
+        self.assertEqual(img_arr.shape, (1061, 750, 3))
+
+    @is_flaky()
+    def test_load_img_url_timeout(self):
+        with self.assertRaises(httpx.ConnectTimeout):
+            load_image(INVOICE_URL, timeout=0.001)
+
     def test_load_img_local(self):
         img = load_image("./tests/fixtures/tests_samples/COCO/000000039769.png")
         img_arr = np.array(img)
@@ -435,21 +733,52 @@ class LoadImageTester(unittest.TestCase):
             (480, 640, 3),
         )
 
+    def test_load_img_base64_prefix(self):
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_0.txt", repo_type="dataset"
+        )
+        with open(path, encoding="utf-8") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
+        self.assertEqual(img_arr.shape, (64, 32, 3))
+
+    def test_load_img_base64(self):
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_1.txt", repo_type="dataset"
+        )
+        with open(path, encoding="utf-8") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
+        self.assertEqual(img_arr.shape, (64, 32, 3))
+
+    def test_load_img_base64_encoded_bytes(self):
+        path = hf_hub_download(
+            repo_id="hf-internal-testing/dummy-base64-images", filename="image_2.txt", repo_type="dataset"
+        )
+        with codecs.open(path, encoding="unicode_escape") as b64:
+            img = load_image(b64.read())
+            img_arr = np.array(img)
+        self.assertEqual(img_arr.shape, (256, 256, 3))
+
     def test_load_img_rgba(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
-
-        img = load_image(dataset[0]["file"])  # img with mode RGBA
-        img_arr = np.array(img)
-
-        self.assertEqual(
-            img_arr.shape,
-            (512, 512, 3),
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        img = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "0-test-lena.png", revision="refs/pr/1"
         )
 
-    def test_load_img_la(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        img = load_image(img)  # img with mode RGBA
+        img_arr = np.array(img)
+        self.assertEqual(img_arr.shape, (512, 512, 3))
 
-        img = load_image(dataset[1]["file"])  # img with mode LA
+    def test_load_img_la(self):
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        img = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "1-test-parrots.png", revision="refs/pr/1"
+        )
+
+        img = load_image(img)  # img with mode LA
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -458,9 +787,13 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_l(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        img = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "2-test-tree.png", revision="refs/pr/1"
+        )
 
-        img = load_image(dataset[2]["file"])  # img with mode L
+        img = load_image(img)  # img with mode L
         img_arr = np.array(img)
 
         self.assertEqual(
@@ -469,10 +802,12 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_exif_transpose(self):
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
-        img_file = dataset[3]["file"]
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
 
-        img_without_exif_transpose = PIL.Image.open(img_file)
+        img_without_exif_transpose = get_image_from_hub_dataset(
+            "hf-internal-testing/fixtures_image_utils", "3-test-cat-rotated.jpg", revision="refs/pr/1"
+        )
         img_arr_without_exif_transpose = np.array(img_without_exif_transpose)
 
         self.assertEqual(
@@ -480,7 +815,7 @@ class LoadImageTester(unittest.TestCase):
             (333, 500, 3),
         )
 
-        img_with_exif_transpose = load_image(img_file)
+        img_with_exif_transpose = load_image(img_without_exif_transpose)
         img_arr_with_exif_transpose = np.array(img_with_exif_transpose)
 
         self.assertEqual(
@@ -498,7 +833,7 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image), (32, 64))
 
-        # Test the channel dimension can be overriden
+        # Test the channel dimension can be overridden
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
 
@@ -513,6 +848,10 @@ class UtilFunctionTester(unittest.TestCase):
         # Test we fail if neither first not last dimension is of size 3 or 1
         with pytest.raises(ValueError):
             infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)))
+
+        # But if we explicitly set one of the number of channels to 50 it works
+        inferred_dim = infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)), num_channels=50)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
 
         # Test we correctly identify the channel dimension
         image = np.random.randint(0, 256, (3, 4, 5))

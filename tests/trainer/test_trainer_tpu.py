@@ -20,7 +20,6 @@
 #
 
 import sys
-from typing import Dict
 
 from transformers import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
 from transformers.utils import logging
@@ -68,10 +67,7 @@ def main():
     sys.argv += ["--output_dir", "./examples"]
     training_args = parser.parse_args_into_dataclasses()[0]
 
-    logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, "
-        f"tpu_num_cores: {training_args.tpu_num_cores}",
-    )
+    logger.warning(f"Process rank: {training_args.local_process_index}, device: {training_args.device}, ")
 
     # Essentially, what we want to verify in the distributed case is
     # that we get all samples back, in the right order.
@@ -79,7 +75,7 @@ def main():
     for dataset_length in [1001, 256, 15]:
         dataset = DummyDataset(dataset_length)
 
-        def compute_metrics(p: EvalPrediction) -> Dict:
+        def compute_metrics(p: EvalPrediction) -> dict:
             sequential = list(range(len(dataset)))
             success = p.predictions.tolist() == sequential and p.label_ids.tolist() == sequential
             return {"success": success}
@@ -119,7 +115,7 @@ def main():
 
         trainer.args.eval_accumulation_steps = None
 
-    logger.info("🔥 All distributed tests successful")
+    logger.info("All distributed tests successful")
 
 
 def _mp_fn(index):

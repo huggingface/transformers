@@ -15,58 +15,62 @@
 """
 Processor class for TrOCR.
 """
-import warnings
-from contextlib import contextmanager
 
-from ...processing_utils import ProcessorMixin
+from typing import Optional, Union
+
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+class TrOCRProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 class TrOCRProcessor(ProcessorMixin):
     r"""
-    Constructs a TrOCR processor which wraps a vision feature extractor and a TrOCR tokenizer into a single processor.
+    Constructs a TrOCR processor which wraps a vision image processor and a TrOCR tokenizer into a single processor.
 
-    [`TrOCRProcessor`] offers all the functionalities of [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] and
+    [`TrOCRProcessor`] offers all the functionalities of [`ViTImageProcessor`/`DeiTImageProcessor`] and
     [`RobertaTokenizer`/`XLMRobertaTokenizer`]. See the [`~TrOCRProcessor.__call__`] and [`~TrOCRProcessor.decode`] for
     more information.
 
     Args:
-        feature_extractor ([`ViTFeatureExtractor`/`DeiTFeatureExtractor`]):
-            An instance of [`ViTFeatureExtractor`/`DeiTFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`]):
+        image_processor ([`ViTImageProcessor`/`DeiTImageProcessor`], *optional*):
+            An instance of [`ViTImageProcessor`/`DeiTImageProcessor`]. The image processor is a required input.
+        tokenizer ([`RobertaTokenizer`/`XLMRobertaTokenizer`], *optional*):
             An instance of [`RobertaTokenizer`/`XLMRobertaTokenizer`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "AutoFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        super().__init__(image_processor, tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        **kwargs: Unpack[TrOCRProcessorKwargs],
+    ) -> BatchFeature:
         """
-        When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
-        [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
+        [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~TrOCRProcessor.as_target_processor`] this method forwards all its arguments to TrOCRTokenizer's
-        [`~TrOCRTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
+        [`~TrOCRTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
-        images = kwargs.pop("images", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            images = args[0]
-            args = args[1:]
-
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
+        output_kwargs = self._merge_kwargs(
+            TrOCRProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
         if images is not None:
-            inputs = self.feature_extractor(images, *args, **kwargs)
+            inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         if text is None:
             return inputs
@@ -76,32 +80,10 @@ class TrOCRProcessor(ProcessorMixin):
             inputs["labels"] = encodings["input_ids"]
             return inputs
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return image_processor_input_names + ["labels"]
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
-    @contextmanager
-    def as_target_processor(self):
-        """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning TrOCR.
-        """
-        warnings.warn(
-            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
-            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your images inputs, or in a separate call."
-        )
-        self._in_target_context_manager = True
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
+__all__ = ["TrOCRProcessor"]

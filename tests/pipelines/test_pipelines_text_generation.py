@@ -13,61 +13,48 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
+from transformers import (
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    TextGenerationPipeline,
+    logging,
+    pipeline,
+)
 from transformers.testing_utils import (
+    CaptureLogger,
+    is_pipeline_test,
     require_accelerate,
-    require_tf,
     require_torch,
-    require_torch_gpu,
-    require_torch_or_tf,
+    require_torch_accelerator,
+    torch_device,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-@require_torch_or_tf
-class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+@require_torch
+class TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
-        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="pt")
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-random-LlamaForCausalLM",
+            max_new_tokens=10,
+        )
         # Using `do_sample=False` to force deterministic output
         outputs = text_generator("This is a test", do_sample=False)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": (
-                        "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
-                        " oscope. FiliFili@@"
-                    )
-                }
-            ],
-        )
+        self.assertEqual(outputs, [{"generated_text": "This is a testкт MéxicoWSAnimImportдели pip letscosatur"}])
 
-        outputs = text_generator(["This is a test", "This is a second test"])
+        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
         self.assertEqual(
             outputs,
             [
-                [
-                    {
-                        "generated_text": (
-                            "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
-                            " oscope. FiliFili@@"
-                        )
-                    }
-                ],
-                [
-                    {
-                        "generated_text": (
-                            "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy"
-                            " oscope. oscope. FiliFili@@"
-                        )
-                    }
-                ],
+                [{"generated_text": "This is a testкт MéxicoWSAnimImportдели pip letscosatur"}],
+                [{"generated_text": "This is a second testкт MéxicoWSAnimImportдели Düsseld bootstrap learn user"}],
             ],
         )
 
@@ -79,81 +66,254 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 {"generated_token_ids": ANY(list)},
             ],
         )
-        text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
-        text_generator.tokenizer.pad_token = "<pad>"
-        outputs = text_generator(
-            ["This is a test", "This is a second test"],
-            do_sample=True,
-            num_return_sequences=2,
-            batch_size=2,
-            return_tensors=True,
+
+    @require_torch
+    def test_small_chat_model_pt(self):
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
         )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
         self.assertEqual(
             outputs,
             [
-                [
-                    {"generated_token_ids": ANY(list)},
-                    {"generated_token_ids": ANY(list)},
-                ],
-                [
-                    {"generated_token_ids": ANY(list)},
-                    {"generated_token_ids": ANY(list)},
-                ],
+                {"generated_text": expected_chat1},
             ],
         )
 
-    @require_tf
-    def test_small_model_tf(self):
-        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="tf")
+        outputs = text_generator([chat1, chat2], do_sample=False, max_new_tokens=10)
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+            }
+        ]
 
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
+            ],
+        )
+
+    @require_torch
+    def test_small_chat_model_continue_final_message(self):
+        # Here we check that passing a chat that ends in an assistant message is handled correctly
+        # by continuing the final message rather than starting a new one
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
         # Using `do_sample=False` to force deterministic output
-        outputs = text_generator("This is a test", do_sample=False)
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+            {"role": "assistant", "content": "This is"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+
+        # Assert that we continued the last message and there isn't a sneaky <|im_end|>
         self.assertEqual(
             outputs,
             [
                 {
-                    "generated_text": (
-                        "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
-                        " please,"
-                    )
+                    "generated_text": [
+                        {"role": "system", "content": "This is a system message."},
+                        {"role": "user", "content": "This is a test"},
+                        {
+                            "role": "assistant",
+                            "content": "This is stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+                        },
+                    ]
                 }
             ],
         )
 
-        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
+    @require_torch
+    def test_small_chat_model_continue_final_message_override(self):
+        # Here we check that passing a chat that ends in an assistant message is handled correctly
+        # by continuing the final message rather than starting a new one
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10, continue_final_message=True)
+
+        # Assert that we continued the last message and there isn't a sneaky <|im_end|>
         self.assertEqual(
             outputs,
             [
-                [
-                    {
-                        "generated_text": (
-                            "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
-                            " please,"
-                        )
-                    }
-                ],
-                [
-                    {
-                        "generated_text": (
-                            "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes"
-                            " Cannes 閲閲Cannes Cannes Cannes 攵 please,"
-                        )
-                    }
-                ],
+                {
+                    "generated_text": [
+                        {"role": "system", "content": "This is a system message."},
+                        {
+                            "role": "user",
+                            "content": "This is a test stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+                        },
+                    ]
+                }
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
+    @require_torch
+    def test_small_chat_model_with_dataset_pt(self):
+        from torch.utils.data import Dataset
+
+        from transformers.pipelines.pt_utils import KeyDataset
+
+        class MyDataset(Dataset):
+            data = [
+                [
+                    {"role": "system", "content": "This is a system message."},
+                    {"role": "user", "content": "This is a test"},
+                ],
+            ]
+
+            def __len__(self):
+                return 1
+
+            def __getitem__(self, i):
+                return {"text": self.data[i]}
+
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+
+        dataset = MyDataset()
+        key_dataset = KeyDataset(dataset, "text")
+
+        for outputs in text_generator(key_dataset, do_sample=False, max_new_tokens=10):
+            expected_chat = dataset.data[0] + [
+                {
+                    "role": "assistant",
+                    "content": " factors factors factors factors factors factors factors factors factors factors",
+                }
+            ]
+            self.assertEqual(
+                outputs,
+                [
+                    {"generated_text": expected_chat},
+                ],
+            )
+
+    @require_torch
+    def test_small_chat_model_with_iterator_pt(self):
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+        ]
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+            }
+        ]
+
+        def data():
+            yield from [chat1, chat2]
+
+        outputs = text_generator(data(), do_sample=False, max_new_tokens=10)
+        outputs = list(outputs)
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
+            ],
+        )
+
+    @require_torch
+    def test_small_chat_model_with_response_parsing(self):
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        text_generator.tokenizer.response_schema = {
+            # A real response schema should probably have things like "role" and "content"
+            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
+            # output anything like that, so let's keep it simple.
+            "type": "object",
+            "properties": {
+                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
+                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
+            },
+        }
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10)
+        parsed_message = outputs[0]["generated_text"][-1]
+        self.assertEqual(parsed_message, {"first_word": "factors", "last_word": "factors"})
+
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        dtype="float32",
+    ):
+        text_generator = TextGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            dtype=dtype,
+            max_new_tokens=5,
+        )
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
+        text_generator = pipeline(
+            "text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5, do_sample=False
+        )
         output = text_generator(prompt)
         self.assertEqual(
             output,
-            [{"generated_text": "Hello I believe in fe fe fe fe fe fe fe fe fe fe fe fe"}],
+            [{"generated_text": "Hello I believe in fe fe fe fe fe"}],
         )
 
         output = text_generator(prompt, stop_sequence=" fe")
@@ -171,7 +331,9 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
 
-        text_generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer, return_full_text=False)
+        text_generator = pipeline(
+            task="text-generation", model=model, tokenizer=tokenizer, return_full_text=False, max_new_tokens=5
+        )
         outputs = text_generator("This is a test")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
@@ -201,95 +363,218 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 ],
             )
 
-        # Empty prompt is slighly special
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_full_text=True, return_text=True)
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_full_text=True, return_tensors=True)
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_text=True, return_tensors=True)
+
+        # Empty prompt is slightly special
         # it requires BOS token to exist.
         # Special case for Pegasus which will always append EOS so will
         # work even without BOS.
-        if text_generator.tokenizer.bos_token_id is not None or "Pegasus" in tokenizer.__class__.__name__:
+        if (
+            text_generator.tokenizer.bos_token_id is not None
+            or "Pegasus" in tokenizer.__class__.__name__
+            or "Git" in model.__class__.__name__
+        ):
             outputs = text_generator("")
             self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         else:
             with self.assertRaises((ValueError, AssertionError)):
-                outputs = text_generator("")
+                outputs = text_generator("", add_special_tokens=False)
 
-        if text_generator.framework == "tf":
-            # TF generation does not support max_new_tokens, and it's impossible
-            # to control long generation with only max_length without
-            # fancy calculation, dismissing tests for now.
-            return
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.
-        if tokenizer.model_max_length < 10000 and "XGLM" not in tokenizer.__class__.__name__:
+        EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS = [
+            "RwkvForCausalLM",
+            "XGLMForCausalLM",
+            "GPTNeoXForCausalLM",
+            "GPTNeoXJapaneseForCausalLM",
+            "FuyuForCausalLM",
+            "LlamaForCausalLM",
+        ]
+        if (
+            tokenizer.model_max_length < 10000
+            and text_generator.model.__class__.__name__ not in EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS
+        ):
             # Handling of large generations
-            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
-                text_generator("This is a test" * 500, max_new_tokens=20)
+            if str(text_generator.device) == "cpu":
+                with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
+                    text_generator("This is a test" * 500, max_new_tokens=5)
 
-            outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)
+            outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=5)
             # Hole strategy cannot work
-            with self.assertRaises(ValueError):
-                text_generator(
-                    "This is a test" * 500,
-                    handle_long_generation="hole",
-                    max_new_tokens=tokenizer.model_max_length + 10,
-                )
+            if str(text_generator.device) == "cpu":
+                with self.assertRaises(ValueError):
+                    text_generator(
+                        "This is a test" * 500,
+                        handle_long_generation="hole",
+                        max_new_tokens=tokenizer.model_max_length + 10,
+                    )
 
     @require_torch
     @require_accelerate
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_pt_bloom_accelerate(self):
         import torch
 
         # Classic `model_kwargs`
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
-            model_kwargs={"device_map": "auto", "torch_dtype": torch.bfloat16},
+            model_kwargs={"device_map": "auto", "dtype": torch.bfloat16},
+            max_new_tokens=5,
+            do_sample=False,
         )
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
             out,
-            [
-                {
-                    "generated_text": (
-                        "This is a test test test test test test test test test test test test test test test test"
-                        " test"
-                    )
-                }
-            ],
+            [{"generated_text": ("This is a test test test test test test")}],
         )
 
         # Upgraded those two to real pipeline arguments (they just get sent for the model as they're unlikely to mean anything else.)
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.bfloat16)
-        self.assertEqual(pipe.model.device, torch.device(0))
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom",
+            device_map="auto",
+            dtype=torch.bfloat16,
+            max_new_tokens=5,
+            do_sample=False,
+        )
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
             out,
+            [{"generated_text": ("This is a test test test test test test")}],
+        )
+
+        # dtype will be automatically set to torch.bfloat16 if not provided - check: https://github.com/huggingface/transformers/pull/38882
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom", device_map="auto", max_new_tokens=5, do_sample=False
+        )
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
+        out = pipe("This is a test")
+        self.assertEqual(
+            out,
+            [{"generated_text": ("This is a test test test test test test")}],
+        )
+
+    @require_torch
+    @require_torch_accelerator
+    def test_small_model_fp16(self):
+        import torch
+
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom",
+            device=torch_device,
+            dtype=torch.float16,
+            max_new_tokens=3,
+        )
+        pipe("This is a test")
+
+    @require_torch
+    @require_accelerate
+    @require_torch_accelerator
+    def test_pipeline_accelerate_top_p(self):
+        import torch
+
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom",
+            device_map=torch_device,
+            dtype=torch.float16,
+            max_new_tokens=3,
+        )
+        pipe("This is a test", do_sample=True, top_p=0.5)
+
+    def test_pipeline_length_setting_warning(self):
+        prompt = """Hello world"""
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5)
+        logger = logging.get_logger("transformers.generation.utils")
+        logger_msg = "Both `max_new_tokens`"  # The beginning of the message to be checked in this test
+
+        # Both are set by the user -> log warning
+        with CaptureLogger(logger) as cl:
+            _ = text_generator(prompt, max_length=10, max_new_tokens=1)
+        self.assertIn(logger_msg, cl.out)
+
+        # The user only sets one -> no warning
+        with CaptureLogger(logger) as cl:
+            _ = text_generator(prompt, max_new_tokens=1)
+        self.assertNotIn(logger_msg, cl.out)
+
+        with CaptureLogger(logger) as cl:
+            _ = text_generator(prompt, max_length=10, max_new_tokens=None)
+        self.assertNotIn(logger_msg, cl.out)
+
+    def test_return_dict_in_generate(self):
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
+        out = text_generator(
+            ["This is great !", "Something else"], return_dict_in_generate=True, output_logits=True, output_scores=True
+        )
+        self.assertEqual(
+            out,
             [
-                {
-                    "generated_text": (
-                        "This is a test test test test test test test test test test test test test test test test"
-                        " test"
-                    )
-                }
+                [
+                    {
+                        "generated_text": ANY(str),
+                        "logits": ANY(list),
+                        "scores": ANY(list),
+                    },
+                ],
+                [
+                    {
+                        "generated_text": ANY(str),
+                        "logits": ANY(list),
+                        "scores": ANY(list),
+                    },
+                ],
             ],
         )
 
-        # torch_dtype not necessary
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto")
-        self.assertEqual(pipe.model.device, torch.device(0))
-        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
-        out = pipe("This is a test")
-        self.assertEqual(
-            out,
-            [
-                {
-                    "generated_text": (
-                        "This is a test test test test test test test test test test test test test test test test"
-                        " test"
-                    )
-                }
-            ],
-        )
+    @require_torch
+    def test_pipeline_assisted_generation(self):
+        """Tests that we can run assisted generation in the pipeline"""
+        model = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        pipe = pipeline("text-generation", model=model, assistant_model=model, max_new_tokens=2)
+
+        # We can run the pipeline
+        prompt = "Hello world"
+        _ = pipe(prompt)
+
+        # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
+        with self.assertRaises(ValueError):
+            _ = pipe(prompt, generate_kwargs={"num_beams": 2})
+
+    @require_torch
+    def test_pipeline_skip_special_tokens(self):
+        """Tests that we can use `skip_special_tokens=False` to get the special tokens in the output"""
+        model_id = "google/gemma-3-270m-it"
+        chat = [{"role": "user", "content": "What's your name?"}]
+        generator = pipeline("text-generation", model=model_id)
+
+        # normal pipeline use
+        output = generator(chat, max_new_tokens=20, do_sample=False)
+        self.assertNotIn("<end_of_turn>", str(output[0]["generated_text"]))
+
+        # forcing special tokens to be included in the output
+        output = generator(chat, max_new_tokens=1000, do_sample=False, skip_special_tokens=False)
+        self.assertIn("<end_of_turn>", str(output[0]["generated_text"]))
+
+    @require_torch
+    def test_forward_tokenizer_kwargs(self):
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        model = "hf-internal-testing/tiny-gpt2-with-chatml-template"
+        text_generator = pipeline("text-generation", model, max_new_tokens=5)
+        tokenizer = text_generator.tokenizer
+
+        with patch.object(tokenizer, "apply_chat_template", wraps=tokenizer.apply_chat_template) as mock:
+            text_generator(chat, tokenizer_encode_kwargs={"enable_thinking": True})
+            self.assertGreater(mock.call_count, 0)
+            kw_call_args = mock.call_args[1]
+            self.assertIn("enable_thinking", kw_call_args)
+            self.assertEqual(kw_call_args["enable_thinking"], True)

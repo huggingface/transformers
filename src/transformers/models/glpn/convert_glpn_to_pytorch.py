@@ -14,16 +14,14 @@
 # limitations under the License.
 """Convert GLPN checkpoints."""
 
-
 import argparse
 from collections import OrderedDict
-from pathlib import Path
 
+import requests
 import torch
 from PIL import Image
 
-import requests
-from transformers import GLPNConfig, GLPNFeatureExtractor, GLPNForDepthEstimation
+from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNImageProcessor
 from transformers.utils import logging
 
 
@@ -41,13 +39,13 @@ def rename_keys(state_dict):
         if "patch_embed" in key:
             # replace for example patch_embed1 by patch_embeddings.0
             idx = key[key.find("patch_embed") + len("patch_embed")]
-            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx)-1}")
+            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx) - 1}")
         if "norm" in key:
             key = key.replace("norm", "layer_norm")
         if "glpn.encoder.layer_norm" in key:
             # replace for example layer_norm1 by layer_norm.0
             idx = key[key.find("glpn.encoder.layer_norm") + len("glpn.encoder.layer_norm")]
-            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx)-1}")
+            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx) - 1}")
         if "layer_norm1" in key:
             key = key.replace("layer_norm1", "layer_norm_1")
         if "layer_norm2" in key:
@@ -55,7 +53,7 @@ def rename_keys(state_dict):
         if "block" in key:
             # replace for example block1 by block.0
             idx = key[key.find("block") + len("block")]
-            key = key.replace(f"block{idx}", f"block.{int(idx)-1}")
+            key = key.replace(f"block{idx}", f"block.{int(idx) - 1}")
         if "attn.q" in key:
             key = key.replace("attn.q", "attention.self.query")
         if "attn.proj" in key:
@@ -74,7 +72,7 @@ def rename_keys(state_dict):
         if "linear_c" in key:
             # replace for example linear_c4 by linear_c.3
             idx = key[key.find("linear_c") + len("linear_c")]
-            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx)-1}")
+            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx) - 1}")
         if "bot_conv" in key:
             key = key.replace("bot_conv", "0.convolution")
         if "skip_conv1" in key:
@@ -131,17 +129,17 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     # load GLPN configuration (Segformer-B4 size)
     config = GLPNConfig(hidden_sizes=[64, 128, 320, 512], decoder_hidden_size=64, depths=[3, 8, 27, 3])
 
-    # load feature extractor (only resize + rescale)
-    feature_extractor = GLPNFeatureExtractor()
+    # load image processor (only resize + rescale)
+    image_processor = GLPNImageProcessor()
 
     # prepare image
     image = prepare_img()
-    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+    pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
     logger.info("Converting model...")
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+    state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
 
     # rename keys
     state_dict = rename_keys(state_dict)
@@ -179,19 +177,9 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
 
     # finally, push to hub if required
     if push_to_hub:
-        logger.info("Pushing model and feature extractor to the hub...")
-        model.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        feature_extractor.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add feature extractor",
-            use_temp_dir=True,
-        )
+        logger.info("Pushing model and image processor to the hub...")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        image_processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

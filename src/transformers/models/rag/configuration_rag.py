@@ -12,17 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RAG model configuration"""
+"""RAG model configuration"""
 
-import copy
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""
-    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PretrainedConfig`] and
-    can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PreTrainedConfig`] and
+    can be used to control the model outputs. Read the documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         title_sep (`str`, *optional*, defaults to  `" / "`):
@@ -79,9 +77,9 @@ RAG_CONFIG_DOC = r"""
 
 
 @add_start_docstrings(RAG_CONFIG_DOC)
-class RagConfig(PretrainedConfig):
+class RagConfig(PreTrainedConfig):
     model_type = "rag"
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(
         self,
@@ -112,7 +110,8 @@ class RagConfig(PretrainedConfig):
         output_retrieved=False,
         use_cache=True,
         forced_eos_token_id=None,
-        **kwargs
+        dataset_revision=None,
+        **kwargs,
     ):
         super().__init__(
             bos_token_id=bos_token_id,
@@ -125,9 +124,11 @@ class RagConfig(PretrainedConfig):
             vocab_size=vocab_size,
             **kwargs,
         )
-        assert (
-            "question_encoder" in kwargs and "generator" in kwargs
-        ), "Config has to be initialized with question_encoder and generator config"
+        if "question_encoder" not in kwargs or "generator" not in kwargs:
+            raise ValueError(
+                f"A configuration of type {self.model_type} cannot be instantiated because "
+                f"both `question_encoder` and `generator` sub-configurations were not passed, only {kwargs}"
+            )
         question_encoder_config = kwargs.pop("question_encoder")
         question_encoder_model_type = question_encoder_config.pop("model_type")
         decoder_config = kwargs.pop("generator")
@@ -157,6 +158,7 @@ class RagConfig(PretrainedConfig):
         self.passages_path = passages_path
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+        self.dataset_revision = dataset_revision
 
         self.output_retrieved = output_retrieved
 
@@ -164,13 +166,13 @@ class RagConfig(PretrainedConfig):
 
         self.use_cache = use_cache
 
-        if self.forced_eos_token_id is None:
+        if forced_eos_token_id is None:
             self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)
 
     @classmethod
     def from_question_encoder_generator_configs(
-        cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
-    ) -> PretrainedConfig:
+        cls, question_encoder_config: PreTrainedConfig, generator_config: PreTrainedConfig, **kwargs
+    ) -> PreTrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
         decoder model configuration.
@@ -180,15 +182,5 @@ class RagConfig(PretrainedConfig):
         """
         return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["question_encoder"] = self.question_encoder.to_dict()
-        output["generator"] = self.generator.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+__all__ = ["RagConfig"]

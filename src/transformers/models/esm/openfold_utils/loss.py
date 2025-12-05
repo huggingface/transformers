@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import torch
 
 
-def _calculate_bin_centers(boundaries: torch.Tensor):
+def _calculate_bin_centers(boundaries: torch.Tensor) -> torch.Tensor:
     step = boundaries[1] - boundaries[0]
     bin_centers = boundaries + step / 2
     bin_centers = torch.cat([bin_centers, (bin_centers[-1] + step).unsqueeze(-1)], dim=0)
@@ -28,7 +28,7 @@ def _calculate_bin_centers(boundaries: torch.Tensor):
 def _calculate_expected_aligned_error(
     alignment_confidence_breaks: torch.Tensor,
     aligned_distance_error_probs: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     bin_centers = _calculate_bin_centers(alignment_confidence_breaks)
     return (
         torch.sum(aligned_distance_error_probs * bin_centers, dim=-1),
@@ -41,7 +41,7 @@ def compute_predicted_aligned_error(
     max_bin: int = 31,
     no_bins: int = 64,
     **kwargs,
-) -> Dict[str, torch.Tensor]:
+) -> dict[str, torch.Tensor]:
     """Computes aligned confidence metrics from logits.
 
     Args:
@@ -59,7 +59,7 @@ def compute_predicted_aligned_error(
     boundaries = torch.linspace(0, max_bin, steps=(no_bins - 1), device=logits.device)
 
     aligned_confidence_probs = torch.nn.functional.softmax(logits, dim=-1)
-    (predicted_aligned_error, max_predicted_aligned_error,) = _calculate_expected_aligned_error(
+    predicted_aligned_error, max_predicted_aligned_error = _calculate_expected_aligned_error(
         alignment_confidence_breaks=boundaries,
         aligned_distance_error_probs=aligned_confidence_probs,
     )

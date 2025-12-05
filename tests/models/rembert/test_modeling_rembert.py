@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch RemBERT model. """
-
+"""Testing suite for the PyTorch RemBERT model."""
 
 import unittest
 
@@ -22,6 +20,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,7 +36,6 @@ if is_torch_available():
         RemBertForTokenClassification,
         RemBertModel,
     )
-    from transformers.models.rembert.modeling_rembert import REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class RemBertModelTester:
@@ -54,7 +52,7 @@ class RemBertModelTester:
         hidden_size=32,
         input_embedding_size=18,
         output_embedding_size=43,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -201,24 +199,6 @@ class RemBertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = RemBertForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -360,8 +340,7 @@ class RemBertModelTester:
 
 
 @require_torch
-class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RemBertModel,
@@ -375,7 +354,21 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RemBertForCausalLM,) if is_torch_available() else ()
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RemBertModel,
+            "fill-mask": RemBertForMaskedLM,
+            "question-answering": RemBertForQuestionAnswering,
+            "text-classification": RemBertForSequenceClassification,
+            "text-generation": RemBertForCausalLM,
+            "token-classification": RemBertForTokenClassification,
+            "zero-shot": RemBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = RemBertModelTester(self)
@@ -387,12 +380,6 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -423,7 +410,6 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -452,9 +438,9 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RemBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/rembert"
+        model = RemBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -465,7 +451,8 @@ class RemBertModelIntegrationTest(unittest.TestCase):
         model = RemBertModel.from_pretrained("google/rembert")
         input_ids = torch.tensor([[312, 56498, 313, 2125, 313]])
         segment_ids = torch.tensor([[0, 0, 0, 1, 1]])
-        output = model(input_ids, token_type_ids=segment_ids, output_hidden_states=True)
+        with torch.no_grad():
+            output = model(input_ids, token_type_ids=segment_ids, output_hidden_states=True)
 
         hidden_size = 1152
 
@@ -484,15 +471,6 @@ class RemBertModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        # Running on the original tf implementation gives slightly different results here.
-        # Not clear why this variations is present
-        # TODO: Find reason for discrepancy
-        # expected_original_implementation = [[
-        #     [0.07630594074726105, -0.20146065950393677, 0.19107051193714142],
-        #     [-0.3405614495277405, -0.36971670389175415, -0.4808273911476135],
-        #     [-0.22587086260318756, -0.6656315922737122, -0.07844287157058716],
-        #     [-0.04145475849509239, -0.3077218234539032, -0.42316967248916626],
-        #     [-0.15887849032878876, -0.054529931396245956, 0.5356100797653198]
-        # ]]
-
-        self.assertTrue(torch.allclose(output["last_hidden_state"][:, :, :3], expected_implementation, atol=1e-4))
+        torch.testing.assert_close(
+            output["last_hidden_state"][:, :, :3], expected_implementation, rtol=1e-4, atol=1e-4
+        )

@@ -12,35 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" YOLOS model configuration"""
+"""YOLOS model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "hustvl/yolos-small": "https://huggingface.co/hustvl/yolos-small/resolve/main/config.json",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-}
 
-
-class YolosConfig(PretrainedConfig):
+class YolosConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`YolosModel`]. It is used to instantiate a YOLOS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the YOLOS
     [hustvl/yolos-base](https://huggingface.co/hustvl/yolos-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -54,23 +43,23 @@ class YolosConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        image_size (`List[int]`, *optional*, defaults to `[512, 864]`):
+        image_size (`list[int]`, *optional*, defaults to `[512, 864]`):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `16`):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        num_detection_tokens (`int`, *optional*, defaults to `100`):
+        num_detection_tokens (`int`, *optional*, defaults to 100):
             The number of detection tokens.
         use_mid_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use the mid-layer position encodings.
@@ -103,6 +92,7 @@ class YolosConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "yolos"
 
     def __init__(
@@ -129,7 +119,7 @@ class YolosConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -159,22 +149,4 @@ class YolosConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
 
 
-class YolosOnnxConfig(OnnxConfig):
-
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
+__all__ = ["YolosConfig"]

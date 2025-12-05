@@ -12,30 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SegFormer model configuration"""
+"""SegFormer model configuration"""
 
 import warnings
-from collections import OrderedDict
-from typing import Mapping
 
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/segformer-b0-finetuned-ade-512-512": (
-        "https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512/resolve/main/config.json"
-    ),
-    # See all SegFormer models at https://huggingface.co/models?filter=segformer
-}
 
-
-class SegformerConfig(PretrainedConfig):
+class SegformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegformerModel`]. It is used to instantiate an
     SegFormer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -43,27 +31,27 @@ class SegformerConfig(PretrainedConfig):
     [nvidia/segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_encoder_blocks (`int`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`List[int]`, *optional*, defaults to [2, 2, 2, 2]):
+        depths (`list[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
-        sr_ratios (`List[int]`, *optional*, defaults to [8, 4, 2, 1]):
+        sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
             Sequence reduction ratios in each encoder block.
-        hidden_sizes (`List[int]`, *optional*, defaults to [32, 64, 160, 256]):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
             Dimension of each of the encoder blocks.
-        patch_sizes (`List[int]`, *optional*, defaults to [7, 3, 3, 3]):
+        patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
             Patch size before each encoder block.
-        strides (`List[int]`, *optional*, defaults to [4, 2, 2, 2]):
+        strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to [1, 2, 5, 8]):
+        num_attention_heads (`list[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`List[int]`, *optional*, defaults to [4, 4, 4, 4]):
+        mlp_ratios (`list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -79,7 +67,7 @@ class SegformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         decoder_hidden_size (`int`, *optional*, defaults to 256):
             The dimension of the all-MLP decode head.
@@ -100,6 +88,7 @@ class SegformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "segformer"
 
     def __init__(
@@ -121,9 +110,8 @@ class SegformerConfig(PretrainedConfig):
         drop_path_rate=0.1,
         layer_norm_eps=1e-6,
         decoder_hidden_size=256,
-        is_encoder_decoder=False,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -155,22 +143,4 @@ class SegformerConfig(PretrainedConfig):
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
-class SegformerOnnxConfig(OnnxConfig):
-
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
+__all__ = ["SegformerConfig"]

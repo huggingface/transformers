@@ -17,15 +17,13 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Union
 
 import torch
+from filelock import FileLock
 from torch.utils.data import Dataset
 
-from filelock import FileLock
-
 from ...tokenization_utils_base import PreTrainedTokenizerBase
-from ...utils import logging
+from ...utils import check_torch_load_is_safe, logging
 from ..processors.glue import glue_convert_examples_to_features, glue_output_modes, glue_processors
 from ..processors.utils import InputFeatures
 
@@ -70,24 +68,20 @@ class Split(Enum):
 
 
 class GlueDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     args: GlueDataTrainingArguments
     output_mode: str
-    features: List[InputFeatures]
+    features: list[InputFeatures]
 
     def __init__(
         self,
         args: GlueDataTrainingArguments,
         tokenizer: PreTrainedTokenizerBase,
-        limit_length: Optional[int] = None,
-        mode: Union[str, Split] = Split.train,
-        cache_dir: Optional[str] = None,
+        limit_length: int | None = None,
+        mode: str | Split = Split.train,
+        cache_dir: str | None = None,
     ):
         warnings.warn(
-            "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+            "This dataset will be removed from the library soon, preprocessing should be handled with the Hugging Face Datasets "
             "library. You can have a look at this example script for pointers: "
             "https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py",
             FutureWarning,
@@ -108,7 +102,6 @@ class GlueDataset(Dataset):
         label_list = self.processor.get_labels()
         if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__.__name__ in (
             "RobertaTokenizer",
-            "RobertaTokenizerFast",
             "XLMRobertaTokenizer",
             "BartTokenizer",
             "BartTokenizerFast",
@@ -121,10 +114,10 @@ class GlueDataset(Dataset):
         # and the others will use the cache.
         lock_path = cached_features_file + ".lock"
         with FileLock(lock_path):
-
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                self.features = torch.load(cached_features_file)
+                check_torch_load_is_safe()
+                self.features = torch.load(cached_features_file, weights_only=True)
                 logger.info(
                     f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
                 )

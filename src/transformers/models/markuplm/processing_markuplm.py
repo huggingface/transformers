@@ -15,6 +15,7 @@
 """
 Processor class for MarkupLM.
 """
+
 from typing import Optional, Union
 
 from ...file_utils import TensorType
@@ -41,9 +42,11 @@ class MarkupLMProcessor(ProcessorMixin):
         parse_html (`bool`, *optional*, defaults to `True`):
             Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
     """
-    feature_extractor_class = "MarkupLMFeatureExtractor"
-    tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
+
     parse_html = True
+
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     def __call__(
         self,
@@ -66,7 +69,7 @@ class MarkupLMProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         This method first forwards the `html_strings` argument to [`~MarkupLMFeatureExtractor.__call__`]. Next, it
@@ -125,16 +128,5 @@ class MarkupLMProcessor(ProcessorMixin):
 
         return encoded_inputs
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+__all__ = ["MarkupLMProcessor"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,16 @@
 
 import unittest
 
-from transformers import MobileBertConfig, is_torch_available
+import pytest
+from packaging import version
+
+from transformers import AutoTokenizer, MobileBertConfig, MobileBertForMaskedLM, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -53,7 +56,7 @@ class MobileBertModelTester:
         vocab_size=99,
         hidden_size=64,
         embedding_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -253,8 +256,7 @@ class MobileBertModelTester:
 
 
 @require_torch
-class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MobileBertModel,
@@ -269,7 +271,18 @@ class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    fx_compatible = True
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MobileBertModel,
+            "fill-mask": MobileBertForMaskedLM,
+            "question-answering": MobileBertForQuestionAnswering,
+            "text-classification": MobileBertForSequenceClassification,
+            "token-classification": MobileBertForTokenClassification,
+            "zero-shot": MobileBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -284,6 +297,11 @@ class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
         return inputs_dict
+
+    # TODO (@SunMarc): Fix me
+    @unittest.skip(reason="It's broken.")
+    def test_resize_tokens_embeddings(self):
+        super().test_resize_tokens_embeddings()
 
     def setUp(self):
         self.model_tester = MobileBertModelTester(self)
@@ -342,7 +360,9 @@ TOLERANCE = 1e-3
 class MobileBertModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = MobileBertModel.from_pretrained("google/mobilebert-uncased").to(torch_device)
+        model = MobileBertModel.from_pretrained("google/mobilebert-uncased", attn_implementation="eager").to(
+            torch_device
+        )
         input_ids = _long_tensor([[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -367,3 +387,43 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
         upper_bound = torch.all((expected_slice / output[..., :3, :3]) <= 1 + TOLERANCE)
 
         self.assertTrue(lower_bound and upper_bound)
+
+    @pytest.mark.torch_export_test
+    @slow
+    def test_export(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        mobilebert_model = "google/mobilebert-uncased"
+        device = "cpu"
+        attn_implementation = "eager"
+        max_length = 512
+
+        tokenizer = AutoTokenizer.from_pretrained(mobilebert_model)
+        inputs = tokenizer(
+            f"the man worked as a {tokenizer.mask_token}.",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        model = MobileBertForMaskedLM.from_pretrained(
+            mobilebert_model,
+            device_map=device,
+            attn_implementation=attn_implementation,
+        )
+
+        logits = model(**inputs).logits
+        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
+        self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "mechanic", "teacher", "clerk"])
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
+            strict=True,
+        )
+
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
+        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the Wav2Vec2 tokenizer."""
+
 import inspect
 import json
 import os
@@ -24,13 +24,13 @@ import unittest
 import numpy as np
 
 from transformers import (
-    WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+    AddedToken,
     Wav2Vec2Config,
     Wav2Vec2CTCTokenizer,
     Wav2Vec2Tokenizer,
 )
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import get_tests_dir, require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -38,6 +38,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 global_rng = random.Random()
 
 
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -55,22 +56,25 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 class Wav2Vec2TokenizerTest(unittest.TestCase):
     tokenizer_class = Wav2Vec2Tokenizer
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
+        cls.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return Wav2Vec2Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return Wav2Vec2Tokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def test_tokenizer_decode(self):
         # TODO(PVP) - change to facebook
@@ -143,8 +147,10 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
             [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34],
         ]
         batch_tokens = tokenizer.batch_decode(sample_ids)
+        batch_tokens_2 = tokenizer.batch_decode(sample_ids, skip_special_tokens=True)
 
-        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
+        self.assertEqual(batch_tokens, ["HELLO<unk>!? !?$$$", "BYE BYE<unk>$$$"])
+        self.assertEqual(batch_tokens_2, ["HELO!? !?", "BYE BYE"])
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -159,6 +165,14 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
+        encoded_sequences_1 = tokenizer(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = tokenizer(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
         encoded_sequences_1 = tokenizer(speech_inputs, return_tensors="np").input_values
         encoded_sequences_2 = tokenizer(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
@@ -223,26 +237,6 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         self.assertTrue(abs(sum(np.asarray(input_values_8[1])[1000:])) < 1e-3)
         self.assertTrue(abs(sum(np.asarray(input_values_8[2])[1200:])) < 1e-3)
 
-    def test_save_pretrained(self):
-        pretrained_name = list(self.tokenizer_class.pretrained_vocab_files_map["vocab_file"].keys())[0]
-        tokenizer = self.tokenizer_class.from_pretrained(pretrained_name)
-        tmpdirname2 = tempfile.mkdtemp()
-
-        tokenizer_files = tokenizer.save_pretrained(tmpdirname2)
-        self.assertSequenceEqual(
-            sorted(tuple(VOCAB_FILES_NAMES.values()) + ("special_tokens_map.json", "added_tokens.json")),
-            sorted(tuple(x.split(os.path.sep)[-1] for x in tokenizer_files)),
-        )
-
-        # Checks everything loads correctly in the same way
-        tokenizer_p = self.tokenizer_class.from_pretrained(tmpdirname2)
-
-        # Check special tokens are set accordingly on Rust and Python
-        for key in tokenizer.special_tokens_map:
-            self.assertTrue(key in tokenizer_p.special_tokens_map)
-
-        shutil.rmtree(tmpdirname2)
-
     def test_get_vocab(self):
         tokenizer = self.get_tokenizer()
         vocab_dict = tokenizer.get_vocab()
@@ -283,9 +277,11 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         before_len = len(tokenizer)
         sample_ids = [0, 1, 4, 8, 9, 0, 12, before_len, before_len + 1, before_len + 2]
         tokenizer.add_tokens(["?", "!"])
-        additional_special_tokens = tokenizer.additional_special_tokens
-        additional_special_tokens.append("&")
-        tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
+        extra_special_tokens = tokenizer.extra_special_tokens
+        extra_special_tokens.append("&")
+        tokenizer.add_special_tokens(
+            {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
+        )
         before_tokens = tokenizer.decode(sample_ids)
         before_vocab = tokenizer.get_vocab()
         tokenizer.save_pretrained(tmpdirname)
@@ -345,35 +341,65 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         # this test makes sure that models that are using
         # group norm don't have their tokenizer return the
         # attention_mask
-        for model_id in WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            config = Wav2Vec2Config.from_pretrained(model_id)
-            tokenizer = Wav2Vec2Tokenizer.from_pretrained(model_id)
+        model_id = "facebook/wav2vec2-base-960h"
+        config = Wav2Vec2Config.from_pretrained(model_id)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained(model_id)
 
-            # only "layer" feature extraction norm should make use of
-            # attention_mask
-            self.assertEqual(tokenizer.return_attention_mask, config.feat_extract_norm == "layer")
+        # only "layer" feature extraction norm should make use of
+        # attention_mask
+        self.assertEqual(tokenizer.return_attention_mask, config.feat_extract_norm == "layer")
 
 
 class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/wav2vec2-base-960h"
     tokenizer_class = Wav2Vec2CTCTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    def test_pretokenized_inputs(self):
+        # Skip this test for Wav2Vec2 - it's a character-level tokenizer where spaces
+        # become word delimiters, so pretokenized inputs can't match string tokenization
+        self.skipTest("Wav2Vec2 is a character-level tokenizer with word delimiters")
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
+        cls.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
 
-        self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.tmpdirname = tempfile.mkdtemp()
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        # Update with special_tokens_map first, then user kwargs take precedence
+        merged_kwargs = cls.special_tokens_map.copy()
+        merged_kwargs.update(kwargs)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return Wav2Vec2CTCTokenizer.from_pretrained(pretrained_name, **merged_kwargs)
+
+    def test_word_delimiter_round_trip_without_config(self):
+        vocab_path = get_tests_dir("fixtures/vocab.json")
+        tokenizer = self.tokenizer_class(
+            vocab_path,
+            bos_token="<s>",
+            eos_token="</s>",
+            pad_token="<pad>",
+            unk_token="<unk>",
+            word_delimiter_token="|",
+        )
+        before_vocab = tokenizer.get_vocab()
+        self.assertIn("|", before_vocab)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            reloaded = self.tokenizer_class.from_pretrained(tmp_dir)
+
+        self.assertDictEqual(before_vocab, reloaded.get_vocab())
 
     def test_tokenizer_add_token_chars(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
@@ -440,29 +466,31 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_tokenizer_decode_added_tokens(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-base-960h")
-        tokenizer.add_tokens(["!", "?"])
+        tokenizer.add_tokens(["!", "?", "<new_tokens>"])
         tokenizer.add_special_tokens({"cls_token": "$$$"})
 
         # fmt: off
         sample_ids = [
-            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98, 32, 32, 33, tokenizer.word_delimiter_token_id, 32, 32, 33, 34, 34],
-            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34],
+            [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98, 32, 32, 33, tokenizer.word_delimiter_token_id, 32, 32, 33, 34, 34, 35, 35],
+            [24, 22, 5, tokenizer.word_delimiter_token_id, 24, 22, 5, 77, tokenizer.pad_token_id, 34, 34, 35, 35],
         ]
         # fmt: on
         batch_tokens = tokenizer.batch_decode(sample_ids)
+        batch_tokens_2 = tokenizer.batch_decode(sample_ids, skip_special_tokens=True)
 
-        self.assertEqual(batch_tokens, ["HELLO<unk>!?!?$$$", "BYE BYE<unk>$$$"])
+        self.assertEqual(batch_tokens, ["HELLO<unk>!? !?<new_tokens>$$$", "BYE BYE<unk><new_tokens>$$$"])
+        self.assertEqual(batch_tokens_2, ["HELO!? !?<new_tokens>", "BYE BYE<new_tokens>"])
 
     def test_special_characters_in_vocab(self):
         sent = "ʈʰ æ æ̃ ˧ kʰ"
 
-        vocab_dict = {k: v for v, k in enumerate({phoneme for phoneme in sent.split()})}
+        vocab_dict = {k: v for v, k in enumerate(set(sent.split()))}
         vocab_file = os.path.join(self.tmpdirname, "vocab_special.json")
 
         with open(vocab_file, "w") as f:
             json.dump(vocab_dict, f)
 
-        tokenizer = Wav2Vec2CTCTokenizer(vocab_file)
+        tokenizer = Wav2Vec2CTCTokenizer(vocab_file)  # , unk_token="<unk>")
 
         expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
         self.assertEqual(sent, expected_sent)
@@ -642,7 +670,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         #
         #        input_values = feature_extractor(sample["audio"]["array"], return_tensors="pt").input_values
         #        logits = model(input_values).logits
-        #        pred_ids = torch.argmax(logits, axis=-1).cpu().tolist()
+        #        pred_ids = torch.argmax(logits, axis=-1).tolist()
         # ```
         # fmt: off
         pred_ids = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 18, 11, 0, 0, 0, 22, 0, 0, 4, 4, 4, 14, 0, 0, 0, 0, 0, 8, 8, 0, 5, 5, 0, 12, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 0, 0, 10, 0, 0, 0, 15, 0, 0, 10, 0, 0, 0, 12, 0, 0, 0, 0, 0, 7, 0, 9, 0, 0, 14, 0, 0, 0, 13, 0, 7, 0, 0, 4, 4, 0, 15, 8, 8, 0, 0, 8, 0, 26, 0, 0, 4, 4, 0, 0, 15, 0, 0, 0, 0, 0, 0, 10, 0, 26, 5, 5, 0, 4, 4, 0, 0, 12, 11, 0, 0, 5, 4, 4, 4, 0, 18, 0, 0, 0, 7, 9, 9, 0, 6, 0, 12, 12, 4, 4, 0, 6, 0, 0, 8, 0, 4, 4, 4, 0, 19, 0, 0, 8, 9, 9, 0, 0, 0, 0, 12, 12, 0, 0, 0, 0, 0, 0, 0, 16, 16, 0, 0, 17, 5, 5, 5, 0, 4, 4, 4, 0, 0, 29, 29, 0, 0, 0, 0, 8, 11, 0, 9, 9, 0, 0, 0, 4, 4, 0, 12, 12, 0, 0, 0, 9, 0, 0, 0, 0, 0, 8, 18, 0, 0, 0, 4, 4, 0, 0, 8, 9, 0, 4, 4, 0, 6, 11, 5, 0, 4, 4, 0, 13, 13, 0, 0, 0, 10, 0, 0, 25, 0, 0, 6, 0, 4, 4, 0, 0, 0, 0, 7, 0, 0, 23, 0, 0, 4, 4, 0, 0, 0, 6, 11, 0, 5, 4, 4, 18, 0, 0, 0, 0, 0, 0, 7, 15, 0, 0, 0, 15, 15, 0, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
@@ -690,10 +718,6 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_word_time_stamps_start, word_time_stamps_start)
         self.assertListEqual(expected_word_time_stamps_end, word_time_stamps_end)
 
-    def test_pretrained_model_lists(self):
-        # Wav2Vec2Model has no max model length => no testing
-        pass
-
     # overwrite from test_tokenization_common
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -724,7 +748,10 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-3], tokenizer.vocab_size - 1)
 
-                new_toks_2 = {"eos_token": ">>>>|||<||<<|<<", "pad_token": "<<<<<|||>|>>>>|>"}
+                new_toks_2 = {
+                    "eos_token": AddedToken(">>>>|||<||<<|<<", lstrip=False, rstrip=False),
+                    "pad_token": AddedToken("<<<<<|||>|>>>>|>", rstrip=False, lstrip=False),
+                }
                 added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
                 vocab_size_3 = tokenizer.vocab_size
                 all_size_3 = len(tokenizer)
@@ -746,11 +773,11 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
 
-    @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
+    @unittest.skip(reason="The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_tf_encode_plus_sent_to_model(self):
         pass
 
-    @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
+    @unittest.skip(reason="The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_torch_encode_plus_sent_to_model(self):
         pass
 
@@ -764,3 +791,48 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 output = tokenizer.convert_tokens_to_string(tokens)
 
                 self.assertIsInstance(output["text"], str)
+
+    def test_nested_vocab(self):
+        eng_vocab = {"a": 7, "b": 8}
+        spa_vocab = {"a": 23, "c": 88}
+        ita_vocab = {"a": 6, "d": 9}
+
+        nested_vocab = {"eng": eng_vocab, "spa": spa_vocab, "ita": ita_vocab}
+
+        def check_tokenizer(tokenizer, check_ita_first=False):
+            if check_ita_first:
+                self.assertEqual(tokenizer.decode([6, 9, 9]), "ad")
+                self.assertEqual(tokenizer.encoder, ita_vocab)
+                tokenizer.set_target_lang("eng")
+
+            self.assertEqual(tokenizer.encoder, eng_vocab)
+            self.assertEqual(tokenizer.decode([7, 8, 7]), "aba")
+
+            tokenizer.set_target_lang("spa")
+            self.assertEqual(tokenizer.decode([23, 88, 23]), "aca")
+            self.assertEqual(tokenizer.encoder, spa_vocab)
+
+            tokenizer.set_target_lang("eng")
+            self.assertEqual(tokenizer.encoder, eng_vocab)
+            self.assertEqual(tokenizer.decode([7, 7, 8]), "ab")
+
+            tokenizer.set_target_lang("ita")
+            self.assertEqual(tokenizer.decode([6, 9, 9]), "ad")
+            self.assertEqual(tokenizer.encoder, ita_vocab)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            tempfile_path = os.path.join(tempdir, "vocab.json")
+            with open(tempfile_path, "w") as temp_file:
+                json.dump(nested_vocab, temp_file)
+
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(tempdir, target_lang="eng")
+
+        check_tokenizer(tokenizer)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            # should have saved target lang as "ita" since it was last one
+            tokenizer.save_pretrained(tempdir)
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(tempdir)
+
+            self.assertEqual(tokenizer.target_lang, "ita")
+            check_tokenizer(tokenizer, check_ita_first=True)

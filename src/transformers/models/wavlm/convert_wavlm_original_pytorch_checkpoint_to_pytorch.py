@@ -14,12 +14,9 @@
 # limitations under the License.
 """Convert WavLM checkpoint."""
 
-
 import argparse
 
 import torch
-
-from transformers import WavLMConfig, WavLMModel, logging
 
 # Step 1. clone https://github.com/microsoft/unilm
 # Step 2. git checkout to https://github.com/microsoft/unilm/commit/b94ec76c36f02fb2b0bf0dcb0b8554a2185173cd
@@ -28,6 +25,8 @@ from transformers import WavLMConfig, WavLMModel, logging
 # import classes
 from unilm.wavlm.WavLM import WavLM as WavLMOrig
 from unilm.wavlm.WavLM import WavLMConfig as WavLMConfigOrig
+
+from transformers import WavLMConfig, WavLMModel, logging
 
 
 logging.set_verbosity_info()
@@ -179,9 +178,8 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 @torch.no_grad()
 def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
-
     # load the pre-trained checkpoints
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, weights_only=True)
     cfg = WavLMConfigOrig(checkpoint["cfg"])
     model = WavLMOrig(cfg)
     model.load_state_dict(checkpoint["model"])

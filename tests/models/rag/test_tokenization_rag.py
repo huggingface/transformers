@@ -18,7 +18,7 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from transformers import BartTokenizer, BartTokenizerFast, DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
+from transformers import DPRQuestionEncoderTokenizer, RobertaTokenizer
 from transformers.models.bart.configuration_bart import BartConfig
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.configuration_dpr import DPRConfig
@@ -102,24 +102,23 @@ class RagTokenizerTest(TestCase):
     def get_dpr_tokenizer(self) -> DPRQuestionEncoderTokenizer:
         return DPRQuestionEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
 
-    def get_bart_tokenizer(self) -> BartTokenizer:
-        return BartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
+    def get_bart_tokenizer(self) -> RobertaTokenizer:
+        return RobertaTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     @require_tokenizers
     def test_save_load_pretrained_with_saved_config(self):
-
         save_dir = os.path.join(self.tmpdirname, "rag_tokenizer")
         rag_config = RagConfig(question_encoder=DPRConfig().to_dict(), generator=BartConfig().to_dict())
         rag_tokenizer = RagTokenizer(question_encoder=self.get_dpr_tokenizer(), generator=self.get_bart_tokenizer())
         rag_config.save_pretrained(save_dir)
         rag_tokenizer.save_pretrained(save_dir)
         new_rag_tokenizer = RagTokenizer.from_pretrained(save_dir, config=rag_config)
-        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizerFast)
+        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizer)
         self.assertEqual(new_rag_tokenizer.question_encoder.get_vocab(), rag_tokenizer.question_encoder.get_vocab())
-        self.assertIsInstance(new_rag_tokenizer.generator, BartTokenizerFast)
+        self.assertIsInstance(new_rag_tokenizer.generator, RobertaTokenizer)
         self.assertEqual(new_rag_tokenizer.generator.get_vocab(), rag_tokenizer.generator.get_vocab())
 
     @slow

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,11 @@
 
 import copy
 import unittest
+import warnings
 
 import numpy as np
 
+from transformers import Trainer, TrainingArguments
 from transformers.data.data_collator import default_data_collator
 from transformers.testing_utils import require_accelerate, require_torch
 from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
@@ -34,11 +35,10 @@ if is_torch_available():
     from transformers.trainer_pt_utils import (
         DistributedLengthGroupedSampler,
         DistributedSamplerWithLoop,
-        DistributedTensorGatherer,
+        EvalLoopContainer,
         IterableDatasetShard,
         LabelSmoother,
         LengthGroupedSampler,
-        SequentialDistributedSampler,
         ShardSampler,
         get_parameter_names,
         numpy_pad_and_concatenate,
@@ -78,79 +78,6 @@ if is_torch_available():
 
 @require_torch
 class TrainerUtilsTest(unittest.TestCase):
-    def test_distributed_tensor_gatherer(self):
-        # Simulate a result with a dataset of size 21, 4 processes and chunks of lengths 2, 3, 1
-        world_size = 4
-        num_samples = 21
-        input_indices = [
-            [0, 1, 6, 7, 12, 13, 18, 19],
-            [2, 3, 4, 8, 9, 10, 14, 15, 16, 20, 0, 1],
-            [5, 11, 17, 2],
-        ]
-
-        predictions = np.random.normal(size=(num_samples, 13))
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices in input_indices:
-            gatherer.add_arrays(predictions[indices])
-        result = gatherer.finalize()
-        self.assertTrue(np.array_equal(result, predictions))
-
-        # With nested tensors
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices in input_indices:
-            gatherer.add_arrays([predictions[indices], [predictions[indices], predictions[indices]]])
-        result = gatherer.finalize()
-        self.assertTrue(isinstance(result, list))
-        self.assertEqual(len(result), 2)
-        self.assertTrue(isinstance(result[1], list))
-        self.assertEqual(len(result[1]), 2)
-        self.assertTrue(np.array_equal(result[0], predictions))
-        self.assertTrue(np.array_equal(result[1][0], predictions))
-        self.assertTrue(np.array_equal(result[1][1], predictions))
-
-    def test_distributed_tensor_gatherer_different_shapes(self):
-        # Simulate a result with a dataset of size 21, 4 processes and chunks of lengths 2, 3, 1
-        world_size = 4
-        num_samples = 21
-        input_indices = [
-            [0, 1, 6, 7, 12, 13, 18, 19],
-            [2, 3, 4, 8, 9, 10, 14, 15, 16, 20, 0, 1],
-            [5, 11, 17, 2],
-        ]
-        sequence_lengths = [8, 10, 13]
-
-        predictions = np.random.normal(size=(num_samples, 13))
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices, seq_length in zip(input_indices, sequence_lengths):
-            gatherer.add_arrays(predictions[indices, :seq_length])
-        result = gatherer.finalize()
-
-        # Remove the extra samples added at the end for a round multiple of num processes.
-        actual_indices = [input_indices[0], input_indices[1][:-2], input_indices[2][:-1]]
-        for indices, seq_length in zip(actual_indices, sequence_lengths):
-            self.assertTrue(np.array_equal(result[indices, :seq_length], predictions[indices, :seq_length]))
-
-        # With nested tensors
-        predictions = np.random.normal(size=(num_samples, 13))
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices, seq_length in zip(input_indices, sequence_lengths):
-            gatherer.add_arrays([predictions[indices, :seq_length], predictions[indices]])
-        result = gatherer.finalize()
-
-        for indices, seq_length in zip(actual_indices, sequence_lengths):
-            self.assertTrue(np.array_equal(result[0][indices, :seq_length], predictions[indices, :seq_length]))
-        self.assertTrue(np.array_equal(result[1], predictions))
-
-        # Check if works if varying seq_length is second
-        gatherer = DistributedTensorGatherer(world_size=world_size, num_samples=num_samples)
-        for indices, seq_length in zip(input_indices, sequence_lengths):
-            gatherer.add_arrays([predictions[indices], predictions[indices, :seq_length]])
-        result = gatherer.finalize()
-
-        self.assertTrue(np.array_equal(result[0], predictions))
-        for indices, seq_length in zip(actual_indices, sequence_lengths):
-            self.assertTrue(np.array_equal(result[1][indices, :seq_length], predictions[indices, :seq_length]))
-
     def test_label_smoothing(self):
         epsilon = 0.1
         num_labels = 12
@@ -161,7 +88,7 @@ class TrainerUtilsTest(unittest.TestCase):
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
         log_probs = -nn.functional.log_softmax(random_logits, dim=-1)
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.mean()
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
         # With a few -100 labels
         random_labels[0, 1] = -100
@@ -177,7 +104,7 @@ class TrainerUtilsTest(unittest.TestCase):
         log_probs[2, 1] = 0.0
         log_probs[2, 3] = 0.0
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
     def test_group_by_length(self):
         # Get some inputs of random lengths
@@ -189,7 +116,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(lengths[indices[0]], 50)
         # The indices should be a permutation of range(100)
-        self.assertEqual(list(sorted(indices)), list(range(100)))
+        self.assertEqual(sorted(indices), list(range(100)))
 
     def test_group_by_length_with_dict(self):
         # Get some inputs of random lengths
@@ -204,7 +131,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
-        self.assertEqual(list(sorted(indices)), list(range(6)))
+        self.assertEqual(sorted(indices), list(range(6)))
 
     def test_group_by_length_with_batch_encoding(self):
         # Get some inputs of random lengths
@@ -219,7 +146,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
-        self.assertEqual(list(sorted(indices)), list(range(6)))
+        self.assertEqual(sorted(indices), list(range(6)))
 
     def test_distributed_length_grouped(self):
         # Get some inputs of random lengths
@@ -232,7 +159,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(lengths[indices_process_0[0]], 50)
         # The indices should be a permutation of range(100)
-        self.assertEqual(list(sorted(indices_process_0 + indices_process_1)), list(range(100)))
+        self.assertEqual(sorted(indices_process_0 + indices_process_1), list(range(100)))
 
     def test_get_parameter_names(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
@@ -242,6 +169,33 @@ class TrainerUtilsTest(unittest.TestCase):
             ['0.linear1.weight', '0.linear1.bias', '0.linear2.weight', '0.linear2.bias', '0.bias', '1.0.linear1.weight', '1.0.linear1.bias', '1.0.linear2.weight', '1.0.linear2.bias', '1.0.bias', '1.1.linear1.weight', '1.1.linear1.bias', '1.1.linear2.weight', '1.1.linear2.bias', '1.1.bias']
         )
         # fmt: on
+
+    def test_get_parameter_names_rmsnorm(self):
+        class RMSNorm(nn.Module):
+            def __init__(self, hidden_size):
+                super().__init__()
+                self.weight = nn.Parameter(torch.ones(hidden_size))
+                self.bias = nn.Parameter(torch.zeros(hidden_size))
+
+        class ModelWithRMSNorm(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(128, 128)
+                self.rmsnorm = RMSNorm(128)
+                self.bias = nn.Parameter(torch.zeros(128))
+
+        model = ModelWithRMSNorm()
+        # Test both type-based and name-based filtering
+        decay_parameters = get_parameter_names(model, [], ["bias", "rmsnorm"])
+
+        # Parameters that should be in weight decay
+        self.assertIn("linear.weight", decay_parameters)
+
+        # Parameters that should NOT be in weight decay
+        self.assertNotIn("linear.bias", decay_parameters)
+        self.assertNotIn("rmsnorm.weight", decay_parameters)
+        self.assertNotIn("rmsnorm.bias", decay_parameters)
+        self.assertNotIn("bias", decay_parameters)
 
     def test_distributed_sampler_with_loop(self):
         batch_size = 16
@@ -267,38 +221,6 @@ class TrainerUtilsTest(unittest.TestCase):
 
             self.assertEqual(set(total[:length]), set(dataset))
             self.assertEqual(set(total[length:]), set(total[: (len(total) - length)]))
-
-    def test_sequential_distributed_sampler(self):
-        batch_size = 16
-        for length in [23, 64, 123]:
-            dataset = list(range(length))
-            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0)
-            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1)
-
-            # Sample
-            samples1 = list(shard1)
-            samples2 = list(shard2)
-
-            total = samples1 + samples2
-
-            self.assertListEqual(total[:length], dataset)
-            self.assertListEqual(total[length:], dataset[: (len(total) - length)])
-
-            # With a batch_size passed
-            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0, batch_size=batch_size)
-            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1, batch_size=batch_size)
-
-            # Sample
-            samples1 = list(shard1)
-            samples2 = list(shard2)
-
-            self.assertTrue(len(samples1) % batch_size == 0)
-            self.assertTrue(len(samples2) % batch_size == 0)
-
-            total = samples1 + samples2
-
-            self.assertListEqual(total[:length], dataset)
-            self.assertListEqual(total[length:], dataset[: (len(total) - length)])
 
     def check_iterable_dataset_shard(self, dataset, batch_size, drop_last, num_processes=2, epoch=0):
         # Set the seed for the base dataset to get the proper reference.
@@ -437,7 +359,7 @@ class TrainerUtilsTest(unittest.TestCase):
                 raise RuntimeError("CUDA out of memory.")
 
         mock_training_loop_function()
-        self.assertEqual(batch_sizes, [64, 32, 16])
+        self.assertEqual(batch_sizes, [64, 57, 51, 45, 40, 36, 32, 28, 25, 22, 19, 17, 15])
 
     @require_accelerate
     def test_executable_batch_size_no_search(self):
@@ -497,3 +419,130 @@ class TrainerUtilsTest(unittest.TestCase):
         remove_columns_collator(data_batch)
         self.assertEqual(logger.called, 1)
         self.assertIn("col3", logger.last_msg)
+
+    def test_eval_loop_container(self):
+        batch_1 = [
+            torch.ones([8, 5]),
+            {"loss": torch.tensor(1.0)},
+            (torch.ones([8, 2, 3]), torch.ones([8, 2])),
+        ]
+        batch_2 = [
+            torch.ones([4, 5]),
+            {"loss": torch.tensor(2.0)},
+            (torch.ones([4, 2, 3]), torch.ones([4, 6])),
+        ]
+
+        concat_container = EvalLoopContainer(do_nested_concat=True, padding_index=-100)
+        concat_container.add(batch_1)
+        concat_container.add(batch_2)
+        concat_container.to_cpu_and_numpy()
+        arrays = concat_container.get_arrays()
+
+        # Test two nested batches concatenation
+        self.assertIsInstance(arrays, list)
+        self.assertEqual(len(arrays), 3)
+        self.assertIsInstance(arrays[0], np.ndarray)
+        self.assertEqual(arrays[0].shape, (12, 5))
+        self.assertIsInstance(arrays[1], dict)
+        self.assertIsInstance(arrays[1]["loss"], np.ndarray)
+        self.assertEqual(arrays[1]["loss"].shape, (2,))
+        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1.0, 2.0])))
+        self.assertIsInstance(arrays[2], tuple)
+        self.assertEqual(len(arrays[2]), 2)
+        self.assertEqual(arrays[2][0].shape, (12, 2, 3))
+        self.assertEqual(arrays[2][1].shape, (12, 6))
+        # check that first batch padded with padding index -100 after concatenation
+        self.assertEqual(arrays[2][1][0][2], -100)
+
+        # Test two batches with no concatenation
+        list_container = EvalLoopContainer(do_nested_concat=False)
+        list_container.add(batch_1)
+        list_container.add(batch_2)
+        list_container.to_cpu_and_numpy()
+        arrays = list_container.get_arrays()
+
+        self.assertEqual(len(arrays), 2)
+        self.assertIsInstance(arrays, list)
+        np_batch_1, np_batch_2 = arrays
+
+        self.assertIsInstance(np_batch_1, list)
+        self.assertEqual(len(np_batch_1), 3)
+        self.assertIsInstance(np_batch_1[0], np.ndarray)
+        self.assertIsInstance(np_batch_1[1], dict)
+        self.assertIsInstance(np_batch_1[2], tuple)
+        self.assertEqual(np_batch_1[0].shape, (8, 5))
+        self.assertEqual(np_batch_1[1]["loss"].shape, ())
+        self.assertEqual(np_batch_1[2][0].shape, (8, 2, 3))
+        self.assertEqual(np_batch_1[2][1].shape, (8, 2))
+
+        self.assertIsInstance(np_batch_2, list)
+        self.assertEqual(len(np_batch_2), 3)
+        self.assertIsInstance(np_batch_2[0], np.ndarray)
+        self.assertIsInstance(np_batch_2[1], dict)
+        self.assertIsInstance(np_batch_2[2], tuple)
+        self.assertEqual(np_batch_2[0].shape, (4, 5))
+        self.assertEqual(np_batch_2[1]["loss"].shape, ())
+        self.assertEqual(np_batch_2[2][0].shape, (4, 2, 3))
+        self.assertEqual(np_batch_2[2][1].shape, (4, 6))
+
+        # Test no batches
+        none_arr = EvalLoopContainer(do_nested_concat=True, padding_index=-100).get_arrays()
+        self.assertIsNone(none_arr)
+
+        none_arr = EvalLoopContainer(do_nested_concat=False).get_arrays()
+        self.assertIsNone(none_arr)
+
+        # Test one batch
+        concat_container = EvalLoopContainer(do_nested_concat=True, padding_index=-100)
+        concat_container.add(batch_1)
+        arrays = concat_container.get_arrays()
+        self.assertIsInstance(arrays, list)
+        self.assertEqual(len(arrays), 3)
+        self.assertIsInstance(arrays[0], np.ndarray)
+        self.assertEqual(arrays[0].shape, (8, 5))
+        self.assertIsInstance(arrays[1], dict)
+        self.assertIsInstance(arrays[1]["loss"], np.ndarray)
+        self.assertEqual(arrays[1]["loss"].shape, ())
+        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1.0])))
+        self.assertIsInstance(arrays[2], tuple)
+        self.assertEqual(len(arrays[2]), 2)
+        self.assertEqual(arrays[2][0].shape, (8, 2, 3))
+        self.assertEqual(arrays[2][1].shape, (8, 2))
+
+    def test_label_smoothing_multi_label_incompatibility(self):
+        """Test that Trainer warns and disables label smoothing for multi-label classification"""
+
+        # Mock model config with multi-label classification
+        class MockConfig:
+            problem_type = "multi_label_classification"
+
+        class MockModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.config = MockConfig()
+                self.linear = nn.Linear(10, 3)
+
+            def forward(self, **kwargs):
+                return {"logits": torch.randn(2, 3)}
+
+        model = MockModel()
+
+        # Create training args with label smoothing
+        training_args = TrainingArguments(
+            output_dir="./test-trainer",
+            label_smoothing_factor=0.1,
+            per_device_train_batch_size=2,
+            num_train_epochs=1,
+        )
+
+        # Should warn and disable label smoothing
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            trainer = Trainer(model=model, args=training_args)
+
+            # Check warning was issued
+            self.assertEqual(len(w), 1)
+            self.assertIn("Label smoothing is not compatible with multi-label classification", str(w[0].message))
+
+            # Check label_smoother was disabled
+            self.assertIsNone(trainer.label_smoother)

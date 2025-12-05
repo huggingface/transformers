@@ -1,10 +1,10 @@
-from typing import List, Union
+import inspect
 
 import numpy as np
 
-from ..tokenization_utils import TruncationStrategy
+from ..tokenization_python import TruncationStrategy
 from ..utils import add_end_docstrings, logging
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
+from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
 
 logger = logging.get_logger(__name__)
@@ -26,10 +26,8 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
             raise ValueError("You must include at least one label and at least one sequence.")
         if hypothesis_template.format(labels[0]) == hypothesis_template:
             raise ValueError(
-                (
-                    'The provided hypothesis_template "{}" was not able to be formatted with the target labels. '
-                    "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
-                ).format(hypothesis_template)
+                f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
+                "Make sure the passed template includes formatting syntax such as {} where the label should go."
             )
 
         if isinstance(sequences, str):
@@ -42,16 +40,39 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         return sequence_pairs, sequences
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class ZeroShotClassificationPipeline(ChunkPipeline):
     """
     NLI-based zero-shot classification pipeline using a `ModelForSequenceClassification` trained on NLI (natural
-    language inference) tasks.
+    language inference) tasks. Equivalent of `text-classification` pipelines, but these models don't require a
+    hardcoded number of potential classes, they can be chosen at runtime. It usually means it's slower but it is
+    **much** more flexible.
 
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
     pair and passed to the pretrained model. Then, the logit for *entailment* is taken as the logit for the candidate
     label being valid. Any NLI model can be used, but the id of the *entailment* label must be included in the model
-    config's :attr:*~transformers.PretrainedConfig.label2id*.
+    config's :attr:*~transformers.PreTrainedConfig.label2id*.
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> oracle = pipeline(model="facebook/bart-large-mnli")
+    >>> oracle(
+    ...     "I have a problem with my iphone that needs to be resolved asap!!",
+    ...     candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"],
+    ... )
+    {'sequence': 'I have a problem with my iphone that needs to be resolved asap!!', 'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'], 'scores': [0.504, 0.479, 0.013, 0.003, 0.002]}
+
+    >>> oracle(
+    ...     "I have a problem with my iphone that needs to be resolved asap!!",
+    ...     candidate_labels=["english", "german"],
+    ... )
+    {'sequence': 'I have a problem with my iphone that needs to be resolved asap!!', 'labels': ['english', 'german'], 'scores': [0.814, 0.186]}
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This NLI pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"zero-shot-classification"`.
@@ -60,9 +81,14 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     of available models on [huggingface.co/models](https://huggingface.co/models?search=nli).
     """
 
-    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), **kwargs):
         self._args_parser = args_parser
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         if self.entailment_id == -1:
             logger.warning(
                 "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
@@ -82,7 +108,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        return_tensors = self.framework
+        return_tensors = "pt"
         if self.tokenizer.pad_token is None:
             # Override for tokenizers not supporting padding
             logger.error(
@@ -119,7 +145,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         return inputs
 
     def _sanitize_parameters(self, **kwargs):
-        if kwargs.get("multi_class", None) is not None:
+        if kwargs.get("multi_class") is not None:
             kwargs["multi_label"] = kwargs["multi_class"]
             logger.warning(
                 "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
@@ -138,7 +164,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        sequences: Union[str, List[str]],
+        sequences: str | list[str],
         *args,
         **kwargs,
     ):
@@ -147,9 +173,9 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         information.
 
         Args:
-            sequences (`str` or `List[str]`):
+            sequences (`str` or `list[str]`):
                 The sequence(s) to classify, will be truncated if the model input is too large.
-            candidate_labels (`str` or `List[str]`):
+            candidate_labels (`str` or `list[str]`):
                 The set of possible class labels to classify each sequence into. Can be a single label, a string of
                 comma-separated labels, or a list of labels.
             hypothesis_template (`str`, *optional*, defaults to `"This example is {}."`):
@@ -169,8 +195,8 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **sequence** (`str`) -- The sequence for which this is the output.
-            - **labels** (`List[str]`) -- The labels sorted by order of likelihood.
-            - **scores** (`List[float]`) -- The probabilities for each of the labels.
+            - **labels** (`list[str]`) -- The labels sorted by order of likelihood.
+            - **scores** (`list[float]`) -- The probabilities for each of the labels.
         """
         if len(args) == 0:
             pass
@@ -198,6 +224,10 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         candidate_label = inputs["candidate_label"]
         sequence = inputs["sequence"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
+        model_forward = self.model.forward
+        if "use_cache" in inspect.signature(model_forward).parameters:
+            model_inputs["use_cache"] = False
         outputs = self.model(**model_inputs)
 
         model_outputs = {
@@ -211,7 +241,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         sequences = [outputs["sequence"] for outputs in model_outputs]
-        logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
+        logits = np.concatenate([output["logits"].float().numpy() for output in model_outputs])
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n

@@ -20,7 +20,6 @@ additional na_prob.json file is provided. This file is expected to map question 
 probability that a question is unanswerable.
 """
 
-
 import collections
 import json
 import math
@@ -149,7 +148,7 @@ def find_best_thresh_v2(preds, scores, na_probs, qid_to_has_ans):
     best_score = cur_score
     best_thresh = 0.0
     qid_list = sorted(na_probs, key=lambda k: na_probs[k])
-    for i, qid in enumerate(qid_list):
+    for qid in qid_list:
         if qid not in scores:
             continue
         if qid_to_has_ans[qid]:
@@ -227,7 +226,7 @@ def squad_evaluate(examples, preds, no_answer_probs=None, no_answer_probability_
     no_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if not has_answer]
 
     if no_answer_probs is None:
-        no_answer_probs = {k: 0.0 for k in preds}
+        no_answer_probs = dict.fromkeys(preds, 0.0)
 
     exact, f1 = get_raw_scores(examples, preds)
 
@@ -536,7 +535,8 @@ def compute_predictions_logits(
         if not nbest:
             nbest.append(_NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
 
-        assert len(nbest) >= 1, "No valid predictions"
+        if len(nbest) < 1:
+            raise ValueError("No valid predictions")
 
         total_scores = []
         best_non_null_entry = None
@@ -557,7 +557,8 @@ def compute_predictions_logits(
             output["end_logit"] = entry.end_logit
             nbest_json.append(output)
 
-        assert len(nbest_json) >= 1, "No valid predictions"
+        if len(nbest_json) < 1:
+            raise ValueError("No valid predictions")
 
         if not version_2_with_negative:
             all_predictions[example.qas_id] = nbest_json[0]["text"]
@@ -752,8 +753,10 @@ def compute_predictions_log_probs(
             output["end_log_prob"] = entry.end_log_prob
             nbest_json.append(output)
 
-        assert len(nbest_json) >= 1, "No valid predictions"
-        assert best_non_null_entry is not None, "No valid predictions"
+        if len(nbest_json) < 1:
+            raise ValueError("No valid predictions")
+        if best_non_null_entry is None:
+            raise ValueError("No valid predictions")
 
         score_diff = score_null
         scores_diff_json[example.qas_id] = score_diff

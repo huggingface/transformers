@@ -15,8 +15,8 @@ RUN apt update && \
 RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
     jupyter \
-    tensorflow \
     torch
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/kernels@main#egg=kernels
 
 RUN git clone https://github.com/NVIDIA/apex
 RUN cd apex && \

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -29,7 +29,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         IBertForMaskedLM,
         IBertForMultipleChoice,
         IBertForQuestionAnswering,
@@ -61,7 +60,7 @@ class IBertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -224,11 +223,7 @@ class IBertModelTester:
 
 
 @require_torch
-class IBertModelTest(ModelTesterMixin, unittest.TestCase):
-
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
 
     all_model_classes = (
@@ -243,6 +238,18 @@ class IBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": IBertModel,
+            "fill-mask": IBertForMaskedLM,
+            "question-answering": IBertForQuestionAnswering,
+            "text-classification": IBertForSequenceClassification,
+            "token-classification": IBertForTokenClassification,
+            "zero-shot": IBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = IBertModelTester(self)
@@ -254,13 +261,6 @@ class IBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # I-BERT only supports absolute embedding
-        for type in ["absolute"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -280,13 +280,12 @@ class IBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = IBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "kssteven/ibert-roberta-base"
+        model = IBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is IBertEmbeddings.padding_idx + 1
@@ -304,9 +303,7 @@ class IBertModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
-
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is IBertEmbeddings.padding_idx + 1
         """
@@ -326,7 +323,7 @@ class IBertModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     # Override
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -370,6 +367,10 @@ class IBertModelTest(ModelTesterMixin, unittest.TestCase):
 
             with torch.no_grad():
                 model(**inputs)[0]
+
+    @unittest.skip(reason="ibert overrides scaling to None if inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
 
 
 @require_torch
@@ -507,7 +508,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
         gelu_q = IntGELU(quant_mode=True)
         gelu_dq = nn.GELU()
 
-        x_int = torch.range(-10000, 10000, 1)
+        x_int = torch.arange(-10000, 10001, 1)
         x_scaling_factor = torch.tensor(0.001)
         x = x_int * x_scaling_factor
 
@@ -522,7 +523,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
 
     def test_force_dequant_gelu(self):
-        x_int = torch.range(-10000, 10000, 1)
+        x_int = torch.arange(-10000, 10001, 1)
         x_scaling_factor = torch.tensor(0.001)
         x = x_int * x_scaling_factor
 
@@ -553,7 +554,6 @@ class IBertModelIntegrationTest(unittest.TestCase):
         softmax_q = IntSoftmax(output_bit, quant_mode=True)
         softmax_dq = nn.Softmax()
 
-        # x_int = torch.range(-10000, 10000, 1)
         def _test(array):
             x_int = torch.tensor(array)
             x_scaling_factor = torch.tensor(0.1)
@@ -673,10 +673,10 @@ class IBertModelIntegrationTest(unittest.TestCase):
         # Recursively convert all the `quant_mode` attributes as `True`
         if hasattr(model, "quant_mode"):
             model.quant_mode = True
-        elif type(model) == nn.Sequential:
+        elif isinstance(model, nn.Sequential):
             for n, m in model.named_children():
                 self.quantize(m)
-        elif type(model) == nn.ModuleList:
+        elif isinstance(model, nn.ModuleList):
             for n in model:
                 self.quantize(n)
         else:

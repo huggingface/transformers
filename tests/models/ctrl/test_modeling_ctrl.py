@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Salesforce and HuggingFace Inc. team.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,22 +12,21 @@
 # limitations under the License.
 
 
-import gc
 import unittest
 
 from transformers import CTRLConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
         CTRLForSequenceClassification,
         CTRLLMHeadModel,
         CTRLModel,
@@ -48,7 +46,7 @@ class CTRLModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -112,13 +110,10 @@ class CTRLModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -132,7 +127,7 @@ class CTRLModelTester:
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
+            dff=self.intermediate_size,
             # hidden_act=self.hidden_act,
             # hidden_dropout_prob=self.hidden_dropout_prob,
             # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -142,18 +137,18 @@ class CTRLModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_ctrl_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = CTRLModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        model(input_ids, token_type_ids=token_type_ids)
         model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = CTRLLMHeadModel(config)
         model.to(torch_device)
         model.eval()
@@ -169,7 +164,6 @@ class CTRLModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -177,28 +171,44 @@ class CTRLModelTester:
             choice_labels,
         ) = config_and_inputs
 
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
 
         return config, inputs_dict
 
-    def create_and_check_ctrl_for_sequence_classification(self, config, input_ids, head_mask, token_type_ids, *args):
-        config.num_labels = self.num_labels
-        model = CTRLForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-        result = model(input_ids, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
 
 @require_torch
-class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
-    all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
-    test_pruning = True
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": CTRLModel,
+            "text-classification": CTRLForSequenceClassification,
+            "text-generation": CTRLLMHeadModel,
+            "zero-shot": CTRLForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_resize_embeddings = False
-    test_head_masking = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "ZeroShotClassificationPipelineTests":
+            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
+            # `CTRLConfig` was never used in pipeline tests, either because of a missing checkpoint or because a tiny
+            # config could not be created.
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = CTRLModelTester(self)
@@ -207,8 +217,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -223,9 +232,9 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CTRLModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/ctrl"
+        model = CTRLModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -233,12 +242,11 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_lm_generate_ctrl(self):
-        model = CTRLLMHeadModel.from_pretrained("ctrl")
+        model = CTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
         model.to(torch_device)
         input_ids = torch.tensor(
             [[11859, 0, 1611, 8]], dtype=torch.long, device=torch_device

@@ -17,13 +17,14 @@
 import os
 import pickle
 import time
-from typing import Iterable, List, Optional, Tuple
+from collections.abc import Iterable
+from typing import Optional
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends
+from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends, strtobool
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
 
@@ -46,7 +47,7 @@ class Index:
     A base class for the Indices encapsulated by the [`RagRetriever`].
     """
 
-    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> list[dict]:
         """
         Returns a list of dictionaries, containing titles and text of the retrieved documents.
 
@@ -56,7 +57,7 @@ class Index:
         """
         raise NotImplementedError
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         """
         For each query in the batch, retrieves `n_docs` documents.
 
@@ -103,6 +104,7 @@ class LegacyIndex(Index):
     PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
 
     def __init__(self, vector_size, index_path):
+        requires_backends(self, ["faiss"])
         self.index_id_to_db_id = []
         self.index_path = index_path
         self.passages = self._load_passages()
@@ -115,13 +117,13 @@ class LegacyIndex(Index):
         try:
             # Load from URL or cache if already cached
             resolved_archive_file = cached_file(index_path, filename)
-        except EnvironmentError:
+        except OSError:
             msg = (
                 f"Can't load '{filename}'. Make sure that:\n\n"
                 f"- '{index_path}' is a correct remote path to a directory containing a file named {filename}\n\n"
                 f"- or '{index_path}' is the correct path to a directory containing a file named {filename}.\n\n"
             )
-            raise EnvironmentError(msg)
+            raise OSError(msg)
         if is_local:
             logger.info(f"loading file {resolved_archive_file}")
         else:
@@ -131,6 +133,13 @@ class LegacyIndex(Index):
     def _load_passages(self):
         logger.info(f"Loading passages from {self.index_path}")
         passages_path = self._resolve_path(self.index_path, self.PASSAGE_FILENAME)
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+            )
         with open(passages_path, "rb") as passages_file:
             passages = pickle.load(passages_file)
         return passages
@@ -140,11 +149,18 @@ class LegacyIndex(Index):
         resolved_index_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index.dpr")
         self.index = faiss.read_index(resolved_index_path)
         resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+            )
         with open(resolved_meta_path, "rb") as metadata_file:
             self.index_id_to_db_id = pickle.load(metadata_file)
-        assert (
-            len(self.index_id_to_db_id) == self.index.ntotal
-        ), "Deserialized index_id_to_db_id should match faiss index size"
+        assert len(self.index_id_to_db_id) == self.index.ntotal, (
+            "Deserialized index_id_to_db_id should match faiss index size"
+        )
 
     def is_initialized(self):
         return self._index_initialized
@@ -157,7 +173,7 @@ class LegacyIndex(Index):
         self._deserialize_index()
         self._index_initialized = True
 
-    def get_doc_dicts(self, doc_ids: np.array):
+    def get_doc_dicts(self, doc_ids: np.ndarray):
         doc_list = []
         for doc_ids_i in doc_ids:
             ids = [str(int(doc_id)) for doc_id in doc_ids_i]
@@ -171,7 +187,7 @@ class LegacyIndex(Index):
             doc_dicts.append(doc_dict)
         return doc_dicts
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         aux_dim = np.zeros(len(question_hidden_states), dtype="float32").reshape(-1, 1)
         query_nhsw_vectors = np.hstack((question_hidden_states, aux_dim))
         _, docs_ids = self.index.search(query_nhsw_vectors, n_docs)
@@ -182,6 +198,7 @@ class LegacyIndex(Index):
 
 class HFIndexBase(Index):
     def __init__(self, vector_size, dataset, index_initialized=False):
+        requires_backends(self, ["faiss"])
         self.vector_size = vector_size
         self.dataset = dataset
         self._index_initialized = index_initialized
@@ -190,7 +207,7 @@ class HFIndexBase(Index):
 
     def _check_dataset_format(self, with_index: bool):
         if not isinstance(self.dataset, Dataset):
-            raise ValueError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
+            raise TypeError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
         if len({"title", "text", "embeddings"} - set(self.dataset.column_names)) > 0:
             raise ValueError(
                 "Dataset should be a dataset with the following columns: "
@@ -209,10 +226,10 @@ class HFIndexBase(Index):
     def is_initialized(self):
         return self._index_initialized
 
-    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> list[dict]:
         return [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         _, ids = self.dataset.search_batch("embeddings", question_hidden_states, n_docs)
         docs = [self.dataset[[i for i in indices if i >= 0]] for indices in ids]
         vectors = [doc["embeddings"] for doc in docs]
@@ -252,7 +269,9 @@ class CanonicalHFIndex(HFIndexBase):
         index_name: Optional[str] = None,
         index_path: Optional[str] = None,
         use_dummy_dataset=False,
+        dataset_revision=None,
     ):
+        requires_backends(self, ["faiss"])
         if int(index_path is None) + int(index_name is None) != 1:
             raise ValueError("Please provide `index_name` or `index_path`.")
         self.dataset_name = dataset_name
@@ -260,9 +279,14 @@ class CanonicalHFIndex(HFIndexBase):
         self.index_name = index_name
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+        self.dataset_revision = dataset_revision
         logger.info(f"Loading passages from {self.dataset_name}")
         dataset = load_dataset(
-            self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
+            self.dataset_name,
+            with_index=False,
+            split=self.dataset_split,
+            dummy=self.use_dummy_dataset,
+            revision=dataset_revision,
         )
         super().__init__(vector_size, dataset, index_initialized=False)
 
@@ -279,6 +303,7 @@ class CanonicalHFIndex(HFIndexBase):
                 split=self.dataset_split,
                 index_name=self.index_name,
                 dummy=self.use_dummy_dataset,
+                revision=self.dataset_revision,
             )
             self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
         self._index_initialized = True
@@ -299,6 +324,7 @@ class CustomHFIndex(HFIndexBase):
     """
 
     def __init__(self, vector_size: int, dataset, index_path=None):
+        requires_backends(self, ["faiss"])
         super().__init__(vector_size, dataset, index_initialized=index_path is None)
         self.index_path = index_path
 
@@ -353,14 +379,14 @@ class RagRetriever:
 
     >>> dataset = (
     ...     ...
-    ... )  # dataset must be a datasets.Datasets object with columns "title", "text" and "embeddings", and it must have a faiss index
+    ... )  # dataset must be a datasets.Datasets object with columns "title", "text" and "embeddings", and it must have a supported index (e.g., Faiss or other index types depending on your setup)
     >>> retriever = RagRetriever.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base", indexed_dataset=dataset)
 
     >>> # To load your own indexed dataset built with the datasets library that was saved on disk. More info in examples/rag/use_own_knowledge_dataset.py
     >>> from transformers import RagRetriever
 
     >>> dataset_path = "path/to/my/dataset"  # dataset saved via *dataset.save_to_disk(...)*
-    >>> index_path = "path/to/my/index.faiss"  # faiss index saved via *dataset.get_index("embeddings").save(...)*
+    >>> index_path = "path/to/my/index"  # index saved via *dataset.get_index("embeddings").save(...)*
     >>> retriever = RagRetriever.from_pretrained(
     ...     "facebook/dpr-ctx_encoder-single-nq-base",
     ...     index_name="custom",
@@ -376,7 +402,7 @@ class RagRetriever:
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
         self._init_retrieval = init_retrieval
-        requires_backends(self, ["datasets", "faiss"])
+        requires_backends(self, ["datasets"])
         super().__init__()
         self.index = index or self._build_index(config)
         self.generator_tokenizer = generator_tokenizer
@@ -413,11 +439,12 @@ class RagRetriever:
                 index_name=config.index_name,
                 index_path=config.index_path,
                 use_dummy_dataset=config.use_dummy_dataset,
+                dataset_revision=config.dataset_revision,
             )
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        requires_backends(cls, ["datasets", "faiss"])
+        requires_backends(cls, ["datasets"])
         config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
@@ -482,10 +509,7 @@ class RagRetriever:
         def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
             # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
             # TODO(piktus): better handling of truncation
-            if doc_title.startswith('"'):
-                doc_title = doc_title[1:]
-            if doc_title.endswith('"'):
-                doc_title = doc_title[:-1]
+            doc_title = doc_title.removeprefix('"').removesuffix('"')
             if prefix is None:
                 prefix = ""
             out = (prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace(
@@ -504,7 +528,7 @@ class RagRetriever:
             for j in range(n_docs)
         ]
 
-        contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
+        contextualized_inputs = self.generator_tokenizer(
             rag_input_strings,
             max_length=self.config.max_combined_length,
             return_tensors=return_tensors,
@@ -514,10 +538,10 @@ class RagRetriever:
 
         return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
 
-    def _chunk_tensor(self, t: Iterable, chunk_size: int) -> List[Iterable]:
+    def _chunk_tensor(self, t: Iterable, chunk_size: int) -> list[Iterable]:
         return [t[i : i + chunk_size] for i in range(0, len(t), chunk_size)]
 
-    def _main_retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _main_retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> tuple[np.ndarray, np.ndarray]:
         question_hidden_states_batched = self._chunk_tensor(question_hidden_states, self.batch_size)
         ids_batched = []
         vectors_batched = []
@@ -534,7 +558,7 @@ class RagRetriever:
             np.array(vectors_batched),
         )  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
-    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, List[dict]]:
+    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> tuple[np.ndarray, np.ndarray, list[dict]]:
         """
         Retrieves documents for specified `question_hidden_states`.
 
@@ -545,12 +569,12 @@ class RagRetriever:
                 The number of docs retrieved per query.
 
         Return:
-            `Tuple[np.ndarray, np.ndarray, List[dict]]`: A tuple with the following objects:
+            `tuple[np.ndarray, np.ndarray, list[dict]]`: A tuple with the following objects:
 
             - **retrieved_doc_embeds** (`np.ndarray` of shape `(batch_size, n_docs, dim)`) -- The retrieval embeddings
               of the retrieved docs per query.
             - **doc_ids** (`np.ndarray` of shape `(batch_size, n_docs)`) -- The ids of the documents in the index
-            - **doc_dicts** (`List[dict]`): The `retrieved_doc_embeds` examples per query.
+            - **doc_dicts** (`list[dict]`): The `retrieved_doc_embeds` examples per query.
         """
 
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
@@ -563,7 +587,7 @@ class RagRetriever:
 
     def __call__(
         self,
-        question_input_ids: List[List[int]],
+        question_input_ids: list[list[int]],
         question_hidden_states: np.ndarray,
         prefix=None,
         n_docs=None,
@@ -573,17 +597,16 @@ class RagRetriever:
         Retrieves documents for specified `question_hidden_states`.
 
         Args:
-            question_input_ids: (`List[List[int]]`) batch of input ids
+            question_input_ids (`list[list[int]]`) batch of input ids
             question_hidden_states (`np.ndarray` of shape `(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
-            prefix: (`str`, *optional*):
+            prefix (`str`, *optional*):
                 The prefix used by the generator's tokenizer.
             n_docs (`int`, *optional*):
                 The number of docs retrieved per query.
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to "pt"):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 
@@ -606,7 +629,7 @@ class RagRetriever:
         prefix = prefix if prefix is not None else self.config.generator.prefix
         retrieved_doc_embeds, doc_ids, docs = self.retrieve(question_hidden_states, n_docs)
 
-        input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
+        input_strings = self.question_encoder_tokenizer.decode(question_input_ids, skip_special_tokens=True)
         context_input_ids, context_attention_mask = self.postprocess_docs(
             docs, input_strings, prefix, n_docs, return_tensors=return_tensors
         )
@@ -650,3 +673,6 @@ class RagRetriever:
                 },
                 tensor_type=return_tensors,
             )
+
+
+__all__ = ["RagRetriever"]

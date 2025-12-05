@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Splinter model. """
+"""Testing suite for the PyTorch Splinter model."""
 
 import copy
 import unittest
@@ -22,13 +21,13 @@ from transformers.testing_utils import require_torch, require_torch_multi_gpu, s
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import SplinterConfig, SplinterForPreTraining, SplinterForQuestionAnswering, SplinterModel
-    from transformers.models.splinter.modeling_splinter import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class SplinterModelTester:
@@ -45,7 +44,7 @@ class SplinterModelTester:
         vocab_size=99,
         hidden_size=32,
         question_token_id=1,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -207,8 +206,7 @@ class SplinterModelTester:
 
 
 @require_torch
-class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
-
+class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SplinterModel,
@@ -218,6 +216,29 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "QAPipelineTests":
+            return True
+        elif pipeline_test_case_name == "FeatureExtractionPipelineTests" and tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -261,12 +282,6 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -312,9 +327,9 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SplinterModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "tau/splinter-base"
+        model = SplinterModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwrite from common since `SplinterForPreTraining` could contain different number of question tokens in inputs.
     # When the batch is distributed to multiple devices, each replica could get different values for the maximal number
@@ -326,19 +341,12 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
         # move input tensors to cuda:O
         for k, v in inputs_dict.items():
             if torch.is_tensor(v):
                 inputs_dict[k] = v.to(0)
 
         for model_class in self.all_model_classes:
-
             # Skip this case since it will fail sometimes, as described above.
             if model_class == SplinterForPreTraining:
                 continue
@@ -351,6 +359,18 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
             model = nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @unittest.skip(
+        "Splinter GC with `use_reentrant` fails after #38751, FIXME raushan after deprecated args are removed"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        "Splinter GC with `use_reentrant` fails after #38751, FIXME raushan after deprecated args are removed"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
 
 
 @require_torch

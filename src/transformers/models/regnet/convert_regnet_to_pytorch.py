@@ -14,24 +14,24 @@
 # limitations under the License.
 """Convert RegNet checkpoints from timm and vissl."""
 
-
 import argparse
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
-
-import torch
-import torch.nn as nn
-from torch import Tensor
+from typing import Optional
 
 import timm
+import torch
+import torch.nn as nn
 from classy_vision.models.regnet import RegNet, RegNetParams, RegNetY32gf, RegNetY64gf, RegNetY128gf
-from huggingface_hub import cached_download, hf_hub_url
-from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
-from transformers.utils import logging
+from huggingface_hub import hf_hub_download
+from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
+
+from transformers import AutoImageProcessor, RegNetConfig, RegNetForImageClassification, RegNetModel
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()
@@ -41,11 +41,11 @@ logger = logging.get_logger()
 @dataclass
 class Tracker:
     module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
+    traced: list[nn.Module] = field(default_factory=list)
     handles: list = field(default_factory=list)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, (nn.Conv2d, nn.BatchNorm2d))
         if has_not_submodules:
             self.traced.append(m)
 
@@ -53,7 +53,7 @@ class Tracker:
         for m in self.module.modules():
             self.handles.append(m.register_forward_hook(self._forward_hook))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property
@@ -67,8 +67,8 @@ class ModuleTransfer:
     src: nn.Module
     dest: nn.Module
     verbose: int = 1
-    src_skip: List = field(default_factory=list)
-    dest_skip: List = field(default_factory=list)
+    src_skip: list = field(default_factory=list)
+    dest_skip: list = field(default_factory=list)
     raise_if_mismatch: bool = True
 
     def __call__(self, x: Tensor):
@@ -91,7 +91,7 @@ class ModuleTransfer:
         for dest_m, src_m in zip(dest_traced, src_traced):
             dest_m.load_state_dict(src_m.state_dict())
             if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
+                print(f"Transferred from={src_m} to={dest_m}")
 
 
 class FakeRegNetVisslWrapper(nn.Module):
@@ -102,7 +102,7 @@ class FakeRegNetVisslWrapper(nn.Module):
     def __init__(self, model: nn.Module):
         super().__init__()
 
-        feature_blocks: List[Tuple[str, nn.Module]] = []
+        feature_blocks: list[tuple[str, nn.Module]] = []
         # - get the stem
         feature_blocks.append(("conv1", model.stem))
         # - get all the feature blocks
@@ -130,7 +130,7 @@ class NameToFromModelFuncMap(dict):
         x_split = x.split("-")
         return x_split[0] + x_split[1] + "_" + "".join(x_split[2:])
 
-    def __getitem__(self, x: str) -> Callable[[], Tuple[nn.Module, Dict]]:
+    def __getitem__(self, x: str) -> Callable[[], tuple[nn.Module, dict]]:
         # default to timm!
         if x not in self:
             x = self.convert_name_to_timm(x)
@@ -155,7 +155,7 @@ class NameToOurModelFuncMap(dict):
         return val
 
 
-def manually_copy_vissl_head(from_state_dict, to_state_dict, keys: List[Tuple[str, str]]):
+def manually_copy_vissl_head(from_state_dict, to_state_dict, keys: list[tuple[str, str]]):
     for from_key, to_key in keys:
         to_state_dict[to_key] = from_state_dict[from_key].clone()
         print(f"Copied key={from_key} to={to_key}")
@@ -192,7 +192,7 @@ def convert_weight_and_push(
     )
 
     from_output = from_model(x)
-    from_output = from_output[-1] if type(from_output) is list else from_output
+    from_output = from_output[-1] if isinstance(from_output, list) else from_output
 
     # now since I don't want to use any config files, vissl seer model doesn't actually have an head, so let's just check the last hidden state
     if "seer" in name and "in1k" in name:
@@ -201,35 +201,25 @@ def convert_weight_and_push(
     assert torch.allclose(from_output, our_output), "The model logits don't match the original one."
 
     if push_to_hub:
-        our_model.push_to_hub(
-            repo_path_or_name=save_directory / name,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        our_model.push_to_hub(repo_id=name)
 
         size = 224 if "seer" not in name else 384
         # we can use the convnext one
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
-        feature_extractor.push_to_hub(
-            repo_path_or_name=save_directory / name,
-            commit_message="Add feature extractor",
-            use_temp_dir=True,
-        )
+        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
+        image_processor.push_to_hub(repo_id=name)
 
         print(f"Pushed {name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
     expected_shape = (1, num_labels)
 
     repo_id = "huggingface/label-files"
-    num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
-    id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
     ImageNetPreTrainedConfig = partial(RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
@@ -306,7 +296,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         "regnet-y-320": ImageNetPreTrainedConfig(
             depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
         ),
-        # models created by SEER -> https://arxiv.org/abs/2202.08360
+        # models created by SEER -> https://huggingface.co/papers/2202.08360
         "regnet-y-320-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232),
         "regnet-y-640-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328),
         "regnet-y-1280-seer": RegNetConfig(
@@ -340,7 +330,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     names_to_from_model_map = NameToFromModelFuncMap()
     # add seer weights logic
 
-    def load_using_classy_vision(checkpoint_url: str, model_func: Callable[[], nn.Module]) -> Tuple[nn.Module, Dict]:
+    def load_using_classy_vision(checkpoint_url: str, model_func: Callable[[], nn.Module]) -> tuple[nn.Module, dict]:
         files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
         model = model_func()
         # check if we have a head, if yes add it
@@ -449,7 +439,7 @@ if __name__ == "__main__":
         default=True,
         type=bool,
         required=False,
-        help="If True, push model and feature extractor to the hub.",
+        help="If True, push model and image processor to the hub.",
     )
 
     args = parser.parse_args()

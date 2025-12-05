@@ -14,21 +14,20 @@
 # limitations under the License.
 """Convert MobileViT checkpoints from the ml-cvnets library."""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     MobileViTConfig,
-    MobileViTFeatureExtractor,
     MobileViTForImageClassification,
     MobileViTForSemanticSegmentation,
+    MobileViTImageProcessor,
 )
 from transformers.utils import logging
 
@@ -156,7 +155,7 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
     else:
         model_prefix = "mobilevit."
 
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key[:8] == "encoder.":
@@ -200,7 +199,7 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
     config = get_mobilevit_config(mobilevit_name)
 
     # load original state_dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # load 🤗 model
     if mobilevit_name.startswith("deeplabv3_"):
@@ -211,9 +210,9 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
     new_state_dict = convert_state_dict(state_dict, model)
     model.load_state_dict(new_state_dict)
 
-    # Check outputs on an image, prepared by MobileViTFeatureExtractor
-    feature_extractor = MobileViTFeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    # Check outputs on an image, prepared by MobileViTImageProcessor
+    image_processor = MobileViTImageProcessor(crop_size=config.image_size, size=config.image_size + 32)
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits = outputs.logits
 
@@ -265,8 +264,8 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {mobilevit_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model_mapping = {
@@ -280,7 +279,7 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
 
         print("Pushing to the hub...")
         model_name = model_mapping[mobilevit_name]
-        feature_extractor.push_to_hub(model_name, organization="apple")
+        image_processor.push_to_hub(model_name, organization="apple")
         model.push_to_hub(model_name, organization="apple")
 
 
@@ -303,7 +302,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

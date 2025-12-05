@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 LXMERT Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +18,13 @@ import unittest
 
 import numpy as np
 
-from transformers import LxmertConfig, is_tf_available, is_torch_available
+from transformers import LxmertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,11 +37,6 @@ if is_torch_available():
         LxmertForQuestionAnswering,
         LxmertModel,
     )
-    from transformers.models.lxmert.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
-
-
-if is_tf_available():
-    import tensorflow as tf
 
 
 class LxmertModelTester:
@@ -59,13 +54,12 @@ class LxmertModelTester:
         max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
         pad_token_id=0,
         num_qa_labels=30,
         num_object_labels=16,
         num_attr_labels=4,
         num_visual_features=10,
-        l_layers=2,
+        l_layers=1,
         x_layers=1,
         r_layers=1,
         visual_feat_dim=128,
@@ -99,7 +93,6 @@ class LxmertModelTester:
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
         self.pad_token_id = pad_token_id
         self.num_qa_labels = num_qa_labels
         self.num_object_labels = num_object_labels
@@ -129,7 +122,6 @@ class LxmertModelTester:
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
 
     def prepare_config_and_inputs(self):
-
         output_attentions = self.output_attentions
         input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=self.vocab_size)
         visual_feats = torch.rand(self.batch_size, self.num_visual_features, self.visual_feat_dim, device=torch_device)
@@ -200,7 +192,6 @@ class LxmertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            layer_norm_eps=self.layer_norm_eps,
             pad_token_id=self.pad_token_id,
             num_qa_labels=self.num_qa_labels,
             num_object_labels=self.num_object_labels,
@@ -412,7 +403,6 @@ class LxmertModelTester:
         ans,
         output_attentions,
     ):
-
         start_labels = config.num_qa_labels
         num_large_labels = config.num_qa_labels * 2
         num_small_labels = int(config.num_qa_labels * 2)
@@ -531,14 +521,13 @@ class LxmertModelTester:
 
 
 @require_torch
-class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LxmertModel, LxmertForPreTraining, LxmertForQuestionAnswering) if is_torch_available() else ()
-
-    fx_compatible = True
-    test_head_masking = False
-    test_pruning = False
-    test_torchscript = False
+    pipeline_model_mapping = (
+        {"feature-extraction": LxmertModel, "question-answering": LxmertForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
 
     # overwrite function because qa models takes different input label shape
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -581,10 +570,10 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LxmertModel.from_pretrained(model_name)
-            model.to(torch_device)
-            self.assertIsNotNone(model)
+        model_name = "unc-nlp/lxmert-base-uncased"
+        model = LxmertModel.from_pretrained(model_name)
+        model.to(torch_device)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -740,37 +729,18 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states_vision.grad)
         self.assertIsNotNone(attentions_vision.grad)
 
-    def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
-
-        tf_inputs_dict = {}
-        for key, value in pt_inputs_dict.items():
-            # skip key that does not exist in tf
-            if isinstance(value, dict):
-                tf_inputs_dict[key] = self.prepare_pt_inputs_from_tf_inputs(value)
-            elif isinstance(value, (list, tuple)):
-                tf_inputs_dict[key] = (self.prepare_pt_inputs_from_tf_inputs(iter_value) for iter_value in value)
-            elif type(value) == bool:
-                tf_inputs_dict[key] = value
-            elif key == "input_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            elif key == "pixel_values":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            elif key == "input_features":
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            # other general float inputs
-            elif value.is_floating_point():
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)
-            else:
-                tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.int32)
-
-        return tf_inputs_dict
+    @unittest.skip(
+        reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 @require_torch
 class LxmertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = LxmertModel.from_pretrained(LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = LxmertModel.from_pretrained("unc-nlp/lxmert-base-uncased")
         input_ids = torch.tensor([[101, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 102]])
         num_visual_features = 10
         _, visual_feats = np.random.seed(0), np.random.rand(1, num_visual_features, model.config.visual_feat_dim)
@@ -784,4 +754,4 @@ class LxmertModelIntegrationTest(unittest.TestCase):
             [[[0.2417, -0.9807, 0.1480], [1.2541, -0.8320, 0.5112], [1.4070, -1.1052, 0.6990]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -12,43 +12,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvBERT model configuration"""
+"""ConvBERT model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/config.json",
-    "YituTech/conv-bert-medium-small": (
-        "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/config.json"
-    ),
-    "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/config.json",
-    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
-}
 
-
-class ConvBertConfig(PretrainedConfig):
+class ConvBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvBertModel`]. It is used to instantiate an
     ConvBERT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ConvBERT
     [YituTech/conv-bert-base](https://huggingface.co/YituTech/conv-bert-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the ConvBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`ConvBertModel`] or [`TFConvBertModel`].
+            the `inputs_ids` passed when calling [`ConvBertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -61,14 +48,14 @@ class ConvBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`ConvBertModel`] or [`TFConvBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`ConvBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -96,13 +83,13 @@ class ConvBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "convbert"
 
     def __init__(
         self,
         vocab_size=30522,
         hidden_size=768,
-        is_encoder_decoder=False,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
@@ -125,7 +112,6 @@ class ConvBertConfig(PretrainedConfig):
     ):
         super().__init__(
             pad_token_id=pad_token_id,
-            is_encoder_decoder=is_encoder_decoder,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
@@ -150,18 +136,4 @@ class ConvBertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig
-class ConvBertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
+__all__ = ["ConvBertConfig"]

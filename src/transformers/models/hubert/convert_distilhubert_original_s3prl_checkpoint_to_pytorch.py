@@ -14,12 +14,11 @@
 # limitations under the License.
 """Convert Hubert checkpoint."""
 
-
 import argparse
 
 import torch
-
 from s3prl.hub import distilhubert
+
 from transformers import HubertConfig, HubertModel, Wav2Vec2FeatureExtractor, logging
 
 
@@ -89,8 +88,6 @@ def recursively_load_weights(fairseq_model, hf_model):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = mapped_key
-
                 if key in name:
                     is_used = True
                     if "*" in mapped_key:

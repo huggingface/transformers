@@ -34,7 +34,6 @@ python run_audio_classification.py \
     --dataset_name superb \
     --dataset_config_name ks \
     --output_dir wav2vec2-base-ft-keyword-spotting \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
@@ -42,7 +41,7 @@ python run_audio_classification.py \
     --learning_rate 3e-5 \
     --max_length_seconds 1 \
     --attention_mask False \
-    --warmup_ratio 0.1 \
+    --warmup_steps 0.1 \
     --num_train_epochs 5 \
     --per_device_train_batch_size 32 \
     --gradient_accumulation_steps 4 \
@@ -50,7 +49,7 @@ python run_audio_classification.py \
     --dataloader_num_workers 4 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model accuracy \
@@ -76,7 +75,6 @@ python run_audio_classification.py \
     --audio_column_name audio \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
@@ -84,7 +82,7 @@ python run_audio_classification.py \
     --learning_rate 3e-4 \
     --max_length_seconds 16 \
     --attention_mask False \
-    --warmup_ratio 0.1 \
+    --warmup_steps 0.1 \
     --num_train_epochs 10 \
     --per_device_train_batch_size 8 \
     --gradient_accumulation_steps 4 \
@@ -92,7 +90,7 @@ python run_audio_classification.py \
     --dataloader_num_workers 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model accuracy \
@@ -115,10 +113,10 @@ On 4 V100 GPUs (16GB), this script should run in ~1 hour and yield accuracy of *
 $ apt install git-lfs
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`
+2. Log in with your HuggingFace account credentials using `hf`
 
 ```bash
-$ huggingface-cli login
+$ hf auth login
 # ...follow the prompts
 ```
 

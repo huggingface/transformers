@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,79 +12,93 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+PyTorch-independent utilities for the Trainer class.
 """
 
 import copy
 import functools
 import gc
 import inspect
+import json
 import os
 import random
 import re
 import threading
 import time
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from collections.abc import Callable
+from functools import partial
+from typing import Any, NamedTuple
 
 import numpy as np
 
 from .utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    WEIGHTS_INDEX_NAME,
     ExplicitEnum,
+    check_torch_load_is_safe,
     is_psutil_available,
-    is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
-    is_torch_tpu_available,
+    is_torch_hpu_available,
+    is_torch_mlu_available,
+    is_torch_mps_available,
+    is_torch_musa_available,
+    is_torch_npu_available,
+    is_torch_xla_available,
+    is_torch_xpu_available,
     requires_backends,
 )
 
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    import tensorflow as tf
+    from safetensors.torch import load_file as safe_load_file
 
 
-def seed_worker(_):
+def seed_worker(worker_id: int, num_workers: int, rank: int):
     """
     Helper function to set worker seed during Dataloader initialization.
     """
-    worker_seed = torch.initial_seed() % 2**32
+    init_seed = torch.initial_seed() % 2**32
+    worker_seed = num_workers * rank + init_seed
     set_seed(worker_seed)
 
 
-def enable_full_determinism(seed: int):
+def enable_full_determinism(seed: int, warn_only: bool = False):
     """
     Helper function for reproducible behavior during distributed training. See
-    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
-    - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
+    https://pytorch.org/docs/stable/notes/randomness.html for pytorch
     """
     # set seed first
     set_seed(seed)
 
     if is_torch_available():
-        #  Enable PyTorch deterministic mode. This potentially requires either the environment
-        #  variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
+        # Enable PyTorch deterministic mode. This potentially requires either the environment
+        # variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
         # depending on the CUDA version, so we set them both here
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-        torch.use_deterministic_algorithms(True)
+        # The environment variable required to enable deterministic mode on Ascend NPUs.
+        os.environ["ASCEND_LAUNCH_BLOCKING"] = "1"
+        os.environ["HCCL_DETERMINISTIC"] = "1"
+
+        os.environ["FLASH_ATTENTION_DETERMINISTIC"] = "1"
+        torch.use_deterministic_algorithms(True, warn_only=warn_only)
 
         # Enable CUDNN deterministic mode
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    if is_tf_available():
-        tf.config.experimental.enable_op_determinism()
 
-
-def set_seed(seed: int):
+def set_seed(seed: int, deterministic: bool = False):
     """
-    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` (if installed).
 
     Args:
-        seed (`int`): The seed to set.
+        seed (`int`):
+            The seed to set.
+        deterministic (`bool`, *optional*, defaults to `False`):
+            Whether to use deterministic algorithms where available. Can slow down training.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -93,8 +106,44 @@ def set_seed(seed: int):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         # ^^ safe to call this function even if cuda is not available
-    if is_tf_available():
-        tf.random.set_seed(seed)
+        if deterministic:
+            torch.use_deterministic_algorithms(True)
+    if is_torch_mlu_available():
+        torch.mlu.manual_seed_all(seed)
+    if is_torch_musa_available():
+        torch.musa.manual_seed_all(seed)
+    if is_torch_npu_available():
+        torch.npu.manual_seed_all(seed)
+    if is_torch_hpu_available():
+        torch.hpu.manual_seed_all(seed)
+    if is_torch_xpu_available():
+        torch.xpu.manual_seed_all(seed)
+
+
+def neftune_post_forward_hook(module, input, output):
+    """
+    Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
+    layers. This method is slightly adapted from the original source code that can be found here:
+    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
+    ```python
+    model = ...
+    model.embed_tokens.neftune_noise_alpha = 0.1
+    model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
+    ```
+    Args:
+        module (`torch.nn.Module`):
+            The embedding module where the hook is attached. Note that you need to set `module.neftune_noise_alpha` to
+            the desired noise alpha value.
+        input (`torch.Tensor`):
+            The input tensor to the model.
+        output (`torch.Tensor`):
+            The output tensor of the model (i.e. the embeddings).
+    """
+    if module.training:
+        dims = torch.tensor(output.size(1) * output.size(2))
+        mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
+        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
+    return output
 
 
 class EvalPrediction:
@@ -104,55 +153,53 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*)
+        inputs (`np.ndarray`, *optional*): Input data passed to the model.
+        losses (`np.ndarray`, *optional*): Loss values computed during evaluation.
     """
 
     def __init__(
         self,
-        predictions: Union[np.ndarray, Tuple[np.ndarray]],
-        label_ids: Union[np.ndarray, Tuple[np.ndarray]],
-        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        predictions: np.ndarray | tuple[np.ndarray],
+        label_ids: np.ndarray | tuple[np.ndarray],
+        inputs: np.ndarray | tuple[np.ndarray] | None = None,
+        losses: np.ndarray | tuple[np.ndarray] | None = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
         self.inputs = inputs
+        self.losses = losses
+        self.elements = (self.predictions, self.label_ids)
+        if self.inputs is not None:
+            self.elements += (self.inputs,)
+        if self.losses is not None:
+            self.elements += (self.losses,)
 
     def __iter__(self):
-        if self.inputs is not None:
-            return iter((self.predictions, self.label_ids, self.inputs))
-        else:
-            return iter((self.predictions, self.label_ids))
+        return iter(self.elements)
 
     def __getitem__(self, idx):
-        if idx < 0 or idx > 2:
+        if idx < 0 or idx >= len(self.elements):
             raise IndexError("tuple index out of range")
-        if idx == 2 and self.inputs is None:
-            raise IndexError("tuple index out of range")
-        if idx == 0:
-            return self.predictions
-        elif idx == 1:
-            return self.label_ids
-        elif idx == 2:
-            return self.inputs
+        return self.elements[idx]
 
 
 class EvalLoopOutput(NamedTuple):
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
-    metrics: Optional[Dict[str, float]]
-    num_samples: Optional[int]
+    predictions: np.ndarray | tuple[np.ndarray]
+    label_ids: np.ndarray | tuple[np.ndarray] | None
+    metrics: dict[str, float] | None
+    num_samples: int | None
 
 
 class PredictionOutput(NamedTuple):
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, Tuple[np.ndarray]]]
-    metrics: Optional[Dict[str, float]]
+    predictions: np.ndarray | tuple[np.ndarray]
+    label_ids: np.ndarray | tuple[np.ndarray] | None
+    metrics: dict[str, float] | None
 
 
 class TrainOutput(NamedTuple):
     global_step: int
     training_loss: float
-    metrics: Dict[str, float]
+    metrics: dict[str, float]
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
@@ -177,10 +224,11 @@ class IntervalStrategy(ExplicitEnum):
     EPOCH = "epoch"
 
 
-class EvaluationStrategy(ExplicitEnum):
+class SaveStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
     EPOCH = "epoch"
+    BEST = "best"
 
 
 class HubStrategy(ExplicitEnum):
@@ -192,7 +240,7 @@ class HubStrategy(ExplicitEnum):
 
 class BestRun(NamedTuple):
     """
-    The best run found by an hyperparameter search (see [`~Trainer.hyperparameter_search`]).
+    The best run found by a hyperparameter search (see [`~Trainer.hyperparameter_search`]).
 
     Parameters:
         run_id (`str`):
@@ -200,22 +248,25 @@ class BestRun(NamedTuple):
             with run-{run_id}).
         objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (`Dict[str, Any]`):
+        hyperparameters (`dict[str, Any]`):
             The hyperparameters picked to get this run.
+        run_summary (`Optional[Any]`):
+            A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
     """
 
     run_id: str
-    objective: float
-    hyperparameters: Dict[str, Any]
+    objective: float | list[float]
+    hyperparameters: dict[str, Any]
+    run_summary: Any | None = None
 
 
-def default_compute_objective(metrics: Dict[str, float]) -> float:
+def default_compute_objective(metrics: dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no
     metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
         `float`: The objective to minimize or maximize
@@ -224,13 +275,13 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_per_second")]
+    speed_metrics = [m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second")]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
 
 
-def default_hp_space_optuna(trial) -> Dict[str, float]:
+def default_hp_space_optuna(trial) -> dict[str, float]:
     from .integrations import is_optuna_available
 
     assert is_optuna_available(), "This function needs Optuna installed: `pip install optuna`"
@@ -242,7 +293,7 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> Dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -256,20 +307,7 @@ def default_hp_space_ray(trial) -> Dict[str, float]:
     }
 
 
-def default_hp_space_sigopt(trial):
-    return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformamtion": "log"},
-        {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
-        {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
-        {
-            "categorical_values": ["4", "8", "16", "32", "64"],
-            "name": "per_device_train_batch_size",
-            "type": "categorical",
-        },
-    ]
-
-
-def default_hp_space_wandb(trial) -> Dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
@@ -290,27 +328,18 @@ def default_hp_space_wandb(trial) -> Dict[str, float]:
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
-    SIGOPT = "sigopt"
     WANDB = "wandb"
-
-
-default_hp_space = {
-    HPSearchBackend.OPTUNA: default_hp_space_optuna,
-    HPSearchBackend.RAY: default_hp_space_ray,
-    HPSearchBackend.SIGOPT: default_hp_space_sigopt,
-    HPSearchBackend.WANDB: default_hp_space_wandb,
-}
 
 
 def is_main_process(local_rank):
     """
-    Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
+    Whether or not the current process is the local process, based on `xr.global_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
-    if is_torch_tpu_available(check_device=True):
-        import torch_xla.core.xla_model as xm
+    if is_torch_xla_available():
+        import torch_xla.runtime as xr
 
-        return xm.get_ordinal() == 0
+        return xr.global_ordinal() == 0
     return local_rank in [-1, 0]
 
 
@@ -318,10 +347,10 @@ def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
-    if is_torch_tpu_available(check_device=True):
-        import torch_xla.core.xla_model as xm
+    if is_torch_xla_available():
+        import torch_xla.runtime as xr
 
-        return xm.xrt_world_size()
+        return xr.world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -329,7 +358,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None, num_steps=None):
+def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_tokens=None):
     """
     Measure and return speed performance metrics.
 
@@ -340,25 +369,54 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
+    - num_steps: number of steps processed
+    - num_tokens: number of tokens processed
     """
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
+    if runtime == 0:
+        return result
     if num_samples is not None:
         samples_per_second = num_samples / runtime
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
     if num_steps is not None:
         steps_per_second = num_steps / runtime
         result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
+    if num_tokens is not None:
+        tokens_per_second = num_tokens / runtime
+        result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
     return result
 
 
 class SchedulerType(ExplicitEnum):
+    """
+    Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
+    By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
+    Scheduler types:
+       - "linear" = [`get_linear_schedule_with_warmup`]
+       - "cosine" = [`get_cosine_schedule_with_warmup`]
+       - "cosine_with_restarts" = [`get_cosine_with_hard_restarts_schedule_with_warmup`]
+       - "polynomial" = [`get_polynomial_decay_schedule_with_warmup`]
+       - "constant" =  [`get_constant_schedule`]
+       - "constant_with_warmup" = [`get_constant_schedule_with_warmup`]
+       - "inverse_sqrt" = [`get_inverse_sqrt_schedule`]
+       - "reduce_lr_on_plateau" = [`get_reduce_on_plateau_schedule`]
+       - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
+       - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
+       - "warmup_stable_decay" = [`get_wsd_schedule`]
+    """
+
     LINEAR = "linear"
     COSINE = "cosine"
     COSINE_WITH_RESTARTS = "cosine_with_restarts"
     POLYNOMIAL = "polynomial"
     CONSTANT = "constant"
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
+    INVERSE_SQRT = "inverse_sqrt"
+    REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
+    COSINE_WITH_MIN_LR = "cosine_with_min_lr"
+    COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
+    WARMUP_STABLE_DECAY = "warmup_stable_decay"
 
 
 class TrainerMemoryTracker:
@@ -379,8 +437,6 @@ class TrainerMemoryTracker:
     self._memory_tracker.stop_and_update_metrics(metrics)
     ```
 
-    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
-
     To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
 
@@ -394,7 +450,6 @@ class TrainerMemoryTracker:
     }
 
     def __init__(self, skip_memory_metrics=False):
-
         self.skip_memory_metrics = skip_memory_metrics
 
         if not is_psutil_available():
@@ -404,9 +459,29 @@ class TrainerMemoryTracker:
         if self.skip_memory_metrics:
             return
 
-        import psutil  # noqa
+        import psutil
 
-        if is_torch_cuda_available():
+        if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
+        elif is_torch_mps_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
+        elif is_torch_xpu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
+        elif is_torch_npu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
+        elif is_torch_hpu_available():
             import torch
 
             self.torch = torch
@@ -461,12 +536,44 @@ class TrainerMemoryTracker:
         gc.collect()
 
         if self.torch is not None:
-            self.torch.cuda.reset_peak_memory_stats()
-            self.torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                self.torch.cuda.reset_peak_memory_stats()
+                self.torch.cuda.empty_cache()
+            elif is_torch_mlu_available():
+                self.torch.mlu.reset_peak_memory_stats()
+                self.torch.mlu.empty_cache()
+            elif is_torch_musa_available():
+                self.torch.musa.reset_peak_memory_stats()
+                self.torch.musa.empty_cache()
+            elif is_torch_xpu_available():
+                self.torch.xpu.reset_peak_memory_stats()
+                self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.reset_peak_memory_stats()
+                self.torch.npu.empty_cache()
+            elif is_torch_hpu_available():
+                self.torch.hpu.reset_peak_memory_stats()
+                # not available on hpu as it reserves all device memory for the current process
+                # self.torch.hpu.empty_cache()
+            elif is_torch_mps_available():
+                self.torch.mps.empty_cache()
 
         # gpu
         if self.torch is not None:
-            self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
+            if torch.cuda.is_available():
+                self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
+            elif is_torch_mlu_available():
+                self.gpu_mem_used_at_start = self.torch.mlu.memory_allocated()
+            elif is_torch_musa_available():
+                self.gpu_mem_used_at_start = self.torch.musa.memory_allocated()
+            elif is_torch_xpu_available():
+                self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_at_start = self.torch.npu.memory_allocated()
+            elif is_torch_hpu_available():
+                self.gpu_mem_used_at_start = self.torch.hpu.memory_allocated()
+            elif is_torch_mps_available():
+                self.gpu_mem_used_at_start = self.torch.mps.current_allocated_memory()
 
         # cpu
         self.cpu_mem_used_at_start = self.cpu_mem_used()
@@ -490,7 +597,22 @@ class TrainerMemoryTracker:
         gc.collect()
 
         if self.torch is not None:
-            self.torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                self.torch.cuda.empty_cache()
+            elif is_torch_mlu_available():
+                self.torch.mlu.empty_cache()
+            elif is_torch_musa_available():
+                self.torch.musa.empty_cache()
+            elif is_torch_xpu_available():
+                self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.empty_cache()
+            elif is_torch_hpu_available():
+                # not available on hpu as it reserves all device memory for the current process
+                # self.torch.npu.empty_cache()
+                pass
+            elif is_torch_mps_available():
+                self.torch.mps.empty_cache()
 
         # concepts:
         # - alloc_delta:  the difference of allocated memory between the end and the start
@@ -499,23 +621,50 @@ class TrainerMemoryTracker:
 
         # gpu
         if self.torch is not None:
-            self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
-            self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
-            self.gpu[self.cur_stage] = dict(
-                begin=self.gpu_mem_used_at_start,
-                end=self.gpu_mem_used_now,
-                alloc=(self.gpu_mem_used_now - self.gpu_mem_used_at_start),
-                peaked=max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
-            )
+            if torch.cuda.is_available():
+                self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
+            elif is_torch_mlu_available():
+                self.gpu_mem_used_now = self.torch.mlu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.mlu.max_memory_allocated()
+            elif is_torch_musa_available():
+                self.gpu_mem_used_now = self.torch.musa.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.musa.max_memory_allocated()
+            elif is_torch_xpu_available():
+                self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_now = self.torch.npu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.npu.max_memory_allocated()
+            elif is_torch_hpu_available():
+                self.gpu_mem_used_now = self.torch.hpu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.hpu.max_memory_allocated()
+            elif is_torch_mps_available():
+                self.gpu_mem_used_now = self.torch.mps.current_allocated_memory()
+                # self.torch.mps.max_memory_allocated() does not exist yet
+                self.gpu_mem_used_peak = None
+
+            else:
+                raise ValueError("No available GPU device found!")
+
+            self.gpu[self.cur_stage] = {
+                "begin": self.gpu_mem_used_at_start,
+                "end": self.gpu_mem_used_now,
+                "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
+            }
+            if self.gpu_mem_used_peak is not None:
+                self.gpu[self.cur_stage]["peaked"] = max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now)
+            else:
+                self.gpu[self.cur_stage]["peaked"] = "Not available"
 
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
-        self.cpu[self.cur_stage] = dict(
-            begin=self.cpu_mem_used_at_start,
-            end=self.cpu_mem_used_now,
-            alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
-            peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
-        )
+        self.cpu[self.cur_stage] = {
+            "begin": self.cpu_mem_used_at_start,
+            "end": self.cpu_mem_used_now,
+            "alloc": (self.cpu_mem_used_now - self.cpu_mem_used_at_start),
+            "peaked": max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
+        }
 
         # reset - cycle finished
         self.cur_stage = None
@@ -583,6 +732,9 @@ def has_length(dataset):
     except TypeError:
         # TypeError: len() of unsized object
         return False
+    except AttributeError:
+        # Ray DataSets raises an AttributeError: https://github.com/ray-project/ray/blob/master/python/ray/data/dataset.py#L5616
+        return False
 
 
 def denumpify_detensorize(metrics):
@@ -610,23 +762,15 @@ def number_of_arguments(func):
     return len(inspect.signature(func).parameters)
 
 
-class ShardedDDPOption(ExplicitEnum):
-    SIMPLE = "simple"
-    ZERO_DP_2 = "zero_dp_2"
-    ZERO_DP_3 = "zero_dp_3"
-    OFFLOAD = "offload"
-    AUTO_WRAP = "auto_wrap"
-
-
 def find_executable_batch_size(
-    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Callable | None = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function` `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
-        function (`callable`, *optional*)
+        function (`Callable`, *optional*)
             A function to wrap
         starting_batch_size (`int`, *optional*)
             The batch size to try and fit into memory
@@ -642,9 +786,9 @@ def find_executable_batch_size(
 
     if auto_find_batch_size:
         requires_backends(find_executable_batch_size, "accelerate")
-        import accelerate.memory_utils as mem_utils
+        from accelerate.utils import find_executable_batch_size as accelerate_find_executable_batch_size
 
-        return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+        return accelerate_find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
 
     return functools.partial(function, batch_size=starting_batch_size)
 
@@ -653,6 +797,8 @@ class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
     NO_SHARD = "no_shard"
+    HYBRID_SHARD = "hybrid_shard"
+    HYBRID_SHARD_ZERO2 = "hybrid_shard_zero2"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 
@@ -665,8 +811,8 @@ class RemoveColumnsCollator:
         data_collator,
         signature_columns,
         logger=None,
-        model_name: Optional[str] = None,
-        description: Optional[str] = None,
+        model_name: str | None = None,
+        description: str | None = None,
     ):
         self.data_collator = data_collator
         self.signature_columns = signature_columns
@@ -691,6 +837,121 @@ class RemoveColumnsCollator:
                 self.message_logged = True
         return {k: v for k, v in feature.items() if k in self.signature_columns}
 
-    def __call__(self, features: List[dict]):
+    def __call__(self, features: list[dict]):
         features = [self._remove_columns(feature) for feature in features]
         return self.data_collator(features)
+
+
+def check_target_module_exists(optim_target_modules, key: str, return_is_regex: bool = False):
+    """A helper method to check if the passed module's key name matches any of the target modules in the optim_target_modules.
+
+    Args:
+        optim_target_modules (`Union[str, list[str]]`):
+            A list of strings to try to match. Can be also a full string.
+        key (`str`):
+            A key to search any matches in optim_target_modules
+        return_is_regex (`bool`):
+            If set to `True`, the method will return whether the passed `optim_target_modules`
+            is a regex or not.
+
+    Returns:
+        `bool` : True of match object if key matches any target modules from config, False or
+        None if no match found
+        `bool` : If the matched target module is a regex to silence out the warnings in Trainer
+        for extra modules being found (only if `target_module_found=True` for an array of regex).
+    """
+    target_module_found = False
+    is_regex = False
+
+    if isinstance(optim_target_modules, str):
+        target_module_found = bool(re.fullmatch(optim_target_modules, key))
+        is_regex = optim_target_modules != key
+    elif key in optim_target_modules:  # from here, target_module_found must be a list of str
+        # this module is specified directly in target_modules
+        target_module_found = True
+    elif any(target_key in key for target_key in optim_target_modules):
+        target_module_found = True
+    elif any(bool(re.fullmatch(optim_target_module, key)) for optim_target_module in optim_target_modules):
+        target_module_found = True
+        is_regex = True
+
+    if return_is_regex:
+        return target_module_found, is_regex
+
+    return target_module_found
+
+
+def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
+    """
+    This is the same as
+    [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
+    but for a sharded checkpoint.
+
+    This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
+    loaded in the model.
+
+    Args:
+        model (`torch.nn.Module`): The model in which to load the checkpoint.
+        folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
+        strict (`bool`, *optional*, defaults to `True`):
+            Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+        prefer_safe (`bool`, *optional*, defaults to `False`):
+            If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
+            safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
+
+    Returns:
+        `NamedTuple`: A named tuple with `missing_keys` and `unexpected_keys` fields
+            - `missing_keys` is a list of str containing the missing keys
+            - `unexpected_keys` is a list of str containing the unexpected keys
+    """
+    # Load the index
+    index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
+    safe_index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
+
+    index_present = os.path.isfile(index_file)
+    safe_index_present = os.path.isfile(safe_index_file)
+
+    if not index_present and not safe_index_present:
+        filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME)
+        raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
+
+    load_safe = safe_index_present and (prefer_safe or not index_present)
+    load_index = safe_index_file if load_safe else index_file
+
+    with open(load_index, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    shard_files = list(set(index["weight_map"].values()))
+
+    # If strict=True, error before loading any of the state dicts.
+    # TODO: Here, update the weight map with the config.dynamic_weight_conversion
+    loaded_keys = index["weight_map"].keys()
+    model_keys = model.state_dict().keys()
+    missing_keys = [key for key in model_keys if key not in loaded_keys]
+    unexpected_keys = [key for key in loaded_keys if key not in model_keys]
+    if strict and (len(missing_keys) > 0 or len(unexpected_keys) > 0):
+        error_message = f"Error(s) in loading state_dict for {model.__class__.__name__}"
+        if len(missing_keys) > 0:
+            str_missing_keys = ",".join([f'"{k}"' for k in missing_keys])
+            error_message += f"\nMissing key(s): {str_missing_keys}."
+        if len(unexpected_keys) > 0:
+            str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
+            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+        raise RuntimeError(error_message)
+
+    if load_safe:
+        loader = safe_load_file
+    else:
+        check_torch_load_is_safe()
+        loader = partial(torch.load, map_location="cpu", weights_only=True)
+
+    for shard_file in shard_files:
+        state_dict = loader(os.path.join(folder, shard_file))
+        model.load_state_dict(state_dict, strict=False)
+
+        # Make sure memory is freed before we load the next state dict.
+        del state_dict
+        gc.collect()
+
+    # Return the same thing as PyTorch load_state_dict function.
+    return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)

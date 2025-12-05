@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes."""
+
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
-from ...tokenization_utils_fast import AddedToken, PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import AddedToken, PreTrainedTokenizerFast
 from ...utils import logging
 
 
@@ -25,18 +26,9 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/spiece.model",
-    },
-    "tokenizer_file": {
-        "TsinghuaAI/CPM-Generate": "https://huggingface.co/TsinghuaAI/CPM-Generate/resolve/main/tokenizer.json",
-    },
-}
-
 
 class CpmTokenizerFast(PreTrainedTokenizerFast):
-    """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
+    """Runs pre-tokenization with Jieba-RS segmentation tool. It is used in CPM models."""
 
     def __init__(
         self,
@@ -53,10 +45,10 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<cls>",
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
-        **kwargs
+        **kwargs,
     ):
         """
-        Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and
+        Construct a CPM tokenizer. Based on [Jieba-RS](https://pypi.org/project/rjieba/) and
         [SentencePiece](https://github.com/google/sentencepiece).
 
         This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should
@@ -109,7 +101,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             mask_token (`str`, *optional*, defaults to `"<mask>"`):
                 The token used for masking values. This is the token used when training this model with masked language
                 modeling. This is the token which the model will try to predict.
-            additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
+            additional_special_tokens (`list[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
                 Additional special tokens used by the tokenizer.
 
         Attributes:
@@ -141,22 +133,20 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         try:
-            import jieba
+            import rjieba
         except ModuleNotFoundError as error:
             raise error.__class__(
-                "You need to install jieba to use CpmTokenizer or CpmTokenizerFast. "
-                "See https://pypi.org/project/jieba/ for installation."
+                "You need to install rjieba to use CpmTokenizer or CpmTokenizerFast. "
+                "See https://pypi.org/project/rjieba/ for installation."
             )
-        self.jieba = jieba
+        self.jieba = rjieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLNet sequence has the following format:
@@ -165,13 +155,13 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences: `A <sep> B <sep> <cls>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -179,10 +169,9 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             return token_ids_0 + sep + cls
         return token_ids_0 + sep + token_ids_1 + sep + cls
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLNet
         sequence pair mask has the following format:
@@ -195,13 +184,13 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            `list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls_segment_id = [2]
@@ -210,8 +199,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             return len(token_ids_0 + sep) * [0] + cls_segment_id
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
 
-    # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -232,7 +220,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 
     def _batch_encode_plus(self, batch_text_or_text_pairs, *args, **kwargs):
         batch_text_or_text_pairs = [
-            " ".join([x.translate(self.translator) for x in self.jieba.cut(text, cut_all=False)])
+            " ".join([x.translate(self.translator) for x in self.jieba.cut(text, False)])
             for text in batch_text_or_text_pairs
         ]
         return super()._batch_encode_plus(batch_text_or_text_pairs, *args, **kwargs)
@@ -241,3 +229,6 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         text = super()._decode(*args, **kwargs)
         text = text.replace(" ", "").replace("\u2582", " ").replace("\u2583", "\n")
         return text
+
+
+__all__ = ["CpmTokenizerFast"]

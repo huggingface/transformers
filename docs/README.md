@@ -20,8 +20,11 @@ To generate the documentation, you first have to build it. Several packages are 
 you can install them with the following command, at the root of the code repository:
 
 ```bash
-pip install -e ".[docs]"
+pip install -e ".[dev]"
 ```
+
+> [!NOTE]
+> This command might fail for some OS that are missing dependencies. Check step 4 in [Create a Pull Request](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request) to work around it.
 
 Then you need to install our special tool that builds the documentation:
 
@@ -29,17 +32,13 @@ Then you need to install our special tool that builds the documentation:
 pip install git+https://github.com/huggingface/doc-builder
 ```
 
----
-**NOTE**
-
-You only need to generate the documentation to inspect it locally (if you're planning changes and want to
-check how they look before committing for instance). You don't have to commit the built documentation.
-
----
+> [!NOTE]
+> You only need to generate the documentation to inspect it locally (if you're planning changes and want to
+> check how they look before committing for instance). You don't have to commit the built documentation.
 
 ## Building the documentation
 
-Once you have setup the `doc-builder` and additional packages, you can generate the documentation by 
+Once you have set up the `doc-builder` and additional packages, you can generate the documentation by 
 typing the following command:
 
 ```bash
@@ -72,25 +71,21 @@ doc-builder preview transformers docs/source/en/
 
 The docs will be viewable at [http://localhost:3000](http://localhost:3000). You can also preview the docs once you have opened a PR. You will see a bot add a comment to a link where the documentation with your changes lives.
 
----
-**NOTE**
-
-The `preview` command only works with existing doc files. When you add a completely new file, you need to update `_toctree.yml` & restart `preview` command (`ctrl-c` to stop it & call `doc-builder preview ...` again).
-
----
+> [!NOTE]
+> The `preview` command only works with existing doc files. When you add a completely new file, you need to update `_toctree.yml` & restart `preview` command (`ctrl-c` to stop it & call `doc-builder preview ...` again).
 
 ## Adding a new element to the navigation bar
 
-Accepted files are Markdown (.md or .mdx).
+Accepted files are Markdown (.md).
 
 Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
-the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/_toctree.yml) file.
+the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/en/_toctree.yml) file.
 
 ## Renaming section headers and moving sections
 
 It helps to keep the old links working when renaming the section header and/or moving sections from one document to another. This is because the old links are likely to be used in Issues, Forums, and Social media and it'd make for a much more superior user experience if users reading those months later could still easily navigate to the originally intended information.
 
-Therefore we simply keep a little map of moved sections at the end of the document where the original section was. The key is to preserve the original anchor.
+Therefore, we simply keep a little map of moved sections at the end of the document where the original section was. The key is to preserve the original anchor.
 
 So if you renamed a section from: "Section A" to "Section B", then you can add at the end of the file:
 
@@ -109,7 +104,7 @@ Sections that were moved:
 
 Use the relative style to link to the new file so that the versioned docs continue to work.
 
-For an example of a rich moved section set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/en/main_classes/trainer.mdx).
+For an example of a rich moved section set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/en/main_classes/trainer.md).
 
 
 ## Writing Documentation - Specification
@@ -138,7 +133,7 @@ When translating, refer to the guide at [./TRANSLATING.md](https://github.com/hu
 
 When adding a new model:
 
-- Create a file `xxx.mdx` or under `./source/model_doc` (don't hesitate to copy an existing file as template).
+- Create a file `xxx.md` or under `./source/model_doc` (don't hesitate to copy an existing file as template).
 - Link that file in `./source/_toctree.yml`.
 - Write a short overview of the model:
     - Overview with paper & authors
@@ -147,7 +142,7 @@ When adding a new model:
 - Add the classes that should be linked in the model. This generally includes the configuration, the tokenizer, and
   every model of that class (the base model, alongside models with additional heads), both in PyTorch and TensorFlow.
   The order is generally:
-    - Configuration,
+    - Configuration
     - Tokenizer
     - PyTorch base model
     - PyTorch head models
@@ -163,6 +158,9 @@ These classes should be added using our Markdown syntax. Usually as follows:
 
 [[autodoc]] XXXConfig
 ```
+
+> [!IMPORTANT]
+> Always add a blank line after `[[autodoc]]` to ensure it passes the CI/CD checks.
 
 This will include every public method of the configuration that is documented. If for some reason you wish for a method
 not to be displayed in the documentation, you can do so by specifying which methods should be in the docs:
@@ -202,7 +200,7 @@ provide its path. For instance: \[\`utils.ModelOutput\`\]. This will be converte
 `utils.ModelOutput` in the description. To get rid of the path and only keep the name of the object you are
 linking to in the description, add a ~: \[\`~utils.ModelOutput\`\] will generate a link with `ModelOutput` in the description.
 
-The same works for methods so you can either use \[\`XXXClass.method\`\] or \[~\`XXXClass.method\`\].
+The same works for methods so you can either use \[\`XXXClass.method\`\] or \[\`~XXXClass.method\`\].
 
 #### Defining arguments in a method
 
@@ -250,7 +248,7 @@ then its documentation should look like this:
 
 Note that we always omit the "defaults to \`None\`" when None is the default for any argument. Also note that even
 if the first line describing your argument type and its default gets long, you can't break it on several lines. You can
-however write as many lines as you want in the indented description (see the example above with `input_ids`).
+however, write as many lines as you want in the indented description (see the example above with `input_ids`).
 
 #### Writing a multi-line code block
 
@@ -276,14 +274,14 @@ building the return.
 
 Here's an example of a single value return:
 
-```
+```python
     Returns:
-        `List[int]`: A list of integers in the range [0, 1] --- 1 for a special token, 0 for a sequence token.
+        `list[int]`: A list of integers in the range [0, 1] --- 1 for a special token, 0 for a sequence token.
 ```
 
 Here's an example of a tuple return, comprising several objects:
 
-```
+```python
     Returns:
         `tuple(torch.FloatTensor)` comprising various elements depending on the configuration ([`BertConfig`]) and inputs:
         - ** loss** (*optional*, returned when `masked_lm_labels` is provided) `torch.FloatTensor` of shape `(1,)` --
@@ -297,12 +295,11 @@ Here's an example of a tuple return, comprising several objects:
 Due to the rapidly growing repository, it is important to make sure that no files that would significantly weigh down the repository are added. This includes images, videos, and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
 the ones hosted on [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) in which to place these files and reference
 them by URL. We recommend putting them in the following dataset: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
-If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images
-to this dataset.
+If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate them to this dataset.
 
 ## Styling the docstring
 
-We have an automatic script running with the `make style` comment that will make sure that:
+We have an automatic script running with the `make style` command that will make sure that:
 - the docstrings fully take advantage of the line width
 - all code examples are formatted using black, like the code of the Transformers library
 
@@ -322,10 +319,9 @@ includes an example of how to transcribe speech to text in the
 
 The syntax for Example docstrings can look as follows:
 
-```
+```python
     Example:
 
-    ```python
     >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
     >>> from datasets import load_dataset
     >>> import torch
@@ -347,14 +343,13 @@ The syntax for Example docstrings can look as follows:
     >>> transcription = processor.batch_decode(predicted_ids)
     >>> transcription[0]
     'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
-    ```
 ```
 
 The docstring should give a minimal, clear example of how the respective model 
 is to be used in inference and also include the expected (ideally sensible)
 output.
 Often, readers will try out the example before even going through the function 
-or class definitions. Therefore it is of utmost importance that the example 
+or class definitions. Therefore, it is of utmost importance that the example 
 works as expected.
 
 ## Docstring testing
@@ -364,25 +359,9 @@ We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to v
 For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
 seen [here](https://github.com/huggingface/transformers/actions/workflows/doctests.yml).
 
-To include your example in the daily doctests, you need to add the filename that
-contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
-
 ### For Python files
 
-You will first need to run the following command (from the root of the repository) to prepare the doc file (doc-testing needs to add additional lines that we don't include in the doc source files):
-
-```bash
-python utils/prepare_for_doc_test.py src docs
-```
-
-If you work on a specific python module, say `modeling_wav2vec2.py`, you can run the command as follows (to avoid the unnecessary temporary changes in irrelevant files):
-
-```bash
-python utils/prepare_for_doc_test.py src/transformers/utils/doc.py src/transformers/models/wav2vec2/modeling_wav2vec2.py
-```
-(`utils/doc.py` should always be included)
-
-Then you can run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
+Run all the tests in the docstrings of a given file with the following command, here is how we test the modeling file of Wav2Vec2 for instance:
 
 ```bash
 pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py -sv --doctest-continue-on-failure
@@ -394,30 +373,12 @@ If you want to isolate a specific docstring, just add `::` after the file name t
 pytest --doctest-modules src/transformers/models/wav2vec2/modeling_wav2vec2.py::transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.forward -sv --doctest-continue-on-failure
 ```
 
-Once you're done, you can run the following command (still from the root of the repository) to undo the changes made by the first command before committing:
-
-```bash
-python utils/prepare_for_doc_test.py src docs --remove_new_line
-```
-
 ### For Markdown files
 
-You will first need to run the following command (from the root of the repository) to prepare the doc file (doc-testing needs to add additional lines that we don't include in the doc source files):
+You can test locally a given file with this command (here testing the quicktour):
 
 ```bash
-python utils/prepare_for_doc_test.py src docs
-```
-
-Then you can test locally a given file with this command (here testing the quicktour):
-
-```bash
-pytest --doctest-modules docs/source/quicktour.mdx -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
-```
-
-Once you're done, you can run the following command (still from the root of the repository) to undo the changes made by the first command before committing:
-
-```bash
-python utils/prepare_for_doc_test.py src docs --remove_new_line
+pytest --doctest-modules docs/source/quicktour.md -sv --doctest-continue-on-failure --doctest-glob="*.md"
 ```
 
 ### Writing doctests

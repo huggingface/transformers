@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Sequence feature extraction class for common feature extractors to preprocess sequences.
+Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
-from typing import Dict, List, Optional, Union
+
+from typing import Optional, Union
 
 import numpy as np
 
+from .audio_utils import is_valid_audio, load_audio
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
+from .utils import PaddingStrategy, TensorType, is_torch_tensor, logging, to_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -34,7 +35,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         feature_size (`int`):
             The feature dimension of the extracted features.
         sampling_rate (`int`):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`):
             The value that is used to fill the padding values / vectors.
     """
@@ -53,10 +54,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         self,
         processed_features: Union[
             BatchFeature,
-            List[BatchFeature],
-            Dict[str, BatchFeature],
-            Dict[str, List[BatchFeature]],
-            List[Dict[str, BatchFeature]],
+            list[BatchFeature],
+            dict[str, BatchFeature],
+            dict[str, list[BatchFeature]],
+            list[dict[str, BatchFeature]],
         ],
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
@@ -74,20 +75,20 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         <Tip>
 
-        If the `processed_features` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+        If the `processed_features` passed are dictionary of numpy arrays or PyTorch tensors  the
         result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
         PyTorch tensors, you will lose the specific device of your tensors however.
 
         </Tip>
 
         Args:
-            processed_features ([`BatchFeature`], list of [`BatchFeature`], `Dict[str, List[float]]`, `Dict[str, List[List[float]]` or `List[Dict[str, List[float]]]`):
-                Processed inputs. Can represent one input ([`BatchFeature`] or `Dict[str, List[float]]`) or a batch of
-                input values / vectors (list of [`BatchFeature`], *Dict[str, List[List[float]]]* or *List[Dict[str,
-                List[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+            processed_features ([`BatchFeature`], list of [`BatchFeature`], `dict[str, list[float]]`, `dict[str, list[list[float]]` or `list[dict[str, list[float]]]`):
+                Processed inputs. Can represent one input ([`BatchFeature`] or `dict[str, list[float]]`) or a batch of
+                input values / vectors (list of [`BatchFeature`], *dict[str, list[list[float]]]* or *list[dict[str,
+                list[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                Instead of `list[float]` you can have tensors (numpy arrays or PyTorch tensors),
                 see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -107,7 +108,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -116,13 +117,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
+            # Call .keys() explicitly for compatibility with TensorDict and other Mapping subclasses
             processed_features = {
                 key: [example[key] for example in processed_features] for key in processed_features[0].keys()
             }
@@ -140,12 +141,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return_attention_mask if return_attention_mask is not None else self.return_attention_mask
         )
 
-        if not required_input:
+        if len(required_input) == 0:
             if return_attention_mask:
                 processed_features["attention_mask"] = []
             return processed_features
 
-        # If we have PyTorch/TF tensors or lists as inputs, we cast them as Numpy arrays
+        # If we have PyTorch tensors or lists as inputs, we cast them as Numpy arrays
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -159,16 +160,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 first_element = required_input[index][0]
 
         if return_tensors is None:
-            if is_tf_tensor(first_element):
-                return_tensors = "tf"
-            elif is_torch_tensor(first_element):
+            if is_torch_tensor(first_element):
                 return_tensors = "pt"
             elif isinstance(first_element, (int, float, list, tuple, np.ndarray)):
                 return_tensors = "np"
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, or pytorch object."
                 )
 
         for key, value in processed_features.items():
@@ -188,7 +187,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         truncated_inputs = []
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in processed_features.items())
+            inputs = {k: v[i] for k, v in processed_features.items()}
             # truncation
             inputs_slice = self._truncate(
                 inputs,
@@ -225,7 +224,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _pad(
         self,
-        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
+        processed_features: Union[dict[str, np.ndarray], BatchFeature],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -235,11 +234,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features:
-                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
-                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
-            max_length: maximum length of the returned list and optionally padding length (see below)
-            padding_strategy: PaddingStrategy to use for padding.
+            processed_features (`Union[dict[str, np.ndarray], BatchFeature]`):
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`list[np.ndarray[float]]`) or batch
+                of inputs values (`list[np.ndarray[int]]`) / input vectors (`list[np.ndarray[int]]`)
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see below)
+            padding_strategy (`PaddingStrategy`, *optional*, default to `PaddingStrategy.DO_NOT_PAD`):
+                PaddingStrategy to use for padding.
 
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
                 - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
@@ -248,11 +249,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
                     - 'left': pads on the left of the sequences
                     - 'right': pads on the right of the sequences
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask:
-                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            pad_to_multiple_of (`int`, *optional*):
+                Integer if set will pad the sequence to a multiple of the provided value. This is especially useful to
+                enable the use of Tensor Core on NVIDIA hardware with compute capability `>= 7.5` (Volta), or on TPUs
+                which benefit from having sequence lengths be a multiple of 128.
+            return_attention_mask (`bool`, *optional*):
+                Set to False to avoid returning attention mask (default: set to model specifics)
         """
         required_input = processed_features[self.model_input_names[0]]
 
@@ -294,7 +296,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _truncate(
         self,
-        processed_features: Union[Dict[str, np.ndarray], BatchFeature],
+        processed_features: Union[dict[str, np.ndarray], BatchFeature],
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         truncation: Optional[bool] = None,
@@ -303,15 +305,17 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features:
-                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
-                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
-            max_length: maximum length of the returned list and optionally padding length (see below)
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            truncation:
-                (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            processed_features(`Union[dict[str, np.ndarray], BatchFeature]`):
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`list[np.ndarray[float]]`) or batch
+                of inputs values (`list[np.ndarray[int]]`) / input vectors (`list[np.ndarray[int]]`)
+            max_length (`int`, *optional*):
+                maximum length of the returned list and optionally padding length (see below)
+            pad_to_multiple_of (`int`, *optional*) :
+                Integer if set will pad the sequence to a multiple of the provided value. This is especially useful to
+                enable the use of Tensor Core on NVIDIA hardware with compute capability `>= 7.5` (Volta), or on TPUs
+                which benefit from having sequence lengths be a multiple of 128.
+            truncation (`bool`, *optional*):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
         if not truncation:
             return processed_features
@@ -364,3 +368,19 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
+
+    def fetch_audio(self, audio_url_or_urls: Union[str, list[str], list[list[str]]]):
+        """
+        Convert a single or a list of urls into the corresponding `np.ndarray` objects.
+
+        If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
+        returned.
+        """
+        if isinstance(audio_url_or_urls, list):
+            return [self.fetch_audio(x) for x in audio_url_or_urls]
+        elif isinstance(audio_url_or_urls, str):
+            return load_audio(audio_url_or_urls)
+        elif is_valid_audio(audio_url_or_urls):
+            return audio_url_or_urls
+        else:
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(audio_url_or_urls)}")

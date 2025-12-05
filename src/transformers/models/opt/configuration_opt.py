@@ -12,32 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OPT model configuration"""
-from ...configuration_utils import PretrainedConfig
+"""OPT model configuration"""
+
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-OPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/opt-125m": "https://huggingface.co/facebook/opt-125m/blob/main/config.json",
-    "facebook/opt-350m": "https://huggingface.co/facebook/opt-350m/blob/main/config.json",
-    "facebook/opt-1.3b": "https://huggingface.co/facebook/opt-1.3b/blob/main/config.json",
-    "facebook/opt-2.7b": "https://huggingface.co/facebook/opt-2.7b/blob/main/config.json",
-    "facebook/opt-6.7b": "https://huggingface.co/facebook/opt-6.7b/blob/main/config.json",
-    "facebook/opt-13b": "https://huggingface.co/facebook/opt-13b/blob/main/config.json",
-}
 
-
-class OPTConfig(PretrainedConfig):
+class OPTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OPTModel`]. It is used to instantiate a OPT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the OPT
     [facebook/opt-350m](https://huggingface.co/facebook/opt-350m) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -67,13 +59,17 @@ class OPTConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+        layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
             details.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        enable_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not if the linear layers in the attention blocks should use the bias term.
+        layer_norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
+            Whether or not if the layer norms should have learnable parameters.
 
     Example:
 
@@ -89,6 +85,7 @@ class OPTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "opt"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -112,7 +109,9 @@ class OPTConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=2,
         eos_token_id=2,
-        **kwargs
+        enable_bias=True,
+        layer_norm_elementwise_affine=True,
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
@@ -134,8 +133,14 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.do_layer_norm_before = do_layer_norm_before
+        # We keep these variables at `True` for backward compatibility.
+        self.enable_bias = enable_bias
+        self.layer_norm_elementwise_affine = layer_norm_elementwise_affine
 
         # Note that the only purpose of `_remove_final_layer_norm` is to keep backward compatibility
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
         self._remove_final_layer_norm = _remove_final_layer_norm
+
+
+__all__ = ["OPTConfig"]

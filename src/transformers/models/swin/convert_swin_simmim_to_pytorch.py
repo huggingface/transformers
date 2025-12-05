@@ -18,11 +18,11 @@ URL: https://github.com/microsoft/Swin-Transformer/blob/main/MODELHUB.md#simmim-
 
 import argparse
 
+import requests
 import torch
 from PIL import Image
 
-import requests
-from transformers import SwinConfig, SwinForMaskedImageModeling, ViTFeatureExtractor
+from transformers import SwinConfig, SwinForMaskedImageModeling, ViTImageProcessor
 
 
 def get_swin_config(model_name):
@@ -83,7 +83,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "attn_mask" in key:
@@ -95,15 +95,15 @@ def convert_state_dict(orig_state_dict, model):
             dim = model.swin.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
 
             if "weight" in key:
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
-                ] = val[:dim, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"] = (
+                    val[:dim, :]
+                )
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
-                ] = val[-dim:, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"] = (
+                    val[-dim:, :]
+                )
             else:
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
                     :dim
@@ -121,7 +121,7 @@ def convert_state_dict(orig_state_dict, model):
 
 
 def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     config = get_swin_config(model_name)
     model = SwinForMaskedImageModeling(config)
@@ -132,9 +132,9 @@ def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    feature_extractor = ViTFeatureExtractor(size={"height": 192, "width": 192})
+    image_processor = ViTImageProcessor(size={"height": 192, "width": 192})
     image = Image.open(requests.get(url, stream=True).raw)
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    inputs = image_processor(images=image, return_tensors="pt")
 
     with torch.no_grad():
         outputs = model(**inputs).logits
@@ -146,13 +146,13 @@ def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
 
-        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor for {model_name} to hub")
+        print(f"Pushing model and image processor for {model_name} to hub")
         model.push_to_hub(f"microsoft/{model_name}")
-        feature_extractor.push_to_hub(f"microsoft/{model_name}")
+        image_processor.push_to_hub(f"microsoft/{model_name}")
 
 
 if __name__ == "__main__":
@@ -175,7 +175,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

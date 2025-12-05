@@ -14,31 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class EncoderDecoderConfig(PretrainedConfig):
+class EncoderDecoderConfig(PreTrainedConfig):
     r"""
     [`EncoderDecoderConfig`] is the configuration class to store the configuration of a [`EncoderDecoderModel`]. It is
     used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder
     configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
 
     Examples:
@@ -46,13 +46,13 @@ class EncoderDecoderConfig(PretrainedConfig):
     ```python
     >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 
-    >>> # Initializing a BERT bert-base-uncased style configuration
+    >>> # Initializing a BERT google-bert/bert-base-uncased style configuration
     >>> config_encoder = BertConfig()
     >>> config_decoder = BertConfig()
 
     >>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a Bert2Bert model from the bert-base-uncased style configurations
+    >>> # Initializing a Bert2Bert model (with random weights) from the google-bert/bert-base-uncased style configurations
     >>> model = EncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration
@@ -69,20 +69,22 @@ class EncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained("my-model")
     >>> model = EncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "encoder-decoder"
-    is_composition = True
+    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        assert (
-            "encoder" in kwargs and "decoder" in kwargs
-        ), "Config has to be initialized with encoder and decoder config"
+        if "encoder" not in kwargs or "decoder" not in kwargs:
+            raise ValueError(
+                f"A configuration of type {self.model_type} cannot be instantiated because "
+                f"both `encoder` and `decoder` sub-configurations were not passed, only {kwargs}"
+            )
         encoder_config = kwargs.pop("encoder")
         encoder_model_type = encoder_config.pop("model_type")
         decoder_config = kwargs.pop("decoder")
         decoder_model_type = decoder_config.pop("model_type")
-
-        from ..auto.configuration_auto import AutoConfig
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
@@ -90,8 +92,8 @@ class EncoderDecoderConfig(PretrainedConfig):
 
     @classmethod
     def from_encoder_decoder_configs(
-        cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
-    ) -> PretrainedConfig:
+        cls, encoder_config: PreTrainedConfig, decoder_config: PreTrainedConfig, **kwargs
+    ) -> PreTrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
         decoder model configuration.
@@ -105,15 +107,5 @@ class EncoderDecoderConfig(PretrainedConfig):
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
 
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["encoder"] = self.encoder.to_dict()
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+__all__ = ["EncoderDecoderConfig"]

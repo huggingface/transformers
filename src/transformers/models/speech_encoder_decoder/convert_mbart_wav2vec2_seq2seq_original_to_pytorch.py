@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Wav2Vec2 checkpoint."""
 
-
 import argparse
 
 import fairseq
@@ -193,41 +192,41 @@ def load_adapter(full_name, value, adapter, unused_weights):
         if "proj_ln" in full_name:
             # has to be layer norm
             if "bias" in name:
-                assert (
-                    value.shape == adapter.proj_layer_norm.bias.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.bias.data.shape} was found."
+                assert value.shape == adapter.proj_layer_norm.bias.data.shape, (
+                    f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.bias.data.shape} was found."
+                )
                 adapter.proj_layer_norm.bias.data = value
                 logger.info(f"Adapter proj layer norm bias was initialized from {full_name}.")
             if "weight" in name:
-                assert (
-                    value.shape == adapter.proj_layer_norm.weight.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.weight.data.shape} was found."
+                assert value.shape == adapter.proj_layer_norm.weight.data.shape, (
+                    f"{full_name} has size {value.shape}, but {adapter.proj_layer_norm.weight.data.shape} was found."
+                )
                 adapter.proj_layer_norm.weight.data = value
         else:
             # has to be projection layer
             if "bias" in name:
-                assert (
-                    value.shape == adapter.proj.bias.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj.bias.data.shape} was found."
+                assert value.shape == adapter.proj.bias.data.shape, (
+                    f"{full_name} has size {value.shape}, but {adapter.proj.bias.data.shape} was found."
+                )
                 adapter.proj.bias.data = value
                 logger.info(f"Adapter proj layer bias was initialized from {full_name}.")
             if "weight" in name:
-                assert (
-                    value.shape == adapter.proj.weight.data.shape
-                ), f"{full_name} has size {value.shape}, but {adapter.proj.weight.data.shape} was found."
+                assert value.shape == adapter.proj.weight.data.shape, (
+                    f"{full_name} has size {value.shape}, but {adapter.proj.weight.data.shape} was found."
+                )
                 adapter.proj.weight.data = value
                 logger.info(f"Adapter proj layer weight was initialized from {full_name}.")
     elif isinstance(layer_id, int):
         if "bias" in name:
-            assert (
-                value.shape == adapter.layers[layer_id].conv.bias.data.shape
-            ), f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.bias.data.shape} was found."
+            assert value.shape == adapter.layers[layer_id].conv.bias.data.shape, (
+                f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.bias.data.shape} was found."
+            )
             adapter.layers[layer_id].conv.bias.data = value
             logger.info(f"Adapter layer {layer_id} bias was initialized from {full_name}.")
         elif "weight" in name:
-            assert (
-                value.shape == adapter.layers[layer_id].conv.weight.data.shape
-            ), f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.weight.data.shape} was found."
+            assert value.shape == adapter.layers[layer_id].conv.weight.data.shape, (
+                f"{full_name} has size {value.shape}, but {adapter.layers[layer_id].conv.weight.data.shape} was found."
+            )
             adapter.layers[layer_id].conv.weight.data = value
             logger.info(f"Adapter layer {layer_id} bias was initialized from {full_name}.")
     else:
@@ -264,7 +263,7 @@ def convert_wav2vec2_checkpoint(
         add_adapter=True,
         adapter_stride=adapter_stride,
         adapter_kernel_size=adapter_kernel_size,
-        use_auth_token=True,
+        token_token=True,
         output_hidden_size=encoder_output_dim,
     )
     decoder_config = MBartConfig.from_pretrained(decoder_config_path)
@@ -282,7 +281,7 @@ def convert_wav2vec2_checkpoint(
     model = model[0].eval()
 
     # load feature extractor
-    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, use_auth_token=True)
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, token_token=True)
 
     # set weights for wav2vec2 encoder
     hf_encoder = Wav2Vec2Model(encoder_config)
@@ -336,7 +335,7 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf decoder checkpoint config",
     )
-    parser.add_argument("--add_adapter", default=True, type=bool, help="whethere to add model adapter layers")
+    parser.add_argument("--add_adapter", default=True, type=bool, help="whether to add model adapter layers")
     parser.add_argument("--adapter_stride", default=2, type=int, help="stride of adapter layers")
     parser.add_argument("--adapter_kernel_size", default=3, type=int, help="kernel size of adapter layers")
     parser.add_argument("--encoder_output_dim", default=1024, type=int, help="encoder output dim")

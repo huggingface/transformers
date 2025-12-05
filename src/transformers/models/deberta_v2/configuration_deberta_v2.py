@@ -12,42 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DeBERTa-v2 model configuration"""
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+"""DeBERTa-v2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
 
 
 logger = logging.get_logger(__name__)
 
-DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/config.json",
-    "microsoft/deberta-v2-xlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/config.json"
-    ),
-    "microsoft/deberta-v2-xxlarge-mnli": (
-        "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/config.json"
-    ),
-}
 
-
-class DebertaV2Config(PretrainedConfig):
+class DebertaV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DebertaV2Model`]. It is used to instantiate a
     DeBERTa-v2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DeBERTa
     [microsoft/deberta-v2-xlarge](https://huggingface.co/microsoft/deberta-v2-xlarge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 128100):
@@ -73,7 +55,7 @@ class DebertaV2Config(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 0):
-            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-7):
@@ -85,13 +67,16 @@ class DebertaV2Config(PretrainedConfig):
             as `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 0):
             The value used to pad input_ids.
-        position_biased_input (`bool`, *optional*, defaults to `False`):
+        position_biased_input (`bool`, *optional*, defaults to `True`):
             Whether add absolute position embedding to content embedding.
-        pos_att_type (`List[str]`, *optional*):
+        pos_att_type (`list[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
             `["p2c", "c2p"]`, `["p2c", "c2p"]`.
-        layer_norm_eps (`float`, optional, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should use the legacy `LegacyDebertaOnlyMLMHead`, which does not work properly
+            for mask infilling tasks.
 
     Example:
 
@@ -107,6 +92,7 @@ class DebertaV2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "deberta-v2"
 
     def __init__(
@@ -130,7 +116,8 @@ class DebertaV2Config(PretrainedConfig):
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
-        **kwargs
+        legacy=True,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -150,7 +137,7 @@ class DebertaV2Config(PretrainedConfig):
         self.position_biased_input = position_biased_input
 
         # Backwards compatibility
-        if type(pos_att_type) == str:
+        if isinstance(pos_att_type, str):
             pos_att_type = [x.strip() for x in pos_att_type.lower().split("|")]
 
         self.pos_att_type = pos_att_type
@@ -160,40 +147,7 @@ class DebertaV2Config(PretrainedConfig):
         self.pooler_hidden_size = kwargs.get("pooler_hidden_size", hidden_size)
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
+        self.legacy = legacy
 
 
-class DebertaV2OnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        if self._config.type_vocab_size > 0:
-            return OrderedDict(
-                [("input_ids", dynamic_axis), ("attention_mask", dynamic_axis), ("token_type_ids", dynamic_axis)]
-            )
-        else:
-            return OrderedDict([("input_ids", dynamic_axis), ("attention_mask", dynamic_axis)])
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
-
-    def generate_dummy_inputs(
-        self,
-        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
-        batch_size: int = -1,
-        seq_length: int = -1,
-        num_choices: int = -1,
-        is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
-        num_channels: int = 3,
-        image_width: int = 40,
-        image_height: int = 40,
-        tokenizer: "PreTrainedTokenizerBase" = None,
-    ) -> Mapping[str, Any]:
-        dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor, framework=framework)
-        if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
-            del dummy_inputs["token_type_ids"]
-        return dummy_inputs
+__all__ = ["DebertaV2Config"]

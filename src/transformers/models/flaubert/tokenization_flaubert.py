@@ -14,14 +14,13 @@
 # limitations under the License.
 """Tokenization classes for Flaubert."""
 
-
 import json
 import os
 import re
 import unicodedata
-from typing import List, Optional, Tuple
+from typing import Optional
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -30,47 +29,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "flaubert/flaubert_small_cased": (
-            "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/vocab.json"
-        ),
-        "flaubert/flaubert_base_uncased": (
-            "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/vocab.json"
-        ),
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/vocab.json",
-        "flaubert/flaubert_large_cased": (
-            "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "flaubert/flaubert_small_cased": (
-            "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/merges.txt"
-        ),
-        "flaubert/flaubert_base_uncased": (
-            "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/merges.txt"
-        ),
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/merges.txt",
-        "flaubert/flaubert_large_cased": (
-            "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "flaubert/flaubert_small_cased": 512,
-    "flaubert/flaubert_base_uncased": 512,
-    "flaubert/flaubert_base_cased": 512,
-    "flaubert/flaubert_large_cased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "flaubert/flaubert_small_cased": {"do_lowercase": False},
-    "flaubert/flaubert_base_uncased": {"do_lowercase": True},
-    "flaubert/flaubert_base_cased": {"do_lowercase": False},
-    "flaubert/flaubert_large_cased": {"do_lowercase": False},
 }
 
 
@@ -207,7 +165,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<special1>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<special0>","<special1>","<special2>","<special3>","<special4>","<special5>","<special6>","<special7>","<special8>","<special9>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<special0>', '<special1>', '<special2>', '<special3>', '<special4>', '<special5>', '<special6>', '<special7>', '<special8>', '<special9>']`):
             List of additional special tokens.
         lang2id (`Dict[str, int]`, *optional*):
             Dictionary mapping languages string identifiers to their IDs.
@@ -216,9 +174,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -245,9 +200,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        **kwargs
+        **kwargs,
     ):
-
         do_lowercase_and_remove_accent = kwargs.pop("do_lowercase_and_remove_accent", None)
         if do_lowercase_and_remove_accent is not None:
             logger.warning(
@@ -258,19 +212,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.do_lowercase_and_remove_accent = False
 
         self.do_lowercase = do_lowercase
-
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
-            lang2id=lang2id,
-            id2lang=id2lang,
-            **kwargs,
-        )
 
         try:
             import sacremoses
@@ -283,10 +224,10 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.sm = sacremoses
 
         # cache of sm.MosesPunctNormalizer instance
-        self.cache_moses_punct_normalizer = dict()
+        self.cache_moses_punct_normalizer = {}
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
+        self.cache_moses_tokenizer = {}
+        self.lang_with_custom_tokenizer = {"zh", "th", "ja"}
         self.lang2id = lang2id
         self.id2lang = id2lang
         if lang2id is not None and id2lang is not None:
@@ -303,6 +244,20 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        super().__init__(
+            do_lowercase=do_lowercase,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            lang2id=lang2id,
+            id2lang=id2lang,
+            **kwargs,
+        )
 
     @property
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.do_lower_case
@@ -453,7 +408,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 
@@ -475,8 +430,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLM sequence has the following format:
@@ -503,8 +458,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -530,38 +485,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1]
 
-    # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.create_token_type_ids_from_sequences
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLM sequence
-        pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -608,3 +533,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+
+__all__ = ["FlaubertTokenizer"]

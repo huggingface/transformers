@@ -14,22 +14,21 @@
 # limitations under the License.
 """Convert SegFormer checkpoints."""
 
-
 import argparse
 import json
 from collections import OrderedDict
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     SegformerConfig,
-    SegformerFeatureExtractor,
     SegformerForImageClassification,
     SegformerForSemanticSegmentation,
+    SegformerImageProcessor,
 )
 from transformers.utils import logging
 
@@ -48,13 +47,13 @@ def rename_keys(state_dict, encoder_only=False):
         if "patch_embed" in key:
             # replace for example patch_embed1 by patch_embeddings.0
             idx = key[key.find("patch_embed") + len("patch_embed")]
-            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx)-1}")
+            key = key.replace(f"patch_embed{idx}", f"patch_embeddings.{int(idx) - 1}")
         if "norm" in key:
             key = key.replace("norm", "layer_norm")
         if "segformer.encoder.layer_norm" in key:
             # replace for example layer_norm1 by layer_norm.0
             idx = key[key.find("segformer.encoder.layer_norm") + len("segformer.encoder.layer_norm")]
-            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx)-1}")
+            key = key.replace(f"layer_norm{idx}", f"layer_norm.{int(idx) - 1}")
         if "layer_norm1" in key:
             key = key.replace("layer_norm1", "layer_norm_1")
         if "layer_norm2" in key:
@@ -62,7 +61,7 @@ def rename_keys(state_dict, encoder_only=False):
         if "block" in key:
             # replace for example block1 by block.0
             idx = key[key.find("block") + len("block")]
-            key = key.replace(f"block{idx}", f"block.{int(idx)-1}")
+            key = key.replace(f"block{idx}", f"block.{int(idx) - 1}")
         if "attn.q" in key:
             key = key.replace("attn.q", "attention.self.query")
         if "attn.proj" in key:
@@ -81,7 +80,7 @@ def rename_keys(state_dict, encoder_only=False):
         if "linear_c" in key:
             # replace for example linear_c4 by linear_c.3
             idx = key[key.find("linear_c") + len("linear_c")]
-            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx)-1}")
+            key = key.replace(f"linear_c{idx}", f"linear_c.{int(idx) - 1}")
         if key.startswith("head"):
             key = key.replace("head", "classifier")
         new_state_dict[key] = value
@@ -179,22 +178,22 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     else:
         raise ValueError(f"Size {size} not supported")
 
-    # load feature extractor (only resize + normalize)
-    feature_extractor = SegformerFeatureExtractor(
+    # load image processor (only resize + normalize)
+    image_processor = SegformerImageProcessor(
         image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
     )
 
     # prepare image
     image = prepare_img()
-    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+    pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
     logger.info(f"Converting model {model_name}...")
 
     # load original state dict
     if encoder_only:
-        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)
     else:
-        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"))["state_dict"]
+        state_dict = torch.load(checkpoint_path, map_location=torch.device("cpu"), weights_only=True)["state_dict"]
 
     # rename keys
     state_dict = rename_keys(state_dict, encoder_only=encoder_only)
@@ -362,11 +361,11 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         assert logits.shape == expected_shape
         assert torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-2)
 
-    # finally, save model and feature extractor
-    logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+    # finally, save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

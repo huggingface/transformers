@@ -12,32 +12,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SEW-D model configuration"""
+"""SEW-D model configuration"""
 
 import functools
 import operator
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "asapp/sew-d-tiny-100k": "https://huggingface.co/asapp/sew-d-tiny-100k/resolve/main/config.json",
-    # See all SEW-D models at https://huggingface.co/models?filter=sew-d
-}
 
-
-class SEWDConfig(PretrainedConfig):
+class SEWDConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SEWDModel`]. It is used to instantiate a SEW-D
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the SEW-D
     [asapp/sew-d-tiny-100k](https://huggingface.co/asapp/sew-d-tiny-100k) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -63,9 +58,7 @@ class SEWDConfig(PretrainedConfig):
             Whether to share attention key with c2p and p2c.
         relative_attention (`bool`, *optional*, defaults to `True`):
             Whether to use relative position encoding.
-        position_biased_input (`bool`, *optional*, defaults to `False`):
-            Whether to add absolute position embedding to content embedding.
-        pos_att_type (`Tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
+        pos_att_type (`tuple[str]`, *optional*, defaults to `("p2c", "c2p")`):
             The type of relative position attention, it can be a combination of `("p2c", "c2p")`, e.g. `("p2c")`,
             `("p2c", "c2p")`, `("p2c", "c2p")`.
         norm_rel_ebd (`str`, *optional*, defaults to `"layer_norm"`):
@@ -74,6 +67,8 @@ class SEWDConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, `"gelu_python"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
+            Deprecated. Not used by the model and will be removed in a future version.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
@@ -94,13 +89,13 @@ class SEWDConfig(PretrainedConfig):
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
+        conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(64, 128, 128, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
+        conv_stride (`tuple[int]` or `list[int]`, *optional*, defaults to `(5, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
             of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
-        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
+        conv_kernel (`tuple[int]` or `list[int]`, *optional*, defaults to `(10, 3, 1, 3, 1, 3, 1, 3, 1, 2, 1, 2, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
             length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
@@ -114,11 +109,11 @@ class SEWDConfig(PretrainedConfig):
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
+            Recognition](https://huggingface.co/papers/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
-            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            procedure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+            reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
             masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
             actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
@@ -129,8 +124,8 @@ class SEWDConfig(PretrainedConfig):
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
-            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            masking procedure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
             span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
             may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
             True`.
@@ -169,6 +164,7 @@ class SEWDConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "sew-d"
 
     def __init__(
@@ -183,7 +179,6 @@ class SEWDConfig(PretrainedConfig):
         position_buckets=256,
         share_att_key=True,
         relative_attention=True,
-        position_biased_input=False,
         pos_att_type=("p2c", "c2p"),
         norm_rel_ebd="layer_norm",
         hidden_act="gelu_python",
@@ -192,7 +187,6 @@ class SEWDConfig(PretrainedConfig):
         attention_dropout=0.1,
         feat_proj_dropout=0.0,
         final_dropout=0.1,
-        layerdrop=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-7,
         feature_layer_norm_eps=1e-5,
@@ -218,7 +212,7 @@ class SEWDConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
@@ -239,16 +233,14 @@ class SEWDConfig(PretrainedConfig):
         self.share_att_key = share_att_key
         self.relative_attention = relative_attention
         self.norm_rel_ebd = norm_rel_ebd
-        self.position_biased_input = position_biased_input
         self.pos_att_type = list(pos_att_type)
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
-        self.hidden_dropout = hidden_dropout
+        self._hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.feat_proj_dropout = feat_proj_dropout
         self.final_dropout = final_dropout
-        self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.feature_layer_norm_eps = feature_layer_norm_eps
         self.initializer_range = initializer_range
@@ -260,13 +252,13 @@ class SEWDConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect."
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`,"
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride)"
+                "Configuration for convolutional layers is incorrect. "
+                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
+                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
@@ -286,3 +278,14 @@ class SEWDConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary.
+        """
+        output = super().to_dict()
+        output["hidden_dropout"] = output.pop("_hidden_dropout")
+        return output
+
+
+__all__ = ["SEWDConfig"]

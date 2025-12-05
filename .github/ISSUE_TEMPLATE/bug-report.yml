@@ -1,11 +1,22 @@
 name: "\U0001F41B Bug Report"
 description: Submit a bug report to help us improve transformers
+labels: [ "bug" ]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! 🤗
+
+        Before you submit your bug report:
+
+          - If it is your first time submitting, be sure to check our [bug report guidelines](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#did-you-find-a-bug)
+          - Try our [docs bot](https://huggingface.co/spaces/huggingchat/hf-docs-chat) -- it might be able to help you with your issue
+
   - type: textarea
     id: system-info
     attributes:
       label: System Info
-      description: Please share your system info with us. You can run the command `transformers-cli env` and copy-paste its output below.
+      description: Please share your system info with us. You can run the command `transformers env` and copy-paste its output below.
       placeholder: transformers version, platform, python version, ...
     validations:
       required: true
@@ -17,58 +28,54 @@ body:
       description: |
         Your issue will be replied to more quickly if you can figure out the right person to tag with @
         If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of **who to tag**.
+
+        All issues are read by one of the core maintainers, so if you don't know who to tag, just leave this blank and
+        a core maintainer will ping the right person.
+
         Please tag fewer than 3 people.
-        
+
         Models:
 
-          - ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: `@LysandreJik`
-          - T5, Pegasus, EncoderDecoder: `@patrickvonplaten`
-          - Blenderbot, MBART, BART, Marian, Pegasus: `@patil-suraj`
-          - Reformer, TransfoXL, XLNet, FNet: `@patrickvonplaten`
-          - Longformer, BigBird: `@ydshieh`
-          - FSMT: `@stas00`
-          - Funnel: `@sgugger`
-          - GPT-2, GPT: `@patil-suraj`, `@patrickvonplaten`, `@LysandreJik`
-          - RAG, DPR: `@patrickvonplaten`, `@lhoestq`
-          - TensorFlow: `@Rocketknight1`
-          - JAX/Flax: `@patil-suraj`
-          - TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: `@NielsRogge`
-          - GPT-Neo, GPT-J, CLIP: `@patil-suraj`
-          - Wav2Vec2, HuBERT, UniSpeech, UniSpeechSAT, SEW, SEW-D: `@patrickvonplaten`, `@anton-l`
-          - SpeechEncoderDecoder, Speech2Text, Speech2Text2: `@sanchit-gandhi`, `@patrickvonplaten`, `@anton-l`
-          
-          If the model isn't in the list, ping `@LysandreJik` who will redirect you to the correct contributor.
+          - text models: @ArthurZucker @Cyrilvallez
+          - vision models: @yonigozlan @molbap
+          - audio models: @eustlb @ebezzam @vasqu
+          - multimodal models: @zucchini-nlp
+          - graph models: @clefourrier
 
         Library:
-          - Benchmarks: `@patrickvonplaten`
-          - Deepspeed: `@stas00`
-          - Ray/raytune: `@richardliaw`, `@amogkam`
-          - Text generation: `@patrickvonplaten`, `@Narsil`, `@gante`
-          - Tokenizers: `@SaulLu`
-          - Trainer: `@sgugger`
-          - Pipelines: `@Narsil`
-          - Speech: `@patrickvonplaten`, `@anton-l`, `@sanchit-gandhi`
-          - Vision: `@NielsRogge`, `@sgugger`
 
-        Documentation: `@sgugger`, `@stevhliu`
+          - generate: @zucchini-nlp (visual-language models) or @gante (all others)
+          - continuous batching: @remi-or @ArthurZucker @McPatate
+          - pipelines: @Rocketknight1
+          - tokenizers: @ArthurZucker and @itazap
+          - trainer: @SunMarc
+          - attention: @vasqu @ArthurZucker @CyrilVallez
+          - model loading (from pretrained, etc): @CyrilVallez
+          - distributed: @3outeille @ArthurZucker
+          - CIs: @ydshieh
+
+        Integrations:
+
+          - ray/raytune: @richardliaw, @amogkam
+          - Big Model Inference: @SunMarc
+          - quantization: @SunMarc @MekkCyber
+          - kernels: @MekkCyber @drbh
+          - peft: @BenjaminBossan @githubnemo
+        
+        Devices/Backends:
+        
+          - AMD ROCm: @ivarflakstad
+          - Intel XPU: @IlyasMoutawwakil
+          - Ascend NPU: @ivarflakstad 
+
+        Documentation: @stevhliu
 
         Model hub:
 
           - for issues with a model, report at https://discuss.huggingface.co/ and tag the model's creator.
 
-        HF projects:
+        Research projects are not maintained and should be taken as is.
 
-          - datasets: [different repo](https://github.com/huggingface/datasets)
-          - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
-
-        Examples:
-
-          - maintained examples (not research project or legacy): `@sgugger`, `@patil-suraj`
-
-        For research projetcs, please ping the contributor directly. For example, on the following projects:
-
-          - research_projects/bert-loses-patience: `@JetRunner`
-          - research_projects/distillation: `@VictorSanh`
       placeholder: "@Username ..."
 
   - type: checkboxes
@@ -97,17 +104,18 @@ body:
       label: Reproduction
       description: |
         Please provide a code sample that reproduces the problem you ran into. It can be a Colab link or just a code snippet.
+        Please include relevant config information with your code, for example your Trainers, TRL, Peft, and DeepSpeed configs.
         If you have code snippets, error messages, stack traces please provide them here as well.
         Important! Use code tags to correctly format your code. See https://help.github.com/en/github/writing-on-github/creating-and-highlighting-code-blocks#syntax-highlighting
         Do not use screenshots, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
 
       placeholder: |
         Steps to reproduce the behavior:
-          
+
           1.
           2.
           3.
-          
+
 
   - type: textarea
     id: expected-behavior

@@ -12,37 +12,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MobileBERT model configuration"""
-from collections import OrderedDict
-from typing import Mapping
+"""MobileBERT model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/config.json"
-}
 
-
-class MobileBertConfig(PretrainedConfig):
+class MobileBertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MobileBertModel`] or a [`TFMobileBertModel`]. It
+    This is the configuration class to store the configuration of a [`MobileBertModel`]. It
     is used to instantiate a MobileBERT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the MobileBERT
     [google/mobilebert-uncased](https://huggingface.co/google/mobilebert-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the MobileBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`MobileBertModel`] or [`TFMobileBertModel`].
+            the `inputs_ids` passed when calling [`MobileBertModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 24):
@@ -62,8 +55,7 @@ class MobileBertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`MobileBertModel`] or
-            [`TFMobileBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`MobileBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -104,11 +96,8 @@ class MobileBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-
-    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
-    checkpoints.
     """
-    pretrained_config_archive_map = MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+
     model_type = "mobilebert"
 
     def __init__(
@@ -136,7 +125,7 @@ class MobileBertConfig(PretrainedConfig):
         normalization_type="no_norm",
         classifier_activation=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -170,18 +159,4 @@ class MobileBertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Bert->MobileBert
-class MobileBertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
+__all__ = ["MobileBertConfig"]

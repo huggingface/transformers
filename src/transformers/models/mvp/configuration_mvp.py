@@ -12,29 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MVP model configuration"""
-import warnings
+"""MVP model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-MVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/config.json",
-}
 
-
-class MvpConfig(PretrainedConfig):
+class MvpConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MvpModel`]. It is used to instantiate a MVP model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the MVP [RUCAIBox/mvp](https://huggingface.co/RUCAIBox/mvp)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -72,18 +67,15 @@ class MvpConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        forced_eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
-            `eos_token_id`.
         use_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not to use prompt.
         prompt_length (`int`, *optional*, defaults to 100):
@@ -93,17 +85,18 @@ class MvpConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MvpModel, MvpConfig
+    >>> from transformers import MvpConfig, MvpModel
 
     >>> # Initializing a MVP RUCAIBox/mvp style configuration
     >>> configuration = MvpConfig()
 
-    >>> # Initializing a model from the RUCAIBox/mvp style configuration
+    >>> # Initializing a model (with random weights) from the RUCAIBox/mvp style configuration
     >>> model = MvpModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mvp"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -134,11 +127,10 @@ class MvpConfig(PretrainedConfig):
         eos_token_id=2,
         is_encoder_decoder=True,
         decoder_start_token_id=2,
-        forced_eos_token_id=2,
         use_prompt=False,
         prompt_length=100,
         prompt_mid_dim=800,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -170,13 +162,8 @@ class MvpConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 
-        if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
-            self.forced_bos_token_id = self.bos_token_id
-            warnings.warn(
-                f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
-                "The config can simply be saved and uploaded again to be fixed."
-            )
+
+__all__ = ["MvpConfig"]

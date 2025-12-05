@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,16 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ESM model. """
-
+"""Testing suite for the PyTorch ESM model."""
 
 import unittest
 
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import TestCasePlus, is_flaky, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -42,7 +41,7 @@ class EsmFoldModelTester:
         use_labels=False,
         vocab_size=19,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -99,6 +98,28 @@ class EsmFoldModelTester:
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
+        esmfold_config = {
+            "trunk": {
+                "num_blocks": 2,
+                "sequence_state_dim": 64,
+                "pairwise_state_dim": 16,
+                "sequence_head_width": 4,
+                "pairwise_head_width": 4,
+                "position_bins": 4,
+                "chunk_size": 16,
+                "structure_module": {
+                    "ipa_dim": 16,
+                    "num_angles": 7,
+                    "num_blocks": 2,
+                    "num_heads_ipa": 4,
+                    "pairwise_dim": 16,
+                    "resnet_dim": 16,
+                    "sequence_dim": 48,
+                },
+            },
+            "fp16_esm": False,
+            "lddt_head_hid_dim": 16,
+        }
         config = EsmConfig(
             vocab_size=33,
             hidden_size=self.hidden_size,
@@ -113,7 +134,7 @@ class EsmFoldModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             is_folding_model=True,
-            esmfold_config={"trunk": {"num_blocks": 2}, "fp16_esm": False},
+            esmfold_config=esmfold_config,
         )
         return config
 
@@ -125,8 +146,8 @@ class EsmFoldModelTester:
         result = model(input_ids)
         result = model(input_ids)
 
-        self.parent.assertEqual(result.positions.shape, (8, self.batch_size, self.seq_length, 14, 3))
-        self.parent.assertEqual(result.angles.shape, (8, self.batch_size, self.seq_length, 7, 2))
+        self.parent.assertEqual(result.positions.shape, (2, self.batch_size, self.seq_length, 14, 3))
+        self.parent.assertEqual(result.angles.shape, (2, self.batch_size, self.seq_length, 7, 2))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -143,12 +164,11 @@ class EsmFoldModelTester:
 
 
 @require_torch
-class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
-
+class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
 
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
-    all_generative_model_classes = ()
+    pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
 
     def setUp(self):
@@ -162,7 +182,13 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("Does not support attention outputs")
+    @is_flaky(
+        description="The computed `s = s / norm_denom` in `EsmFoldAngleResnet` is numerically instable if `norm_denom` is very small."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
+    @unittest.skip(reason="Does not support attention outputs")
     def test_attention_outputs(self):
         pass
 
@@ -170,75 +196,35 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
     def test_correct_missing_keys(self):
         pass
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip("Esm does not support embedding resizing")
+    @unittest.skip(reason="Esm does not support embedding resizing")
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip("ESMFold does not support passing input embeds!")
+    @unittest.skip(reason="ESMFold does not support passing input embeds!")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("ESMFold does not support head pruning.")
-    def test_head_pruning(self):
-        pass
-
-    @unittest.skip("ESMFold does not support head pruning.")
-    def test_head_pruning_integration(self):
-        pass
-
-    @unittest.skip("ESMFold does not support head pruning.")
-    def test_head_pruning_save_load_from_config_init(self):
-        pass
-
-    @unittest.skip("ESMFold does not support head pruning.")
-    def test_head_pruning_save_load_from_pretrained(self):
-        pass
-
-    @unittest.skip("ESMFold does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
-    @unittest.skip("ESMFold does not output hidden states in the normal way.")
+    @unittest.skip(reason="ESMFold does not output hidden states in the normal way.")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("ESMfold does not output hidden states in the normal way.")
+    @unittest.skip(reason="ESMfold does not output hidden states in the normal way.")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("ESMFold only has one output format.")
+    @unittest.skip(reason="ESMFold only has one output format.")
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip("This test doesn't work for ESMFold and doesn't test core functionality")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip("ESMFold does not support input chunking.")
+    @unittest.skip(reason="ESMFold does not support input chunking.")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip("ESMFold doesn't respect you and it certainly doesn't respect your initialization arguments.")
-    def test_initialization(self):
-        pass
-
-    @unittest.skip("ESMFold doesn't support torchscript compilation.")
-    def test_torchscript_output_attentions(self):
-        pass
-
-    @unittest.skip("ESMFold doesn't support torchscript compilation.")
-    def test_torchscript_output_hidden_state(self):
-        pass
-
-    @unittest.skip("ESMFold doesn't support torchscript compilation.")
-    def test_torchscript_simple(self):
-        pass
-
-    @unittest.skip("ESMFold doesn't support data parallel.")
+    @unittest.skip(reason="ESMFold doesn't support data parallel.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
@@ -247,9 +233,9 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
 class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_protein_folding(self):
-        model = EsmForProteinFolding.from_pretrained("Rocketknight1/esmfold_v1").float()
+        model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1").float()
         model.eval()
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         position_outputs = model(input_ids)["positions"]
         expected_slice = torch.tensor([2.5828, 0.7993, -10.9334], dtype=torch.float32)
-        self.assertTrue(torch.allclose(position_outputs[0, 0, 0, 0], expected_slice, atol=1e-4))
+        torch.testing.assert_close(position_outputs[0, 0, 0, 0], expected_slice, rtol=1e-4, atol=1e-4)

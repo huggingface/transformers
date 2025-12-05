@@ -11,20 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import hashlib
+import io
+import tempfile
 import unittest
-from typing import Dict
 
 import datasets
+import httpx
 import numpy as np
 from datasets import load_dataset
+from huggingface_hub import ImageSegmentationOutputElement
+from huggingface_hub.utils import insecure_hashlib
 
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForImageSegmentation,
     AutoModelForInstanceSegmentation,
     DetrForSegmentation,
@@ -33,9 +35,17 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
+    is_pipeline_test,
+    nested_simplify,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -49,38 +59,69 @@ else:
 
 
 def hashimage(image: Image) -> str:
-    m = hashlib.md5(image.tobytes())
+    m = insecure_hashlib.md5(image.tobytes())
     return m.hexdigest()[:10]
 
 
-def mask_to_test_readable(mask: Image) -> Dict:
+def mask_to_test_readable(mask: Image) -> dict:
     npimg = np.array(mask)
     white_pixels = (npimg == 255).sum()
     shape = npimg.shape
     return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
 
 
+def mask_to_test_readable_only_shape(mask: Image) -> dict:
+    npimg = np.array(mask)
+    shape = npimg.shape
+    return {"shape": shape}
+
+
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-    model_mapping = {
-        k: v
-        for k, v in (
-            list(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()) if MODEL_FOR_IMAGE_SEGMENTATION_MAPPING else []
-        )
+class ImageSegmentationPipelineTests(unittest.TestCase):
+    model_mapping = dict(
+        (list(MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()) if MODEL_FOR_IMAGE_SEGMENTATION_MAPPING else [])
         + (MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items() if MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING else [])
         + (MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items() if MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING else [])
-    }
+    )
+    _dataset = None
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            # we use revision="refs/pr/1" until the PR is merged
+            # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
+            )
+
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        dtype="float32",
+    ):
+        image_segmenter = ImageSegmentationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            dtype=dtype,
+        )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
+        self._load_dataset()
         outputs = image_segmenter(
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             threshold=0.0,
@@ -99,18 +140,22 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         # to make it work
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * n, outputs)
 
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
-
         # RGBA
-        outputs = image_segmenter(dataset[0]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            self._dataset[0]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # LA
-        outputs = image_segmenter(dataset[1]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            self._dataset[1]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # L
-        outputs = image_segmenter(dataset[2]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
+        outputs = image_segmenter(
+            self._dataset[2]["image"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0
+        )
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
 
@@ -132,7 +177,11 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
         outputs = image_segmenter(
-            batch, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0, batch_size=batch_size
+            batch,
+            threshold=0.0,
+            mask_threshold=0,
+            overlap_mask_area_threshold=0,
+            batch_size=batch_size,
         )
         self.assertEqual(len(batch), len(outputs))
         self.assertEqual(len(outputs[0]), n)
@@ -148,10 +197,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             f"Expected [{n}, {n}, {n}, {n}, {n}], got {[len(item) for item in outputs]}",
         )
 
-    @require_tf
-    @unittest.skip("Image segmentation not implemented in TF")
-    def test_small_model_tf(self):
-        pass
+        for single_output in outputs:
+            for output_element in single_output:
+                compare_pipeline_output_to_hub_spec(output_element, ImageSegmentationOutputElement)
 
     @require_torch
     def test_small_model_pt_no_panoptic(self):
@@ -181,10 +229,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
         image_segmenter = ImageSegmentationPipeline(
             model=model,
-            feature_extractor=feature_extractor,
+            image_processor=image_processor,
             subtask="panoptic",
             threshold=0.0,
             mask_threshold=0.0,
@@ -259,25 +307,55 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         # The `panoptic` returns only LABEL_215, and this returns 3 labels.
         #
         output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="semantic")
+
+        output_masks = [o["mask"] for o in output]
+
+        # page links (to visualize)
+        expected_masks = [
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_0.png",
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_1.png",
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_2.png",
+        ]
+        # actual links to get files
+        expected_masks = [x.replace("/blob/", "/resolve/") for x in expected_masks]
+        expected_masks = [
+            Image.open(io.BytesIO(httpx.get(image, follow_redirects=True).content)) for image in expected_masks
+        ]
+
+        # Convert masks to numpy array
+        output_masks = [np.array(x) for x in output_masks]
+        expected_masks = [np.array(x) for x in expected_masks]
+
+        self.assertEqual(output_masks[0].shape, expected_masks[0].shape)
+        self.assertEqual(output_masks[1].shape, expected_masks[1].shape)
+        self.assertEqual(output_masks[2].shape, expected_masks[2].shape)
+
+        # With un-trained tiny random models, the output `logits` tensor is very likely to contain many values
+        # close to each other, which cause `argmax` to give quite different results when running the test on 2
+        # environments. We use a lower threshold `0.9` here to avoid flakiness.
+        self.assertGreaterEqual(np.mean(output_masks[0] == expected_masks[0]), 0.9)
+        self.assertGreaterEqual(np.mean(output_masks[1] == expected_masks[1]), 0.9)
+        self.assertGreaterEqual(np.mean(output_masks[2] == expected_masks[2]), 0.9)
+
         for o in output:
-            o["mask"] = mask_to_test_readable(o["mask"])
+            o["mask"] = mask_to_test_readable_only_shape(o["mask"])
         self.maxDiff = None
         self.assertEqual(
             nested_simplify(output, decimals=4),
             [
                 {
                     "label": "LABEL_88",
-                    "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                    "mask": {"shape": (480, 640)},
                     "score": None,
                 },
                 {
                     "label": "LABEL_101",
-                    "mask": {"hash": "10ab738dc9", "shape": (480, 640), "white_pixels": 8948},
+                    "mask": {"shape": (480, 640)},
                     "score": None,
                 },
                 {
                     "label": "LABEL_215",
-                    "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
+                    "mask": {"shape": (480, 640)},
                     "score": None,
                 },
             ],
@@ -515,13 +593,13 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "facebook/maskformer-swin-base-ade"
 
         model = AutoModelForInstanceSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
+        image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
-        image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-        file = image[0]["file"]
-        outputs = image_segmenter(file, threshold=threshold)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
+        outputs = image_segmenter(image, threshold=threshold)
 
         # Shortening by hashing
         for o in outputs:
@@ -567,3 +645,119 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 },
             ],
         )
+
+    @require_torch
+    @slow
+    def test_oneformer(self):
+        image_segmenter = pipeline(model="shi-labs/oneformer_ade20k_swin_tiny")
+
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = ds[0]["image"].convert("RGB")
+        outputs = image_segmenter(image, threshold=0.99)
+        # Shortening by hashing
+        for o in outputs:
+            o["mask"] = mask_to_test_readable(o["mask"])
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": 0.9981,
+                    "label": "grass",
+                    "mask": {"hash": "3a92904d4c", "white_pixels": 118131, "shape": (512, 683)},
+                },
+                {
+                    "score": 0.9992,
+                    "label": "sky",
+                    "mask": {"hash": "fa2300cc9a", "white_pixels": 231565, "shape": (512, 683)},
+                },
+            ],
+        )
+
+        # Different task
+        outputs = image_segmenter(image, threshold=0.99, subtask="instance")
+        # Shortening by hashing
+        for o in outputs:
+            o["mask"] = mask_to_test_readable(o["mask"])
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": 0.9991,
+                    "label": "sky",
+                    "mask": {"hash": "8b1ffad016", "white_pixels": 230566, "shape": (512, 683)},
+                },
+                {
+                    "score": 0.9981,
+                    "label": "grass",
+                    "mask": {"hash": "9bbdf83d3d", "white_pixels": 119130, "shape": (512, 683)},
+                },
+            ],
+        )
+
+        # Different task
+        outputs = image_segmenter(image, subtask="semantic")
+        # Shortening by hashing
+        for o in outputs:
+            o["mask"] = mask_to_test_readable(o["mask"])
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": None,
+                    "label": "wall",
+                    "mask": {"hash": "897fb20b7f", "white_pixels": 14506, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "building",
+                    "mask": {"hash": "f2a68c63e4", "white_pixels": 125019, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "sky",
+                    "mask": {"hash": "e0ca3a548e", "white_pixels": 135330, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "tree",
+                    "mask": {"hash": "7c9544bcac", "white_pixels": 16263, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "road, route",
+                    "mask": {"hash": "2c7704e491", "white_pixels": 2143, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "grass",
+                    "mask": {"hash": "bf6c2867e0", "white_pixels": 53040, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "plant",
+                    "mask": {"hash": "93c4b7199e", "white_pixels": 3335, "shape": (512, 683)},
+                },
+                {
+                    "score": None,
+                    "label": "house",
+                    "mask": {"hash": "93ec419ad5", "white_pixels": 60, "shape": (512, 683)},
+                },
+            ],
+        )
+
+    def test_save_load(self):
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
+
+        model = AutoModelForImageSegmentation.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        image_segmenter = pipeline(
+            task="image-segmentation",
+            model=model,
+            image_processor=image_processor,
+        )
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_segmenter.save_pretrained(tmpdirname)
+            pipeline(task="image-segmentation", model=tmpdirname)

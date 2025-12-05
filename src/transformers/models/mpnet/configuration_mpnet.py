@@ -13,33 +13,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MPNet model configuration"""
+"""MPNet model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/mpnet-base": "https://huggingface.co/microsoft/mpnet-base/resolve/main/config.json",
-}
 
-
-class MPNetConfig(PretrainedConfig):
+class MPNetConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MPNetModel`] or a [`TFMPNetModel`]. It is used to
+    This is the configuration class to store the configuration of a [`MPNetModel`]. It is used to
     instantiate a MPNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MPNet
     [microsoft/mpnet-base](https://huggingface.co/microsoft/mpnet-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30527):
             Vocabulary size of the MPNet model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MPNetModel`] or [`TFMPNetModel`].
+            `inputs_ids` passed when calling [`MPNetModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -79,6 +75,7 @@ class MPNetConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mpnet"
 
     def __init__(
@@ -114,3 +111,6 @@ class MPNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.relative_attention_num_buckets = relative_attention_num_buckets
+
+
+__all__ = ["MPNetConfig"]

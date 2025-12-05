@@ -12,29 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CANINE model configuration"""
+"""CANINE model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/canine-s": "https://huggingface.co/google/canine-s/resolve/main/config.json",
-    # See all CANINE models at https://huggingface.co/models?filter=canine
-}
 
-
-class CanineConfig(PretrainedConfig):
+class CanineConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CanineModel`]. It is used to instantiate an
     CANINE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CANINE
     [google/canine-s](https://huggingface.co/google/canine-s) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -50,7 +45,7 @@ class CanineConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoders, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoders, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 16384):
@@ -61,6 +56,12 @@ class CanineConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 57344):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 57345):
+            End of stream token id.
         downsampling_rate (`int`, *optional*, defaults to 4):
             The rate at which to downsample the original character sequence length before applying the deep Transformer
             encoder.
@@ -89,6 +90,7 @@ class CanineConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "canine"
 
     def __init__(
@@ -104,8 +106,6 @@ class CanineConfig(PretrainedConfig):
         type_vocab_size=16,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=0xE000,
         eos_token_id=0xE001,
@@ -114,7 +114,7 @@ class CanineConfig(PretrainedConfig):
         num_hash_functions=8,
         num_hash_buckets=16384,
         local_transformer_stride=128,  # Good TPU/XLA memory alignment.
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -129,7 +129,6 @@ class CanineConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
 
         # Character config:
         self.downsampling_rate = downsampling_rate
@@ -137,3 +136,6 @@ class CanineConfig(PretrainedConfig):
         self.num_hash_functions = num_hash_functions
         self.num_hash_buckets = num_hash_buckets
         self.local_transformer_stride = local_transformer_stride
+
+
+__all__ = ["CanineConfig"]

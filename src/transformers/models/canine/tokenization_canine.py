@@ -14,18 +14,12 @@
 # limitations under the License.
 """Tokenization classes for CANINE."""
 
-from typing import Dict, List, Optional
-
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "nielsr/canine-s": 2048,
-}
 
 # Unicode defines 1,114,112 total “codepoints”
 UNICODE_VOCAB_SIZE = 1114112
@@ -33,7 +27,6 @@ UNICODE_VOCAB_SIZE = 1114112
 # Below: Constants defining canonical codepoints for special, pseudo-characters.
 # Copied from https://github.com/google-research/language/blob/master/language/canine/special_codepoints.py
 PAD = 0
-
 CLS = 0xE000
 SEP = 0xE001
 BOS = 0xE002
@@ -41,7 +34,7 @@ MASK = 0xE003
 RESERVED = 0xE004
 
 # Maps special codepoints to human-readable names.
-SPECIAL_CODEPOINTS: Dict[int, str] = {
+SPECIAL_CODEPOINTS: dict[int, str] = {
     # Special symbols are represented using codepoints values that are valid,
     # but designated as "Private Use", meaning that they will never be assigned
     # characters by the Unicode Consortium, and are thus safe for use here.
@@ -57,7 +50,7 @@ SPECIAL_CODEPOINTS: Dict[int, str] = {
 }
 
 # Maps special codepoint human-readable names to their codepoint values.
-SPECIAL_CODEPOINTS_BY_NAME: Dict[str, int] = {name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()}
+SPECIAL_CODEPOINTS_BY_NAME: dict[str, int] = {name: codepoint for codepoint, name in SPECIAL_CODEPOINTS.items()}
 
 
 class CanineTokenizer(PreTrainedTokenizer):
@@ -74,8 +67,6 @@ class CanineTokenizer(PreTrainedTokenizer):
                 The maximum sentence length the model accepts.
     """
 
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-
     def __init__(
         self,
         bos_token=chr(CLS),
@@ -86,7 +77,7 @@ class CanineTokenizer(PreTrainedTokenizer):
         mask_token=chr(MASK),
         add_prefix_space=False,
         model_max_length=2048,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -97,6 +88,19 @@ class CanineTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
+        # Creates a mapping for looking up the IDs of special symbols.
+        self._special_codepoints: dict[str, int] = {}
+        for codepoint, name in SPECIAL_CODEPOINTS.items():
+            self._special_codepoints[name] = codepoint
+
+        # Creates a mapping for looking up the string forms of special symbol IDs.
+        self._special_codepoint_strings: dict[int, str] = {
+            codepoint: name for name, codepoint in self._special_codepoints.items()
+        }
+
+        self._unicode_vocab_size = UNICODE_VOCAB_SIZE
+        self._num_special_tokens = len(self._special_codepoints)
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -106,27 +110,22 @@ class CanineTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
             model_max_length=model_max_length,
+            token_type_ids_pattern="all_zeros",
+            token_type_ids_include_special_tokens=True,
+            special_tokens_pattern="cls_sep",
             **kwargs,
         )
-
-        # Creates a mapping for looking up the IDs of special symbols.
-        self._special_codepoints: Dict[str, int] = {}
-        for codepoint, name in SPECIAL_CODEPOINTS.items():
-            self._special_codepoints[name] = codepoint
-
-        # Creates a mapping for looking up the string forms of special symbol IDs.
-        self._special_codepoint_strings: Dict[int, str] = {
-            codepoint: name for name, codepoint in self._special_codepoints.items()
-        }
-
-        self._unicode_vocab_size = UNICODE_VOCAB_SIZE
-        self._num_special_tokens = len(self._special_codepoints)
 
     @property
     def vocab_size(self) -> int:
         return self._unicode_vocab_size
 
-    def _tokenize(self, text: str) -> List[str]:
+    def get_vocab(self):
+        vocab = {chr(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def _tokenize(self, text: str) -> list[str]:
         """Tokenize a string (i.e. perform character splitting)."""
         return list(text)
 
@@ -152,92 +151,5 @@ class CanineTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         return "".join(tokens)
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A CANINE sequence has the following format:
 
-        - single sequence: `[CLS] X [SEP]`
-        - pair of sequences: `[CLS] A [SEP] B [SEP]`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        result = cls + token_ids_0 + sep
-        if token_ids_1 is not None:
-            result += token_ids_1 + sep
-        return result
-
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        result = [1] + ([0] * len(token_ids_0)) + [1]
-        if token_ids_1 is not None:
-            result += ([0] * len(token_ids_1)) + [1]
-        return result
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CANINE
-        sequence pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        result = len(cls + token_ids_0 + sep) * [0]
-        if token_ids_1 is not None:
-            result += len(token_ids_1 + sep) * [1]
-        return result
-
-    # CanineTokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
-        return ()
+__all__ = ["CanineTokenizer"]

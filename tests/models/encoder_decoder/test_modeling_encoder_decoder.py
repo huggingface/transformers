@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +16,15 @@
 import tempfile
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import is_torch_available, logging
+from transformers.testing_utils import (
+    CaptureLogger,
+    Expectations,
+    require_deterministic_for_xpu,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...test_modeling_common import ids_tensor
 from ..bart.test_modeling_bart import BartStandaloneDecoderModelTester
@@ -54,6 +60,8 @@ if is_torch_available():
 
 @require_torch
 class EncoderDecoderMixin:
+    supports_sdpa = False
+
     def get_encoder_decoder_model(self, config, decoder_config):
         raise NotImplementedError
 
@@ -72,7 +80,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -106,7 +114,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -167,10 +175,13 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+        with (
+            tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+            tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+        ):
             encoder_model.save_pretrained(encoder_tmp_dirname)
             decoder_model.save_pretrained(decoder_tmp_dirname)
             model_kwargs = {"encoder_hidden_dropout_prob": 0.0}
@@ -210,7 +221,7 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         return_dict,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -240,7 +251,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -281,7 +292,7 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -297,7 +308,10 @@ class EncoderDecoderMixin:
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
-            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            with (
+                tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+                tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+            ):
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
                 enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -327,7 +341,7 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         labels,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -395,8 +409,12 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         labels,
-        **kwargs
+        **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -424,16 +442,21 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         labels,
-        **kwargs
+        **kwargs,
     ):
         # Similar to `check_encoder_decoder_model_output_attentions`, but with `output_attentions` triggered from the
         # config file. Contrarily to most models, changing the model's config won't work -- the defaults are loaded
         # from the inner models' configurations.
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.config._attn_implementation = "eager"  # model config -> won't work
         enc_dec_model.config.output_attentions = True  # model config -> won't work
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
@@ -473,13 +496,17 @@ class EncoderDecoderMixin:
             enc_dec_model.config.eos_token_id = None
         if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
             enc_dec_model.config.decoder.eos_token_id = None
+        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
+            enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
-            input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
+            input_ids,
+            decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def create_and_check_encoder_decoder_shared_weights(
         self,
@@ -491,7 +518,7 @@ class EncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         labels,
-        **kwargs
+        **kwargs,
     ):
         torch.manual_seed(0)
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
@@ -525,8 +552,6 @@ class EncoderDecoderMixin:
             decoder_attention_mask=decoder_attention_mask,
         )
 
-        # check that models has less parameters
-        self.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
         random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
         # check that outputs are equal
@@ -543,10 +568,6 @@ class EncoderDecoderMixin:
             tied_model.to(torch_device)
             tied_model.eval()
 
-            # check that models has less parameters
-            self.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             tied_model_result = tied_model(
@@ -607,6 +628,7 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
+    @unittest.skip("This is no longer FORCED, it was just not working before.")
     def test_encoder_decoder_model_shared_weights(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.create_and_check_encoder_decoder_shared_weights(**input_ids_dict)
@@ -637,6 +659,7 @@ class EncoderDecoderMixin:
         loss.backward()
 
     @slow
+    @require_deterministic_for_xpu
     def test_real_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
         model_2.to(torch_device)
@@ -667,11 +690,64 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
+    def test_sdpa_can_dispatch_composite_models(self):
+        if not self.supports_sdpa:
+            self.skipTest("SDPA is not supported")
+
+        inputs_dict = self.prepare_config_and_inputs()
+        encoder_config, decoder_config = inputs_dict["config"], inputs_dict["decoder_config"]
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config=encoder_config, decoder_config=decoder_config
+        )
+        model = EncoderDecoderModel(config=config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_sdpa = EncoderDecoderModel.from_pretrained(tmpdirname)
+            model_sdpa = model_sdpa.eval().to(torch_device)
+
+            # see https://github.com/huggingface/transformers/pull/32238
+            # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+            encoder_attn = "sdpa" if model.encoder._supports_sdpa else "eager"
+            decoder_attn = "sdpa" if model.decoder._supports_sdpa else "eager"
+            self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+            self.assertTrue(model_sdpa.encoder.config._attn_implementation == encoder_attn)
+            self.assertTrue(model_sdpa.decoder.config._attn_implementation == decoder_attn)
+
+            # Also test that nothing break if we request SDPA explicitly, when both sub-parts support it.
+            # If the model supports sdpa (i.e. all of sub-models supports it) we'll dispatch safely
+            # Otherwise we should raise error that SDPA is not supported, as some of the sub-models doesn't support
+            if encoder_attn == "sdpa" and decoder_attn == "sdpa":
+                model_sdpa_explicit = EncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model_sdpa_explicit = model_sdpa_explicit.eval().to(torch_device)
+
+                self.assertTrue(model_sdpa_explicit.config._attn_implementation == "sdpa")
+            else:
+                with self.assertRaises(ValueError):
+                    model_sdpa_explicit = EncoderDecoderModel.from_pretrained(tmpdirname, attn_implementation="sdpa")
+
+            model_eager = EncoderDecoderModel.from_pretrained(
+                tmpdirname,
+                attn_implementation="eager",
+            )
+            model_eager = model_eager.eval().to(torch_device)
+
+            self.assertTrue(model_eager.config._attn_implementation == "eager")
+            self.assertTrue(model_eager.encoder.config._attn_implementation == "eager")
+            self.assertTrue(model_eager.decoder.config._attn_implementation == "eager")
+
+            for name, submodule in model_eager.named_modules():
+                class_name = submodule.__class__.__name__
+                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    raise ValueError("The eager model should not have SDPA attention layers")
+
 
 @require_torch
 class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "bert-base-cased")
+        return EncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-cased", "google-bert/bert-base-cased"
+        )
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = BertModel(config)
@@ -720,24 +796,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "labels": decoder_token_labels,
         }
 
-    def test_relative_position_embeds(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-
-        encoder_config = config_and_inputs["config"]
-        decoder_config = config_and_inputs["decoder_config"]
-
-        encoder_config.position_embedding_type = "relative_key_query"
-        decoder_config.position_embedding_type = "relative_key_query"
-
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
-        model = EncoderDecoderModel(config).eval().to(torch_device)
-
-        logits = model(
-            input_ids=config_and_inputs["input_ids"], decoder_input_ids=config_and_inputs["decoder_input_ids"]
-        ).logits
-
-        self.assertTrue(logits.shape, (13, 7))
-
     @slow
     def test_bert2bert_summarization(self):
         model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
@@ -755,7 +813,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         input_dict = tokenizer(
             [ARTICLE_SIGMA, ARTICLE_AMERICA],
             padding="max_length",
-            pad_to_max_length=True,
             max_length=512,
             return_tensors="pt",
         )
@@ -765,6 +822,56 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         summary = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_SIGMA, EXPECTED_SUMMARY_AMERICA])
+
+    def test_bert2bert_default_decoder_attention_mask(self):
+        torch.manual_seed(0)
+        test_dict = self.prepare_config_and_inputs()
+        encoder_config, decoder_config = test_dict["config"], test_dict["decoder_config"]
+
+        encoder_config.pad_token_id = 5
+        encoder_config.decoder_start_token_id = 2
+        decoder_config.pad_token_id = 5
+        decoder_config.decoder_start_token_id = 2
+
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        config.pad_token_id = 5
+        config.decoder_start_token_id = 2
+
+        encoder_model, decoder_model = self.get_encoder_decoder_model(encoder_config, decoder_config)
+        model = EncoderDecoderModel(config=config, encoder=encoder_model, decoder=decoder_model)
+
+        input_ids = torch.tensor(
+            [
+                [10, 55, 89, 11, 57, 32, 36, 78, 46, 28, 5, 5, 5],
+                [10, 21, 97, 71, 63, 19, 12, 57, 5, 5, 5, 5, 5],
+            ]
+        )
+        attention_mask = input_ids.new_tensor(input_ids != 5)
+        labels = torch.tensor(
+            [
+                [33, 23, 91, 12, 19, 96, 5, 5],
+                [87, 85, 13, 31, 5, 5, 5, 5],
+            ]
+        )
+
+        logger = logging.get_logger("transformers.modeling_utils")
+        logger.warning_once.cache_clear()
+
+        with CaptureLogger(logger) as cl:
+            torch.manual_seed(0)
+            output = model(input_ids, attention_mask, labels=labels)
+
+        # Assert that the warning does not show up since a default decoder_attention_mask should have been created.
+        self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+        # Create a new attention mask that ignores padding, and test that the loss differs for this new attention mask
+        # and the default attention mask.
+        attention_mask_ignoring_padding = torch.ones(labels.shape, dtype=torch.long)
+        torch.manual_seed(0)
+        ignore_pad_tokens_output = model(
+            input_ids, attention_mask, labels=labels, decoder_attention_mask=attention_mask_ignoring_padding
+        )
+        self.assertNotAlmostEqual(output.loss.item(), ignore_pad_tokens_output.loss.item())
 
 
 @require_torch
@@ -813,6 +920,7 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
         }
 
     @slow
+    @require_deterministic_for_xpu
     def test_roberta2roberta_summarization(self):
         model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_bbc")
         model.to(torch_device)
@@ -822,9 +930,28 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
 
         ARTICLE_TOSHIBA = """An independent panel appointed by Toshiba found institutional accounting irregularities, the firm said in a statement to investors. Toshiba said it "takes the situation it has caused very seriously" and that it "deeply apologised" to shareholders. The overstatement was roughly triple an initial Toshiba estimate. The probe could lead to a restatement of earnings, a board overhaul and potential action by regulators. "Within Toshiba, there was a corporate culture in which one could not go against the wishes of superiors," the report said. "Therefore, when top management presented 'challenges', division presidents, line managers and employees below them continually carried out inappropriate accounting practices to meet targets in line with the wishes of their superiors." The improper accounting practices stretched back to 2008."""
 
-        EXPECTED_SUMMARY_PS3 = """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer."""
+        # fmt: off
+        EXPECTED_SUMMARIES_PS3 = Expectations(
+            {
+                ("xpu", 3): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer .""",
+                ("cuda", 7): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer.""",
+            }
+        ) # fmt: on
+        EXPECTED_SUMMARY_PS3 = EXPECTED_SUMMARIES_PS3.get_expectation()
 
-        EXPECTED_SUMMARY_TOSHIBA = """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year, according to a report."""
+        EXPECTED_SUMMARIES_TOSHIBA = Expectations(
+            {
+                (
+                    "xpu",
+                    3,
+                ): """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year , according to a report .""",
+                (
+                    "cuda",
+                    7,
+                ): """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year, according to a report.""",
+            }
+        )
+        EXPECTED_SUMMARY_TOSHIBA = EXPECTED_SUMMARIES_TOSHIBA.get_expectation()
 
         input_dict = tokenizer(
             [ARTICLE_PS3, ARTICLE_TOSHIBA], max_length=512, padding="max_length", return_tensors="pt"
@@ -887,11 +1014,15 @@ class RoBertaEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         }
 
     def get_pretrained_model(self):
-        return EncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
+        return EncoderDecoderModel.from_encoder_decoder_pretrained(
+            "FacebookAI/roberta-base", "FacebookAI/roberta-base"
+        )
 
 
 @require_torch
 class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
+    supports_sdpa = True
+
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = BertModel(config)
         decoder_model = GPT2LMHeadModel(decoder_config)
@@ -915,7 +1046,6 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             decoder_config,
             decoder_input_ids,
             decoder_input_mask,
-            decoder_head_mask,
             decoder_token_type_ids,
             decoder_sequence_labels,
             decoder_token_labels,
@@ -944,22 +1074,38 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         }
 
     def get_pretrained_model(self):
-        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        return EncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-cased", "openai-community/gpt2"
+        )
 
+    @unittest.skip
     def test_encoder_decoder_model_shared_weights(self):
         pass
 
     @slow
+    @require_deterministic_for_xpu
     def test_bert2gpt2_summarization(self):
         model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
 
         model.to(torch_device)
-        tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer_in = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_out = AutoTokenizer.from_pretrained("openai-community/gpt2")
 
         ARTICLE_STUDENTS = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members singing a racist chant. SAE's national chapter suspended the students, but University of Oklahoma President David Boren took it a step further, saying the university's affiliation with the fraternity is permanently done. The news is shocking, but it's not the first time SAE has faced controversy. SAE was founded March 9, 1856, at the University of Alabama, five years before the American Civil War, according to the fraternity website. When the war began, the group had fewer than 400 members, of which "369 went to war for the Confederate States and seven for the Union Army," the website says. The fraternity now boasts more than 200,000 living alumni, along with about 15,000 undergraduates populating 219 chapters and 20 "colonies" seeking full membership at universities. SAE has had to work hard to change recently after a string of member deaths, many blamed on the hazing of new recruits, SAE national President Bradley Cohen wrote in a message on the fraternity's website. The fraternity's website lists more than 130 chapters cited or suspended for "health and safety incidents" since 2010. At least 30 of the incidents involved hazing, and dozens more involved alcohol. However, the list is missing numerous incidents from recent months. Among them, according to various media outlets: Yale University banned the SAEs from campus activities last month after members allegedly tried to interfere with a sexual misconduct investigation connected to an initiation rite. Stanford University in December suspended SAE housing privileges after finding sorority members attending a fraternity function were subjected to graphic sexual content. And Johns Hopkins University in November suspended the fraternity for underage drinking. "The media has labeled us as the 'nation's deadliest fraternity,' " Cohen said. In 2011, for example, a student died while being coerced into excessive alcohol consumption, according to a lawsuit. SAE's previous insurer dumped the fraternity. "As a result, we are paying Lloyd's of London the highest insurance rates in the Greek-letter world," Cohen said. Universities have turned down SAE's attempts to open new chapters, and the fraternity had to close 12 in 18 months over hazing incidents."""
 
-        EXPECTED_SUMMARY_STUDENTS = """SAS Alpha Epsilon suspended the students, but university president says it's permanent.\nThe fraternity has had to deal with a string of student deaths since 2010.\nSAS has more than 200,000 members, many of whom are students.\nA student died while being forced into excessive alcohol consumption."""
+        EXPECTED_SUMMARIES_STUDENTS = Expectations(
+            {
+                (
+                    "xpu",
+                    3,
+                ): """SAS Alpha Epsilon suspended the students, but university president says it's permanent .\nThe fraternity has had to deal with a string of student deaths since 2010 .\nSAS has more than 200,000 members, many of whom are students .\nA student died while being forced into excessive alcohol consumption .""",
+                (
+                    "cuda",
+                    7,
+                ): """SAS Alpha Epsilon suspended the students, but university president says it's permanent.\nThe fraternity has had to deal with a string of student deaths since 2010.\nSAS has more than 200,000 members, many of whom are students.\nA student died while being forced into excessive alcohol consumption.""",
+            }
+        )
+        EXPECTED_SUMMARY_STUDENTS = EXPECTED_SUMMARIES_STUDENTS.get_expectation()
 
         input_dict = tokenizer_in(ARTICLE_STUDENTS, return_tensors="pt")
         output_ids = model.generate(input_dict["input_ids"].to(torch_device))
@@ -1017,9 +1163,10 @@ class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
     def get_pretrained_model(self):
         return EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "bert-large-uncased", "microsoft/prophetnet-large-uncased"
+            "google-bert/bert-large-uncased", "microsoft/prophetnet-large-uncased"
         )
 
+    @unittest.skip
     def test_encoder_decoder_model_shared_weights(self):
         pass
 
@@ -1072,8 +1219,11 @@ class BartEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         }
 
     def get_pretrained_model(self):
-        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "facebook/bart-large")
+        return EncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-large-uncased", "facebook/bart-large"
+        )
 
+    @unittest.skip
     def test_encoder_decoder_model_shared_weights(self):
         pass
 
@@ -1081,10 +1231,12 @@ class BartEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class EncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+        return EncoderDecoderModel.from_encoder_decoder_pretrained(
+            "google-bert/bert-base-uncased", "google-bert/bert-base-uncased"
+        )
 
     def get_decoder_config(self):
-        config = AutoConfig.from_pretrained("bert-base-uncased")
+        config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
         config.is_decoder = True
         config.add_cross_attention = True
         return config
@@ -1093,8 +1245,10 @@ class EncoderDecoderModelTest(unittest.TestCase):
         return EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
 
     def get_encoder_decoder_models(self):
-        encoder_model = BertModel.from_pretrained("bert-base-uncased")
-        decoder_model = BertLMHeadModel.from_pretrained("bert-base-uncased", config=self.get_decoder_config())
+        encoder_model = BertModel.from_pretrained("google-bert/bert-base-uncased")
+        decoder_model = BertLMHeadModel.from_pretrained(
+            "google-bert/bert-base-uncased", config=self.get_decoder_config()
+        )
         return {"encoder": encoder_model, "decoder": decoder_model}
 
     def _check_configuration_tie(self, model):

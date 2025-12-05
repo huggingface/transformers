@@ -17,7 +17,7 @@ Fixes # (issue)
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#start-contributing-pull-requests),
+- [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#create-a-pull-request),
       Pull Request section?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
       to it if that's the case.
@@ -39,36 +39,40 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- albert, bert, xlm: @LysandreJik
-- blenderbot, bart, marian, pegasus, encoderdecoder,  t5: @patrickvonplaten, @patil-suraj
-- longformer, reformer, transfoxl, xlnet: @patrickvonplaten
-- fsmt: @stas00
-- funnel: @sgugger
-- gpt2: @patrickvonplaten, @LysandreJik
-- rag: @patrickvonplaten, @lhoestq
-- tensorflow: @LysandreJik
+- text models: @ArthurZucker @Cyrilvallez
+- vision models: @yonigozlan @molbap
+- audio models: @eustlb @ebezzam @vasqu
+- multimodal models: @zucchini-nlp
+- graph models: @clefourrier
 
 Library:
 
-- benchmarks: @patrickvonplaten
-- deepspeed: @stas00
+- generate: @zucchini-nlp (visual-language models) or @gante (all others)
+- continuous batching: @remi-or @ArthurZucker @McPatate
+- pipelines: @Rocketknight1
+- tokenizers: @ArthurZucker and @itazap
+- trainer: @SunMarc
+- attention: @vasqu @ArthurZucker @CyrilVallez
+- model loading (from pretrained, etc): @CyrilVallez
+- distributed: @3outeille @ArthurZucker
+- CIs: @ydshieh
+
+Integrations:
+
 - ray/raytune: @richardliaw, @amogkam
-- text generation: @patrickvonplaten
-- tokenizers: @n1t0, @LysandreJik
-- trainer: @sgugger
-- pipelines: @LysandreJik
+- Big Model Inference: @SunMarc
+- quantization: @SunMarc @MekkCyber
+- kernels: @MekkCyber @drbh
+- peft: @BenjaminBossan @githubnemo
 
-Documentation: @sgugger
+Devices/Backends:
 
-HF projects:
+- AMD ROCm: @ivarflakstad
+- Intel XPU: @IlyasMoutawwakil
+- Ascend NPU: @ivarflakstad 
 
-- datasets: [different repo](https://github.com/huggingface/datasets)
-- rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
+Documentation: @stevhliu
 
-Examples:
-
-- maintained examples (not research project or legacy): @sgugger, @patil-suraj
-- research_projects/bert-loses-patience: @JetRunner
-- research_projects/distillation: @VictorSanh
+Research projects are not maintained and should be taken as is.
 
  -->

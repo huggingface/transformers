@@ -12,28 +12,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GPTNeoX Japanese model configuration"""
+"""GPTNeoX Japanese model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from typing import Optional
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "abeja/gpt-neox-japanese-2.7b": "https://huggingface.co/abeja/gpt-neox-japanese-2.7b/resolve/main/config.json",
-}
 
-
-class GPTNeoXJapaneseConfig(PretrainedConfig):
+class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXModelJapanese`]. It is used to instantiate
     a GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTNeoXJapanese
     [abeja/gpt-neox-japanese-2.7b](https://huggingface.co/abeja/gpt-neox-japanese-2.7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Default configs is set as 2.7B model
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Default configs is set as 2.7B model
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -50,10 +49,6 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
             intermediate_multiple_size.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
-        rotary_pct (`float`, *optional*, defaults to 1.00):
-            percentage of hidden dimensions to allocate to rotary embeddings
-        rotary_emb_base (`int`, *optional*, defaults to 10000)
-            base for computing rotary embeddings frequency
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -63,8 +58,10 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        weight_tying (`bool`, *optional*, defaults to `True`):
-            Whhether or not use weight tying between input and output embedding weight
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -83,30 +80,28 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "gpt_neox_japanese"
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=2560,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        intermediate_multiple_size=4,
-        hidden_act="gelu",
-        rotary_pct=1.00,
-        rotary_emb_base=10000,
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        use_cache=True,
-        bos_token_id=31996,
-        eos_token_id=31999,
-        weight_tying=True,
-        attention_dropout=0.1,
-        hidden_dropout=0.0,
-        **kwargs
+        vocab_size: Optional[int] = 32000,
+        hidden_size: Optional[int] = 2560,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        intermediate_multiple_size: Optional[int] = 4,
+        hidden_act: Optional[str] = "gelu",
+        max_position_embeddings: Optional[int] = 2048,
+        initializer_range: Optional[float] = 0.02,
+        layer_norm_eps: Optional[int] = 1e-5,
+        use_cache: Optional[bool] = True,
+        bos_token_id: Optional[int] = 31996,
+        eos_token_id: Optional[int] = 31999,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        attention_dropout: Optional[float] = 0.1,
+        hidden_dropout: Optional[float] = 0.0,
+        **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -114,11 +109,27 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_multiple_size = intermediate_multiple_size
         self.hidden_act = hidden_act
-        self.rotary_pct = rotary_pct
-        self.rotary_emb_base = rotary_emb_base
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.weight_tying = weight_tying
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
+        self.rope_parameters = rope_parameters
+
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        # Model uses non-standard naming for rope params, overwrite!
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
+        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
+
+
+__all__ = ["GPTNeoXJapaneseConfig"]

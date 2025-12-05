@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,46 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import re
 import shutil
 import tempfile
 import unittest
-from typing import Tuple
+from functools import cached_property
 
-from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
-from transformers.utils import cached_property, is_tf_available, is_torch_available
+from transformers import BatchEncoding, PerceiverTokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
-
-
 class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "deepmind/language-perceiver"
     tokenizer_class = PerceiverTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = PerceiverTokenizer()
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     @cached_property
     def perceiver_tokenizer(self):
         return PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
 
-    def get_tokenizer(self, **kwargs) -> PerceiverTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PerceiverTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         # XXX The default common tokenizer tests assume that every ID is decodable on its own.
         # This assumption is invalid for Perceiver because single bytes might not be
         # valid utf-8 (byte 128 for instance).
@@ -114,16 +105,11 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_prepare_batch_integration(self):
         tokenizer = self.perceiver_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        # fmt: off
-        expected_src_tokens = [4, 71, 38, 114, 117, 116, 109, 38, 118, 103, 120, 103, 109, 120, 103, 118, 110, 38, 108, 117, 120, 38, 121, 123, 115, 115, 103, 120, 111, 128, 103, 122, 111, 117, 116, 52, 5, 0]
-        # fmt: on
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        expected_src_tokens = [4, 71, 38, 114, 117, 116, 109, 38, 118, 103, 120, 103, 109, 120, 103, 118, 110, 38, 108, 117, 120, 38, 121, 123, 115, 115, 103, 120, 111, 128, 103, 122, 111, 117, 116, 52, 5, 0]  # fmt: skip
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         self.assertIsInstance(batch, BatchEncoding)
 
-        if FRAMEWORK != "jax":
-            result = list(batch.input_ids.numpy()[0])
-        else:
-            result = list(batch.input_ids.tolist()[0])
+        result = list(batch.input_ids.numpy()[0])
 
         self.assertListEqual(expected_src_tokens, result)
 
@@ -133,7 +119,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_empty_target_text(self):
         tokenizer = self.perceiver_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids are returned and no decoder_input_ids
         self.assertIn("input_ids", batch)
         self.assertIn("attention_mask", batch)
@@ -147,11 +133,11 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         targets = tokenizer(
-            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt"
         )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
-    # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
+    # cannot use default save_and_load_tokenizer test method because tokenizer has no vocab
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()
@@ -166,7 +152,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 
@@ -182,18 +168,20 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Isolate this from the other tests because we save additional tokens/etc
                 tmpdirname = tempfile.mkdtemp()
 
-                sample_text = " He is very happy, UNwant\u00E9d,running"
+                sample_text = " He is very happy, UNwant\u00e9d,running"
                 tokenizer.add_tokens(["bim", "bambam"])
-                additional_special_tokens = tokenizer.additional_special_tokens
-                additional_special_tokens.append("new_additional_special_token")
-                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
+                extra_special_tokens = tokenizer.extra_special_tokens
+                extra_special_tokens.append("new_extra_special_token")
+                tokenizer.add_special_tokens(
+                    {"extra_special_tokens": extra_special_tokens}, replace_extra_special_tokens=False
+                )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 
                 after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
                 after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
                 self.assertListEqual(before_tokens, after_tokens)
-                self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+                self.assertIn("new_extra_special_token", after_tokenizer.extra_special_tokens)
                 self.assertEqual(after_tokenizer.model_max_length, 42)
 
                 tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
@@ -201,88 +189,20 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    # There is a conflict between the default value of extra_ids and adding a new special token through additional_special_tokens
-    # We need to add the extra_ids in the list of the arg additional_special_tokens
-    def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
-        tokenizer_list = []
-        if self.test_slow_tokenizer:
-            tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))
-
-        if self.test_rust_tokenizer:
-            tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
-
-        for tokenizer_class, tokenizer_utils in tokenizer_list:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                tokenizer_utils.save_pretrained(tmp_dir)
-
-                with open(os.path.join(tmp_dir, "special_tokens_map.json"), encoding="utf-8") as json_file:
-                    special_tokens_map = json.load(json_file)
-
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), encoding="utf-8") as json_file:
-                    tokenizer_config = json.load(json_file)
-
-                added_tokens_extra_ids = [f"<extra_id_{i}>" for i in range(125)]
-
-                special_tokens_map["additional_special_tokens"] = added_tokens_extra_ids + [
-                    "an_additional_special_token"
-                ]
-                tokenizer_config["additional_special_tokens"] = added_tokens_extra_ids + [
-                    "an_additional_special_token"
-                ]
-
-                with open(os.path.join(tmp_dir, "special_tokens_map.json"), "w", encoding="utf-8") as outfile:
-                    json.dump(special_tokens_map, outfile)
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as outfile:
-                    json.dump(tokenizer_config, outfile)
-
-                # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
-                # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
-                # "special_tokens_map.json" files
-                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                )
-                self.assertIn(
-                    "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
-                )
-                self.assertEqual(
-                    ["an_additional_special_token"],
-                    tokenizer_without_change_in_init.convert_ids_to_tokens(
-                        tokenizer_without_change_in_init.convert_tokens_to_ids(["an_additional_special_token"])
-                    ),
-                )
-
-                # Now we test that we can change the value of additional_special_tokens in the from_pretrained
-                new_added_tokens = added_tokens_extra_ids + [AddedToken("a_new_additional_special_token", lstrip=True)]
-                tokenizer = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                    additional_special_tokens=new_added_tokens,
-                )
-
-                self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
-                self.assertEqual(
-                    ["a_new_additional_special_token"],
-                    tokenizer.convert_ids_to_tokens(
-                        tokenizer.convert_tokens_to_ids(["a_new_additional_special_token"])
-                    ),
-                )
-
     def test_decode_invalid_byte_id(self):
         tokenizer = self.perceiver_tokenizer
         self.assertEqual(tokenizer.decode([178]), "�")
 
-    # tokenizer can be instantiated without any pretrained files, so no need for pretrained tokenizer list
-    def test_pretrained_model_lists(self):
-        pass
-
-    # tokenizer does not have vocabulary
+    @unittest.skip(reason="tokenizer does not have vocabulary")
     def test_get_vocab(self):
         pass
 
-    # inputs cannot be pretokenized since ids depend on whole input string and not just on single characters
+    @unittest.skip(reason="inputs cannot be pretokenized")
     def test_pretokenized_inputs(self):
+        # inputs cannot be pretokenized since ids depend on whole input string and not just on single characters
         pass
 
-    # tests all ids in vocab => vocab doesn't exist so unnecessary to test
+    @unittest.skip(reason="vocab does not exist")
     def test_conversion_reversible(self):
         pass
 

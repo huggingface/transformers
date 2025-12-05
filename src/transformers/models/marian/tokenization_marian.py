@@ -13,16 +13,16 @@
 # limitations under the License.
 import json
 import os
-import re
 import warnings
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import sentencepiece
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -35,29 +35,13 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "source_spm": {
-        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/source.spm"
-    },
-    "target_spm": {
-        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/target.spm"
-    },
-    "vocab": {
-        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json"
-    },
-    "tokenizer_config_file": {
-        "Helsinki-NLP/opus-mt-en-de": (
-            "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/tokenizer_config.json"
-        )
-    },
-}
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"Helsinki-NLP/opus-mt-en-de": 512}
-PRETRAINED_INIT_CONFIGURATION = {}
+SPIECE_UNDERLINE = "▁"
 
 # Example URL https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json
 
 
+@requires(backends=("sentencepiece",))
 class MarianTokenizer(PreTrainedTokenizer):
     r"""
     Construct a Marian tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -85,7 +69,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             The token used for padding, for example when batching sequences of different lengths.
         model_max_length (`int`, *optional*, defaults to 512):
             The maximum sentence length the model accepts.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
+        additional_special_tokens (`list[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
@@ -106,23 +90,19 @@ class MarianTokenizer(PreTrainedTokenizer):
     Examples:
 
     ```python
-    >>> from transformers import MarianTokenizer
+    >>> from transformers import MarianForCausalLM, MarianTokenizer
 
+    >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
     >>> inputs = tokenizer(src_texts, text_target=tgt_texts, return_tensors="pt", padding=True)
-    # keys  [input_ids, attention_mask, labels].
 
     >>> outputs = model(**inputs)  # should work
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
-    language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
         self,
@@ -136,32 +116,18 @@ class MarianTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         model_max_length=512,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         separate_vocabs=False,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
-            source_lang=source_lang,
-            target_lang=target_lang,
-            unk_token=unk_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            model_max_length=model_max_length,
-            sp_model_kwargs=self.sp_model_kwargs,
-            target_vocab_file=target_vocab_file,
-            separate_vocabs=separate_vocabs,
-            **kwargs,
-        )
         assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
 
         self.separate_vocabs = separate_vocabs
         self.encoder = load_json(vocab)
-        if self.unk_token not in self.encoder:
-            raise KeyError("<unk> token must be in vocab")
-        assert self.pad_token in self.encoder
+        if str(unk_token) not in self.encoder:
+            raise KeyError("<unk> token must be in the vocab")
 
         if separate_vocabs:
             self.target_encoder = load_json(target_vocab_file)
@@ -185,6 +151,22 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         self._setup_normalizer()
 
+        self._decode_use_source_tokenizer = False
+
+        super().__init__(
+            # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
+            source_lang=source_lang,
+            target_lang=target_lang,
+            unk_token=unk_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            model_max_length=model_max_length,
+            sp_model_kwargs=self.sp_model_kwargs,
+            target_vocab_file=target_vocab_file,
+            separate_vocabs=separate_vocabs,
+            **kwargs,
+        )
+
     def _setup_normalizer(self):
         try:
             from sacremoses import MosesPunctNormalizer
@@ -199,34 +181,46 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.punc_normalizer(x) if x else ""
 
     def _convert_token_to_id(self, token):
-        return self.current_encoder.get(token, self.current_encoder[self.unk_token])
+        if token in self.current_encoder:
+            return self.current_encoder[token]
+        # The Marian vocab is not aligned with the SentencePiece IDs, so falling back to raw
+        # SentencePiece indices would map to unrelated tokens. Treat such pieces as unknown.
+        return self.current_encoder[self.unk_token]
 
     def remove_language_code(self, text: str):
         """Remove language codes like >>fr<< before sentencepiece"""
-        match = self.language_code_re.match(text)
-        code: list = [match.group(0)] if match else []
-        return code, self.language_code_re.sub("", text)
+        code = []
+        if text.startswith(">>") and (end_loc := text.find("<<")) != -1:
+            code.append(text[: end_loc + 2])
+            text = text[end_loc + 2 :]
+        return code, text
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         code, text = self.remove_language_code(text)
         pieces = self.current_spm.encode(text, out_type=str)
         return code + pieces
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the decoder."""
-        return self.decoder.get(index, self.unk_token)
+        if index in self.decoder:
+            return self.decoder[index]
+        # Fall back to SPM model for IDs not in external vocab
+        spm_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
+        piece = spm_model.IdToPiece(index)
+        return piece if piece else self.unk_token
 
     def batch_decode(self, sequences, **kwargs):
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).
@@ -234,7 +228,7 @@ class MarianTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `List[str]`: The list of decoded sentences.
+            `list[str]`: The list of decoded sentences.
         """
         return super().batch_decode(sequences, **kwargs)
 
@@ -246,12 +240,13 @@ class MarianTokenizer(PreTrainedTokenizer):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             use_source_tokenizer (`bool`, *optional*, defaults to `False`):
                 Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
                 problems).
@@ -263,7 +258,24 @@ class MarianTokenizer(PreTrainedTokenizer):
         """
         return super().decode(token_ids, **kwargs)
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def _decode(
+        self,
+        token_ids,
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: Optional[bool] = None,
+        **kwargs,
+    ) -> str:
+        """Internal decode method that handles use_source_tokenizer parameter."""
+        default_use_source = not self.separate_vocabs
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", default_use_source)
+        return super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
         sp_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
         current_sub_tokens = []
@@ -276,9 +288,10 @@ class MarianTokenizer(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
         out_string += sp_model.decode_pieces(current_sub_tokens)
+        out_string = out_string.replace(SPIECE_UNDERLINE, " ")
         return out_string.strip()
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
             return token_ids_0 + [self.eos_token_id]
@@ -298,7 +311,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -343,7 +356,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         return tuple(saved_files)
 
-    def get_vocab(self) -> Dict:
+    def get_vocab(self) -> dict:
         return self.get_src_vocab()
 
     def get_src_vocab(self):
@@ -352,19 +365,21 @@ class MarianTokenizer(PreTrainedTokenizer):
     def get_tgt_vocab(self):
         return dict(self.target_encoder, **self.added_tokens_decoder)
 
-    def __getstate__(self) -> Dict:
+    def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         state.update(
-            {k: None for k in ["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"]}
+            dict.fromkeys(["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"])
         )
         return state
 
-    def __setstate__(self, d: Dict) -> None:
+    def __setstate__(self, d: dict) -> None:
         self.__dict__ = d
 
         # for backward compatibility
         if not hasattr(self, "sp_model_kwargs"):
             self.sp_model_kwargs = {}
+        if not hasattr(self, "_decode_use_source_tokenizer"):
+            self._decode_use_source_tokenizer = False
 
         self.spm_source, self.spm_target = (load_spm(f, self.sp_model_kwargs) for f in self.spm_files)
         self.current_spm = self.spm_source
@@ -380,8 +395,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
@@ -391,7 +406,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
 
-def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
+def load_spm(path: str, sp_model_kwargs: dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(path)
     return spm
@@ -402,6 +417,9 @@ def save_json(data, path: str) -> None:
         json.dump(data, f, indent=2)
 
 
-def load_json(path: str) -> Union[Dict, List]:
+def load_json(path: str) -> Union[dict, list]:
     with open(path, "r") as f:
         return json.load(f)
+
+
+__all__ = ["MarianTokenizer"]

@@ -12,49 +12,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Funnel Transformer model configuration"""
+"""Funnel Transformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/config.json",
-    "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/config.json",
-    "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/config.json",
-    "funnel-transformer/medium-base": "https://huggingface.co/funnel-transformer/medium-base/resolve/main/config.json",
-    "funnel-transformer/intermediate": (
-        "https://huggingface.co/funnel-transformer/intermediate/resolve/main/config.json"
-    ),
-    "funnel-transformer/intermediate-base": (
-        "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/config.json"
-    ),
-    "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/config.json",
-    "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/config.json",
-    "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/config.json",
-    "funnel-transformer/xlarge-base": "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/config.json",
-}
 
-
-class FunnelConfig(PretrainedConfig):
+class FunnelConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FunnelModel`] or a [`TFBertModel`]. It is used to
+    This is the configuration class to store the configuration of a [`FunnelModel`]. It is used to
     instantiate a Funnel Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Funnel
     Transformer [funnel-transformer/small](https://huggingface.co/funnel-transformer/small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Funnel transformer. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
-        block_sizes (`List[int]`, *optional*, defaults to `[4, 4, 4]`):
+            by the `inputs_ids` passed when calling [`FunnelModel`].
+        block_sizes (`list[int]`, *optional*, defaults to `[4, 4, 4]`):
             The sizes of the blocks used in the model.
-        block_repeats (`List[int]`, *optional*):
+        block_repeats (`list[int]`, *optional*):
             If passed along, each layer of each block is repeated the number of times indicated.
         num_decoder_layers (`int`, *optional*, defaults to 2):
             The number of layers in the decoder (when not using the base model).
@@ -75,18 +58,13 @@ class FunnelConfig(PretrainedConfig):
             The dropout probability for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability used between the two layers of the feed-forward blocks.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 3):
-            The vocabulary size of the `token_type_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
         initializer_range (`float`, *optional*, defaults to 0.1):
             The upper bound of the *uniform initializer* for initializing all weight matrices in attention layers.
         initializer_std (`float`, *optional*):
             The standard deviation of the *normal initializer* for initializing the embedding matrix and the weight of
             linear layers. Will default to 1 for the embedding matrix and the value given by Xavier initialization for
             linear layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-9):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-09):
             The epsilon used by the layer normalization layers.
         pooling_type (`str`, *optional*, defaults to `"mean"`):
             Possible values are `"mean"` or `"max"`. The way pooling is performed at the beginning of each block.
@@ -95,12 +73,13 @@ class FunnelConfig(PretrainedConfig):
             is faster on TPU.
         separate_cls (`bool`, *optional*, defaults to `True`):
             Whether or not to separate the cls token when applying pooling.
-        truncate_seq (`bool`, *optional*, defaults to `False`):
+        truncate_seq (`bool`, *optional*, defaults to `True`):
             When using `separate_cls`, whether or not to truncate the last token when pooling, to avoid getting a
             sequence length that is not a multiple of 2.
-        pool_q_only (`bool`, *optional*, defaults to `False`):
+        pool_q_only (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
     """
+
     model_type = "funnel"
     attribute_map = {
         "hidden_size": "d_model",
@@ -121,8 +100,6 @@ class FunnelConfig(PretrainedConfig):
         hidden_dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.0,
-        max_position_embeddings=512,
-        type_vocab_size=3,
         initializer_range=0.1,
         initializer_std=None,
         layer_norm_eps=1e-9,
@@ -131,14 +108,14 @@ class FunnelConfig(PretrainedConfig):
         separate_cls=True,
         truncate_seq=True,
         pool_q_only=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
         self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats
-        assert len(block_sizes) == len(
-            self.block_repeats
-        ), "`block_sizes` and `block_repeats` should have the same length."
+        assert len(block_sizes) == len(self.block_repeats), (
+            "`block_sizes` and `block_repeats` should have the same length."
+        )
         self.num_decoder_layers = num_decoder_layers
         self.d_model = d_model
         self.n_head = n_head
@@ -148,8 +125,6 @@ class FunnelConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.initializer_std = initializer_std
         self.layer_norm_eps = layer_norm_eps
@@ -186,3 +161,6 @@ class FunnelConfig(PretrainedConfig):
     @num_blocks.setter
     def num_blocks(self, value):
         raise NotImplementedError("This model does not support the setting of `num_blocks`. Please set `block_sizes`.")
+
+
+__all__ = ["FunnelConfig"]

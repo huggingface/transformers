@@ -21,10 +21,10 @@ URL: https://github.com/NVlabs/GroupViT
 
 import argparse
 
+import requests
 import torch
 from PIL import Image
 
-import requests
 from transformers import CLIPProcessor, GroupViTConfig, GroupViTModel
 
 
@@ -85,7 +85,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -163,7 +163,7 @@ def convert_groupvit_checkpoint(
     config = GroupViTConfig()
     model = GroupViTModel(config).eval()
 
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     new_state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     assert missing_keys == ["text_model.embeddings.position_ids"]
@@ -191,8 +191,8 @@ def convert_groupvit_checkpoint(
 
     if push_to_hub:
         print("Pushing to the hub...")
-        processor.push_to_hub(model_name, organization="nielsr")
-        model.push_to_hub(model_name, organization="nielsr")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Whether or not to push the converted model and processor to the 🤗 hub using the provided `model_name`.",
+        help="Whether or not to push the converted model and processor to the Hugging Face hub using the provided `model_name`.",
     )
     args = parser.parse_args()
 

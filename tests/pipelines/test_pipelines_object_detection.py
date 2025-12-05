@@ -14,17 +14,29 @@
 
 import unittest
 
+import datasets
+from huggingface_hub import ObjectDetectionOutputElement
+
 from transformers import (
     MODEL_FOR_OBJECT_DETECTION_MAPPING,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForObjectDetection,
     ObjectDetectionPipeline,
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
+    is_pipeline_test,
+    nested_simplify,
+    require_pytesseract,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -37,17 +49,45 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
+    _dataset = None
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            # we use revision="refs/pr/1" until the PR is merged
+            # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
+            )
+
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        dtype="float32",
+    ):
+        object_detector = ObjectDetectionPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            dtype=dtype,
+        )
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 
     def run_pipeline_test(self, object_detector, examples):
+        self._load_dataset()
         outputs = object_detector("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
 
         self.assertGreater(len(outputs), 0)
@@ -61,19 +101,15 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
                 },
             )
 
-        import datasets
-
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
-
         batch = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "http://images.cocodataset.org/val2017/000000039769.jpg",
             # RGBA
-            dataset[0]["file"],
+            self._dataset[0]["image"],
             # LA
-            dataset[1]["file"],
+            self._dataset[1]["image"],
             # L
-            dataset[2]["file"],
+            self._dataset[2]["image"],
         ]
         batch_outputs = object_detector(batch, threshold=0.0)
 
@@ -89,19 +125,15 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
                         "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
                     },
                 )
-
-    @require_tf
-    @unittest.skip("Object detection not implemented in TF")
-    def test_small_model_tf(self):
-        pass
+                compare_pipeline_output_to_hub_spec(detected_object, ObjectDetectionOutputElement)
 
     @require_torch
     def test_small_model_pt(self):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
 
         model = AutoModelForObjectDetection.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
 
         outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.0)
 
@@ -141,8 +173,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         model_id = "facebook/detr-resnet-50"
 
         model = AutoModelForObjectDetection.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
 
         outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(
@@ -241,5 +273,25 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             [
                 {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
                 {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
+            ],
+        )
+
+    @require_torch
+    @require_pytesseract
+    @slow
+    def test_layoutlm(self):
+        model_id = "Narsil/layoutlmv3-finetuned-funsd"
+        threshold = 0.9993
+
+        object_detector = pipeline("object-detection", model=model_id, threshold=threshold)
+
+        outputs = object_detector(
+            "https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png"
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
             ],
         )

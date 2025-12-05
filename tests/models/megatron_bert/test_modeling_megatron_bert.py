@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MegatronBERT model. """
-
+"""Testing suite for the PyTorch MegatronBERT model."""
 
 import math
 import os
@@ -25,6 +24,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -57,7 +57,7 @@ class MegatronBertModelTester:
         vocab_size=99,
         hidden_size=64,
         embedding_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -152,15 +152,6 @@ class MegatronBertModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = MegatronBertForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_causal_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = MegatronBertForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -266,8 +257,7 @@ class MegatronBertModelTester:
 
 
 @require_torch
-class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MegatronBertModel,
@@ -283,9 +273,22 @@ class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    fx_compatible = True
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MegatronBertModel,
+            "fill-mask": MegatronBertForMaskedLM,
+            "question-answering": MegatronBertForQuestionAnswering,
+            "text-classification": MegatronBertForSequenceClassification,
+            "text-generation": MegatronBertForCausalLM,
+            "token-classification": MegatronBertForTokenClassification,
+            "zero-shot": MegatronBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     # test_resize_embeddings = False
-    test_head_masking = False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -357,7 +360,7 @@ TOLERANCE = 1e-4
 @require_tokenizers
 class MegatronBertModelIntegrationTests(unittest.TestCase):
     @slow
-    @unittest.skip("Model is not available.")
+    @unittest.skip(reason="Model is not available.")
     def test_inference_no_head(self):
         directory = "nvidia/megatron-bert-uncased-345m"
         if "MYDIR" in os.environ:
@@ -376,5 +379,5 @@ class MegatronBertModelIntegrationTests(unittest.TestCase):
             for jj in range(3):
                 a = output[0, ii, jj]
                 b = expected[3 * ii + jj]
-                msg = "ii={} jj={} a={} b={}".format(ii, jj, a, b)
+                msg = f"ii={ii} jj={jj} a={a} b={b}"
                 self.assertTrue(math.isclose(a, b, rel_tol=TOLERANCE, abs_tol=TOLERANCE), msg=msg)

@@ -19,15 +19,15 @@ import socket
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Union
 from zipfile import ZipFile
 
 import numpy as np
 import torch
+from huggingface_hub.hf_api import list_models
 from torch import nn
 from tqdm import tqdm
 
-from huggingface_hub.hf_api import list_models
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 
 
@@ -61,14 +61,14 @@ def load_layers_(layer_lst: nn.ModuleList, opus_state: dict, converter, is_decod
         layer.load_state_dict(sd, strict=False)
 
 
-def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
+def find_pretrained_model(src_lang: str, tgt_lang: str) -> list[str]:
     """Find models that can accept src_lang as input and return tgt_lang as output."""
     prefix = "Helsinki-NLP/opus-mt-"
     model_list = list_models()
-    model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
+    model_ids = [x.id for x in model_list if x.id.startswith("Helsinki-NLP")]
     src_and_targ = [
         remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
-    ]  # + cant be loaded.
+    ]  # + can't be loaded.
     matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
     return matching
 
@@ -94,7 +94,7 @@ def _cast_yaml_str(v):
         return v
 
 
-def cast_marian_config(raw_cfg: Dict[str, str]) -> Dict:
+def cast_marian_config(raw_cfg: dict[str, str]) -> dict:
     return {k: _cast_yaml_str(v) for k, v in raw_cfg.items()}
 
 
@@ -185,12 +185,12 @@ def convert_hf_name_to_opus_name(hf_model_name):
 def get_system_metadata(repo_root):
     import git
 
-    return dict(
-        helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
-        transformers_git_sha=git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
-        port_machine=socket.gethostname(),
-        port_time=time.strftime("%Y-%m-%d-%H:%M"),
-    )
+    return {
+        "helsinki_git_sha": git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
+        "transformers_git_sha": git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
+        "port_machine": socket.gethostname(),
+        "port_time": time.strftime("%Y-%m-%d-%H:%M"),
+    }
 
 
 # docstyle-ignore
@@ -315,7 +315,7 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None, dest_dir=P
     return save_paths
 
 
-def lmap(f, x) -> List:
+def lmap(f, x) -> list:
     return list(map(f, x))
 
 
@@ -366,11 +366,11 @@ def _parse_readme(lns):
 
 def save_tokenizer_config(dest_dir: Path, separate_vocabs=False):
     dname = dest_dir.name.split("-")
-    dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]), separate_vocabs=separate_vocabs)
+    dct = {"target_lang": dname[-1], "source_lang": "-".join(dname[:-1]), "separate_vocabs": separate_vocabs}
     save_json(dct, dest_dir / "tokenizer_config.json")
 
 
-def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
+def add_to_vocab_(vocab: dict[str, int], special_tokens: list[str]):
     start = max(vocab.values()) + 1
     added = 0
     for tok in special_tokens:
@@ -622,6 +622,10 @@ class OpusState:
             bias_tensor = nn.Parameter(torch.FloatTensor(self.final_bias))
             model.model.decoder.embed_tokens.weight = decoder_wemb_tensor
 
+        # handle tied embeddings, otherwise "from_pretrained" loads them incorrectly
+        if self.cfg["tied-embeddings"]:
+            model.lm_head.weight.data = model.model.decoder.embed_tokens.weight.data.clone()
+
         model.final_logits_bias = bias_tensor
 
         if "Wpos" in state_dict:
@@ -631,7 +635,7 @@ class OpusState:
             model.model.decoder.embed_positions.weight = wpos_tensor
 
         if cfg.normalize_embedding:
-            if not ("encoder_emb_ln_scale_pre" in state_dict):
+            if "encoder_emb_ln_scale_pre" not in state_dict:
                 raise ValueError("encoder_emb_ln_scale_pre is not in state dictionary")
             raise NotImplementedError("Need to convert layernorm_embedding")
 
@@ -677,11 +681,11 @@ def convert(source_dir: Path, dest_dir):
 def load_yaml(path):
     import yaml
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
 
 
-def save_json(content: Union[Dict, List], path: str) -> None:
+def save_json(content: Union[dict, list], path: str) -> None:
     with open(path, "w") as f:
         json.dump(content, f)
 
@@ -697,7 +701,12 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model sub dir", default="en-de")
+    parser.add_argument(
+        "--src",
+        type=str,
+        help="path to marian model sub dir. yaml.load will be used to load the configuration file, please be wary of which file you're loading.",
+        default="en-de",
+    )
     parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 

@@ -16,13 +16,63 @@
 # by pytest before any tests are run
 
 import doctest
+import os
 import sys
 import warnings
 from os.path import abspath, dirname, join
 
+import _pytest
+import pytest
+
+from transformers.testing_utils import (
+    HfDoctestModule,
+    HfDocTestParser,
+    is_torch_available,
+    patch_testing_methods_to_collect_info,
+    patch_torch_compile_force_graph,
+)
+from transformers.utils import enable_tf32
+
+
+NOT_DEVICE_TESTS = {
+    "test_tokenization",
+    "test_tokenization_mistral_common",
+    "test_processing",
+    "test_beam_constraints",
+    "test_configuration_utils",
+    "test_data_collator",
+    "test_trainer_callback",
+    "test_trainer_utils",
+    "test_feature_extraction",
+    "test_image_processing",
+    "test_image_processor",
+    "test_image_transforms",
+    "test_optimization",
+    "test_retrieval",
+    "test_config",
+    "test_from_pretrained_no_checkpoint",
+    "test_keep_in_fp32_modules",
+    "test_gradient_checkpointing_backward_compatibility",
+    "test_gradient_checkpointing_enable_disable",
+    "test_torch_save_load",
+    "test_forward_signature",
+    "test_model_get_set_embeddings",
+    "test_model_main_input_name",
+    "test_correct_missing_keys",
+    "test_can_use_safetensors",
+    "test_load_save_without_tied_weights",
+    "test_tied_weights_keys",
+    "test_model_weights_reload_no_missing_tied_weights",
+    "test_can_load_ignoring_mismatched_shapes",
+    "test_model_is_small",
+    "ModelTest::test_pipeline_",  # None of the pipeline tests from PipelineTesterMixin (of which XxxModelTest inherits from) are running on device
+    "ModelTester::test_pipeline_",
+    "/repo_utils/",
+    "/utils/",
+}
 
 # allow having multiple repository checkouts and not needing to remember to rerun
-# 'pip install -e .[dev]' when switching between checkouts and running tests.
+# `pip install -e '.[dev]'` when switching between checkouts and running tests.
 git_repo_path = abspath(join(dirname(__file__), "src"))
 sys.path.insert(1, git_repo_path)
 
@@ -32,13 +82,22 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "is_pt_tf_cross_test: mark test to run only when PT and TF interactions are tested"
-    )
-    config.addinivalue_line(
-        "markers", "is_pt_flax_cross_test: mark test to run only when PT and FLAX interactions are tested"
-    )
+    config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
+    config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
+    config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
+    config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
+    config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+    config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
+    config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
+
+    os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
+
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        if any(test_name in item.nodeid for test_name in NOT_DEVICE_TESTS):
+            item.add_marker(pytest.mark.not_device_test)
 
 
 def pytest_addoption(parser):
@@ -62,7 +121,7 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 # Doctest custom flag to ignore output.
-IGNORE_RESULT = doctest.register_optionflag('IGNORE_RESULT')
+IGNORE_RESULT = doctest.register_optionflag("IGNORE_RESULT")
 
 OutputChecker = doctest.OutputChecker
 
@@ -75,3 +134,18 @@ class CustomOutputChecker(OutputChecker):
 
 
 doctest.OutputChecker = CustomOutputChecker
+_pytest.doctest.DoctestModule = HfDoctestModule
+doctest.DocTestParser = HfDocTestParser
+
+if is_torch_available():
+    # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+    # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
+    enable_tf32(False)
+
+    # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
+    # the patched version will always run with `fullgraph=True`.
+    patch_torch_compile_force_graph()
+
+
+if os.environ.get("PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS", "").lower() in ("yes", "true", "on", "y", "1"):
+    patch_testing_methods_to_collect_info()

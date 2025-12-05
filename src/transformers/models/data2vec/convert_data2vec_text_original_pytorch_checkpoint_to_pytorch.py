@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert data2vec checkpoint."""
 
-
 import argparse
 import os
 import pathlib
@@ -24,7 +23,12 @@ import torch
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import Data2VecTextConfig, Data2VecTextForMaskedLM, Data2VecTextForSequenceClassification
+from transformers import (
+    Data2VecTextConfig,
+    Data2VecTextForMaskedLM,
+    Data2VecTextForSequenceClassification,
+    Data2VecTextModel,
+)
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -35,7 +39,6 @@ from transformers.models.bert.modeling_bert import (
 
 # IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
 # File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
-from transformers.models.data2vec.data2vec_text import Data2VecTextModel
 from transformers.utils import logging
 
 
@@ -124,9 +127,9 @@ def convert_data2vec_checkpoint_to_pytorch(
 
         # self-attention output
         self_output: BertSelfOutput = layer.attention.output
-        assert (
-            self_output.dense.weight.shape == data2vec_layer.self_attn.out_proj.weight.shape
-        ), f"Shape for self_output.dense.weight should be {data2vec_layer.self_attn.out_proj.weight.shape}"
+        assert self_output.dense.weight.shape == data2vec_layer.self_attn.out_proj.weight.shape, (
+            f"Shape for self_output.dense.weight should be {data2vec_layer.self_attn.out_proj.weight.shape}"
+        )
         self_output.dense.weight = data2vec_layer.self_attn.out_proj.weight
         self_output.dense.bias = data2vec_layer.self_attn.out_proj.bias
         self_output.LayerNorm.weight = data2vec_layer.self_attn_layer_norm.weight
@@ -134,17 +137,17 @@ def convert_data2vec_checkpoint_to_pytorch(
 
         # intermediate
         intermediate: BertIntermediate = layer.intermediate
-        assert (
-            intermediate.dense.weight.shape == data2vec_layer.fc1.weight.shape
-        ), f"Shape for intermediate.dense.weight should be {data2vec_layer.fc1.weight.shape}"
+        assert intermediate.dense.weight.shape == data2vec_layer.fc1.weight.shape, (
+            f"Shape for intermediate.dense.weight should be {data2vec_layer.fc1.weight.shape}"
+        )
         intermediate.dense.weight = data2vec_layer.fc1.weight
         intermediate.dense.bias = data2vec_layer.fc1.bias
 
         # output
         bert_output: BertOutput = layer.output
-        assert (
-            bert_output.dense.weight.shape == data2vec_layer.fc2.weight.shape
-        ), f"Shape for bert_output.dense.weight should be {data2vec_layer.fc2.weight.shape}"
+        assert bert_output.dense.weight.shape == data2vec_layer.fc2.weight.shape, (
+            f"Shape for bert_output.dense.weight should be {data2vec_layer.fc2.weight.shape}"
+        )
         bert_output.dense.weight = data2vec_layer.fc2.weight
         bert_output.dense.bias = data2vec_layer.fc2.bias
         bert_output.LayerNorm.weight = data2vec_layer.final_layer_norm.weight
@@ -177,7 +180,7 @@ def convert_data2vec_checkpoint_to_pytorch(
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
     print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-7
     success = torch.allclose(our_output, their_output, atol=1e-3)
-    print("Do both models output the same tensors?", "🔥" if success else "💩")
+    print("Do both models output the same tensors?", "[PASS]" if success else "[FAIL]")
     if not success:
         raise Exception("Something went wRoNg")
 

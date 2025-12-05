@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +30,7 @@ if is_torch_available():
 @require_tokenizers
 class MegatronGPT2IntegrationTest(unittest.TestCase):
     @slow
-    @unittest.skip("Model is not available.")
+    @unittest.skip(reason="Model is not available.")
     def test_inference_no_head(self):
         directory = "nvidia/megatron-gpt2-345m/"
         if "MYDIR" in os.environ:

@@ -11,47 +11,53 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import inspect
-from typing import Callable, List, Optional, Set, Tuple, Union
+from collections.abc import Callable
+from functools import lru_cache, wraps
 
 import torch
-from packaging import version
-from torch import _softmax_backward_data, nn
+from safetensors.torch import storage_ptr, storage_size
+from torch import nn
 
-from .utils import logging
+from .utils import (
+    is_torch_greater_or_equal,
+    is_torch_xla_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
-parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
+is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
+is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+is_torch_greater_or_equal_than_2_4 = is_torch_greater_or_equal("2.4", accept_dev=True)
+is_torch_greater_or_equal_than_2_3 = is_torch_greater_or_equal("2.3", accept_dev=True)
 
-is_torch_less_than_1_8 = parsed_torch_version_base < version.parse("1.8.0")
-is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse("1.10")
-is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
+# For backwards compatibility (e.g. some remote codes on Hub using those variables).
+is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
+is_torch_greater_or_equal_than_2_1 = is_torch_greater_or_equal("2.1", accept_dev=True)
+is_torch_greater_or_equal_than_2_0 = is_torch_greater_or_equal("2.0", accept_dev=True)
+is_torch_greater_or_equal_than_1_13 = is_torch_greater_or_equal("1.13", accept_dev=True)
+is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_dev=True)
+
+# Cache this result has it's a C FFI call which can be pretty time-consuming
+_torch_distributed_available = torch.distributed.is_available()
 
 
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if is_torch_less_than_1_8:
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")
-
-
-def softmax_backward_data(parent, grad_output, output, dim, self):
+def softmax_backward_data(parent, grad_output, output):
     """
     A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
     to the torch version detected.
     """
 
-    if is_torch_less_than_1_11:
-        return _softmax_backward_data(grad_output, output, parent.dim, self)
-    else:
-        return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
+    from torch import _softmax_backward_data
+
+    return _softmax_backward_data(grad_output, output, parent.dim, output.dtype)
 
 
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
@@ -69,12 +75,12 @@ def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) 
         `torch.nn.Linear`: The pruned layer as a new layer with `requires_grad=True`.
     """
     index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
+    W = layer.weight.index_select(dim, index).detach().clone()
     if layer.bias is not None:
         if dim == 1:
-            b = layer.bias.clone().detach()
+            b = layer.bias.detach().clone()
         else:
-            b = layer.bias[index].clone().detach()
+            b = layer.bias[index].detach().clone()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
     new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
@@ -102,10 +108,13 @@ class Conv1D(nn.Module):
     def __init__(self, nf, nx):
         super().__init__()
         self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
+        self.nx = nx
+        self.weight = nn.Parameter(torch.empty(nx, nf))
         self.bias = nn.Parameter(torch.zeros(nf))
+        nn.init.normal_(self.weight, std=0.02)
+
+    def __repr__(self) -> str:
+        return "Conv1D(nf={nf}, nx={nx})".format(**self.__dict__)
 
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)
@@ -114,65 +123,11 @@ class Conv1D(nn.Module):
         return x
 
 
-def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> Conv1D:
-    """
-    Prune a Conv1D layer to keep only entries in index. A Conv1D work as a Linear layer (see e.g. BERT) but the weights
-    are transposed.
-
-    Used to remove heads.
-
-    Args:
-        layer ([`~pytorch_utils.Conv1D`]): The layer to prune.
-        index (`torch.LongTensor`): The indices to keep in the layer.
-        dim (`int`, *optional*, defaults to 1): The dimension on which to keep the indices.
-
-    Returns:
-        [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
-    """
-    index = index.to(layer.weight.device)
-    W = layer.weight.index_select(dim, index).clone().detach()
-    if dim == 0:
-        b = layer.bias.clone().detach()
-    else:
-        b = layer.bias[index].clone().detach()
-    new_size = list(layer.weight.size())
-    new_size[dim] = len(index)
-    new_layer = Conv1D(new_size[1], new_size[0]).to(layer.weight.device)
-    new_layer.weight.requires_grad = False
-    new_layer.weight.copy_(W.contiguous())
-    new_layer.weight.requires_grad = True
-    new_layer.bias.requires_grad = False
-    new_layer.bias.copy_(b.contiguous())
-    new_layer.bias.requires_grad = True
-    return new_layer
-
-
-def prune_layer(
-    layer: Union[nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
-) -> Union[nn.Linear, Conv1D]:
-    """
-    Prune a Conv1D or linear layer to keep only entries in index.
-
-    Used to remove heads.
-
-    Args:
-        layer (`Union[torch.nn.Linear, Conv1D]`): The layer to prune.
-        index (`torch.LongTensor`): The indices to keep in the layer.
-        dim (`int`, *optional*): The dimension on which to keep the indices.
-
-    Returns:
-        `torch.nn.Linear` or [`~pytorch_utils.Conv1D`]: The pruned layer as a new layer with `requires_grad=True`.
-    """
-    if isinstance(layer, nn.Linear):
-        return prune_linear_layer(layer, index, dim=0 if dim is None else dim)
-    elif isinstance(layer, Conv1D):
-        return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
-    else:
-        raise ValueError(f"Can't prune layer of class {layer.__class__}")
-
-
 def apply_chunking_to_forward(
-    forward_fn: Callable[..., torch.Tensor], chunk_size: int, chunk_dim: int, *input_tensors
+    forward_fn: Callable[..., torch.Tensor],
+    chunk_size: int,
+    chunk_dim: int,
+    *input_tensors,
 ) -> torch.Tensor:
     """
     This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension
@@ -188,7 +143,7 @@ def apply_chunking_to_forward(
             The chunk size of a chunked tensor: `num_chunks = len(input_tensors[0]) / chunk_size`.
         chunk_dim (`int`):
             The dimension over which the `input_tensors` should be chunked.
-        input_tensors (`Tuple[torch.Tensor]`):
+        input_tensors (`tuple[torch.Tensor]`):
             The input tensors of `forward_fn` which will be chunked
 
     Returns:
@@ -246,27 +201,84 @@ def apply_chunking_to_forward(
     return forward_fn(*input_tensors)
 
 
-def find_pruneable_heads_and_indices(
-    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
-) -> Tuple[Set[int], torch.LongTensor]:
+def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None = None) -> tuple[torch.Tensor, ...]:
     """
-    Finds the heads and their indices taking `already_pruned_heads` into account.
+    Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
+
+    Reference: https://pytorch.org/docs/1.13/generated/torch.meshgrid.html
+    """
+    return torch.meshgrid(*tensors, indexing=indexing)
+
+
+def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
+    """
+    Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
+    example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
+    guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
+    non-overlapping lifetimes may have the same id.
+    """
+    if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+        from torch.distributed.tensor import DTensor
+
+        if isinstance(tensor, DTensor):
+            local_tensor = tensor.to_local()
+            return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
+
+    if tensor.device.type == "xla" and is_torch_xla_available():
+        # NOTE: xla tensors dont have storage
+        # use some other unique id to distinguish.
+        # this is a XLA tensor, it must be created using torch_xla's
+        # device. So the following import is safe:
+        import torch_xla
+
+        unique_id = torch_xla._XLAC._xla_get_tensor_id(tensor)
+    else:
+        unique_id = storage_ptr(tensor)
+
+    return tensor.device, unique_id, storage_size(tensor)
+
+
+def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int) -> torch.Tensor:
+    """
+    Same as `torch.isin` without flags, but MPS-friendly. We can remove this function when we stop supporting
+    torch <= 2.3. See https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
 
     Args:
-        heads (`List[int]`): List of the indices of heads to prune.
-        n_heads (`int`): The number of heads in the model.
-        head_size (`int`): The size of each head.
-        already_pruned_heads (`Set[int]`): A set of already pruned heads.
+        elements (`torch.Tensor`): Input elements
+        test_elements (`torch.Tensor` or `int`): The elements to check against.
 
     Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the remaining heads and their corresponding indices.
+        `torch.Tensor`: A boolean tensor of the same shape as `elements` that is True for `elements` in `test_elements`
+        and False otherwise
     """
-    mask = torch.ones(n_heads, head_size)
-    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
-    for head in heads:
-        # Compute how many pruned heads are before the head and move the index accordingly
-        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
-        mask[head] = 0
-    mask = mask.view(-1).contiguous().eq(1)
-    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
-    return heads, index
+
+    if elements.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
+        test_elements = torch.tensor(test_elements)
+        if test_elements.ndim == 0:
+            test_elements = test_elements.unsqueeze(0)
+        return elements.tile(test_elements.shape[0], 1).eq(test_elements.unsqueeze(1)).sum(dim=0).bool().squeeze()
+    else:
+        # Note: don't use named arguments in `torch.isin`, see https://github.com/pytorch/pytorch/issues/126045
+        return torch.isin(elements, test_elements)
+
+
+@wraps(lru_cache)
+def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
+    """
+    LRU cache decorator from standard functools library, but with a workaround to disable
+    caching when torchdynamo is compiling. Expected to work with class methods.
+    """
+
+    def decorator(func):
+        func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if is_torchdynamo_compiling():
+                return func(*args, **kwargs)
+            else:
+                return func_with_cache(*args, **kwargs)
+
+        return wrapper
+
+    return decorator

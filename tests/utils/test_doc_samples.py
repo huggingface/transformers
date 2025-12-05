@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,32 +11,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import doctest
 import logging
 import os
 import unittest
 from pathlib import Path
-from typing import List, Union
 
 import transformers
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import require_torch, slow
 
 
 logger = logging.getLogger()
 
 
-@unittest.skip("Temporarily disable the doc tests.")
+@unittest.skip(reason="Temporarily disable the doc tests.")
 @require_torch
-@require_tf
 @slow
 class TestCodeExamples(unittest.TestCase):
     def analyze_directory(
         self,
         directory: Path,
-        identifier: Union[str, None] = None,
-        ignore_files: Union[List[str], None] = None,
-        n_identifier: Union[str, List[str], None] = None,
+        identifier: str | None = None,
+        ignore_files: list[str] | None = None,
+        n_identifier: str | list[str] | None = None,
         only_modules: bool = True,
     ):
         """
@@ -57,7 +53,7 @@ class TestCodeExamples(unittest.TestCase):
             files = [file for file in files if identifier in file]
 
         if n_identifier is not None:
-            if isinstance(n_identifier, List):
+            if isinstance(n_identifier, list):
                 for n_ in n_identifier:
                     files = [file for file in files if n_ not in file]
             else:

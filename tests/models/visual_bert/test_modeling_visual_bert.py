@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VisualBERT model. """
+"""Testing suite for the PyTorch VisualBERT model."""
 
 import copy
 import unittest
@@ -22,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -35,7 +35,6 @@ if is_torch_available():
         VisualBertForVisualReasoning,
         VisualBertModel,
     )
-    from transformers.models.visual_bert.modeling_visual_bert import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class VisualBertModelTester:
@@ -53,7 +52,7 @@ class VisualBertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -299,8 +298,7 @@ class VisualBertModelTester:
 
 
 @require_torch
-class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             VisualBertModel,
@@ -313,13 +311,12 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_torchscript = False
-    test_pruning = False
+    pipeline_model_mapping = {"feature-extraction": VisualBertModel} if is_torch_available() else {}
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
         if model_class == VisualBertForMultipleChoice:
-            for key in inputs_dict.keys():
+            for key in inputs_dict:
                 value = inputs_dict[key]
                 if isinstance(value, torch.Tensor) and value.ndim > 1:
                     if key != "visual_embeds":
@@ -413,7 +410,8 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -522,12 +520,6 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_pretraining()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
@@ -550,9 +542,27 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VisualBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "uclanlp/visualbert-vqa"
+        model = VisualBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
 
 @require_torch
@@ -587,14 +597,14 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
             [[[-5.1858, -5.1903, -4.9142], [-6.2214, -5.9238, -5.8381], [-6.3027, -5.9939, -5.9297]]]
         )
 
-        self.assertTrue(torch.allclose(output.prediction_logits[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output.prediction_logits[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_shape_2 = torch.Size((1, 2))
         self.assertEqual(output.seq_relationship_logits.shape, expected_shape_2)
 
         expected_slice_2 = torch.tensor([[0.7393, 0.1754]])
 
-        self.assertTrue(torch.allclose(output.seq_relationship_logits, expected_slice_2, atol=1e-4))
+        torch.testing.assert_close(output.seq_relationship_logits, expected_slice_2, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_vqa(self):
@@ -626,7 +636,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
             [[-8.9898, 3.0803, -1.8016, 2.4542, -8.3420, -2.0224, -3.3124, -4.4139, -3.1491, -3.8997]]
         )
 
-        self.assertTrue(torch.allclose(output.logits[:, :10], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output.logits[:, :10], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_nlvr(self):
@@ -656,7 +666,7 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[-1.1436, 0.8900]])
 
-        self.assertTrue(torch.allclose(output.logits, expected_slice, atol=1e-4))
+        torch.testing.assert_close(output.logits, expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_vcr(self):
@@ -687,4 +697,4 @@ class VisualBertModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[-7.7697, -7.7697, -7.7697, -7.7697]])
 
-        self.assertTrue(torch.allclose(output.logits, expected_slice, atol=1e-4))
+        torch.testing.assert_close(output.logits, expected_slice, rtol=1e-4, atol=1e-4)

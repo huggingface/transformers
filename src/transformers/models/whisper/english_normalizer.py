@@ -14,16 +14,11 @@
 # limitations under the License.
 
 import re
-from fractions import Fraction
-from typing import Iterator, List, Match, Optional, Union
-
-from ...utils import is_more_itertools_available
-
-
-if is_more_itertools_available():
-    from more_itertools import windowed
-
 import unicodedata
+from collections.abc import Iterator
+from fractions import Fraction
+from re import Match
+from typing import Optional, Union
 
 import regex
 
@@ -196,28 +191,26 @@ class EnglishNumberNormalizer:
         }
         self.specials = {"and", "double", "triple", "point"}
 
-        self.words = set(
-            [
-                key
-                for mapping in [
-                    self.zeros,
-                    self.ones,
-                    self.ones_suffixed,
-                    self.tens,
-                    self.tens_suffixed,
-                    self.multipliers,
-                    self.multipliers_suffixed,
-                    self.preceding_prefixers,
-                    self.following_prefixers,
-                    self.suffixers,
-                    self.specials,
-                ]
-                for key in mapping
+        self.words = {
+            key
+            for mapping in [
+                self.zeros,
+                self.ones,
+                self.ones_suffixed,
+                self.tens,
+                self.tens_suffixed,
+                self.multipliers,
+                self.multipliers_suffixed,
+                self.preceding_prefixers,
+                self.following_prefixers,
+                self.suffixers,
+                self.specials,
             ]
-        )
+            for key in mapping
+        }
         self.literal_words = {"one", "ones"}
 
-    def process_words(self, words: List[str]) -> Iterator[str]:
+    def process_words(self, words: list[str]) -> Iterator[str]:
         prefix: Optional[str] = None
         value: Optional[Union[str, int]] = None
         skip = False
@@ -240,7 +233,9 @@ class EnglishNumberNormalizer:
         if len(words) == 0:
             return
 
-        for prev, current, next in windowed([None] + words + [None], 3):
+        for i, current in enumerate(words):
+            prev = words[i - 1] if i != 0 else None
+            next = words[i + 1] if i != len(words) - 1 else None
             if skip:
                 skip = False
                 continue

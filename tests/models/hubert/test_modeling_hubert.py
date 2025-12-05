@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,29 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Hubert model. """
-
+"""Testing suite for the PyTorch Hubert model."""
 
 import math
-import os
-import pickle
-import tempfile
 import unittest
 
 import pytest
 
 from transformers import HubertConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
-from transformers.utils import is_torch_fx_available
+from transformers.testing_utils import require_torch, require_torchcodec, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -48,9 +42,6 @@ if is_torch_available():
         Wav2Vec2Processor,
     )
     from transformers.models.hubert.modeling_hubert import _compute_mask_indices
-
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
 
 
 class HubertModelTester:
@@ -70,7 +61,7 @@ class HubertModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
         intermediate_size=20,
@@ -251,8 +242,8 @@ class HubertModelTester:
             input_values[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
-                # it's important that we make sure that target lenghts are at least
-                # one shorter than logit lenghts to prevent -inf
+                # it's important that we make sure that target lengths are at least
+                # one shorter than logit lengths to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
         loss = model(input_values, labels=labels).loss
@@ -304,11 +295,17 @@ class HubertModelTester:
 
 
 @require_torch
-class HubertModelTest(ModelTesterMixin, unittest.TestCase):
+class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
-    fx_compatible = True
-    test_pruning = False
-    test_headmasking = False
+    pipeline_model_mapping = (
+        {
+            "audio-classification": HubertForSequenceClassification,
+            "automatic-speech-recognition": HubertForCTC,
+            "feature-extraction": HubertModel,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = HubertModelTester(self)
@@ -341,29 +338,31 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_forward_signature(self):
         pass
 
     # Hubert cannot resize token embeddings
     # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Hubert has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         config.output_attentions = True
+
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
@@ -400,152 +399,16 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "quantizer.weight_proj.weight",
-                ]
-                if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    # Hubert cannot be TorchScripted because of torch.nn.utils.weight_norm
-    def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
-        if not is_torch_fx_available() or not self.fx_compatible:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.return_dict = False
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
-
-            try:
-                if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    labels = inputs.get("labels", None)
-                    input_names = [
-                        "attention_mask",
-                        "decoder_attention_mask",
-                        "decoder_input_ids",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                    ]
-                    if labels is not None:
-                        input_names.append("labels")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                else:
-                    input_names = [
-                        "attention_mask",
-                        "bbox",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                        "pixel_values",
-                        "token_type_ids",
-                        "visual_feats",
-                        "visual_pos",
-                    ]
-
-                    labels = inputs.get("labels", None)
-                    start_positions = inputs.get("start_positions", None)
-                    end_positions = inputs.get("end_positions", None)
-                    if labels is not None:
-                        input_names.append("labels")
-                    if start_positions is not None:
-                        input_names.append("start_positions")
-                    if end_positions is not None:
-                        input_names.append("end_positions")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    model_output = model(**filtered_inputs)
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-
-            except Exception as e:
-                self.fail(f"Couldn't trace module: {e}")
-
-            def flatten_output(output):
-                flatten = []
-                for x in output:
-                    if isinstance(x, (tuple, list)):
-                        flatten += flatten_output(x)
-                    elif not isinstance(x, torch.Tensor):
-                        continue
-                    else:
-                        flatten.append(x)
-                return flatten
-
-            model_output = flatten_output(model_output)
-            traced_output = flatten_output(traced_output)
-            num_outputs = len(model_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], traced_output[i]),
-                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
-            # Test that the model can be serialized and restored properly
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                try:
-                    with open(pkl_file_name, "wb") as f:
-                        pickle.dump(traced_model, f)
-                    with open(pkl_file_name, "rb") as f:
-                        loaded = pickle.load(f)
-                except Exception as e:
-                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
-
-                loaded_output = loaded(**filtered_inputs)
-                loaded_output = flatten_output(loaded_output)
-
-                for i in range(num_outputs):
-                    self.assertTrue(
-                        torch.allclose(model_output[i], loaded_output[i]),
-                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
-                    )
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -562,8 +425,6 @@ class HubertModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = HubertModelTester(
@@ -602,29 +463,29 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Hubert has input_values instead of input_ids")
     def test_forward_signature(self):
         pass
 
-    # Hubert cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Hubert has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         config.output_attentions = True
+
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
@@ -661,41 +522,16 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "quantizer.weight_proj.weight",
-                ]
-                if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -737,7 +573,7 @@ class HubertUtilsTest(unittest.TestCase):
 
 
 @require_torch
-@require_soundfile
+@require_torchcodec
 @slow
 class HubertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
@@ -759,9 +595,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         return ds[:num_samples]
 
     def test_inference_ctc_batched(self):
-        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = HubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft", dtype=torch.float16).to(torch_device)
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
@@ -785,7 +619,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
     def test_inference_keyword_spotting(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-ks", torch_dtype=torch.float16
+            "superb/hubert-base-superb-ks", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ks")
         input_data = self._load_superb("ks", 4)
@@ -802,11 +636,11 @@ class HubertModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([7.6692, 17.7795, 11.1562, 11.8232], dtype=torch.float16, device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=2e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=3e-2, atol=3e-2)
 
     def test_inference_intent_classification(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-ic", torch_dtype=torch.float16
+            "superb/hubert-base-superb-ic", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-ic")
         input_data = self._load_superb("ic", 4)
@@ -839,13 +673,13 @@ class HubertModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
 
         # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
-        self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=3e-1))
-        self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=3e-1))
-        self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=3e-1))
+        torch.testing.assert_close(predicted_logits_action, expected_logits_action, rtol=3e-1, atol=3e-1)
+        torch.testing.assert_close(predicted_logits_object, expected_logits_object, rtol=3e-1, atol=3e-1)
+        torch.testing.assert_close(predicted_logits_location, expected_logits_location, rtol=3e-1, atol=3e-1)
 
     def test_inference_speaker_identification(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-sid", torch_dtype=torch.float16
+            "superb/hubert-base-superb-sid", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-sid")
         input_data = self._load_superb("si", 4)
@@ -867,11 +701,11 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=10))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=10, atol=10)
 
     def test_inference_emotion_recognition(self):
         model = HubertForSequenceClassification.from_pretrained(
-            "superb/hubert-base-superb-er", torch_dtype=torch.float16
+            "superb/hubert-base-superb-er", dtype=torch.float16
         ).to(torch_device)
         processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/hubert-base-superb-er")
         input_data = self._load_superb("er", 4)
@@ -889,7 +723,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
         # TODO: lower the tolerance after merging the padding fix https://github.com/pytorch/fairseq/pull/3572
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-1))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-1, atol=1e-1)
 
     def test_inference_distilhubert(self):
         model = HubertModel.from_pretrained("ntu-spml/distilhubert").to(torch_device)
@@ -930,6 +764,47 @@ class HubertModelIntegrationTest(unittest.TestCase):
         )
         expected_output_sum = -3776.0730
 
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
+        torch.testing.assert_close(outputs[:, :4, :4], expected_outputs_first, rtol=5e-3, atol=5e-3)
+        torch.testing.assert_close(outputs[:, -4:, -4:], expected_outputs_last, rtol=5e-3, atol=5e-3)
+        self.assertTrue(abs(outputs.sum() - expected_output_sum) < 0.1)
+
+    def test_inference_hubert_25hz(self):
+        model = HubertModel.from_pretrained("slprl/mhubert-base-25hz").to(torch_device)
+
+        sample = self._load_datasamples(1)
+        input_speech = torch.tensor(sample[0], dtype=torch.float, device=torch_device).unsqueeze(0)
+
+        with torch.no_grad():
+            outputs = model(input_speech, output_hidden_states=True).hidden_states[11]
+
+        # expected outputs taken from the original textlesslib implementation by:
+        # model = SpeechEncoder.by_name(dense_model_name='mhubert-base-25hz', quantizer_model_name='kmeans',
+        # vocab_size=500, deduplicate=False, need_f0=False)
+        # model(wav)['dense']
+        expected_outputs_first = torch.tensor(
+            [
+                [
+                    [0.0267, 0.1776, -0.1706, -0.4559],
+                    [-0.2430, -0.2943, -0.1864, -0.1187],
+                    [-0.1812, -0.4239, -0.1916, -0.0858],
+                    [-0.1495, -0.4758, -0.4036, 0.0302],
+                ]
+            ],
+            device=torch_device,
+        )
+        expected_outputs_last = torch.tensor(
+            [
+                [
+                    [0.3366, -0.2734, -0.1415, -0.3055],
+                    [0.2329, -0.3580, -0.1421, -0.3197],
+                    [0.1631, -0.4301, -0.1965, -0.2956],
+                    [0.3342, -0.2185, -0.2253, -0.2363],
+                ]
+            ],
+            device=torch_device,
+        )
+        expected_output_sum = 1681.7603
+
+        torch.testing.assert_close(outputs[:, :4, :4], expected_outputs_first, rtol=5e-3, atol=5e-3)
+        torch.testing.assert_close(outputs[:, -4:, -4:], expected_outputs_last, rtol=5e-3, atol=5e-3)
         self.assertTrue(abs(outputs.sum() - expected_output_sum) < 0.1)

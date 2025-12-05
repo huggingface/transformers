@@ -14,17 +14,16 @@
 # limitations under the License.
 """Convert Deformable DETR checkpoints."""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import cached_download, hf_hub_url
-from transformers import DeformableDetrConfig, DeformableDetrFeatureExtractor, DeformableDetrForObjectDetection
+from transformers import DeformableDetrConfig, DeformableDetrForObjectDetection, DeformableDetrImageProcessor
 from transformers.utils import logging
 
 
@@ -110,32 +109,32 @@ def convert_deformable_detr_checkpoint(
     config.num_labels = 91
     repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
-    # load feature extractor
-    feature_extractor = DeformableDetrFeatureExtractor(format="coco_detection")
+    # load image processor
+    image_processor = DeformableDetrImageProcessor(format="coco_detection")
 
     # prepare image
     img = prepare_img()
-    encoding = feature_extractor(images=img, return_tensors="pt")
+    encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     logger.info("Converting model...")
 
     # load original state dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "model."
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if not key.startswith("class_embed") and not key.startswith("bbox_embed"):
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
@@ -185,11 +184,11 @@ def convert_deformable_detr_checkpoint(
 
     print("Everything ok!")
 
-    # Save model and feature extractor
-    logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+    # Save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     # Push to hub
     if push_to_hub:
@@ -199,7 +198,7 @@ def convert_deformable_detr_checkpoint(
         model_name += "-with-box-refine" if with_box_refine else ""
         model_name += "-two-stage" if two_stage else ""
         print("Pushing model to hub...")
-        model.push_to_hub(repo_path_or_name=model_name, organization="nielsr", commit_message="Add model")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -223,7 +222,9 @@ if __name__ == "__main__":
         help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
     convert_deformable_detr_checkpoint(

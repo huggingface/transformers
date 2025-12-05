@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,34 +16,33 @@ import inspect
 import shutil
 import tempfile
 import unittest
-from typing import List
+
+from parameterized import parameterized
 
 from transformers import (
     AddedToken,
-    LayoutXLMTokenizerFast,
-    SpecialTokensMixin,
-    is_tf_available,
+    LayoutXLMTokenizer,
+    PreTrainedTokenizerBase,
+    is_mlx_available,
     is_torch_available,
     logging,
 )
-from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
-    is_pt_tf_cross_test,
     require_pandas,
-    require_scatter,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
     slow,
 )
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 from ...test_tokenization_common import (
-    SMALL_TRAINING_CORPUS,
     TokenizerTesterMixin,
     filter_non_english,
     merge_model_tokenizer_mappings,
 )
+from ...test_tokenizers_backend_mixin import SMALL_TRAINING_CORPUS
 
 
 logger = logging.get_logger(__name__)
@@ -55,9 +53,11 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_tokenizers
 @require_pandas
 class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "FacebookAI/xlm-roberta-base"
     tokenizer_class = LayoutXLMTokenizer
-    rust_tokenizer_class = LayoutXLMTokenizerFast
+    rust_tokenizer_class = LayoutXLMTokenizer
     test_rust_tokenizer = True
+    test_slow_tokenizer = False
     from_pretrained_filter = filter_non_english
     test_seq2seq = False
     test_sentencepiece = True
@@ -95,29 +95,171 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         return questions, words, boxes
 
-    def setUp(self):
-        super().setUp()
+    def get_empty_words_and_boxes(self):
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
 
-        # We have a SentencePiece fixture for testing
-        tokenizer = LayoutXLMTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        return words, boxes
+
+    def get_empty_words_and_boxes_batch(self):
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
+        ]
+
+        return words, boxes
+
+    def get_empty_question_words_and_boxes(self):
+        question = ""
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+
+        return question, words, boxes
+
+    def get_empty_question_words_and_boxes_batch(self):
+        questions = ["what's his name?", ""]
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
+        ]
+
+        return questions, words, boxes
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        # Extract vocab from SentencePiece model
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab_ids, vocab_scores, merges = extractor.extract()
+
+        # Create tokenizer from vocab
+        tokenizer = LayoutXLMTokenizer(vocab=vocab_scores)
+        tokenizer.save_pretrained(cls.tmpdirname)
+
+    def convert_batch_encode_plus_format_to_encode_plus(self, batch_encode_plus_sequences):
+        """Helper method to convert batch_encode_plus output to list of encode_plus outputs"""
+        # Get the batch size
+        first_key = list(batch_encode_plus_sequences.keys())[0]
+        batch_size = len(batch_encode_plus_sequences[first_key])
+
+        # Convert to list of dicts
+        encode_plus_sequences = []
+        for i in range(batch_size):
+            single_sequence = {}
+            for key, value in batch_encode_plus_sequences.items():
+                if key != "encodings":  # Skip the encodings attribute
+                    single_sequence[key] = value[i]
+            encode_plus_sequences.append(single_sequence)
+
+        return encode_plus_sequences
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
+
+    @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
+    def test_chat_template_batched(self):
+        pass
+
+    def test_bos_token_with_add_bos_token_true(self):
+        # LayoutXLM requires pretokenized input with boxes
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                words = ["hello", "world"]
+                boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+
+                # LayoutXLM doesn't use add_bos_token, it uses post_processor
+                # Just verify it can encode without error
+                encoded = tokenizer.encode(words, boxes=boxes)
+                self.assertIsInstance(encoded, list)
+
+    def test_bos_token_with_add_bos_token_false(self):
+        # LayoutXLM requires pretokenized input with boxes
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                words = ["hello", "world"]
+                boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+
+                # LayoutXLM doesn't use add_bos_token, it uses post_processor
+                # Just verify it can encode without error
+                encoded = tokenizer.encode(words, boxes=boxes)
+                self.assertIsInstance(encoded, list)
+
+    def test_pad_token_initialization(self):
+        """Test that passing pad_token when creating a tokenizer works correctly."""
+        # LayoutXLM requires pretokenized input with boxes
+        tokenizer = self.get_tokenizer(pad_token="[PAD]")
+        # Verify the pad_token was set correctly
+        self.assertEqual(tokenizer.pad_token, "[PAD]")
+        self.assertIsNotNone(tokenizer.pad_token_id)
+
+        # Test with two sequences of different lengths to trigger padding
+        seq_0 = ["Test", "this", "method"]
+        seq_1 = ["With", "these", "inputs", "and", "some", "extra"]
+        boxes_0 = [[1, 2, 3, 4] for _ in seq_0]
+        boxes_1 = [[1, 2, 3, 4] for _ in seq_1]
+
+        # Test padding works with the custom pad_token
+        output_with_padding = tokenizer(
+            [seq_0, seq_1],
+            boxes=[boxes_0, boxes_1],
+            padding=True,
+        )
+
+        # Check padding was applied correctly
+        self.assertEqual(len(output_with_padding["input_ids"][0]), len(output_with_padding["input_ids"][1]))
+
+    def test_encode_basic_padding(self):
+        """Test basic left/right padding behavior using encode() method with max_length strategy."""
+        tokenizer = self.get_tokenizer(do_lower_case=False)
+        # LayoutXLM requires pretokenized input with boxes
+        words = ["Sequence"]
+        boxes = [[1, 2, 3, 4]]
+        padding_size = 10
+
+        # check correct behaviour if no pad_token_id exists and add it eventually
+        self._check_no_pad_token_padding(tokenizer, words)
+
+        padding_idx = tokenizer.pad_token_id
+
+        # Test right padding
+        encoded_sequence = tokenizer.encode(words, boxes=boxes)
+        sequence_length = len(encoded_sequence)
+        padded_sequence = tokenizer.encode(
+            words, boxes=boxes, max_length=sequence_length + padding_size, padding="max_length"
+        )
+        padded_sequence_length = len(padded_sequence)
+        assert sequence_length + padding_size == padded_sequence_length
+        assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
+
+        # Test left padding
+        tokenizer.padding_side = "left"
+        encoded_sequence = tokenizer.encode(words, boxes=boxes)
+        sequence_length = len(encoded_sequence)
+        padded_sequence = tokenizer.encode(
+            words, boxes=boxes, max_length=sequence_length + padding_size, padding="max_length"
+        )
+        padded_sequence_length = len(padded_sequence)
+        assert sequence_length + padding_size == padded_sequence_length
+        assert [padding_idx] * padding_size + encoded_sequence == padded_sequence
 
     # override test in `test_tokenization_common.py` because of the required input format of the `__call__`` method of
     # this tokenizer
     def test_save_sentencepiece_tokenizer(self) -> None:
-        if not self.test_sentencepiece or not self.test_slow_tokenizer:
-            return
+        if not self.test_sentencepiece:
+            self.skipTest(reason="test_sentencepiece is set to False")
         # We want to verify that we will be able to save the tokenizer even if the original files that were used to
         # build the tokenizer have been deleted in the meantime.
         words, boxes = self.get_words_and_boxes()
 
-        tokenizer_slow_1 = self.get_tokenizer()
-        encoding_tokenizer_slow_1 = tokenizer_slow_1(
+        tokenizer_1 = self.get_tokenizer()
+        encoding_tokenizer_1 = tokenizer_1(
             words,
             boxes=boxes,
         )
@@ -125,25 +267,52 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tmpdirname_1 = tempfile.mkdtemp()
         tmpdirname_2 = tempfile.mkdtemp()
 
-        tokenizer_slow_1.save_pretrained(tmpdirname_1)
-        tokenizer_slow_2 = self.tokenizer_class.from_pretrained(tmpdirname_1)
-        encoding_tokenizer_slow_2 = tokenizer_slow_2(
+        tokenizer_1.save_pretrained(tmpdirname_1)
+        tokenizer_2 = self.tokenizer_class.from_pretrained(tmpdirname_1)
+        encoding_tokenizer_2 = tokenizer_2(
             words,
             boxes=boxes,
         )
 
         shutil.rmtree(tmpdirname_1)
-        tokenizer_slow_2.save_pretrained(tmpdirname_2)
+        tokenizer_2.save_pretrained(tmpdirname_2)
 
-        tokenizer_slow_3 = self.tokenizer_class.from_pretrained(tmpdirname_2)
-        encoding_tokenizer_slow_3 = tokenizer_slow_3(
+        tokenizer_3 = self.tokenizer_class.from_pretrained(tmpdirname_2)
+        encoding_tokenizer_3 = tokenizer_3(
             words,
             boxes=boxes,
         )
         shutil.rmtree(tmpdirname_2)
 
-        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
-        self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
+        self.assertEqual(encoding_tokenizer_1, encoding_tokenizer_2)
+        self.assertEqual(encoding_tokenizer_1, encoding_tokenizer_3)
+
+    def test_split_special_tokens(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            special_token = "<my_new_token>"
+            special_sentence = f"Hey this is a {special_token} token"
+
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.get_tokenizer(
+                    pretrained_name, extra_special_tokens=[special_token], split_special_tokens=True, **kwargs
+                )
+
+                # For LayoutXLM, tokenize works with strings (not requiring boxes)
+                r_tokens_output = tokenizer_r.tokenize(special_sentence)
+                self.assertTrue(special_token not in r_tokens_output)
+
+                r_tokens_output_unsplit = tokenizer_r.tokenize(special_sentence, split_special_tokens=False)
+                self.assertTrue(special_token in r_tokens_output_unsplit)
+
+                tmpdirname = tempfile.mkdtemp()
+                tokenizer_r.save_pretrained(tmpdirname)
+                fast_from_saved = self.tokenizer_class.from_pretrained(tmpdirname)
+
+                output_tokens_reloaded_split = fast_from_saved.tokenize(special_sentence)
+                self.assertTrue(special_token not in output_tokens_reloaded_split)
+
+                output_tokens_reloaded_unsplit = fast_from_saved.tokenize(special_sentence, split_special_tokens=False)
+                self.assertTrue(special_token in output_tokens_reloaded_unsplit)
 
     @slow
     def test_sequence_builders(self):
@@ -165,7 +334,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_tokenizer(pretrained_name, **kwargs)
 
                 words, boxes = self.get_words_and_boxes()
                 words[1] = tokenizer_r.mask_token
@@ -192,10 +361,9 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     def test_add_special_tokens(self):
-        tokenizers: List[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 special_token = "[SPECIAL_TOKEN]"
                 special_token_box = [1000, 1000, 1000, 1000]
 
@@ -209,7 +377,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token not in decoded)
 
     def test_add_tokens_tokenizer(self):
-        tokenizers: List[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
+        tokenizers: list[LayoutXLMTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 vocab_size = tokenizer.vocab_size
@@ -285,7 +453,8 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
                 self.assertIn(decoded, [output, output.lower()])
 
-    def test_encode_plus_with_padding(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_encode_plus_with_padding(self, use_padding_as_call_kwarg: bool):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -336,15 +505,18 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_mask == not_padded_special_tokens_mask)
 
                 # Test right padding
-                tokenizer.padding_side = "right"
+                tokenizer_kwargs_right = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
 
-                right_padded_sequence = tokenizer.encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "right"
+                else:
+                    tokenizer_kwargs_right["padding_side"] = "right"
+
+                right_padded_sequence = tokenizer.encode_plus(words, boxes=boxes, **tokenizer_kwargs_right)
                 right_padded_input_ids = right_padded_sequence["input_ids"]
 
                 right_padded_special_tokens_mask = right_padded_sequence["special_tokens_mask"]
@@ -355,14 +527,18 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_tokens_mask + [1] * padding_size == right_padded_special_tokens_mask)
 
                 # Test left padding
-                tokenizer.padding_side = "left"
-                left_padded_sequence = tokenizer.encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                tokenizer_kwargs_left = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
+
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "left"
+                else:
+                    tokenizer_kwargs_left["padding_side"] = "left"
+
+                left_padded_sequence = tokenizer.encode_plus(words, boxes=boxes, **tokenizer_kwargs_left)
                 left_padded_input_ids = left_padded_sequence["input_ids"]
                 left_padded_special_tokens_mask = left_padded_sequence["special_tokens_mask"]
                 left_padded_sequence_length = len(left_padded_input_ids)
@@ -426,7 +602,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 # test 1: single sequence
                 words, boxes = self.get_words_and_boxes()
 
@@ -451,55 +626,17 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences)
                     )
 
-    def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated"""
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes()
-                padding_size = 10
-
-                # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
-
-                padding_idx = tokenizer.pad_token_id
-
-                # Check that it correctly pads when a maximum length is specified along with the padding flag set to True
-                tokenizer.padding_side = "right"
-                encoded_sequence = tokenizer.encode(words, boxes=boxes)
-                sequence_length = len(encoded_sequence)
-                # FIXME: the next line should be padding(max_length) to avoid warning
-                padded_sequence = tokenizer.encode(
-                    words, boxes=boxes, max_length=sequence_length + padding_size, pad_to_max_length=True
-                )
-                padded_sequence_length = len(padded_sequence)
-                assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
-
-                # Check that nothing is done when a maximum length is not specified
-                encoded_sequence = tokenizer.encode(words, boxes=boxes)
-                sequence_length = len(encoded_sequence)
-
-                tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(words, boxes=boxes, pad_to_max_length=True)
-                padded_sequence_right_length = len(padded_sequence_right)
-                assert sequence_length == padded_sequence_right_length
-                assert encoded_sequence == padded_sequence_right
-
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
                 pad_token_id = tokenizer_p.pad_token_id
 
                 # Encode - Simple input
                 words, boxes = self.get_words_and_boxes()
-                input_r = tokenizer_r.encode(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(words, boxes=boxes, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode(words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -510,13 +647,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode - Pair input
                 question, words, boxes = self.get_question_words_and_boxes()
-                input_r = tokenizer_r.encode(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(question, words, boxes=boxes, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode(question, words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -526,10 +656,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Simple input
                 words, boxes = self.get_words_and_boxes()
-                input_r = tokenizer_r.encode_plus(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode_plus(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(words, boxes=boxes, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode_plus(words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
@@ -545,14 +671,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Pair input
                 question, words, boxes = self.get_question_words_and_boxes()
-                input_r = tokenizer_r.encode_plus(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode_plus(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(
                     question, words, boxes=boxes, max_length=max_length, padding="max_length"
                 )
@@ -570,20 +688,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Batch_encode_plus - Simple input
                 words, boxes = self.get_words_and_boxes_batch()
-
-                input_r = tokenizer_r.batch_encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                input_p = tokenizer_p.batch_encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
                     words,
@@ -705,49 +809,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
-    def test_padding_warning_message_fast_tokenizer(self):
-        if not self.test_rust_tokenizer:
-            return
-
-        words, boxes = self.get_words_and_boxes_batch()
-
-        tokenizer_fast = self.get_rust_tokenizer()
-
-        encoding_fast = tokenizer_fast(
-            words,
-            boxes=boxes,
-        )
-
-        with self.assertLogs("transformers", level="WARNING") as cm:
-            tokenizer_fast.pad(encoding_fast)
-        self.assertEqual(len(cm.records), 1)
-        self.assertIn(
-            "Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to"
-            " encode the text followed by a call to the `pad` method to get a padded encoding.",
-            cm.records[0].message,
-        )
-
-        if not self.test_slow_tokenizer:
-            return
-
-        tokenizer_slow = self.get_tokenizer()
-
-        encoding_slow = tokenizer_slow(
-            words,
-            boxes=boxes,
-        )
-
-        with self.assertLogs(level="WARNING") as cm:
-            # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
-            # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
-            logger.warning("Dummy warning")
-            tokenizer_slow.pad(encoding_slow)
-        self.assertEqual(len(cm.records), 1)
-        self.assertIn(
-            "Dummy warning",
-            cm.records[0].message,
-        )
-
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -816,7 +877,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding="longest"
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -829,13 +890,13 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding=False
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
                     )
 
-    @unittest.skip("batch_encode_plus does not handle overflowing tokens.")
+    @unittest.skip(reason="batch_encode_plus does not handle overflowing tokens.")
     def test_batch_encode_plus_overflowing_tokens(self):
         pass
 
@@ -896,7 +957,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 if tokenizer.pad_token is None:
-                    self.skipTest("No padding token.")
+                    self.skipTest(reason="No padding token.")
                 else:
                     words, boxes = self.get_words_and_boxes()
 
@@ -937,29 +998,20 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_build_inputs_with_special_tokens(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
-
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_tokenizer(pretrained_name, **kwargs)
 
                 # Input tokens id
                 words, boxes = self.get_words_and_boxes()
-                input_simple = tokenizer_p.encode(words, boxes=boxes, add_special_tokens=False)
-                input_pair = tokenizer_p.encode(words, boxes=boxes, add_special_tokens=False)
+                input_simple = tokenizer_r.encode(words, boxes=boxes, add_special_tokens=False)
+                input_pair = tokenizer_r.encode(words, boxes=boxes, add_special_tokens=False)
 
                 # Generate output
-                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
-                output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
-                self.assertEqual(output_p, output_r)
+                _ = tokenizer_r.build_inputs_with_special_tokens(input_simple)
 
                 # Generate pair output
-                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
-                output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
-                self.assertEqual(output_p, output_r)
+                _ = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
 
     def test_special_tokens_mask_input_pairs(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -1028,7 +1080,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname)
 
-    @unittest.skip("Not implemented")
+    @unittest.skip(reason="Not implemented")
     def test_right_and_left_truncation(self):
         pass
 
@@ -1099,7 +1151,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 # test 1: single sequence
                 words, boxes = self.get_words_and_boxes()
 
@@ -1176,7 +1227,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     @slow
-    @require_scatter
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
@@ -1187,15 +1237,14 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    return
+                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
 
                 config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
                 config = config_class()
 
                 if config.is_encoder_decoder or config.pad_token_id is None:
-                    return
+                    self.skipTest(reason="Model is an encoder-decoder or has no pad token id set.")
 
                 model = model_class(config)
 
@@ -1221,109 +1270,21 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
-
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        words, boxes = self.get_words_and_boxes()
-
-        ids = tokenizer.encode(words, boxes=boxes, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(words, boxes=boxes, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        ids = tokenizer.encode(words, boxes=boxes, add_special_tokens=True)
-        rust_ids = rust_tokenizer.encode(words, boxes=boxes, add_special_tokens=True)
-        self.assertListEqual(ids, rust_ids)
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                words, boxes = self.get_words_and_boxes()
-
-                # Ensure basic input match
-                input_p = tokenizer_p.encode_plus(words, boxes=boxes)
-                input_r = tokenizer_r.encode_plus(words, boxes=boxes)
-
-                for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()
-                ):
-                    self.assertSequenceEqual(input_p[key], input_r[key])
-
-                input_pairs_p = tokenizer_p.encode_plus(words, boxes=boxes)
-                input_pairs_r = tokenizer_r.encode_plus(words, boxes=boxes)
-
-                for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()
-                ):
-                    self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
-
-                words = ["hello" for _ in range(1000)]
-                boxes = [[1000, 1000, 1000, 1000] for _ in range(1000)]
-
-                # Ensure truncation match
-                input_p = tokenizer_p.encode_plus(words, boxes=boxes, max_length=512, truncation=True)
-                input_r = tokenizer_r.encode_plus(words, boxes=boxes, max_length=512, truncation=True)
-
-                for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()
-                ):
-                    self.assertSequenceEqual(input_p[key], input_r[key])
-
-                # Ensure truncation with stride match
-                input_p = tokenizer_p.encode_plus(
-                    words, boxes=boxes, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
-                )
-                input_r = tokenizer_r.encode_plus(
-                    words, boxes=boxes, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
-                )
-
-                for key in filter(
-                    lambda x: x in ["input_ids", "token_type_ids", "attention_mask", "bbox"], input_p.keys()
-                ):
-                    self.assertSequenceEqual(input_p[key], input_r[key][0])
-
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
-
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                words, boxes = self.get_words_and_boxes()
-                tokens_r = tokenizer_r.encode_plus(
-                    words,
-                    boxes=boxes,
-                    add_special_tokens=True,
-                )
-                tokens_p = tokenizer_p.encode_plus(
-                    words,
-                    boxes=boxes,
-                    add_special_tokens=True,
-                )
-
-                for key in tokens_p.keys():
-                    self.assertEqual(tokens_r[key], tokens_p[key])
-
-                if "token_type_ids" in tokens_r:
-                    self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
-
-                tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
-                tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
-                self.assertSequenceEqual(tokens_r, tokens_p)
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
     def test_compare_add_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -1346,7 +1307,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # encode_plus()
                 no_special_tokens = tokenizer_r.encode_plus(words, boxes=boxes, add_special_tokens=False)
                 with_special_tokens = tokenizer_r.encode_plus(words, boxes=boxes, add_special_tokens=True)
-                for key in no_special_tokens.keys():
+                for key in no_special_tokens:
                     self.assertEqual(
                         len(no_special_tokens[key]),
                         len(with_special_tokens[key]) - simple_num_special_tokens_to_add,
@@ -1357,7 +1318,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 no_special_tokens = tokenizer_r.batch_encode_plus(words, boxes=boxes, add_special_tokens=False)
                 with_special_tokens = tokenizer_r.batch_encode_plus(words, boxes=boxes, add_special_tokens=True)
-                for key in no_special_tokens.keys():
+                for key in no_special_tokens:
                     for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                         self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
@@ -1380,48 +1341,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Ensure that the input IDs are still truncated when no max_length is specified
         self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
         self.assertLessEqual(len(new_encoded_inputs), 20)
-
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes_batch()
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, words, boxes=boxes, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        words,
-                        boxes=boxes,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        words,
-                        boxes=boxes,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True, return_tensors="pt")
-                    tensorflow_tensor = tokenizer.batch_encode_plus(
-                        words, boxes=boxes, padding="longest", return_tensors="tf"
-                    )
-                    encoded_sequences = tokenizer.batch_encode_plus(words, boxes=boxes, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     def test_sequence_ids(self):
         tokenizers = self.get_tokenizers()
@@ -1450,11 +1369,10 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name, additional_special_tokens=added_tokens, **kwargs
+                    pretrained_name, extra_special_tokens=added_tokens, **kwargs
                 )
                 words = "Hey this is a <special> token".split()
                 boxes = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
@@ -1466,31 +1384,12 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 self.assertTrue(special_token_id in r_output)
 
-                if self.test_slow_tokenizer:
-                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
-                    )
-                    tokenizer_p = self.tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
-                    )
-
-                    words = "Hey this is a <special> token".split()
-                    boxes = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
-
-                    p_output = tokenizer_p.encode(words, boxes=boxes)
-                    cr_output = tokenizer_cr.encode(words, boxes=boxes)
-
-                    self.assertEqual(p_output, r_output)
-                    self.assertEqual(cr_output, r_output)
-                    self.assertTrue(special_token_id in p_output)
-                    self.assertTrue(special_token_id in cr_output)
-
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
         new_tokenizer = tokenizer.train_new_from_iterator(SMALL_TRAINING_CORPUS, 100)
 
         # Test we can use the new tokenizer with something not seen during training
@@ -1511,23 +1410,26 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokenizer.num_special_tokens_to_add(True), new_tokenizer.num_special_tokens_to_add(True))
 
         # Check we have the correct max_length for both pair and non-pair inputs.
-        self.assertEqual(tokenizer.max_len_single_sentence, new_tokenizer.max_len_single_sentence)
-        self.assertEqual(tokenizer.max_len_sentences_pair, new_tokenizer.max_len_sentences_pair)
-
-        # Assert the set of special tokens match as we didn't ask to change them
-        self.assertSequenceEqual(
-            tokenizer.all_special_tokens_extended,
-            new_tokenizer.all_special_tokens_extended,
+        # max_len_single_sentence = model_max_length - num_special_tokens_to_add(pair=False)
+        self.assertEqual(
+            tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=False),
+            new_tokenizer.model_max_length - new_tokenizer.num_special_tokens_to_add(pair=False),
+        )
+        # max_len_sentences_pair = model_max_length - num_special_tokens_to_add(pair=True)
+        self.assertEqual(
+            tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=True),
+            new_tokenizer.model_max_length - new_tokenizer.num_special_tokens_to_add(pair=True),
         )
 
+        # Assert the set of special tokens match as we didn't ask to change them
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
     def test_training_new_tokenizer_with_special_tokens_change(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
-        tokenizer = self.get_rust_tokenizer()
+        tokenizer = self.get_tokenizer()
         # Test with a special tokens map
         class_signature = inspect.signature(tokenizer.__class__)
         if "cls_token" in class_signature.parameters:
@@ -1539,12 +1441,11 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(new_tokenizer.cls_token_id, cls_id)
 
         # Create a new mapping from the special tokens defined in the original tokenizer
-        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
-        special_tokens_list.remove("additional_special_tokens")
+        special_tokens_list = PreTrainedTokenizerBase.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_map = {}
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is not None:
+            if getattr(tokenizer, token) is not None:
                 special_token = getattr(tokenizer, token)
                 special_tokens_map[special_token] = f"{special_token}a"
 
@@ -1556,7 +1457,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Check the changes
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is None:
+            if getattr(tokenizer, token) is None:
                 continue
             special_token = getattr(tokenizer, token)
             if special_token in special_tokens_map:
@@ -1567,12 +1468,25 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(getattr(new_tokenizer, f"{token}_id"), new_id)
 
         # Check if the AddedToken / string format has been kept
-        for special_token in tokenizer.all_special_tokens_extended:
+        tokenizer_special_tokens = [
+            tok
+            for value in tokenizer._special_tokens_map.values()
+            if value
+            for tok in (value if isinstance(value, (list, tuple)) else [value])
+        ]
+        new_tokenizer_special_tokens = [
+            tok
+            for value in new_tokenizer._special_tokens_map.values()
+            if value
+            for tok in (value if isinstance(value, (list, tuple)) else [value])
+        ]
+
+        for special_token in tokenizer_special_tokens:
             if isinstance(special_token, AddedToken) and special_token.content not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens_extended,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    special_token in new_tokenizer_special_tokens,
+                    f"'{special_token}' should be in {new_tokenizer_special_tokens}",
                 )
             elif isinstance(special_token, AddedToken):
                 # The special token must appear in the list of the new tokenizer as an object of type AddedToken with
@@ -1581,7 +1495,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 new_special_token_str = special_tokens_map[special_token_str]
 
                 find = False
-                for candidate in new_tokenizer.all_special_tokens_extended:
+                for candidate in new_tokenizer_special_tokens:
                     if (
                         isinstance(candidate, AddedToken)
                         and candidate.content == new_special_token_str
@@ -1595,19 +1509,19 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(
                     find,
                     f"'{new_special_token_str}' doesn't appear in the list "
-                    f"'{new_tokenizer.all_special_tokens_extended}' as an AddedToken with the same parameters as "
-                    f"'{special_token}' in the list {tokenizer.all_special_tokens_extended}",
+                    f"'{new_tokenizer_special_tokens}' as an AddedToken with the same parameters as "
+                    f"'{special_token}' in the list {tokenizer_special_tokens}",
                 )
             elif special_token not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
-                    special_token in new_tokenizer.all_special_tokens_extended,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    special_token in new_tokenizer_special_tokens,
+                    f"'{special_token}' should be in {new_tokenizer_special_tokens}",
                 )
 
             else:
                 # The special token must appear in the list of the new tokenizer as an object of type string.
-                self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
+                self.assertTrue(special_tokens_map[special_token] in new_tokenizer_special_tokens)
 
         # Test we can use the new tokenizer with something not seen during training
         words = [["this", "is"], ["hello", "🤗"]]
@@ -1625,7 +1539,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             # only test prepare_for_model for the slow tokenizer
-            if tokenizer.__class__.__name__ == "LayoutXLMTokenizerFast":
+            if tokenizer.__class__.__name__ == "LayoutXLMTokenizer":
                 continue
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 words, boxes = self.get_words_and_boxes()
@@ -1638,38 +1552,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding_different_model_input_name(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
-
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
-                pad_token_id = tokenizer_p.pad_token_id
-
-                words, boxes = self.get_words_and_boxes_batch()
-
-                input_r = tokenizer_r.batch_encode_plus(words, boxes=boxes)
-                input_p = tokenizer_r.batch_encode_plus(words, boxes=boxes)
-
-                # rename encoded batch to "inputs"
-                input_r["inputs"] = input_r[tokenizer_r.model_input_names[0]]
-                del input_r[tokenizer_r.model_input_names[0]]
-
-                input_p["inputs"] = input_p[tokenizer_p.model_input_names[0]]
-                del input_p[tokenizer_p.model_input_names[0]]
-
-                # Renaming `input_ids` to `inputs`
-                tokenizer_r.model_input_names = ["inputs"] + tokenizer_r.model_input_names[1:]
-                tokenizer_p.model_input_names = ["inputs"] + tokenizer_p.model_input_names[1:]
-
-                input_r = tokenizer_r.pad(input_r, padding="longest")
-                input_p = tokenizer_r.pad(input_p, padding="longest")
-
-                max_length = len(input_p["inputs"][0])
-                self.assert_batch_padded_input_match(
-                    input_r, input_p, max_length, pad_token_id, model_main_input_name="inputs"
-                )
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
     def test_batch_encode_dynamic_overflowing(self):
         """
@@ -1686,13 +1569,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
-
-                if is_torch_available():
-                    returned_tensor = "pt"
-                elif is_tf_available():
-                    returned_tensor = "tf"
-                else:
-                    returned_tensor = "jax"
+                returned_tensor = "pt"
 
                 # Single example
                 words, boxes = self.get_words_and_boxes()
@@ -1737,95 +1614,29 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
-        self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-layoutxlm", {})
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it save with the same files + the tokenizer.json file for the fast one
-                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-                tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
-                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-                    # self.assertEqual(getattr(tokenizer_rp, key), getattr(tokenizer_pp, key))
-                    # self.assertEqual(getattr(tokenizer_rp, key + "_id"), getattr(tokenizer_pp, key + "_id"))
-
-                shutil.rmtree(tmpdirname2)
-
-                # Save tokenizer rust, legacy_format=True
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=True)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it save with the same files
-                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
-
-                # Save tokenizer rust, legacy_format=False
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=False)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it saved the tokenizer.json file
-                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
-
-    @unittest.skip("TO DO: overwrite this very extensive test.")
-    def test_alignement_methods(self):
+    @unittest.skip(reason="TO DO: overwrite this very extensive test.")
+    def test_alignment_methods(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="layoutxlm tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_pair_input(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="layoutxlm tokenizer requires boxes besides sequences.")
     def test_maximum_encoding_length_single_input(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer requires boxes besides sequences.")
+    @unittest.skip(reason="layoutxlm tokenizer requires boxes besides sequences.")
     def test_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("layoutxlm tokenizer always expects pretokenized inputs.")
+    @unittest.skip(reason="layoutxlm tokenizer always expects pretokenized inputs.")
     def test_compare_pretokenized_inputs(self):
         pass
 
-    @unittest.skip("layoutxlm fast tokenizer does not support prepare_for_model")
+    @unittest.skip(reason="layoutxlm fast tokenizer does not support prepare_for_model")
     def test_compare_prepare_for_model(self):
         pass
 
@@ -1835,17 +1646,8 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         boxes = [[1000, 1000, 1000, 1000] for _ in range(len(words))]
         word_labels = [0, 1]
 
-        # test slow tokenizer
-        tokenizer_p = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
-        encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
-        self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100, -100])
-
-        tokenizer_p = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base", only_label_first_subword=False)
-        encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
-        self.assertListEqual(encoding.labels, [-100, 0, 0, 1, 1, -100])
-
         # test fast tokenizer
-        tokenizer_r = LayoutXLMTokenizerFast.from_pretrained("microsoft/layoutxlm-base")
+        tokenizer_r = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100, -100])
 
@@ -1855,9 +1657,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_layoutxlm_integration_test(self):
-
-        tokenizer_p = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
-        tokenizer_r = LayoutXLMTokenizerFast.from_pretrained("microsoft/layoutxlm-base")
+        tokenizer_r = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
@@ -1872,85 +1672,117 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # CASE 1: not batched
         words, boxes = self.get_words_and_boxes()
 
-        # fmt: off
-        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # fmt: skip
 
-        encoding_p = tokenizer_p(words, boxes=boxes, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 1: batched
         words, boxes = self.get_words_and_boxes_batch()
 
-        # fmt: off
-        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
-        encoding_p = tokenizer_p(words, boxes=boxes, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: not batched
         words, boxes = self.get_words_and_boxes()
         word_labels = [1, 2, 3]
 
-        # fmt: off
-        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'labels': [-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'bbox': [[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], 'labels': [-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], 'attention_mask': [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}  # fmt: skip
 
-        encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 2: batched
         words, boxes = self.get_words_and_boxes_batch()
         word_labels = [[1, 2, 3], [2, 46, 17, 22, 3]]
 
-        # fmt: off
-        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'labels': [[-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 2, -100, 46, 17, 22, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [[0, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 33600, 31, 759, 9351, 83, 21895, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'bbox': [[[0, 0, 0, 0], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [961, 885, 992, 912], [961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]], 'labels': [[-100, 1, 2, -100, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100], [-100, 2, -100, 46, 17, 22, 3, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
-        encoding_p = tokenizer_p(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(words, boxes=boxes, word_labels=word_labels, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: not batched
         question, words, boxes = self.get_question_words_and_boxes()
 
-        # fmt: off
-        expected_results = {'input_ids': [0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]}  # noqa: E231
-        # fmt: on
+        expected_results = {'input_ids': [0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], 'bbox': [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]}  # fmt: skip
 
-        encoding_p = tokenizer_p(question, words, boxes, padding="max_length", max_length=20)
         encoding_r = tokenizer_r(question, words, boxes, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
         # CASE 3: batched
         questions, words, boxes = self.get_question_words_and_boxes_batch()
 
-        # fmt: off
-        expected_results = {'input_ids': [[0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], [0, 3642, 83, 764, 35839, 32, 2, 2, 2367, 10, 21, 3190, 53496, 19, 2, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [336, 42, 353, 57], [34, 42, 66, 69], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]]}  # noqa: E231
-        # fmt: on
-
-        encoding_p = tokenizer_p(questions, words, boxes, padding="max_length", max_length=20)
+        expected_results = {'input_ids': [[0, 2367, 25, 7, 1919, 9351, 32, 2, 2, 10, 179459, 538, 3034, 2, 1, 1, 1, 1, 1, 1], [0, 3642, 83, 764, 35839, 32, 2, 2, 2367, 10, 21, 3190, 53496, 19, 2, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]], 'bbox': [[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [423, 237, 440, 251], [427, 272, 441, 287], [427, 272, 441, 287], [419, 115, 437, 129], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [1000, 1000, 1000, 1000], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [336, 42, 353, 57], [34, 42, 66, 69], [34, 42, 66, 69], [1000, 1000, 1000, 1000], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]]}  # fmt: skip
         encoding_r = tokenizer_r(questions, words, boxes, padding="max_length", max_length=20)
-        self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip("Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support returning Numpy arrays")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
-    @unittest.skip("Doesn't use SentencePiece")
+    @unittest.skip(reason="Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         pass
 
-    @unittest.skip("Doesn't use SentencePiece")
+    @unittest.skip(reason="Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_decode(self):
         pass
+
+    @unittest.skip(reason="Chat is not supported")
+    def test_chat_template(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask(self):
+        pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template_return_assistant_tokens_mask_truncated(self):
+        pass
+
+    def test_empty_input_string(self):
+        tokenizer_return_type = []
+        output_tensor_type = []
+
+        if is_torch_available():
+            import numpy as np
+            import torch
+
+            tokenizer_return_type.append("pt")
+            output_tensor_type.append(torch.int64)
+            tokenizer_return_type.append("np")
+            output_tensor_type.append(np.int64)
+
+        if is_mlx_available():
+            import mlx.core as mx
+
+            tokenizer_return_type.append("mlx")
+            output_tensor_type.append(mx.int32)
+
+        if len(tokenizer_return_type) == 0:
+            self.skipTest(reason="No expected framework from PT or MLX found")
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                words, boxes = self.get_empty_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                words, boxes = self.get_empty_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)

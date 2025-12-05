@@ -15,15 +15,15 @@
 
 import argparse
 
+import gdown
 import numpy as np
 import torch
-
-import gdown
 from huggingface_hub import hf_hub_download
+
 from transformers import (
     CLIPTokenizer,
     CLIPTokenizerFast,
-    VideoMAEFeatureExtractor,
+    VideoMAEImageProcessor,
     XCLIPConfig,
     XCLIPModel,
     XCLIPProcessor,
@@ -55,7 +55,7 @@ def get_xclip_config(model_name, num_frames):
     if model_name == "xclip-large-patch14-16-frames":
         vision_config.image_size = 336
 
-    config = XCLIPConfig.from_text_vision_configs(text_config, vision_config)
+    config = XCLIPConfig(text_config=text_config, vision_config=vision_config)
 
     if "large" in model_name:
         config.projection_dim = 768
@@ -118,7 +118,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "attn.in_proj" in key:
@@ -216,7 +216,6 @@ def prepare_video(num_frames):
 
 
 def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
-
     model_to_url = {
         # fully supervised kinetics-400 checkpoints
         "xclip-base-patch32": "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_32_8.pth",
@@ -280,7 +279,7 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     if "drive" in checkpoint_url:
         output = "pytorch_model.bin"
         gdown.cached_download(checkpoint_url, output, quiet=False)
-        state_dict = torch.load(output, map_location="cpu")["model"]
+        state_dict = torch.load(output, map_location="cpu", weights_only=True)["model"]
     else:
         state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
 
@@ -292,10 +291,10 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     model.eval()
 
     size = 336 if model_name == "xclip-large-patch14-16-frames" else 224
-    feature_extractor = VideoMAEFeatureExtractor(size=size)
+    image_processor = VideoMAEImageProcessor(size=size)
     slow_tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
     fast_tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
-    processor = XCLIPProcessor(feature_extractor=feature_extractor, tokenizer=fast_tokenizer)
+    processor = XCLIPProcessor(image_processor=image_processor, tokenizer=fast_tokenizer)
 
     video = prepare_video(num_frames)
     inputs = processor(
@@ -362,9 +361,9 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     if push_to_hub:
         print("Pushing model, processor and slow tokenizer files to the hub...")
-        model.push_to_hub(model_name, organization="nielsr")
-        processor.push_to_hub(model_name, organization="nielsr")
-        slow_tokenizer.push_to_hub(model_name, organization="nielsr")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        slow_tokenizer.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -380,7 +379,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

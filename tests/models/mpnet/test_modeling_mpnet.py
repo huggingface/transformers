@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team, Microsoft Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -48,7 +48,7 @@ class MPNetModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=64,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=64,
         hidden_act="gelu",
@@ -84,9 +84,6 @@ class MPNetModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
-
-    def get_large_model_config(self):
-        return MPNetConfig.from_pretrained("microsoft/mpnet-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -190,8 +187,7 @@ class MPNetModelTester:
 
 
 @require_torch
-class MPNetModelTest(ModelTesterMixin, unittest.TestCase):
-
+class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MPNetForMaskedLM,
@@ -204,7 +200,19 @@ class MPNetModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_pruning = False
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MPNetModel,
+            "fill-mask": MPNetForMaskedLM,
+            "question-answering": MPNetForQuestionAnswering,
+            "text-classification": MPNetForSequenceClassification,
+            "token-classification": MPNetForTokenClassification,
+            "zero-shot": MPNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
     test_resize_embeddings = True
 
     def setUp(self):
@@ -248,4 +256,4 @@ class MPNetModelIntegrationTest(unittest.TestCase):
             [[[-0.0550, 0.1943, -0.0740], [-0.0562, 0.2211, -0.0579], [-0.0437, 0.3337, -0.0641]]]
         )
         # compare the actual values for a slice.
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

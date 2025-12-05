@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,22 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import inspect
+import tempfile
 import unittest
-from copy import deepcopy
 
-from transformers import RobertaConfig, is_torch_available
+import pytest
+
+from transformers import AutoTokenizer, RobertaConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        DataCollatorWithFlattening,
         RobertaForCausalLM,
         RobertaForMaskedLM,
         RobertaForMultipleChoice,
@@ -37,11 +40,8 @@ if is_torch_available():
         RobertaForTokenClassification,
         RobertaModel,
     )
-    from transformers.models.roberta.modeling_roberta import (
-        ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        RobertaEmbeddings,
-        create_position_ids_from_input_ids,
-    )
+    from transformers.models.roberta.modeling_roberta import RobertaEmbeddings
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
 ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 
@@ -58,7 +58,7 @@ class RobertaModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -366,8 +366,7 @@ class RobertaModelTester:
 
 
 @require_torch
-class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RobertaForCausalLM,
@@ -381,8 +380,26 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
-    fx_compatible = True
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RobertaModel,
+            "fill-mask": RobertaForMaskedLM,
+            "question-answering": RobertaForQuestionAnswering,
+            "text-classification": RobertaForSequenceClassification,
+            "text-generation": RobertaForCausalLM,
+            "token-classification": RobertaForTokenClassification,
+            "zero-shot": RobertaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+    model_split_percents = [0.5, 0.8, 0.9]
+
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
 
     def setUp(self):
         self.model_tester = RobertaModelTester(self)
@@ -395,18 +412,11 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -459,13 +469,12 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RobertaModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/roberta-base"
+        model = RobertaModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaEmbeddings.padding_idx + 1
@@ -478,13 +487,12 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
         )
 
-        position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
+        position_ids = RobertaEmbeddings.create_position_ids_from_input_ids(input_ids, model.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is RobertaEmbeddings.padding_idx + 1
@@ -500,16 +508,130 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             3 + embeddings.padding_idx + 1,
         ]
         expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
-        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
+        position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds, embeddings.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        """
+        Overwritten to account for the embeddings that rely on position ids.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+        support_flag = {
+            "sdpa": "_supports_sdpa",
+            "flash_attention_2": "_supports_flash_attn",
+            "flash_attention_3": "_supports_flash_attn",
+        }
+
+        for model_class in self.all_generative_model_classes:
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            # can't infer if new attn mask API is supported by assume that only model with attention backend support it
+            if not model_class._supports_attention_backend:
+                self.skipTest(f"{model_class.__name__} does not support new attention mask API")
+
+            if model_class._is_stateful:  # non-transformer models most probably have no packing support
+                self.skipTest(f"{model_class.__name__} doesn't support packing!")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest("Model is an encoder-decoder")
+
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
+                self.skipTest("Model dummy inputs should contain text input ids")
+
+            # make sure that all models have enough positions for generation
+            dummy_input_ids = inputs_dict["input_ids"]
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            if (not fa_kwargs) and "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals  etc
+                inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
+
+                # Ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                # Main difference to other models, we need to prepare position ids according to the attention mask
+                # as we use it to extract embeddings that rely on the correct position - naively increasing sequences do
+                # not suffice anymore atp. The solution here calculates an increasing sequences for all 1s and puts 0s else.
+                inputs_dict["position_ids"] = ((inputs_dict["attention_mask"] == 1).long().cumsum(dim=1) - 1) * (
+                    inputs_dict["attention_mask"] == 1
+                ).long()
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.bfloat16,
+                        attn_implementation=attn_implementation,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                if fa_kwargs:
+                    # flatten
+                    features = [
+                        {"input_ids": i[a.bool()].tolist()} for i, a in zip(dummy_input_ids, dummy_attention_mask)
+                    ]
+
+                    # add position_ids + fa_kwargs
+                    data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
+                    batch = data_collator(features)
+                    padfree_inputs_dict = {
+                        k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()
+                    }
+                else:
+                    # create packed position_ids
+                    position_ids = (
+                        torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                        .long()
+                        .unsqueeze(0)
+                        .to(torch_device)
+                    )
+                    padfree_inputs_dict = {
+                        "input_ids": dummy_input_ids[dummy_attention_mask.bool()].unsqueeze(0),
+                        "position_ids": position_ids,
+                    }
+
+                # We need to do simple forward without cache in order to trigger packed SDPA/flex/eager attention path
+                res_padded = model(**inputs_dict, use_cache=False)
+                res_padfree = model(**padfree_inputs_dict, use_cache=False)
+
+                logits_padded = res_padded.logits[dummy_attention_mask.bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                # acceptable numerical instability
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
 
 @require_torch
 class RobertaModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        model = RobertaForMaskedLM.from_pretrained("roberta-base")
+        model = RobertaForMaskedLM.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -525,11 +647,11 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.model.forward(input_ids)[0][:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
-        model = RobertaModel.from_pretrained("roberta-base")
+        model = RobertaModel.from_pretrained("FacebookAI/roberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -543,11 +665,11 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.extract_features(input_ids)[:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_classification_head(self):
-        model = RobertaForSequenceClassification.from_pretrained("roberta-large-mnli")
+        model = RobertaForSequenceClassification.from_pretrained("FacebookAI/roberta-large-mnli")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -560,24 +682,45 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_tensor = roberta.predict("mnli", input_ids, return_logits=True).detach()
 
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
+        torch.testing.assert_close(output, expected_tensor, rtol=1e-4, atol=1e-4)
 
-    # XXX: this might be a candidate for common tests if we have many of those
-    def test_lm_head_ignore_keys(self):
-        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = RobertaConfig.from_pretrained(ROBERTA_TINY)
-        config_tied = deepcopy(config)
-        config_tied.tie_word_embeddings = True
-        config_untied = deepcopy(config)
-        config_untied.tie_word_embeddings = False
-        for cls in [RobertaForMaskedLM, RobertaForCausalLM]:
-            model = cls(config_tied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
+    @pytest.mark.torch_export_test
+    @slow
+    def test_export(self):
+        if not is_torch_greater_or_equal_than_2_4:
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-            # the keys should be different when embeddings aren't tied
-            model = cls(config_untied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
+        roberta_model = "FacebookAI/roberta-base"
+        device = "cpu"
+        attn_implementation = "sdpa"
+        max_length = 512
 
-            # test that saving works with updated ignore keys - just testing that it doesn't fail
-            model.save_pretrained(self.get_auto_remove_tmp_dir())
+        tokenizer = AutoTokenizer.from_pretrained(roberta_model)
+        inputs = tokenizer(
+            "The goal of life is <mask>.",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        model = RobertaForMaskedLM.from_pretrained(
+            roberta_model,
+            device_map=device,
+            attn_implementation=attn_implementation,
+            use_cache=True,
+        )
+
+        logits = model(**inputs).logits
+        eager_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
+        self.assertEqual(eager_predicted_mask.split(), ["happiness", "love", "peace", "freedom", "simplicity"])
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
+            strict=True,
+        )
+
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        exported_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
+        self.assertEqual(eager_predicted_mask, exported_predicted_mask)

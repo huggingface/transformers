@@ -12,28 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RoCBert model configuration"""
+"""RoCBert model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/config.json",
-}
 
-
-class RoCBertConfig(PretrainedConfig):
+class RoCBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RoCBertModel`]. It is used to instantiate a
     RoCBert model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RoCBert
     [weiweishi/roc-bert-base-zh](https://huggingface.co/weiweishi/roc-bert-base-zh) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -52,7 +48,7 @@ class RoCBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -64,19 +60,13 @@ class RoCBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        enable_cls (`bool`, *optional*, defaults to `True`):
-            Whether or not the model use cls loss when pretrained.
         enable_pronunciation (`bool`, *optional*, defaults to `True`):
             Whether or not the model use pronunciation embed when training.
         enable_shape (`bool`, *optional*, defaults to `True`):
@@ -109,6 +99,7 @@ class RoCBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "roc_bert"
 
     def __init__(
@@ -127,9 +118,7 @@ class RoCBertConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         use_cache=True,
         pad_token_id=0,
-        position_embedding_type="absolute",
         classifier_dropout=None,
-        enable_cls=True,
         enable_pronunciation=True,
         enable_shape=True,
         pronunciation_embed_dim=768,
@@ -137,7 +126,7 @@ class RoCBertConfig(PretrainedConfig):
         shape_embed_dim=512,
         shape_vocab_size=24858,
         concat_input=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -152,7 +141,6 @@ class RoCBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.enable_cls = enable_cls
         self.enable_pronunciation = enable_pronunciation
         self.enable_shape = enable_shape
         self.pronunciation_embed_dim = pronunciation_embed_dim
@@ -160,6 +148,8 @@ class RoCBertConfig(PretrainedConfig):
         self.shape_embed_dim = shape_embed_dim
         self.shape_vocab_size = shape_vocab_size
         self.concat_input = concat_input
-        self.position_embedding_type = position_embedding_type
         self.classifier_dropout = classifier_dropout
         super().__init__(pad_token_id=pad_token_id, **kwargs)
+
+
+__all__ = ["RoCBertConfig"]

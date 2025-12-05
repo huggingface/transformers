@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -24,22 +23,22 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class SpeechEncoderDecoderConfig(PretrainedConfig):
+class SpeechEncoderDecoderConfig(PreTrainedConfig):
     r"""
     [`SpeechEncoderDecoderConfig`] is the configuration class to store the configuration of a
     [`SpeechEncoderDecoderModel`]. It is used to instantiate an Encoder Decoder model according to the specified
     arguments, defining the encoder and decoder configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
 
     Examples:
@@ -53,7 +52,7 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
     >>> config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & bert-base-uncased style configurations
+    >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & google-bert/bert-base-uncased style configurations
     >>> model = SpeechEncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration
@@ -70,14 +69,16 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = SpeechEncoderDecoderConfig.from_pretrained("my-model")
     >>> model = SpeechEncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "speech-encoder-decoder"
-    is_composition = True
+    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
-                f"A configuraton of type {self.model_type} cannot be instantiated because not both `encoder` and"
+                f"A configuration of type {self.model_type} cannot be instantiated because not both `encoder` and"
                 f" `decoder` sub-configurations are passed, but only {kwargs}"
             )
 
@@ -92,8 +93,8 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
     @classmethod
     def from_encoder_decoder_configs(
-        cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
-    ) -> PretrainedConfig:
+        cls, encoder_config: PreTrainedConfig, decoder_config: PreTrainedConfig, **kwargs
+    ) -> PreTrainedConfig:
         r"""
         Instantiate a [`SpeechEncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
         configuration and decoder model configuration.
@@ -107,15 +108,5 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
 
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["encoder"] = self.encoder.to_dict()
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+__all__ = ["SpeechEncoderDecoderConfig"]

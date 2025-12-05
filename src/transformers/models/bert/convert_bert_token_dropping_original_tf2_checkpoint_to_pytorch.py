@@ -18,6 +18,7 @@ model. The official implementation of "Token Dropping" can be found in the Tenso
 
 https://github.com/tensorflow/models/tree/master/official/projects/token_dropping
 """
+
 import argparse
 
 import tensorflow as tf
@@ -66,10 +67,10 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
 
         return torch.from_numpy(array)
 
-    def get_encoder_attention_layer_array(layer_index: int, name: str, orginal_shape):
+    def get_encoder_attention_layer_array(layer_index: int, name: str, original_shape):
         full_name = f"encoder/_transformer_layers/{layer_index}/_attention_layer/{name}/.ATTRIBUTES/VARIABLE_VALUE"
         array = tf.train.load_variable(tf_checkpoint_path, full_name)
-        array = array.reshape(orginal_shape)
+        array = array.reshape(original_shape)
 
         if "kernel" in name:
             array = array.transpose()
@@ -163,7 +164,7 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
     new_model = BertForMaskedLM.from_pretrained(pytorch_dump_path)
     print(new_model.eval())
 
-    print("Model conversion was done sucessfully!")
+    print("Model conversion was done successfully!")
 
 
 if __name__ == "__main__":

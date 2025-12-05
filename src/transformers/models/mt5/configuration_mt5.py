@@ -12,36 +12,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" mT5 model configuration"""
-from typing import Mapping
+"""mT5 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxSeq2SeqConfigWithPast
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MT5Config(PretrainedConfig):
+class MT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MT5Model`] or a [`TFMT5Model`]. It is used to
+    This is the configuration class to store the configuration of a [`MT5Model`]. It is used to
     instantiate a mT5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the mT5
     [google/mt5-small](https://huggingface.co/google/mt5-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 250112):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+            `inputs_ids` passed when calling [`T5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
-            num_heads`.
+            Size of the key, query, value projections per attention head. In the conventional context, it is typically expected that `d_kv` has to be equal to `d_model // num_heads`.
+            But in the architecture of mt5-small, `d_kv` is not equal to `d_model //num_heads`. The `inner_dim` of the projection layer will be defined as `num_heads * d_kv`.
         d_ff (`int`, *optional*, defaults to 1024):
             Size of the intermediate feed forward layer in each `T5Block`.
         num_layers (`int`, *optional*, defaults to 8):
@@ -56,6 +54,8 @@ class MT5Config(PretrainedConfig):
             The maximum distance of the longer sequences for the bucket separation.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
+        classifier_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for classifier.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -66,8 +66,15 @@ class MT5Config(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "mt5"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "head_dim": "d_kv",
+    }
 
     def __init__(
         self,
@@ -91,17 +98,9 @@ class MT5Config(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
-        **kwargs
+        classifier_dropout=0.0,
+        **kwargs,
     ):
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -114,18 +113,18 @@ class MT5Config(PretrainedConfig):
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
         self.dropout_rate = dropout_rate
+        self.classifier_dropout = classifier_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
 
         if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
             raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
+                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer. "
                 "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
                 "'gated-gelu' or 'relu'"
             )
@@ -134,45 +133,17 @@ class MT5Config(PretrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-    @property
-    def hidden_size(self):
-        return self.d_model
+        super().__init__(
+            is_encoder_decoder=is_encoder_decoder,
+            tokenizer_class=tokenizer_class,
+            tie_word_embeddings=tie_word_embeddings,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
+        # TODO: Mt5 never supported not tying encoder decoder so this has to be true.
+        self.tie_encoder_decoder = True
 
-    @property
-    def num_attention_heads(self):
-        return self.num_heads
 
-    @property
-    def num_hidden_layers(self):
-        return self.num_layers
-
-
-class MT5OnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    # Copied from transformers.models.t5.configuration_t5.T5OnnxConfig.inputs
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = {
-            "input_ids": {0: "batch", 1: "encoder_sequence"},
-            "attention_mask": {0: "batch", 1: "encoder_sequence"},
-        }
-        if self.use_past:
-            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    @property
-    # Copied from transformers.models.t5.configuration_t5.T5OnnxConfig.default_onnx_opset
-    def default_onnx_opset(self) -> int:
-        return 13
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 5e-4
+__all__ = ["MT5Config"]

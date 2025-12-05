@@ -14,13 +14,12 @@
 # limitations under the License.
 """Tokenization classes for DPR."""
 
-
 import collections
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
-from ..bert.tokenization_bert_fast import BertTokenizerFast
+from ..bert.tokenization_bert import BertTokenizer
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
 
 
@@ -28,120 +27,32 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt"
-        ),
-        "facebook/dpr-ctx_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json"
-        ),
-        "facebook/dpr-ctx_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
-QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt"
-        ),
-        "facebook/dpr-question_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json"
-        ),
-        "facebook/dpr-question_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
-READER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt"
-        ),
-        "facebook/dpr-reader-multiset-base": (
-            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json"
-        ),
-        "facebook/dpr-reader-multiset-base": (
-            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
 
-CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-ctx_encoder-single-nq-base": 512,
-    "facebook/dpr-ctx_encoder-multiset-base": 512,
-}
-QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-question_encoder-single-nq-base": 512,
-    "facebook/dpr-question_encoder-multiset-base": 512,
-}
-READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-reader-single-nq-base": 512,
-    "facebook/dpr-reader-multiset-base": 512,
-}
-
-
-CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-ctx_encoder-multiset-base": {"do_lower_case": True},
-}
-QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-question_encoder-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-question_encoder-multiset-base": {"do_lower_case": True},
-}
-READER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-reader-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-reader-multiset-base": {"do_lower_case": True},
-}
-
-
-class DPRContextEncoderTokenizerFast(BertTokenizerFast):
+class DPRContextEncoderTokenizerFast(BertTokenizer):
     r"""
     Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = DPRContextEncoderTokenizer
 
 
-class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
+class DPRQuestionEncoderTokenizerFast(BertTokenizer):
     r"""
     Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = DPRQuestionEncoderTokenizer
 
 
@@ -161,13 +72,13 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
     [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
     Args:
-        questions (`str` or `List[str]`):
+        questions (`str` or `list[str]`):
             The questions to be encoded. You can specify one question for many passages. In this case, the question
             will be duplicated like `[questions] * n_passages`. Otherwise you have to specify as many questions as in
             `titles` or `texts`.
-        titles (`str` or `List[str]`):
+        titles (`str` or `list[str]`):
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
-        texts (`str` or `List[str]`):
+        texts (`str` or `list[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
@@ -202,7 +113,6 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         return_attention_mask (`bool`, *optional*):
@@ -212,7 +122,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
 
     Return:
-        `Dict[str, List[List[int]]]`: A dictionary with the following keys:
+        `dict[str, list[list[int]]]`: A dictionary with the following keys:
 
         - `input_ids`: List of token ids to be fed to a model.
         - `attention_mask`: List of indices specifying which tokens should be attended to by the model.
@@ -231,7 +141,7 @@ class CustomDPRReaderTokenizerMixin:
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
             return super().__call__(
@@ -259,9 +169,9 @@ class CustomDPRReaderTokenizerMixin:
         texts = texts if not isinstance(texts, str) else [texts]
         n_passages = len(titles)
         questions = questions if not isinstance(questions, str) else [questions] * n_passages
-        assert len(titles) == len(
-            texts
-        ), f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+        assert len(titles) == len(texts), (
+            f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
+        )
         encoded_question_and_titles = super().__call__(questions, titles, padding=False, truncation=False)["input_ids"]
         encoded_texts = super().__call__(texts, add_special_tokens=False, padding=False, truncation=False)["input_ids"]
         encoded_inputs = {
@@ -286,7 +196,7 @@ class CustomDPRReaderTokenizerMixin:
         num_spans: int = 16,
         max_answer_length: int = 64,
         num_spans_per_passage: int = 4,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Get the span predictions for the extractive Q&A model.
 
@@ -316,12 +226,13 @@ class CustomDPRReaderTokenizerMixin:
         >>> outputs = model(**encoded_inputs)
         >>> predicted_spans = tokenizer.decode_best_spans(encoded_inputs, outputs)
         >>> print(predicted_spans[0].text)  # best span
+        a song
         ```"""
         input_ids = reader_input["input_ids"]
         start_logits, end_logits, relevance_logits = reader_output[:3]
         n_passages = len(relevance_logits)
         sorted_docs = sorted(range(n_passages), reverse=True, key=relevance_logits.__getitem__)
-        nbest_spans_predictions: List[DPRReaderOutput] = []
+        nbest_spans_predictions: list[DPRReaderOutput] = []
         for doc_id in sorted_docs:
             sequence_ids = list(input_ids[doc_id])
             # assuming question & title information is at the beginning of the sequence
@@ -356,11 +267,11 @@ class CustomDPRReaderTokenizerMixin:
 
     def _get_best_spans(
         self,
-        start_logits: List[int],
-        end_logits: List[int],
+        start_logits: list[int],
+        end_logits: list[int],
         max_answer_length: int,
         top_spans: int,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage. It returns the best span by descending
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
@@ -376,11 +287,9 @@ class CustomDPRReaderTokenizerMixin:
             length = end_index - start_index + 1
             assert length <= max_answer_length, f"Span is too long: {length} > {max_answer_length}"
             if any(
-                [
-                    start_index <= prev_start_index <= prev_end_index <= end_index
-                    or prev_start_index <= start_index <= end_index <= prev_end_index
-                    for (prev_start_index, prev_end_index) in chosen_span_intervals
-                ]
+                start_index <= prev_start_index <= prev_end_index <= end_index
+                or prev_start_index <= start_index <= end_index <= prev_end_index
+                for (prev_start_index, prev_end_index) in chosen_span_intervals
             ):
                 continue
             chosen_span_intervals.append((start_index, end_index))
@@ -391,21 +300,21 @@ class CustomDPRReaderTokenizerMixin:
 
 
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
-class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
+class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizer):
     r"""
     Constructs a "fast" DPRReader tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece. The difference is that is has three inputs strings: question, titles and texts
     that are combined to be fed to the [`DPRReader`] model.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
 
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = DPRReaderTokenizer
+
+
+__all__ = ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]

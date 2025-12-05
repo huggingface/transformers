@@ -12,29 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" YOSO model configuration"""
+"""YOSO model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uw-madison/yoso-4096": "https://huggingface.co/uw-madison/yoso-4096/resolve/main/config.json",
-    # See all YOSO models at https://huggingface.co/models?filter=yoso
-}
 
-
-class YosoConfig(PretrainedConfig):
+class YosoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`YosoModel`]. It is used to instantiate an YOSO
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the YOSO
     [uw-madison/yoso-4096](https://huggingface.co/uw-madison/yoso-4096) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -53,7 +48,7 @@ class YosoConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -65,8 +60,6 @@ class YosoConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`.
         use_expectation (`bool`, *optional*, defaults to `True`):
             Whether or not to use YOSO Expectation. Overrides any effect of num_hash.
         hash_code_len (`int`, *optional*, defaults to 9):
@@ -94,6 +87,7 @@ class YosoConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "yoso"
 
     def __init__(
@@ -110,7 +104,6 @@ class YosoConfig(PretrainedConfig):
         type_vocab_size=1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        position_embedding_type="absolute",
         use_expectation=True,
         hash_code_len=9,
         num_hash=64,
@@ -120,7 +113,7 @@ class YosoConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -136,10 +129,12 @@ class YosoConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_expectation = use_expectation
         self.hash_code_len = hash_code_len
         self.num_hash = num_hash
         self.conv_window = conv_window
         self.use_fast_hash = use_fast_hash
         self.lsh_backward = lsh_backward
+
+
+__all__ = ["YosoConfig"]

@@ -4,14 +4,18 @@ import subprocess
 
 
 def get_runner_status(target_runners, token):
-
     offline_runners = []
 
-    cmd = (
-        f'curl -H "Accept: application/vnd.github+json" -H "Authorization: Bearer {token}"'
-        " https://api.github.com/repos/huggingface/transformers/actions/runners"
-    )
-    output = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE)
+    cmd = [
+        "curl",
+        "-H",
+        "Accept: application/vnd.github+json",
+        "-H",
+        f"Authorization: Bearer {token}",
+        "https://api.github.com/repos/huggingface/transformers/actions/runners",
+    ]
+
+    output = subprocess.run(cmd, check=False, shell=True, stdout=subprocess.PIPE)
     o = output.stdout.decode("utf-8")
     status = json.loads(o)
 
@@ -26,7 +30,7 @@ def get_runner_status(target_runners, token):
         fp.write(json.dumps(offline_runners))
 
     if len(offline_runners) > 0:
-        failed = "\n".join(offline_runners)
+        failed = "\n".join([x["name"] for x in offline_runners])
         raise ValueError(f"The following runners are offline:\n{failed}")
 
 

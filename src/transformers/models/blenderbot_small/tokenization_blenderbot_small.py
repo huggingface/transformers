@@ -16,11 +16,11 @@
 
 import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import regex as re
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -32,22 +32,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/vocab.json"
-    },
-    "merges_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
-    },
-    "tokenizer_config_file": {
-        "facebook/blenderbot_small-90M": (
-            "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
-        )
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot_small-90M": 512}
 
 
 def get_pairs(word):
@@ -85,15 +69,13 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         unk_token (`str`, *optional*, defaults to `"__unk__"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"__pad__"`):
+        pad_token (`str`, *optional*, defaults to `"__null__"`):
             The token used for padding, for example when batching sequences of different lengths.
-        **kwargs
+        kwargs (*optional*):
             Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -104,10 +86,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         eos_token="__end__",
         unk_token="__unk__",
         pad_token="__null__",
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -117,11 +97,14 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
+        super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
+        self.special_tokens_pattern = None
+
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def get_vocab(self) -> Dict:
+    def get_vocab(self) -> dict:
         return dict(self.encoder, **self.added_tokens_encoder)
 
     def bpe(self, token: str) -> str:
@@ -184,14 +167,14 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             words.append(word)
         return " ".join(words)
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Split a string into tokens using BPE."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
 
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def _convert_token_to_id(self, token: str) -> int:
@@ -203,12 +186,12 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.unk_token)
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens in a single string."""
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -236,3 +219,6 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+
+__all__ = ["BlenderbotSmallTokenizer"]

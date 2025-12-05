@@ -1,9 +1,12 @@
 from collections import Counter
+
 import datasets
+
 import transformers
 from transformers.convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
-
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import logging
+
 
 logging.set_verbosity_info()
 
@@ -11,7 +14,7 @@ TOKENIZER_CLASSES = {
     name: (getattr(transformers, name), getattr(transformers, name + "Fast")) for name in SLOW_TO_FAST_CONVERTERS
 }
 
-dataset = datasets.load_dataset("xnli", split="test+validation")
+dataset = datasets.load_dataset("facebook/xnli", split="test+validation")  # no-script
 
 total = 0
 perfect = 0
@@ -19,7 +22,9 @@ imperfect = 0
 wrong = 0
 
 
-def check_diff(spm_diff, tok_diff, slow, fast):
+def check_diff(
+    spm_diff: list[int], tok_diff: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase
+) -> bool:
     if spm_diff == list(reversed(tok_diff)):
         # AAA -> AA+A vs A+AA case.
         return True
@@ -40,7 +45,7 @@ def check_diff(spm_diff, tok_diff, slow, fast):
     return False
 
 
-def check_LTR_mark(line, idx, fast):
+def check_LTR_mark(line: str, idx: int, fast: PreTrainedTokenizerBase) -> bool:
     enc = fast.encode_plus(line)[0]
     offsets = enc.offsets
     curr, prev = offsets[idx], offsets[idx - 1]
@@ -48,9 +53,12 @@ def check_LTR_mark(line, idx, fast):
         return True
     if prev is not None and line[prev[0] : prev[1]] == "\u200f":
         return True
+    return False
 
 
-def check_details(line, spm_ids, tok_ids, slow, fast):
+def check_details(
+    line: str, spm_ids: list[int], tok_ids: list[int], slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase
+) -> bool:
     # Encoding can be the same with same result AAA -> A + AA vs AA + A
     # We can check that we use at least exactly the same number of tokens.
     for i, (spm_id, tok_id) in enumerate(zip(spm_ids, tok_ids)):
@@ -86,7 +94,9 @@ def check_details(line, spm_ids, tok_ids, slow, fast):
                     if tok_ids[first + k : first + k + min_width] == spm_ids[first + i : first + i + min_width]
                 ]
                 for j in possible_matches:
-                    if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], sp, tok) and check_details(
+                    if check_diff(
+                        spm_ids[first : first + i], tok_ids[first : first + j], slow, fast
+                    ) and check_details(
                         line,
                         spm_ids[first + i : last],
                         tok_ids[first + j : last],
@@ -101,15 +111,15 @@ def check_details(line, spm_ids, tok_ids, slow, fast):
     except Exception:
         pass
 
-    ok_start = fast.decode(spm_ids[:first])
-    ok_end = fast.decode(spm_ids[last:])
+    fast.decode(spm_ids[:first])
+    fast.decode(spm_ids[last:])
     wrong = fast.decode(spm_ids[first:last])
     print()
     print(wrong)
     return False
 
 
-def test_string(slow, fast, text):
+def test_string(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase, text: str) -> None:
     global perfect
     global imperfect
     global wrong
@@ -136,12 +146,12 @@ def test_string(slow, fast, text):
     if skip_assert:
         return
 
-    assert (
-        slow_ids == fast_ids
-    ), f"line {text} : \n\n{slow_ids}\n{fast_ids}\n\n{slow.tokenize(text)}\n{fast.tokenize(text)}"
+    assert slow_ids == fast_ids, (
+        f"line {text} : \n\n{slow_ids}\n{fast_ids}\n\n{slow.tokenize(text)}\n{fast.tokenize(text)}"
+    )
 
 
-def test_tokenizer(slow, fast):
+def test_tokenizer(slow: PreTrainedTokenizerBase, fast: PreTrainedTokenizerBase) -> None:
     global batch_total
     for i in range(len(dataset)):
         # premise, all languages

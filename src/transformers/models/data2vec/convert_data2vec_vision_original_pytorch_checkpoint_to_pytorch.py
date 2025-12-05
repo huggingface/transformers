@@ -3,12 +3,12 @@ import argparse
 import json
 
 import torch
-from PIL import Image
-
 from huggingface_hub import hf_hub_download
+from PIL import Image
 from timm.models import create_model
+
 from transformers import (
-    BeitFeatureExtractor,
+    BeitImageProcessor,
     Data2VecVisionConfig,
     Data2VecVisionForImageClassification,
     Data2VecVisionModel,
@@ -185,18 +185,12 @@ def load_beit_model(args, is_finetuned, is_large):
         missing_keys = warn_missing_keys
 
         if len(missing_keys) > 0:
-            print(
-                "Weights of {} not initialized from pretrained model: {}".format(
-                    model.__class__.__name__, missing_keys
-                )
-            )
+            print(f"Weights of {model.__class__.__name__} not initialized from pretrained model: {missing_keys}")
         if len(unexpected_keys) > 0:
-            print("Weights from pretrained model not used in {}: {}".format(model.__class__.__name__, unexpected_keys))
+            print(f"Weights from pretrained model not used in {model.__class__.__name__}: {unexpected_keys}")
         if len(ignore_missing_keys) > 0:
             print(
-                "Ignored weights of {} not initialized from pretrained model: {}".format(
-                    model.__class__.__name__, ignore_missing_keys
-                )
+                f"Ignored weights of {model.__class__.__name__} not initialized from pretrained model: {ignore_missing_keys}"
             )
         if len(error_msgs) > 0:
             print("\n".join(error_msgs))
@@ -224,7 +218,7 @@ def load_beit_model(args, is_finetuned, is_large):
     )
     patch_size = model.patch_embed.patch_size
     args.window_size = (args.input_size // patch_size[0], args.input_size // patch_size[1])
-    checkpoint = torch.load(args.beit_checkpoint, map_location="cpu")
+    checkpoint = torch.load(args.beit_checkpoint, map_location="cpu", weights_only=True)
 
     print(f"Load ckpt from {args.beit_checkpoint}")
     checkpoint_model = None
@@ -304,9 +298,9 @@ def main():
     orig_model.eval()
 
     # 3. Forward Beit model
-    feature_extractor = BeitFeatureExtractor(size=config.image_size, do_center_crop=False)
+    image_processor = BeitImageProcessor(size=config.image_size, do_center_crop=False)
     image = Image.open("../../../../tests/fixtures/tests_samples/COCO/000000039769.png")
-    encoding = feature_extractor(images=image, return_tensors="pt")
+    encoding = image_processor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     orig_args = (pixel_values,) if is_finetuned else (pixel_values, None)
@@ -347,14 +341,14 @@ def main():
 
     print(f"max_absolute_diff = {max_absolute_diff}")
     success = torch.allclose(hf_output, orig_model_output, atol=1e-3)
-    print("Do both models output the same tensors?", "🔥" if success else "💩")
+    print("Do both models output the same tensors?", "[PASS]" if success else "[FAIL]")
     if not success:
         raise Exception("Something went wRoNg")
 
     # 7. Save
     print(f"Saving to {args.hf_checkpoint_name}")
     hf_model.save_pretrained(args.hf_checkpoint_name)
-    feature_extractor.save_pretrained(args.hf_checkpoint_name)
+    image_processor.save_pretrained(args.hf_checkpoint_name)
 
 
 if __name__ == "__main__":

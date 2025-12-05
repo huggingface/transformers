@@ -12,32 +12,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ProphetNet model configuration"""
+"""ProphetNet model configuration"""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/prophetnet-large-uncased": (
-        "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/config.json"
-    ),
-}
 
-
-class ProphetNetConfig(PretrainedConfig):
+class ProphetNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ProphetNetModel`]. It is used to instantiate a
     ProphetNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ProphetNet
     [microsoft/prophetnet-large-uncased](https://huggingface.co/microsoft/prophetnet-large-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         activation_dropout (`float`, *optional*, defaults to 0.1):
@@ -86,10 +81,10 @@ class ProphetNetConfig(PretrainedConfig):
             token.
         num_buckets (`int`, *optional*, defaults to 32)
             The number of buckets to use for each attention layer. This is for relative position calculation. See the
-            [T5 paper](see https://arxiv.org/abs/1910.10683) for more details.
+            [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
         relative_max_distance (`int`, *optional*, defaults to 128)
             Relative distances greater than this number will be put into the last same bucket. This is for relative
-            position calculation. See the [T5 paper](see https://arxiv.org/abs/1910.10683) for more details.
+            position calculation. See the [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
         disable_ngram_loss (`bool`, *optional*, defaults to `False`):
             Whether be trained predicting only the next first token.
         eps (`float`, *optional*, defaults to 0.0):
@@ -98,6 +93,7 @@ class ProphetNetConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -132,7 +128,7 @@ class ProphetNetConfig(PretrainedConfig):
         pad_token_id: Optional[int] = 0,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -172,7 +168,7 @@ class ProphetNetConfig(PretrainedConfig):
 
     @property
     def num_hidden_layers(self) -> int:
-        return self.num_encoder_layers + self.num_decoder_layers
+        return self.num_encoder_layers
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):
@@ -180,3 +176,6 @@ class ProphetNetConfig(PretrainedConfig):
             "This model does not support the setting of `num_hidden_layers`. Please set `num_encoder_layers` and"
             " `num_decoder_layers`."
         )
+
+
+__all__ = ["ProphetNetConfig"]

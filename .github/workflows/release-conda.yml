@@ -12,14 +12,14 @@ env:
 
 jobs:
   build_and_package:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         shell: bash -l {0}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Install miniconda
         uses: conda-incubator/setup-miniconda@v2
