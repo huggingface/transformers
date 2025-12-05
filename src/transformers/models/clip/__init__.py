@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .modeling_clip import *
     from .processing_clip import *
     from .tokenization_clip import *
-    from .tokenization_clip_fast import *
 else:
     import sys
 

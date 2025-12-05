@@ -53,7 +53,7 @@ from .utils import (
     requires_backends,
 )
 from .utils.generic import strtobool
-from .utils.import_utils import is_optimum_neuron_available
+from .utils.import_utils import enable_tf32, is_optimum_neuron_available
 
 
 logger = logging.get_logger(__name__)
@@ -340,6 +340,17 @@ class TrainingArguments:
             `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
             alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
             checkpoints are saved: the last one and the best one (if they are different).
+        enable_jit_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. When enabled, training will
+            checkpoint upon receiving SIGTERM, allowing for graceful termination without losing
+            progress. This is particularly useful for shared clusters with preemptible workloads (e.g., Kueue).
+            **Important**: You must configure your orchestrator's graceful shutdown period to allow sufficient time
+            for checkpoint completion. For Kubernetes, set `terminationGracePeriodSeconds` in your job definition
+            (method varies by cloud-native trainer: Kubeflow, Ray, etc.). Note: the default is only 30 seconds,
+            which is typically insufficient. For Slurm, use `--signal=USR1@<seconds>` in your sbatch script to send
+            SIGTERM with adequate time before the job time limit. Calculate the required grace period as: longest
+            possible iteration time + checkpoint saving time. For example, if an iteration takes 2 minutes and
+            checkpoint saving takes 2 minutes, set at least 4 minutes (240 seconds) of grace time.
         save_safetensors (`bool`, *optional*, defaults to `True`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -379,7 +390,7 @@ class TrainingArguments:
             metric values.
         tf32 (`bool`, *optional*):
             Whether to enable the TF32 mode, available in Ampere and newer GPU architectures. The default value depends
-            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
+            on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32` and For PyTorch 2.9+ torch.backends.cuda.matmul.fp32_precision. For more details please refer to
             the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
             experimental API and it may change.
         ddp_backend (`str`, *optional*):
@@ -929,7 +940,23 @@ class TrainingArguments:
                 " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
                 " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
                 " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
-                " Default is unlimited checkpoints"
+                " Default is unlimited checkpoints."
+            )
+        },
+    )
+    enable_jit_checkpoint: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. "
+                "When enabled, training will checkpoint upon receiving SIGTERM, "
+                "allowing for graceful termination without losing progress. "
+                "This is particularly useful for shared clusters with preemptible workloads (Kueue). "
+                "IMPORTANT: You must configure your orchestrator's graceful shutdown period. "
+                "Kubernetes: set terminationGracePeriodSeconds (default 30s is insufficient!) in your job definition. "
+                "Slurm: use --signal=USR1@<seconds> in sbatch to send SIGTERM before time limit. "
+                "Calculate required grace period as: iteration time + checkpoint saving time. "
+                "Example: 2min iteration + 2min checkpoint = 240 seconds minimum."
             )
         },
     )
@@ -1601,11 +1628,7 @@ class TrainingArguments:
                         f"Setting TF32 in {device_str} backends to speedup torch compile, you won't see any improvement"
                         " otherwise."
                     )
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                    enable_tf32(True)
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come with GPU Ampere or higher and which is not detected here."
@@ -1613,20 +1636,12 @@ class TrainingArguments:
         if is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = True
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = True
-                        torch.backends.cudnn.allow_tf32 = True
+                    enable_tf32(True)
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
-                    if is_torch_musa_available():
-                        torch.backends.mudnn.allow_tf32 = False
-                    else:
-                        torch.backends.cuda.matmul.allow_tf32 = False
-                        torch.backends.cudnn.allow_tf32 = False
+                    enable_tf32(False)
                 # no need to assert on else
 
         if self.report_to == "all" or self.report_to == ["all"]:
@@ -2754,10 +2769,24 @@ class TrainingArguments:
                         fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
-            fsdp_plugin_args["fsdp_version"] = self.fsdp_config.get("fsdp_version", 1)
+            fsdp_version = int(self.fsdp_config.get("version", 1))
+            fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
-            fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
-            fsdp_plugin_args["forward_prefetch"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+            if fsdp_version == 2:
+                fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
+                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                )
+            else:
+                fsdp_plugin_args["forward_prefetch"] = str_to_bool(
+                    str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+                )
+                fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+                fsdp_plugin_args["reshard_after_forward"] = str(
+                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
+                ).lower()
+                fsdp_plugin_args["use_orig_params"] = str_to_bool(
+                    str(self.fsdp_config.get("use_orig_params", "true")).lower()
+                )
 
             sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
             cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
@@ -2767,11 +2796,10 @@ class TrainingArguments:
                 raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
 
             # we need to set the env here as otherwise we get a warning in accelerate + we need to set it for transformers
-            fsdp_plugin_args["cpu_ram_efficient_loading"] = cpu_ram_efficient_loading
+            fsdp_plugin_args["cpu_ram_efficient_loading"] = str_to_bool(cpu_ram_efficient_loading)
             os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
-            fsdp_plugin_args["sync_module_states"] = sync_module_states
-            fsdp_plugin_args["use_orig_params"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
+            fsdp_plugin_args["sync_module_states"] = str_to_bool(sync_module_states)
 
         return fsdp_plugin_args
 
@@ -2783,3 +2811,18 @@ class ParallelMode(Enum):
     SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
     SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"
+
+
+def str_to_bool(value, to_bool: bool = True) -> int | bool:
+    """
+    Converts a string representation of truth to `True` (1) or `False` (0).
+
+    True values are `y`, `yes`, `t`, `true`, `on`, and `1`; False value are `n`, `no`, `f`, `false`, `off`, and `0`;
+    """
+    value = value.lower()
+    if value in ("y", "yes", "t", "true", "on", "1"):
+        return 1 if not to_bool else True
+    elif value in ("n", "no", "f", "false", "off", "0"):
+        return 0 if not to_bool else False
+    else:
+        raise ValueError(f"invalid truth value {value}")

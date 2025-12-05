@@ -75,15 +75,14 @@ class Bnb4bitDeserialize(ConversionOps):
         Deserialization of bnb keys. We need 6 keys to recreate the quantized weights
         """
         if len(input_dict) == 1:
-            # special case when we only fetched the weight
-            # since we collected keys, we need to return it like that
-            return {full_layer_name: input_dict["weight"]}
+            return input_dict
 
         for key, value in input_dict.items():
             if isinstance(value, list):
                 input_dict[key] = value[0]
 
-        weight = input_dict.pop("weight")
+        key_weight = "weight"
+        weight = input_dict.pop(key_weight)
         module, _ = get_module_from_name(model, full_layer_name)
         new_value = bnb.nn.Params4bit.from_prequantized(
             data=weight,
@@ -93,7 +92,7 @@ class Bnb4bitDeserialize(ConversionOps):
             module=module,
         )
         module._is_hf_initialized = True
-        return {full_layer_name: new_value}
+        return {key_weight: new_value}
 
 
 class Bnb8bitQuantize(ConversionOps):
@@ -140,7 +139,7 @@ class Bnb8bitDeserialize(ConversionOps):
         if len(input_dict) == 1:
             # special case when we only fetched the weight
             # since we collected keys, we need to return it like that
-            return {full_layer_name: input_dict["weight"]}
+            return input_dict
 
         for key, value in input_dict.items():
             if isinstance(value, list):
@@ -148,12 +147,13 @@ class Bnb8bitDeserialize(ConversionOps):
 
         module, _ = get_module_from_name(model, full_layer_name)
 
-        weight = input_dict["weight"]
+        key_weight = "weight"
+        weight = input_dict[key_weight]
         kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
         kwargs["SCB"] = input_dict["SCB"]
         new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
         module._is_hf_initialized = True
-        return {full_layer_name: new_value}
+        return {key_weight: new_value}
 
 
 def _replace_with_bnb_linear(
@@ -223,7 +223,9 @@ def _replace_with_bnb_linear(
                             if pre_quantized:
                                 # this is kind of an edge case when supporting both loading and quantization ...
                                 # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
-                                new_module.weight.data = new_module.weight.data.to(dtype=torch.uint8)
+                                new_module.weight.data = new_module.weight.data.to(
+                                    dtype=quantization_config.bnb_4bit_quant_storage
+                                )
                             model._modules[name] = new_module
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later
