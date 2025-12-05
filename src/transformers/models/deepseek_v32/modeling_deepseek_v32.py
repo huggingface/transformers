@@ -23,6 +23,7 @@ import math
 from typing import Optional, Union
 
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from torch import nn
 
@@ -311,6 +312,7 @@ class DeepseekV32MoE(nn.Module):
         self.hidden_size = config.hidden_size
         self.n_routed_experts = config.n_routed_experts
         self.num_experts_per_tok = config.num_experts_per_tok
+        self.use_distributed_moe = config.use_distributed_moe
 
         self.gate = DeepseekV32Gate(config)
         self.experts = nn.ModuleList([DeepseekV32Expert(config) for _ in range(config.n_routed_experts)])
@@ -348,6 +350,9 @@ class DeepseekV32MoE(nn.Module):
 
         # Add shared expert output
         output = output + self.shared_experts(hidden_states_flat)
+
+        if self.use_distributed_moe and dist.is_initialized() and dist.get_world_size() > 1:
+            dist.all_reduce(output)
 
         return output.type_as(hidden_states).view(batch_size, seq_len, hidden_size)
 

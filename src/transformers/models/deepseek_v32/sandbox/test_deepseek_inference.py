@@ -11,7 +11,6 @@ Usage:
 """
 
 import modal
-from modal import experimental
 
 
 # Configuration
@@ -315,12 +314,12 @@ def test_inference(
     num_gpus = torch.cuda.device_count()
     if fp8_quant_config:
         # FP8 model is ~half the size, should fit entirely on GPU
-        max_memory = {i: "175GiB" for i in range(num_gpus)}
+        max_memory = dict.fromkeys(range(num_gpus), "175GiB")
         max_memory["cpu"] = "0GiB"  # No CPU needed for FP8
         print("  max_memory config: GPU=175GiB each, CPU=0GiB (FP8 fits on GPU)", flush=True)
     else:
         # BF16 model - allocate GPU memory evenly, minimal CPU
-        max_memory = {i: "175GiB" for i in range(num_gpus)}
+        max_memory = dict.fromkeys(range(num_gpus), "175GiB")
         max_memory["cpu"] = "100GiB"  # Allow CPU for buffers/intermediates
         print("  max_memory config: GPU=175GiB each, CPU=100GiB (buffers only)", flush=True)
 
@@ -331,6 +330,7 @@ def test_inference(
     # This avoids the slow auto device placement during weight loading
     print("  Computing optimal device map...", flush=True)
     from accelerate import infer_auto_device_map, init_empty_weights
+
     from transformers import AutoConfig
 
     model_config = AutoConfig.from_pretrained(full_model_path, trust_remote_code=True)
@@ -585,12 +585,13 @@ def test_chat_inference(
 
     # Configure memory
     num_gpus = torch.cuda.device_count()
-    max_memory = {i: "175GiB" for i in range(num_gpus)}
+    max_memory = dict.fromkeys(range(num_gpus), "175GiB")
     max_memory["cpu"] = "0GiB" if fp8_quant_config else "100GiB"
 
     # Pre-compute device map for faster loading
     print("  Computing optimal device map...", flush=True)
     from accelerate import infer_auto_device_map, init_empty_weights
+
     from transformers import AutoConfig
 
     model_config = AutoConfig.from_pretrained(full_model_path, trust_remote_code=True)

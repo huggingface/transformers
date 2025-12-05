@@ -28,6 +28,7 @@ import math
 from typing import Optional, Union
 
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from torch import nn
 
@@ -135,6 +136,8 @@ class DeepseekV32Config(PretrainedConfig):
             Number of top-k tokens to select for sparse attention.
         use_fp8_indexer (`bool`, *optional*, defaults to `False`):
             Whether to use FP8 quantization in the indexer.
+        use_distributed_moe (`bool`, *optional*, defaults to `False`):
+            Whether to enable distributed all-reduce for MoE experts. This mirrors the reference implementation's behavior.
 
     Example:
 
@@ -223,6 +226,7 @@ class DeepseekV32Config(PretrainedConfig):
         index_head_dim: int = 128,
         index_topk: int = 2048,
         use_fp8_indexer: bool = False,
+        use_distributed_moe: bool = False,
         **kwargs,
     ):
         # Core dimensions
@@ -277,6 +281,7 @@ class DeepseekV32Config(PretrainedConfig):
         self.index_head_dim = index_head_dim
         self.index_topk = index_topk
         self.use_fp8_indexer = use_fp8_indexer
+        self.use_distributed_moe = use_distributed_moe
 
         # head_dim for RoPE compatibility
         self.head_dim = qk_rope_head_dim
@@ -637,6 +642,7 @@ class DeepseekV32MoE(nn.Module):
         self.hidden_size = config.hidden_size
         self.n_routed_experts = config.n_routed_experts
         self.num_experts_per_tok = config.num_experts_per_tok
+        self.use_distributed_moe = config.use_distributed_moe
 
         self.gate = DeepseekV32Gate(config)
         self.experts = nn.ModuleList([DeepseekV32Expert(config) for _ in range(config.n_routed_experts)])
@@ -674,6 +680,9 @@ class DeepseekV32MoE(nn.Module):
 
         # Add shared expert output
         output = output + self.shared_experts(hidden_states_flat)
+
+        if self.use_distributed_moe and dist.is_initialized() and dist.get_world_size() > 1:
+            dist.all_reduce(output)
 
         return output.type_as(hidden_states).view(batch_size, seq_len, hidden_size)
 
