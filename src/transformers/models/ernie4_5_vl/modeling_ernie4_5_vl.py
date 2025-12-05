@@ -360,7 +360,7 @@ class Ernie4_5_VLMoeTopKRouter(nn.Module):
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-        routing_weights = routing_weights.to(router_logits.dtype)
+        routing_weights = routing_weights.to(hidden_states.dtype)
         return router_logits, selected_experts, routing_weights
 
 

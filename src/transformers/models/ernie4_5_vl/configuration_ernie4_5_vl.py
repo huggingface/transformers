@@ -54,6 +54,13 @@ class Ernie4_5_VLVisionConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_vision"
     base_config_key = "vision_config"
 
+    base_model_tp_plan = {
+        "blocks.*.attn.qkv": "colwise",
+        "blocks.*.attn.proj": "rowwise",
+        "blocks.*.mlp.fc1": "colwise",
+        "blocks.*.mlp.fc2": "rowwise",
+    }
+
     def __init__(
         self,
         depth=32,
@@ -157,6 +164,25 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
     default_theta = 500_000.0
+
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.text_moe.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.text_moe.experts": "gather",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.vision_moe.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.vision_moe.experts": "gather",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
