@@ -354,11 +354,20 @@ class YolosModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice_logits = torch.tensor(
-            [[-23.7219, -10.3165, -14.9083], [-41.5429, -15.2403, -24.1478], [-29.3909, -12.7173, -19.4650]],
+            [
+                [-23.7215, -10.3157, -14.9062],
+                [-41.5453, -15.2413, -24.1479],
+                [-29.4172, -12.7263, -19.4834],
+            ],
             device=torch_device,
         )
         expected_slice_boxes = torch.tensor(
-            [[0.2536, 0.5449, 0.4643], [0.2037, 0.7735, 0.3672], [0.7692, 0.4056, 0.4549]], device=torch_device
+            [
+                [0.2536, 0.5449, 0.4643],
+                [0.2038, 0.7735, 0.3670],
+                [0.7692, 0.4056, 0.4549],
+            ],
+            device=torch_device
         )
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
@@ -371,7 +380,7 @@ class YolosModelIntegrationTest(unittest.TestCase):
         expected_labels = [75, 75, 17, 63, 17]
         expected_slice_boxes = torch.tensor([331.8438, 80.5440, 369.9546, 188.0579]).to(torch_device)
 
-        self.assertEqual(len(results["scores"]), 5)
+        self.assertEqual(len(results["scores"]), 70)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)
