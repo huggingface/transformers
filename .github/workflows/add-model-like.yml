@@ -1,7 +1,8 @@
 name: Add model like runner
+permissions:
+  contents: read
 
 on:
-  push:
     branches:
       - none # put main here when this is fixed
   #pull_request:
