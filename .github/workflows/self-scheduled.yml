@@ -1,4 +1,6 @@
 name: Nvidia CI (job definitions)
+permissions:
+  contents: read
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
