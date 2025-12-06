@@ -918,6 +918,7 @@ class Jais2Model(Jais2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1151,7 +1152,6 @@ class Jais2Model(Jais2PreTrainedModel):
 
 class Jais2ForCausalLM(Jais2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    # _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1321,6 +1321,7 @@ class Jais2ForSequenceClassification(Jais2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1366,7 +1367,7 @@ class Jais2ForSequenceClassification(Jais2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config, **kwargs)
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1516,6 +1517,7 @@ class Jais2ForTokenClassification(Jais2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1542,7 +1544,7 @@ class Jais2ForTokenClassification(Jais2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, config=self.config)
+            loss = self.loss_function(logits=logits, labels=labels, config=self.config, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[2:]

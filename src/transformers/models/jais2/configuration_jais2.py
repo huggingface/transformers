@@ -1,4 +1,6 @@
 from ...configuration_utils import PretrainedConfig
+
+
 # from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
@@ -171,7 +173,6 @@ class Jais2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        
         # Set up rope_parameters from rope_scaling
         self.rope_parameters = rope_scaling
 
