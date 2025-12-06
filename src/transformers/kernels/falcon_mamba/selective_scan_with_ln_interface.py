@@ -250,12 +250,16 @@ class MambaInnerFn(torch.autograd.Function):
         delta_rank = delta_proj_weight.shape[1]
         d_state = A.shape[-1] * (1 if not A.is_complex() else 2)
         if torch.is_autocast_enabled():
-            x_proj_weight = x_proj_weight.to(dtype=torch.get_autocast_gpu_dtype())
-            delta_proj_weight = delta_proj_weight.to(dtype=torch.get_autocast_gpu_dtype())
-            out_proj_weight = out_proj_weight.to(dtype=torch.get_autocast_gpu_dtype())
-            out_proj_bias = (
-                out_proj_bias.to(dtype=torch.get_autocast_gpu_dtype()) if out_proj_bias is not None else None
+            # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+            target_dtype = (
+                torch.get_autocast_dtype("cuda")
+                if hasattr(torch, "get_autocast_dtype")
+                else torch.get_autocast_gpu_dtype()
             )
+            x_proj_weight = x_proj_weight.to(dtype=target_dtype)
+            delta_proj_weight = delta_proj_weight.to(dtype=target_dtype)
+            out_proj_weight = out_proj_weight.to(dtype=target_dtype)
+            out_proj_bias = out_proj_bias.to(dtype=target_dtype) if out_proj_bias is not None else None
         if xz.stride(-1) != 1:
             xz = xz.contiguous()
         conv1d_weight = rearrange(conv1d_weight, "d 1 w -> d w")

@@ -15,8 +15,6 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
@@ -28,8 +26,6 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     from transformers import (
-        HunYuanDenseV1ForCausalLM,
-        HunYuanDenseV1ForSequenceClassification,
         HunYuanDenseV1Model,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -43,15 +39,6 @@ class HunYuanDenseV1ModelTester(CausalLMModelTester):
 @require_torch
 class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = HunYuanDenseV1ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HunYuanDenseV1Model,
-            "text-generation": HunYuanDenseV1ForCausalLM,
-            "text-classification": HunYuanDenseV1ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     def is_pipeline_test_to_skip(
         self,
@@ -64,15 +51,6 @@ class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @unittest.skip("HunYuanDenseV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("HunYuanDenseV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
 
 
 @require_torch

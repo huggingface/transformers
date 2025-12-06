@@ -67,7 +67,6 @@ To create the package for pypi.
 9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 """
 
-import os
 import re
 import shutil
 from pathlib import Path
@@ -100,12 +99,11 @@ _deps = [
     "blobfile",
     "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
-    "dataclasses",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
-    "evaluate>=0.2.0",
+    "evaluate>=0.4.6",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -114,10 +112,11 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub==1.0.0.rc4",
+    "huggingface-hub>=1.0.0,<2.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
+    "jmespath>=1.0.1",
     "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
@@ -132,13 +131,14 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
+    "peft>=0.18.0",
     "phonemizer",
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
     "pydantic>=2",
-    "pytest>=7.2.0",
-    "pytest-asyncio",
+    "pytest>=7.2.0,<9.0.0",
+    "pytest-asyncio>=1.2.0",
     "pytest-rerunfailures<16.0",
     "pytest-timeout",
     "pytest-xdist",
@@ -175,6 +175,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
+    "typer-slim",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
@@ -260,10 +261,7 @@ extras["torch"] = deps_list("torch", "accelerate")
 extras["accelerate"] = deps_list("accelerate")
 extras["hf_xet"] = deps_list("hf_xet")
 
-if os.name == "nt":  # windows
-    extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
-else:
-    extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
@@ -277,7 +275,7 @@ extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
 
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
@@ -297,7 +295,7 @@ extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[opencv]")
-extras["chat_template"] = deps_list("jinja2")
+extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["testing"] = (
     deps_list(
         "pytest",
@@ -394,6 +392,7 @@ extras["torchhub"] = deps_list(
 extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
+# TODO: refactor this to split API and SDK; SDK and exporter should only be needed to run code that collects metrics whereas API is what people will need to instrument their code and handle exporter themselves
 extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
@@ -406,6 +405,7 @@ install_requires = [
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
+    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
@@ -427,11 +427,7 @@ setup(
     package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
     zip_safe=False,
     extras_require=extras,
-    entry_points={
-        "console_scripts": [
-            "transformers=transformers.commands.transformers_cli:main",
-        ]
-    },
+    entry_points={"console_scripts": ["transformers=transformers.cli.transformers:main"]},
     python_requires=">=3.10.0",
     install_requires=list(install_requires),
     classifiers=[

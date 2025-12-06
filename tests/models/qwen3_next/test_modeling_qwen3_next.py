@@ -27,10 +27,6 @@ if is_torch_available():
 
     from transformers import (
         Cache,
-        Qwen3NextForCausalLM,
-        Qwen3NextForQuestionAnswering,
-        Qwen3NextForSequenceClassification,
-        Qwen3NextForTokenClassification,
         Qwen3NextModel,
     )
     from transformers.models.qwen3_next.modeling_qwen3_next import Qwen3NextDynamicCache
@@ -58,18 +54,6 @@ class Qwen3NextModelTester(CausalLMModelTester):
 
 @require_torch
 class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen3NextModel,
-            "text-classification": Qwen3NextForSequenceClassification,
-            "token-classification": Qwen3NextForTokenClassification,
-            "text-generation": Qwen3NextForCausalLM,
-            "question-answering": Qwen3NextForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_tester_class = Qwen3NextModelTester
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):

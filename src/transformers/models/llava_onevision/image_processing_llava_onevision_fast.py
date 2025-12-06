@@ -47,6 +47,7 @@ from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 @auto_docstring
 class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
+    model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -61,7 +62,6 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
     valid_kwargs = LlavaOnevisionImageProcessorKwargs
-    model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
 
     def __init__(self, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -273,9 +273,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
             processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
-            )
+            processed_image_patches = torch.stack(processed_image_patches, dim=0)
             processed_images.append(processed_image_patches)
             image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 

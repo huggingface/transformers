@@ -406,7 +406,7 @@ def main(*args):
             num_hidden_layers=34,
             num_key_value_heads=4,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,

@@ -746,11 +746,9 @@ Il metodo `push_to_hub`, presente in tutti i modelli `transformers`, é una mani
 
 ```python
 brand_new_bert.push_to_hub(
-    repo_path_or_name="brand_new_bert",
+    repo_id="brand_new_bert"
     # Uncomment the following line to push to an organization
-    # organization="<ORGANIZATION>",
-    commit_message="Add model",
-    use_temp_dir=True,
+    # repo_id="<ORGANIZATION>/brand_new_bert"
 )
 ```
 

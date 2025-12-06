@@ -248,7 +248,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -282,7 +282,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     model.base_model.decoder.output_projection.weight.data_ptr(),
                 }
             ),
-            2,
+            3,
         )
 
     @unittest.skip(reason="can't be implemented for FSMT due to dual vocab.")
@@ -295,10 +295,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip(reason="Input ids is required for FSMT.")
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="model weights aren't tied in FSMT.")
-    def test_tie_model_weights(self):
         pass
 
     @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
@@ -418,7 +414,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         if len(prefix) > 0:
             prefix = f"{prefix}: "

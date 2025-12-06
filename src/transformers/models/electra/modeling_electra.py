@@ -532,20 +532,6 @@ class ElectraPreTrainedModel(PreTrainedModel):
         "cross_attentions": ElectraCrossAttention,
     }
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
 
 @dataclass
 @auto_docstring(
@@ -588,7 +574,7 @@ class ElectraModel(ElectraPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -610,7 +596,11 @@ class ElectraModel(ElectraPreTrainedModel):
             use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None or self.config.is_encoder_decoder
+                else DynamicCache(config=self.config)
+            )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1000,7 +990,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     """
 )
 class ElectraForMaskedLM(ElectraPreTrainedModel):
-    _tied_weights_keys = ["generator_lm_head.weight"]
+    _tied_weights_keys = {"generator_lm_head.weight": "electra.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1300,7 +1290,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
     """
 )
 class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["generator_lm_head.weight"]
+    _tied_weights_keys = {"generator_lm_head.weight": "electra.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1312,7 +1302,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         self.generator_predictions = ElectraGeneratorPredictions(config)
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
 
-        self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.generator_lm_head
@@ -1335,6 +1325,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
@@ -1362,7 +1353,7 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         if labels is not None:
             use_cache = False
 
-        outputs = self.electra(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.electra(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1377,21 +1368,18 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.generator_lm_head(self.generator_predictions(sequence_output))
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.generator_lm_head(self.generator_predictions(hidden_states[:, slice_indices, :]))
 
-        lm_loss = None
+        loss = None
         if labels is not None:
-            lm_loss = self.loss_function(
-                prediction_scores,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

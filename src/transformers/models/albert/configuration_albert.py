@@ -15,16 +15,12 @@
 # limitations under the License.
 """ALBERT model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 
 
 class AlbertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
+    This is the configuration class to store the configuration of a [`AlbertModel`]. It is used
     to instantiate an ALBERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the ALBERT
     [albert/albert-xxlarge-v2](https://huggingface.co/albert/albert-xxlarge-v2) architecture.
@@ -35,7 +31,7 @@ class AlbertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30000):
             Vocabulary size of the ALBERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`AlbertModel`] or [`TFAlbertModel`].
+            `inputs_ids` passed when calling [`AlbertModel`].
         embedding_size (`int`, *optional*, defaults to 128):
             Dimensionality of vocabulary embeddings.
         hidden_size (`int`, *optional*, defaults to 4096):
@@ -61,7 +57,7 @@ class AlbertConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`AlbertModel`] or [`TFAlbertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`AlbertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -142,21 +138,4 @@ class AlbertConfig(PreTrainedConfig):
         self.classifier_dropout_prob = classifier_dropout_prob
 
 
-# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert
-class AlbertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["AlbertConfig", "AlbertOnnxConfig"]
+__all__ = ["AlbertConfig"]

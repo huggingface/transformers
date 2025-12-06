@@ -24,6 +24,7 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
@@ -697,23 +698,19 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     config: MaskFormerSwinConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["MaskFormerSwinStage"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, MaskFormerSwinEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, MaskFormerSwinEmbeddings):
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, MaskFormerSwinSelfAttention):
-            module.relative_position_bias_table.data.zero_()
+            init.zeros_(module.relative_position_bias_table)
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
@@ -729,6 +726,8 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
@@ -739,6 +738,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         output_hidden_states=None,
         interpolate_pos_encoding=False,
         return_dict=None,
+        **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -816,6 +816,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

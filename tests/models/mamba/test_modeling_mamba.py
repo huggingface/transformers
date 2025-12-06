@@ -82,9 +82,6 @@ class MambaModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
-    def get_large_model_config(self):
-        return MambaConfig.from_pretrained("hf-internal-testing/mamba-2.8b")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -238,8 +235,6 @@ class MambaModelTester:
 class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MambaModel, MambaForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @ArthurZucker
-    test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
 
     pipeline_model_mapping = (
@@ -403,6 +398,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
 
+@slow
 @require_torch
 class MambaIntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -450,7 +446,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_small(self, device):
         expected_output = "Hello my name is\n\nI am a\n\nI am a"
 
@@ -463,7 +458,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_mid(self, device):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
@@ -476,7 +470,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_big(self, device):
         expected_output = "Hello my name is John and I am a new member of this forum. I am a retired Marine and I am a member of the Marine Corps League. I am a"
 
@@ -488,7 +481,6 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
-    @slow
     @pytest.mark.torch_compile_test
     def test_compile_mamba_cache(self):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"

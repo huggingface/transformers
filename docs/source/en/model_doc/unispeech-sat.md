@@ -55,7 +55,6 @@ found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech-SAT).
   decoded using [`Wav2Vec2CTCTokenizer`].
 - UniSpeechSat performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
 
-
 ## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)

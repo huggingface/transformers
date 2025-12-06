@@ -43,9 +43,6 @@ if is_torch_available():
 
     from transformers import (
         MistralForCausalLM,
-        MistralForQuestionAnswering,
-        MistralForSequenceClassification,
-        MistralForTokenClassification,
         MistralModel,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -58,17 +55,6 @@ class MistralModelTester(CausalLMModelTester):
 
 @require_torch
 class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MistralModel,
-            "text-classification": MistralForSequenceClassification,
-            "token-classification": MistralForTokenClassification,
-            "text-generation": MistralForCausalLM,
-            "question-answering": MistralForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = MistralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -314,6 +300,7 @@ class MistralIntegrationTest(unittest.TestCase):
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
+    @pytest.mark.flash_attn_test
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
     @require_flash_attn
     @slow

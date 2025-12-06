@@ -29,7 +29,7 @@ import tempfile
 from dataclasses import fields
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import packaging.version
@@ -38,7 +38,7 @@ from transformers.utils.import_utils import _is_package_available
 
 
 if os.getenv("WANDB_MODE") == "offline":
-    print("⚙️  Running in WANDB offline mode")
+    print("[INFO] Running in WANDB offline mode")
 
 from .. import PreTrainedModel, TrainingArguments
 from .. import __version__ as version
@@ -264,10 +264,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
         timeout = kwargs.pop("timeout", None)
         n_jobs = kwargs.pop("n_jobs", 1)
         gc_after_trial = kwargs.pop("gc_after_trial", False)
+        catch = kwargs.pop("catch", ())
         directions = direction if isinstance(direction, list) else None
         direction = None if directions is not None else direction
         study = optuna.create_study(direction=direction, directions=directions, **kwargs)
-        study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial)
+        study.optimize(
+            _objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial, catch=catch
+        )
         if not study._is_multi_objective():
             best_trial = study.best_trial
             return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
@@ -299,7 +302,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             for more options
     """
     import ray
-    import ray.train
+    import ray.tune
 
     def _objective(trial: dict, local_trainer):
         try:
@@ -312,7 +315,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         local_trainer.objective = None
 
-        checkpoint = ray.train.get_checkpoint()
+        checkpoint = ray.tune.get_checkpoint()
         if checkpoint:
             # Upon trial resume, the local_trainer's objective gets reset to None.
             # If `local_trainer.train` is a noop (training has already reached
@@ -336,8 +339,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
-                ray.train.report(metrics, checkpoint=checkpoint)
+                checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
@@ -403,7 +406,9 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         Assumes that `_objective`, defined above, is a function.
         """
-        if is_datasets_available():
+        if is_datasets_available() and packaging.version.parse(
+            importlib.metadata.version("datasets")
+        ) < packaging.version.parse("4.0.0"):
             import datasets.load
 
             dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
@@ -732,7 +737,7 @@ class WandbCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
@@ -977,7 +982,7 @@ class TrackioCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
 
             self._trackio.init(
                 project=project,
@@ -1486,13 +1491,13 @@ class NeptuneCallback(TrainerCallback):
     def __init__(
         self,
         *,
-        api_token: Optional[str] = None,
-        project: Optional[str] = None,
-        name: Optional[str] = None,
+        api_token: str | None = None,
+        project: str | None = None,
+        name: str | None = None,
         base_namespace: str = "finetuning",
         run=None,
         log_parameters: bool = True,
-        log_checkpoints: Optional[str] = None,
+        log_checkpoints: str | None = None,
         **neptune_run_kwargs,
     ):
         if not is_neptune_available():
@@ -1519,7 +1524,7 @@ class NeptuneCallback(TrainerCallback):
         self._base_namespace_path = base_namespace
         self._log_parameters = log_parameters
         self._log_checkpoints = log_checkpoints
-        self._initial_run: Optional[Run] = run
+        self._initial_run: Run | None = run
 
         self._run = None
         self._is_monitoring_run = False
@@ -1707,7 +1712,7 @@ class NeptuneCallback(TrainerCallback):
 
         raise Exception("The trainer doesn't have a NeptuneCallback configured.")
 
-    def on_log(self, args, state, control, logs: Optional[dict[str, float]] = None, **kwargs):
+    def on_log(self, args, state, control, logs: dict[str, float] | None = None, **kwargs):
         if not state.is_world_process_zero:
             return
 
@@ -2086,8 +2091,8 @@ class DVCLiveCallback(TrainerCallback):
 
     def __init__(
         self,
-        live: Optional[Any] = None,
-        log_model: Optional[Union[Literal["all"], bool]] = None,
+        live: Any | None = None,
+        log_model: Literal["all"] | bool | None = None,
         **kwargs,
     ):
         if not is_dvclive_available():
@@ -2241,7 +2246,7 @@ class SwanLabCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None and args.run_name is not None:

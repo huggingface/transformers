@@ -17,16 +17,15 @@ import copy
 import tempfile
 import unittest
 
-from parameterized import parameterized
 from pytest import mark
 
-from transformers import LongcatFlashConfig, is_torch_available, set_seed
+from transformers import LongcatFlashConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_large_cpu_ram,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -210,15 +209,6 @@ class LongcatFlashModelTester(CausalLMModelTester):
 
 @require_torch
 class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": LongcatFlashModel,
-            "text-generation": LongcatFlashForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_split_percents = [0.5, 0.8]
 
     model_tester_class = LongcatFlashModelTester
@@ -294,36 +284,8 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
         return config
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)
-        original_model = self.model_tester_class.base_model_class(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = self.model_tester_class.base_model_class(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow

@@ -75,10 +75,10 @@ class ObjectDetectionPipeline(Pipeline):
 
     @overload
     def __call__(
-        self, image: Union[list[str], list["Image.Image"]], *args: Any, **kwargs: Any
+        self, image: list[str] | list["Image.Image"], *args: Any, **kwargs: Any
     ) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(self, *args, **kwargs) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    def __call__(self, *args, **kwargs) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 

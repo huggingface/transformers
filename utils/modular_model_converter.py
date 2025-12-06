@@ -21,13 +21,19 @@ import re
 import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
-from typing import Optional, Union
+from functools import partial
 
 import libcst as cst
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
 from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
+from modular_integrations import (
+    EXCLUDED_EXTERNAL_FILES,
+    AbsoluteImportTransformer,
+    RelativeImportTransformer,
+    convert_relative_import_to_absolute,
+)
 
 from transformers import logging
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
@@ -170,7 +176,7 @@ DOCSTRING_NODE = m.SimpleStatementLine(
 )
 
 
-def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[str]:
+def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
     """Get the full name of an Attribute or Name node (e.g. `"nn.Module"` for an Attribute representing it). If the
     successive value of an Attribute are not Name nodes, return `None`."""
     if m.matches(node, m.Name()):
@@ -371,11 +377,11 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
 
 def find_all_dependencies(
     dependency_mapping: dict[str, set],
-    start_entity: Optional[str] = None,
-    initial_dependencies: Optional[set] = None,
-    initial_checked_dependencies: Optional[set] = None,
+    start_entity: str | None = None,
+    initial_dependencies: set | None = None,
+    initial_checked_dependencies: set | None = None,
     return_parent: bool = False,
-) -> Union[list, set]:
+) -> list | set:
     """Return all the dependencies of the given `start_entity` or `initial_dependencies`. This is basically some kind of
     BFS traversal algorithm. It can either start from `start_entity`, or `initial_dependencies`.
 
@@ -469,7 +475,7 @@ class ClassDependencyMapper(CSTVisitor):
     """
 
     def __init__(
-        self, class_name: str, global_names: set[str], objects_imported_from_modeling: Optional[set[str]] = None
+        self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None
     ):
         super().__init__()
         self.class_name = class_name
@@ -497,7 +503,7 @@ def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> s
 
 
 def augmented_dependencies_for_class_node(
-    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: Optional[set[str]] = None
+    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None
 ) -> set:
     """Create augmented dependencies for a class node based on a `mapper`.
     Augmented dependencies means immediate dependencies + recursive function and assignments dependencies.
@@ -552,7 +558,8 @@ class ModuleMapper(CSTVisitor, ABC):
         """This keeps track of objects imported from neighbor modeling files (e.g. in `modeling_xxx.py, we have
         `from .configuration_xxx import Config`, then `Config` should be recorded as it is not a dependency that needs
         to be added (because it will be part of the imports)"""
-        import_module = self.python_module.code_for_node(node.module)
+        # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
+        import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
         if re.search(rf"^\.({self.match_patterns}).*", import_statement):
             for imported_object in node.names:
@@ -1204,7 +1211,7 @@ class ModularFileMapper(ModuleMapper):
     Calling the method `create_modules()` after visit will create all modules based on this modular file.
     """
 
-    def __init__(self, python_module, new_name):
+    def __init__(self, python_module, new_name, package_name):
         super().__init__(python_module)
         # fmt: off
         self.model_name = new_name  # name of the model being defined. Should be in the format of `llama` or `layout_xlm` or `phi3`
@@ -1213,18 +1220,24 @@ class ModularFileMapper(ModuleMapper):
         self.model_specific_modules: dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
         self.all_all_to_add = {}
+
+        self.excluded_external_files = {} if package_name == "transformers" else EXCLUDED_EXTERNAL_FILES[package_name]
         # fmt: on
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         """When visiting imports from modeling files (i.e. `transformers.models.xxx`) we get the code, parse it,
         and save it in `self.model_specific_modules` to later visit. The imported objects are saved in `self.model_specific_imported_objects`.
         """
-        import_module = self.python_module.code_for_node(node.module)
+        # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
+        import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
         if any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR):
             return
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
+                # If we match here, it's an import from 3rd party lib that we need to skip
+                if any(external_file["name"] in import_statement for external_file in self.excluded_external_files):
+                    continue
                 _import = re.search(
                     rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*",
                     import_statement,
@@ -1272,9 +1285,14 @@ class ModularFileMapper(ModuleMapper):
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
                 self.imports.append(node)
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
-                import_module = self.python_module.code_for_node(node.body[0].module)
+                # `node.body[0].module` is None for fully relative imports, e.g. `from ... import initialization as init`
+                import_module = (
+                    self.python_module.code_for_node(node.body[0].module) if node.body[0].module is not None else ""
+                )
                 import_statement = "." * len(node.body[0].relative) + import_module
-                if not (
+                if any(
+                    external_file["name"] in import_statement for external_file in self.excluded_external_files
+                ) or not (
                     re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*", import_statement)
                     and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
                 ):
@@ -1339,6 +1357,14 @@ class ModularFileMapper(ModuleMapper):
         self.imported_objects_per_file = defaultdict(set)
         for file, mapper in self.visited_modules.items():
             file_type = re.search(rf"^transformers\.models\.\w+\.({self.match_patterns})", file).group(1)
+
+            # If there are excluded external files, override the file type if there is a match
+            if self.excluded_external_files:
+                for excluded_file in self.excluded_external_files:
+                    if file.split(".")[-1] == excluded_file["name"]:
+                        file_type = excluded_file["type"]
+                        break
+
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
 
     def merge_model_specific_imports(self, visited_modules):
@@ -1362,7 +1388,7 @@ class ModularFileMapper(ModuleMapper):
                             self.functions[dep] = visited_module.global_nodes[dep]
 
                 # Add/overwrite the imported functions to other visited modules as well, in case it is absent/different
-                # in he modeling source file of the inherited class. See `examples/modular-tranformers/modular_switch_function.py`
+                # in the modeling source file of the inherited class. See `examples/modular-tranformers/modular_switch_function.py`
                 # and `examples/modular-tranformers/modular_add_function.py` for examples
                 recursive_dependencies = visited_module.object_recursive_dependency_mapping.get(object_name, set())
                 node_recursive_dependencies_mapping = {
@@ -1635,7 +1661,11 @@ def get_class_node_and_dependencies(
     return nodes_to_add, file_type, new_imports
 
 
-def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
+def create_modules(
+    modular_mapper: ModularFileMapper,
+    file_path: str | None = None,
+    package_name: str | None = "transformers",
+) -> dict[str, cst.Module]:
     """Create all the new modules based on visiting the modular file. It replaces all classes as necessary."""
     files = defaultdict(dict)
     current_file_indices = defaultdict(lambda: 0)
@@ -1643,6 +1673,19 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     # For each class defined in modular, potentially replace the node and add it with its dependencies
     for class_name, node in modular_mapper.classes.items():
         nodes_to_add, file_type, new_imports = get_class_node_and_dependencies(modular_mapper, class_name, node, files)
+
+        if package_name != "transformers":
+            # New imports involve new files like configuration_xxx.py, etc
+            # Those are imported with relative imports by default in the modeling file
+            # Since relative imports are Transformers imports at this point in the code, convert them to absolute imports from the source library (e.g. optimum-habana)
+            for key, new_import in new_imports.items():
+                new_imports[key] = new_import.with_changes(
+                    body=[
+                        convert_relative_import_to_absolute(
+                            import_node=new_import.body[0], file_path=file_path, package_name=package_name
+                        )
+                    ]
+                )
 
         # Add the new potential new imports that we may need to the `modular_mapper` variable
         modular_mapper.imported_objects_per_file[file_type].update(new_imports.keys())
@@ -1682,6 +1725,15 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     for file, body in files.items():
         new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
         needed_imports = get_needed_imports(body, all_imports)
+
+        if package_name != "transformers":
+            # Convert all transformers relative imports to absolute ones
+            for imp in needed_imports:
+                if m.matches(imp, m.SimpleStatementLine(body=[m.ImportFrom()])):
+                    imp.body[0] = convert_relative_import_to_absolute(
+                        import_node=imp.body[0], file_path=file_path, package_name="transformers"
+                    )
+
         full_module = needed_imports + new_body
         new_module = cst.Module(body=full_module, header=modular_mapper.python_module.header)
         files[file] = new_module
@@ -1699,7 +1751,7 @@ def run_ruff(code, check=False):
     return stdout.decode()
 
 
-def convert_modular_file(modular_file: str) -> dict[str, str]:
+def convert_modular_file(modular_file: str, source_library: str | None = "transformers") -> dict[str, str]:
     """Convert a `modular_file` into all the different model-specific files it depicts."""
     pattern = re.search(r"modular_(.*)(?=\.py$)", modular_file)
     output = {}
@@ -1709,15 +1761,34 @@ def convert_modular_file(modular_file: str) -> dict[str, str]:
         with open(modular_file, "r", encoding="utf-8") as file:
             code = file.read()
         module = cst.parse_module(code)
+
+        # Get relative path starting from src/transformers/
+        if source_library != "transformers":
+            relative_path = os.path.abspath(modular_file).replace("\\", "/")
+        else:
+            relative_path = re.search(
+                r"(src/transformers/.*|examples/.*)", os.path.abspath(modular_file).replace("\\", "/")
+            )
+            if relative_path is None:
+                raise ValueError(
+                    f"Cannot find the relative path of {modular_file} inside this `transformers` repository. If this modular file is located in another repository and you would like to generate the modeling file there, use the `--external` flag."
+                )
+            relative_path = relative_path.group(1)
+
+        # Convert all source library relative imports to absolute ones
+        if source_library != "transformers":
+            module = module.visit(AbsoluteImportTransformer(relative_path, source_library))
+
         wrapper = MetadataWrapper(module)
-        cst_transformers = ModularFileMapper(module, model_name)
+        cst_transformers = ModularFileMapper(module, model_name, source_library)
         wrapper.visit(cst_transformers)
-        for file, module in create_modules(cst_transformers).items():
+        for file, module in create_modules(
+            cst_transformers, file_path=relative_path, package_name=source_library
+        ).items():
             if module != {}:
-                # Get relative path starting from src/transformers/
-                relative_path = re.search(
-                    r"(src/transformers/.*|examples/.*)", os.path.abspath(modular_file).replace("\\", "/")
-                ).group(1)
+                if source_library != "transformers":
+                    # Convert back all absolute imports from the source library to relative ones
+                    module = module.visit(RelativeImportTransformer(relative_path, source_library))
 
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
@@ -1743,11 +1814,38 @@ def save_modeling_files(modular_file: str, converted_files: dict[str, str]):
             f.write(converted_files[file_type])
 
 
-def run_converter(modular_file: str):
+def count_loc(file_path: str) -> int:
+    with open(file_path, "r", encoding="utf-8") as f:
+        code = f.read()
+    comment_less_code = re.sub(r"#.*", "", code).strip()
+    comment_less_code = re.sub(r" *\n", "\n", comment_less_code).strip()
+    return len([line for line in comment_less_code.split("\n") if line.strip()])
+
+
+def run_converter(modular_file: str, source_library: str | None = "transformers"):
     """Convert a modular file, and save resulting files."""
     print(f"Converting {modular_file} to a single model single file format")
-    converted_files = convert_modular_file(modular_file)
+    converted_files = convert_modular_file(modular_file, source_library=source_library)
     save_modeling_files(modular_file, converted_files)
+
+    model_directory = os.path.dirname(modular_file)
+    modular_loc = count_loc(modular_file)
+
+    autogenerated_files = []
+    for file in os.listdir(model_directory):
+        if file.endswith(".py") and not file.startswith("modular_"):
+            file_path = os.path.join(model_directory, file)
+            with open(file_path, "r", encoding="utf-8") as f:
+                if "This file was automatically generated from" in f.read():
+                    autogenerated_files.append(file_path)
+
+    if autogenerated_files:
+        total_generated_loc = sum(count_loc(f) for f in autogenerated_files)
+        savings = total_generated_loc - modular_loc
+        percentage = (savings / total_generated_loc) * 100
+        print(
+            f"LoC: {modular_loc} (modular) vs {total_generated_loc} (generated) - saved {savings} LoC ({percentage:.1f}%)"
+        )
 
 
 if __name__ == "__main__":
@@ -1773,6 +1871,12 @@ if __name__ == "__main__":
         default=-1,
         type=int,
         help="The number of workers to use. Default is -1, which means the number of CPU cores.",
+    )
+    parser.add_argument(
+        "--source-library",
+        type=str,
+        default="transformers",
+        help="The top-level package name (default: 'transformers')",
     )
     args = parser.parse_args()
     # Both arg represent the same data, but as positional and optional
@@ -1808,4 +1912,4 @@ if __name__ == "__main__":
         # Process files with diff
         workers = min(num_workers, len(dependency_level_files))
         with mp.Pool(workers) as pool:
-            pool.map(run_converter, dependency_level_files)
+            pool.map(partial(run_converter, source_library=args.source_library), dependency_level_files)

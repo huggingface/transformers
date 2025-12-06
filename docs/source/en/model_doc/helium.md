@@ -39,14 +39,14 @@ It supports the following languages: English, French, German, Italian, Portugues
 
 <!-- This section describes the evaluation protocols and provides the results. -->
 
-#### Testing Data
+### Testing Data
 
 <!-- This should link to a Dataset Card if possible. -->
 
 The model was evaluated on MMLU, TriviaQA, NaturalQuestions, ARC Easy & Challenge, Open Book QA, Common Sense QA,
 Physical Interaction QA, Social Interaction QA, HellaSwag, WinoGrande, Multilingual Knowledge QA, FLORES 200.
 
-#### Metrics
+### Metrics
 
 <!-- These are the evaluation metrics being used, ideally with a description of why. -->
 

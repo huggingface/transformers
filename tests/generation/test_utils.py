@@ -23,7 +23,6 @@ import tempfile
 import unittest
 import warnings
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pytest
@@ -908,7 +907,7 @@ class GenerationTesterMixin:
 
     @pytest.mark.generate
     def test_left_padding_compatibility(
-        self, unpadded_custom_inputs: Optional[dict] = None, padded_custom_inputs: Optional[dict] = None
+        self, unpadded_custom_inputs: dict | None = None, padded_custom_inputs: dict | None = None
     ):
         """
         Tests that adding left-padding yields the same logits as the original input. Exposes arguments for custom
@@ -1849,7 +1848,7 @@ class GenerationTesterMixin:
 
     @pytest.mark.flash_attn_test
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_eager_matches_fa2_generate(self):
         """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
@@ -1864,7 +1863,7 @@ class GenerationTesterMixin:
         self._test_attention_implementation("flash_attention_3")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         """
@@ -1895,6 +1894,13 @@ class GenerationTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
 
             model = model_class(config)
+            if not all(
+                getattr(submodel, "_supports_flash_attn")
+                for submodel in model.modules()
+                if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(f"At least some parts of {model_class.__name__} don't support flash attention")
+
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
 
@@ -1995,6 +2001,14 @@ class GenerationTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
 
             model = model_class(config)
+            if attn_implementation != "eager":
+                if not all(
+                    getattr(submodel, support_flag[attn_implementation])
+                    for submodel in model.modules()
+                    if isinstance(submodel, PreTrainedModel)
+                ):
+                    self.skipTest(f"At least some parts of {model_class.__name__} don't support {attn_implementation}")
+
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
 
@@ -2066,14 +2080,14 @@ class GenerationTesterMixin:
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_2")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
@@ -2719,7 +2733,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         question = tokenizer.apply_chat_template(
             question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
         )
-        inputs = tokenizer(question, return_tensors="pt", padding=True).to("cuda")
+        inputs = tokenizer(question, return_tensors="pt", padding=True).to(torch_device)
         outputs = model.generate(**inputs, generation_config=generation_config)
         responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         self.assertEqual(responses[0], EXPECTED_OUTPUT)
@@ -2738,7 +2752,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         cot_question = tokenizer.apply_chat_template(
             cot_question, tokenize=False, add_generation_prompt=True, return_tensors="pt"
         )
-        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to("cuda")
+        inputs = tokenizer([question, cot_question], return_tensors="pt", padding=True).to(torch_device)
 
         outputs = model.generate(**inputs, generation_config=generation_config)
         responses = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -4665,7 +4679,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             value=1,
         )
         inputs_2b["past_key_values"] = outputs_1b.past_key_values
-        cache_length_1b = outputs_1b.past_key_values[0][0].shape[-2]
+        cache_length_1b = outputs_1b.past_key_values.get_seq_length()
         inputs_2b["cache_position"] = torch.arange(
             cache_length_1b,
             cache_length_1b + inputs_2b["input_ids"].shape[1],
@@ -4677,14 +4691,19 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # The two sets of generated text and past kv should be equal to each other
         self.assertTrue(has_similar_generate_outputs(traditional_outputs, incremental_outputs))
-        for layer_idx in range(len(traditional_outputs.past_key_values)):
-            for kv_idx in range(len(traditional_outputs.past_key_values[layer_idx])):
-                self.assertTrue(
-                    torch.allclose(
-                        traditional_outputs.past_key_values[layer_idx][kv_idx],
-                        incremental_outputs.past_key_values[layer_idx][kv_idx],
+        cache1, cache2 = traditional_outputs.past_key_values, incremental_outputs.past_key_values
+        for idx in range(len(cache1)):
+            if isinstance(cache1, EncoderDecoderCache):
+                for subcache in ["self_attention_cache", "cross_attention_cache"]:
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].keys, getattr(cache2, subcache).layers[idx].keys
                     )
-                )
+                    torch.testing.assert_close(
+                        getattr(cache1, subcache).layers[idx].values, getattr(cache2, subcache).layers[idx].values
+                    )
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
     @pytest.mark.generate
     @parameterized.expand(
@@ -4775,6 +4794,7 @@ class TokenHealingTestCase(unittest.TestCase):
 
         healed_ids = completion_model.heal_tokens(input_ids, tokenizer=tokenizer)
         predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+        predicted = predicted.lstrip()
 
         self.assertEqual(predicted, expected)
 

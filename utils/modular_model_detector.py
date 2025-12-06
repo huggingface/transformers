@@ -117,6 +117,7 @@ from tqdm import tqdm
 
 import transformers
 from transformers import AutoModel, AutoTokenizer
+from transformers.utils import enable_tf32
 from transformers.utils import logging as transformers_logging
 
 
@@ -247,7 +248,7 @@ class CodeSimilarityAnalyzer:
             logging.getLogger(name).setLevel(logging.ERROR)
         huggingface_hub_logging.set_verbosity_error()
         transformers_logging.set_verbosity_error()
-        torch.backends.cuda.matmul.allow_tf32 = True
+        enable_tf32(True)
         torch.set_grad_enabled(False)
 
         self.models_root = MODELS_ROOT

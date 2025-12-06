@@ -18,6 +18,7 @@ from typing import Optional, Union
 
 import torch
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -64,8 +65,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     config: VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -143,8 +144,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    def get_encoder(self):
-        return self.encoder
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()
@@ -374,9 +374,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # num_items_in_batch is only needed for loss computation
-        num_items_in_batch = kwargs.pop("num_items_in_batch", None)
-
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
@@ -435,12 +432,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         if labels is not None:
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
 
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.decoder.config.vocab_size,
-                num_items_in_batch=num_items_in_batch,
-            )
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
 
         if not return_dict:
             if loss is not None:

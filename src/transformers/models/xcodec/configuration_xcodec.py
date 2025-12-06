@@ -98,8 +98,8 @@ class XcodecConfig(PreTrainedConfig):
         codebook_size: int = 1024,
         codebook_dim: Optional[int] = None,
         initializer_range: float = 0.02,
-        acoustic_model_config: Union[dict, DacConfig] = None,
-        semantic_model_config: Union[dict, HubertConfig] = None,
+        acoustic_model_config: Optional[Union[dict, DacConfig]] = None,
+        semantic_model_config: Optional[Union[dict, HubertConfig]] = None,
         **kwargs,
     ):
         if acoustic_model_config is None:

@@ -164,7 +164,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # Sanity check: a cache was used
         self.assertIsInstance(gen_out.past_key_values, Cache)
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
@@ -201,7 +201,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # At least one of the sequences requires multiple beam indices -> `reorder_cache` had to shift things around
         self.assertTrue(any(len(set(beams_in_sequence)) > 1 for beams_in_sequence in gen_out.beam_indices))
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand([("quanto"), ("HQQ")])
@@ -243,7 +243,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
 
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
 
         # Check that something is actually quantized
@@ -264,7 +264,7 @@ class CacheIntegrationTest(unittest.TestCase):
         }
 
         gen_out = self.model.generate(**inputs, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
         # Now with extra left-padding
@@ -272,7 +272,7 @@ class CacheIntegrationTest(unittest.TestCase):
         inputs_expanded = inputs_expanded.to(self.model.device)
         self.assertTrue(inputs.input_ids.shape[1] < inputs_expanded.input_ids.shape[1])
         gen_out = self.model.generate(**inputs_expanded, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
 
@@ -301,7 +301,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         gen_out = model.generate(
             **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
         )
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
         input_length = inputs.input_ids.shape[1]
         score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
@@ -349,21 +349,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static")
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
@@ -427,7 +427,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             outputs = model.generate(
                 **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
             )
-            response = tokenizer.batch_decode(outputs)[0]
+            response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
@@ -628,7 +628,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         past_key_values = res.past_key_values
 
         shapes = torch.export.ShapesCollection()
-        dyn = torch.export.Dim("seq", max=512)
+        dyn = torch.export.Dim.DYNAMIC(max=512)
 
         for ix in range(len(past_key_values)):
             shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)

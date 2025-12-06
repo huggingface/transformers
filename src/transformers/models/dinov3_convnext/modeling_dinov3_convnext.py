@@ -20,12 +20,12 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPoolingAndNoAttention,
-)
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
@@ -189,20 +189,16 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = ["DINOv3ConvNextLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, DINOv3ConvNextLayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, DINOv3ConvNextLayer):
+        super()._init_weights(module)
+        if isinstance(module, DINOv3ConvNextLayer):
             if module.gamma is not None:
-                module.gamma.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.gamma, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -218,7 +214,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None
+        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 
@@ -250,4 +246,51 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         )
 
 
-__all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel"]
+@auto_docstring
+class DINOv3ConvNextBackbone(DINOv3ConvNextPreTrainedModel, BackboneMixin):
+    config: DINOv3ConvNextConfig
+
+    def __init__(self, config: DINOv3ConvNextConfig):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.num_features = [config.num_channels] + list(config.hidden_sizes)
+
+        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, s) for s in range(config.num_stages)])
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return None
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
+    ) -> BackboneOutput:
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+
+        hidden_states = pixel_values
+        all_hidden_states: list[torch.Tensor] = [hidden_states]
+
+        for stage in self.stages:
+            hidden_states = stage(hidden_states)
+            all_hidden_states.append(hidden_states)
+
+        # hidden_states are already in NCHW (batch_size, channels, height, width) format
+        feature_maps: list[torch.Tensor] = []
+        for stage, hidden_states in zip(self.stage_names, all_hidden_states):
+            if stage in self.out_features:
+                feature_maps.append(hidden_states)
+
+        return BackboneOutput(
+            feature_maps=tuple(feature_maps),
+            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
+        )
+
+
+__all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel", "DINOv3ConvNextBackbone"]

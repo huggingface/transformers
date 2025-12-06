@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       runner_type:
-        description: 'Type of runner to test (a10 or t4)'
+        description: 'Type of runner to test (a10)'
         required: true
       docker_image:
         description: 'Name of the Docker image'
@@ -36,14 +36,10 @@ jobs:
           NUM_GPUS: ${{ github.event.inputs.num_gpus }}
           RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
         run: |
-          if [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "t4" ]]; then
-            echo "RUNNER=aws-g4dn-4xlarge-cache" >> $GITHUB_ENV
-          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "t4" ]]; then
-            echo "RUNNER=aws-g4dn-12xlarge-cache" >> $GITHUB_ENV
-          elif [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-4xlarge-cache" >> $GITHUB_ENV
+          if [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "a10" ]]; then
+            echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
           elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-12xlarge-cache" >> $GITHUB_ENV
+            echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
           fi
@@ -51,8 +47,8 @@ jobs:
       - name: Set runner to use
         id: set_runner
         run: |
-          echo ${{ env.RUNNER }}
-          echo "RUNNER=${{ env.RUNNER }}" >> $GITHUB_OUTPUT
+          echo "$RUNNER"
+          echo "RUNNER=$RUNNER" >> $GITHUB_OUTPUT
 
   ssh_runner:
     name: "SSH"
@@ -61,13 +57,13 @@ jobs:
       group: ${{ needs.get_runner.outputs.RUNNER }}
     container:
       image: ${{ github.event.inputs.docker_image }}
-      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-
     steps:
       - name: Update clone
         working-directory: /transformers
+        env:
+          commit_sha: ${{ github.sha }}
         run: |
-          git fetch && git checkout ${{ github.sha }}
+          git fetch && git checkout "$commit_sha"
 
       - name: Cleanup
         working-directory: /transformers
@@ -99,14 +95,17 @@ jobs:
       - name: Store Slack infos
         #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
         shell: bash
+        env:
+          user_slack_id: ${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}
+          default_slack_channel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
         run: |
-          echo "${{ env.github_actor }}"
-          if [ "${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" != "" ]; then
-            echo "SLACKCHANNEL=${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" >> $GITHUB_ENV
+          echo "$github_actor"
+          if [ "$user_slack_id" != "" ]; then
+            echo "SLACKCHANNEL=$user_slack_id" >> $GITHUB_ENV
           else
-            echo "SLACKCHANNEL=${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}" >> $GITHUB_ENV
+            echo "SLACKCHANNEL=$default_slack_channel" >> $GITHUB_ENV
           fi
-
+        
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@main
         with:

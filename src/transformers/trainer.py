@@ -33,7 +33,7 @@ import warnings
 from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -63,9 +63,10 @@ from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
+from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -123,6 +124,7 @@ from .trainer_utils import (
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
+    load_sharded_checkpoint,
     neftune_post_forward_hook,
     number_of_arguments,
     seed_worker,
@@ -204,11 +206,10 @@ if is_sagemaker_mp_enabled():
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
 if is_peft_available():
-    from peft import PeftModel
+    from peft import PeftMixedModel, PeftModel
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
-    from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         DataLoaderConfiguration,
@@ -228,12 +229,7 @@ if is_accelerate_available():
 
 def _is_peft_model(model):
     if is_peft_available():
-        classes_to_check = (PeftModel,)
-        # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
-        if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
-            from peft import PeftMixedModel
-
-            classes_to_check = (*classes_to_check, PeftMixedModel)
+        classes_to_check = (PeftModel, PeftMixedModel)
         return isinstance(model, classes_to_check)
     return False
 
@@ -318,7 +314,7 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`, `datasets.Dataset`]), *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, dict[str, `torch.utils.data.Dataset`], `datasets.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
@@ -326,7 +322,6 @@ class Trainer:
             Processing class used to process the data. If provided, will be used to automatically process the inputs
             for the model, and it will be saved along the model to make it easier to rerun an interrupted training or
             reuse the fine-tuned model.
-            This supersedes the `tokenizer` argument, which is now deprecated.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
@@ -386,21 +381,23 @@ class Trainer:
 
     def __init__(
         self,
-        model: Union[PreTrainedModel, nn.Module, None] = None,
-        args: Optional[TrainingArguments] = None,
-        data_collator: Optional[DataCollator] = None,
-        train_dataset: Optional[Union[Dataset, IterableDataset, "datasets.Dataset"]] = None,
-        eval_dataset: Optional[Union[Dataset, dict[str, Dataset], "datasets.Dataset"]] = None,
-        processing_class: Optional[
-            Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
-        ] = None,
-        model_init: Optional[Callable[..., PreTrainedModel]] = None,
-        compute_loss_func: Optional[Callable] = None,
-        compute_metrics: Optional[Callable[[EvalPrediction], dict]] = None,
-        callbacks: Optional[list[TrainerCallback]] = None,
-        optimizers: tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
-        optimizer_cls_and_kwargs: Optional[tuple[type[torch.optim.Optimizer], dict[str, Any]]] = None,
-        preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+        model: PreTrainedModel | nn.Module | None = None,
+        args: TrainingArguments | None = None,
+        data_collator: DataCollator | None = None,
+        train_dataset: Union[Dataset, IterableDataset, "datasets.Dataset"] | None = None,
+        eval_dataset: Union[Dataset, dict[str, Dataset], "datasets.Dataset"] | None = None,
+        processing_class: PreTrainedTokenizerBase
+        | BaseImageProcessor
+        | FeatureExtractionMixin
+        | ProcessorMixin
+        | None = None,
+        model_init: Callable[..., PreTrainedModel] | None = None,
+        compute_loss_func: Callable | None = None,
+        compute_metrics: Callable[[EvalPrediction], dict] | None = None,
+        callbacks: list[TrainerCallback] | None = None,
+        optimizers: tuple[torch.optim.Optimizer | None, torch.optim.lr_scheduler.LambdaLR | None] = (None, None),
+        optimizer_cls_and_kwargs: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
+        preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -604,6 +601,11 @@ class Trainer:
                 k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
             )
 
+        # Override for Sequence Parallelism: SP computes its own good_tokens count, so skip num_items_in_batch calculation
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            self.model_accepts_loss_kwargs = False
+
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
         self.compute_metrics = compute_metrics
@@ -640,6 +642,16 @@ class Trainer:
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
+
+        # Add JIT checkpoint callback if enabled
+        if self.args.enable_jit_checkpoint:
+            from .trainer_jit_checkpoint import JITCheckpointCallback
+
+            jit_callback = JITCheckpointCallback()
+            default_callbacks = default_callbacks + [jit_callback]
+            # Set trainer reference for JIT callback after initialization
+            jit_callback.set_trainer(self)
+
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.processing_class, self.optimizer, self.lr_scheduler
@@ -737,6 +749,10 @@ class Trainer:
         # Internal variables to help with automatic batch size reduction
         self._train_batch_size = args.train_batch_size
         self._created_lr_scheduler = False
+
+        # Set use_cache for the model
+        if getattr(self.model, "config", None) is not None:
+            self.model.config.use_cache = self.args.use_cache
 
         # very last
         self._memory_tracker.stop_and_update_metrics()
@@ -924,7 +940,7 @@ class Trainer:
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
 
-    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
+    def _remove_unused_columns(self, dataset: "datasets.Dataset", description: str | None = None):
         if not self.args.remove_unused_columns:
             return dataset
         self._set_signature_columns_if_needed()
@@ -956,9 +972,7 @@ class Trainer:
         else:
             return dataset.remove_columns(ignored_columns)
 
-    def _get_collator_with_removed_columns(
-        self, data_collator: Callable, description: Optional[str] = None
-    ) -> Callable:
+    def _get_collator_with_removed_columns(self, data_collator: Callable, description: str | None = None) -> Callable:
         """Wrap the data collator in a callable removing unused columns."""
         if not self.args.remove_unused_columns:
             return data_collator
@@ -974,7 +988,7 @@ class Trainer:
         )
         return remove_columns_collator
 
-    def _get_train_sampler(self, train_dataset: Optional[Dataset] = None) -> Optional[torch.utils.data.Sampler]:
+    def _get_train_sampler(self, train_dataset: Dataset | None = None) -> torch.utils.data.Sampler | None:
         if train_dataset is None:
             train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
@@ -1008,9 +1022,9 @@ class Trainer:
         dataset: Dataset,
         description: str,
         batch_size: int,
-        sampler_fn: Optional[Callable[[Dataset], torch.utils.data.Sampler]] = None,
+        sampler_fn: Callable[[Dataset], torch.utils.data.Sampler] | None = None,
         is_training: bool = False,
-        dataloader_key: Optional[str] = None,
+        dataloader_key: str | None = None,
     ) -> DataLoader:
         """Create a [`~torch.utils.data.DataLoader`] from the given dataset."""
 
@@ -1020,12 +1034,16 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
+        # MPS requrires forking if multiple workers are specified
+        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
+
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
+            "multiprocessing_context": "fork" if should_fork else None,
         }
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
@@ -1069,7 +1087,7 @@ class Trainer:
             is_training=True,
         )
 
-    def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
+    def _get_eval_sampler(self, eval_dataset: Dataset) -> torch.utils.data.Sampler | None:
         if eval_dataset is None or not has_length(eval_dataset):
             return None
 
@@ -1097,7 +1115,7 @@ class Trainer:
         else:
             return None
 
-    def get_eval_dataloader(self, eval_dataset: Optional[Union[str, Dataset]] = None) -> DataLoader:
+    def get_eval_dataloader(self, eval_dataset: str | Dataset | None = None) -> DataLoader:
         """
         Returns the evaluation [`~torch.utils.data.DataLoader`].
 
@@ -1263,7 +1281,7 @@ class Trainer:
             raise ValueError("Trainer optimizer is None, please make sure you have setup the optimizer before.")
         return [group["lr"] for group in self.optimizer.param_groups]
 
-    def get_optimizer_group(self, param: Optional[Union[str, torch.nn.parameter.Parameter]] = None):
+    def get_optimizer_group(self, param: str | torch.nn.parameter.Parameter | None = None):
         """
         Returns optimizer group for a parameter if given, else returns all optimizer groups for params.
 
@@ -1280,9 +1298,7 @@ class Trainer:
         return [group["params"] for group in self.optimizer.param_groups]
 
     @staticmethod
-    def get_optimizer_cls_and_kwargs(
-        args: TrainingArguments, model: Optional[PreTrainedModel] = None
-    ) -> tuple[Any, Any]:
+    def get_optimizer_cls_and_kwargs(args: TrainingArguments, model: PreTrainedModel | None = None) -> tuple[Any, Any]:
         """
         Returns the optimizer class and optimizer parameters based on the training arguments.
 
@@ -1764,7 +1780,7 @@ class Trainer:
             return len(dataloader) * self.args.per_device_train_batch_size
 
     @staticmethod
-    def num_tokens(train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
+    def num_tokens(train_dl: DataLoader, max_steps: int | None = None) -> int:
         """
         Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
         """
@@ -1845,15 +1861,15 @@ class Trainer:
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
                     raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            import ray.train
+            import ray.tune
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 checkpoint = None
                 if self.control.should_save:
                     self._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                    checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                    checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
                 metrics["objective"] = self.objective
-                ray.train.report(metrics, checkpoint=checkpoint)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     def _tune_save_checkpoint(self, checkpoint_dir: str):
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
@@ -2051,9 +2067,9 @@ class Trainer:
 
     def train(
         self,
-        resume_from_checkpoint: Optional[Union[str, bool]] = None,
+        resume_from_checkpoint: str | bool | None = None,
         trial: Union["optuna.Trial", dict[str, Any], None] = None,
-        ignore_keys_for_eval: Optional[list[str]] = None,
+        ignore_keys_for_eval: list[str] | None = None,
     ):
         """
         Main training entry point.
@@ -2156,6 +2172,22 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
+    def get_sp_size(self) -> int:
+        """Get the sequence parallel size"""
+        if getattr(self.accelerator, "parallelism_config", None) is None:
+            return 1
+        else:
+            pc = self.accelerator.parallelism_config
+            return pc.sp_size
+
+    def get_cp_size(self) -> int:
+        """Get the context parallel size"""
+        if getattr(self.accelerator, "parallelism_config", None) is None:
+            return 1
+        else:
+            pc = self.accelerator.parallelism_config
+            return pc.cp_size
+
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
@@ -2173,8 +2205,19 @@ class Trainer:
     def get_total_train_batch_size(self, args) -> int:
         """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
 
-        Note: Only considers DP and TP (dp_world_size = world_size // tp_size)."""
-        dp_world_size = args.world_size // self.get_tp_size()
+        Accounts for all parallelism dimensions: TP, CP, and SP.
+
+        Formula: dp_world_size = world_size // (tp_size * cp_size * sp_size)
+
+        Where:
+        - TP (Tensor Parallelism): Model layers split across GPUs
+        - CP (Context Parallelism): Sequences split using Ring Attention (FSDP2)
+        - SP (Sequence Parallelism): Sequences split using ALST/Ulysses (DeepSpeed)
+
+        All dimensions are separate and multiplicative: world_size = dp_size * tp_size * cp_size * sp_size
+        """
+
+        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size()
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def _inner_training_loop(
@@ -2298,8 +2341,15 @@ class Trainer:
         else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
+        # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            train_dataloader = self.accelerator.deepspeed_ulysses_dl_adapter(train_dataloader, model)
+
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
+            # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
+            dist.fsdp.register_fsdp_forward_method(self.model, "generate")
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -2381,7 +2431,7 @@ class Trainer:
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
-        grad_norm: Optional[float] = None
+        grad_norm: float | None = None
         learning_rate = None
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
@@ -2390,8 +2440,6 @@ class Trainer:
 
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
-            if hasattr(epoch_dataloader, "set_epoch"):
-                epoch_dataloader.set_epoch(epoch)
 
             steps_in_epoch = (
                 len(epoch_dataloader)
@@ -2411,6 +2459,9 @@ class Trainer:
                     rng_to_sync = True
                 elif steps_trained_in_current_epoch == 0:
                     self._load_rng_state(resume_from_checkpoint)
+
+            if hasattr(epoch_dataloader, "set_epoch"):
+                epoch_dataloader.set_epoch(epoch)
 
             epoch_iterator = iter(epoch_dataloader)
             # We chunkify the epoch iterator into gradient accumulation steps `n` batches
@@ -2653,9 +2704,9 @@ class Trainer:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
-                import ray.train
+                import ray.tune
 
-                run_id = ray.train.get_context().get_trial_id()
+                run_id = ray.tune.get_context().get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.WANDB:
                 import wandb
 
@@ -2765,20 +2816,13 @@ class Trainer:
 
         # Load adapters following PR # 24096
         elif _is_peft_model(model):
-            # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-            # TODO: in the future support only specific min PEFT versions
-            if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
-                model, "load_adapter"
-            ):
+            # If training a model using PEFT, assume that adapter have been saved properly.
+            if hasattr(model, "active_adapters") and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint):
-                    # For BC for older PEFT versions
-                    if hasattr(model, "active_adapters"):
-                        active_adapters = model.active_adapters
-                        if len(active_adapters) > 1:
-                            logger.warning("Multiple active adapters detected will only consider the first adapter")
-                        active_adapter = active_adapters[0]
-                    else:
-                        active_adapter = model.active_adapter
+                    active_adapters = model.active_adapters
+                    if len(active_adapters) > 1:
+                        logger.warning("Multiple active adapters detected will only consider the first adapter")
+                    active_adapter = active_adapters[0]
 
                     if adapter_subdirs:
                         for subdir_name in adapter_subdirs:
@@ -2794,7 +2838,7 @@ class Trainer:
                         "Check some examples here: https://github.com/huggingface/peft/issues/96"
                     )
             else:
-                logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                logger.warning(f"Could not load adapter model, make sure to have PEFT >= {MIN_PEFT_VERSION} installed")
         else:
             # We load the sharded checkpoint
             load_result = load_sharded_checkpoint(
@@ -2841,18 +2885,11 @@ class Trainer:
                 )
             else:
                 if _is_peft_model(model):
-                    # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-                    # TODO: in the future support only specific min PEFT versions
-                    if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
-                        model, "load_adapter"
-                    ):
-                        # For BC for older PEFT versions
-                        if hasattr(model, "active_adapters"):
-                            active_adapter = model.active_adapters[0]
-                            if len(model.active_adapters) > 1:
-                                logger.warning("Detected multiple active adapters, will only consider the first one")
-                        else:
-                            active_adapter = model.active_adapter
+                    # If training a model using PEFT, assume that adapter have been saved properly.
+                    if hasattr(model, "active_adapters") and hasattr(model, "load_adapter"):
+                        active_adapter = model.active_adapters[0]
+                        if len(model.active_adapters) > 1:
+                            logger.warning("Detected multiple active adapters, will only consider the first one")
 
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                             try:
@@ -2883,7 +2920,9 @@ class Trainer:
                             )
                             has_been_loaded = False
                     else:
-                        logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                        logger.warning(
+                            f"Could not load adapter model, make sure to have PEFT >= {MIN_PEFT_VERSION} installed"
+                        )
                         has_been_loaded = False
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
@@ -2962,7 +3001,7 @@ class Trainer:
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
-            logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["loss"] = tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged)
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:
@@ -3436,14 +3475,14 @@ class Trainer:
 
     def hyperparameter_search(
         self,
-        hp_space: Optional[Callable[["optuna.Trial"], dict[str, float]]] = None,
-        compute_objective: Optional[Callable[[dict[str, float]], float]] = None,
+        hp_space: Callable[["optuna.Trial"], dict[str, float]] | None = None,
+        compute_objective: Callable[[dict[str, float]], float] | None = None,
         n_trials: int = 20,
-        direction: Union[str, list[str]] = "minimize",
-        backend: Optional[Union["str", HPSearchBackend]] = None,
-        hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
+        direction: str | list[str] = "minimize",
+        backend: Union["str", HPSearchBackend] | None = None,
+        hp_name: Callable[["optuna.Trial"], str] | None = None,
         **kwargs,
-    ) -> Union[BestRun, list[BestRun]]:
+    ) -> BestRun | list[BestRun]:
         """
         Launch an hyperparameter search using `optuna` or `Ray Tune`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
@@ -3515,7 +3554,7 @@ class Trainer:
         self.hp_search_backend = None
         return best_run
 
-    def log(self, logs: dict[str, float], start_time: Optional[float] = None) -> None:
+    def log(self, logs: dict[str, float], start_time: float | None = None) -> None:
         """
         Log `logs` on the various objects watching training.
 
@@ -3537,11 +3576,11 @@ class Trainer:
                 )
                 logs.update(speed_metrics("train", start_time, num_tokens=current_session_num_tokens))
 
-        output = {**logs, **{"step": self.state.global_step}}
+        output = {**logs, "step": self.state.global_step}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
-    def _prepare_input(self, data: Union[torch.Tensor, Any]) -> Union[torch.Tensor, Any]:
+    def _prepare_input(self, data: torch.Tensor | Any) -> torch.Tensor | Any:
         """
         Prepares one `data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
         """
@@ -3559,7 +3598,7 @@ class Trainer:
             return data.to(**kwargs)
         return data
 
-    def _prepare_inputs(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
+    def _prepare_inputs(self, inputs: dict[str, torch.Tensor | Any]) -> dict[str, torch.Tensor | Any]:
         """
         Prepare `inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
@@ -3616,7 +3655,7 @@ class Trainer:
         # For unknown dimensions, be conservative and reject
         return False
 
-    def _prepare_context_parallel_inputs(self, model, inputs: dict[str, Union[torch.Tensor, Any]]):
+    def _prepare_context_parallel_inputs(self, model, inputs: dict[str, torch.Tensor | Any]):
         """
         Prepare inputs for context parallelism by setting up buffers and validation.
 
@@ -3632,23 +3671,30 @@ class Trainer:
             getattr(self.accelerator, "parallelism_config", None) is not None
             and self.accelerator.parallelism_config.cp_enabled
         ):
-            if hasattr(model, "config"):
-                if model.config._attn_implementation != "sdpa":
-                    raise ValueError(
-                        f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
-                    )
+            if self.accelerator.parallelism_config.cp_backend == "torch":
+                if hasattr(model, "config"):
+                    if model.config._attn_implementation != "sdpa":
+                        raise ValueError(
+                            f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
+                        )
+
+                if "shift_labels" not in inputs:
+                    logger.warning_once("Shift labels not found in the inputs, shifting manually")
+                    if "labels" in inputs:
+                        _ignore_index = -100
+                        labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
+                        inputs["shift_labels"] = labels[:, 1:].contiguous()
+
+            # note: we don't do anything for accelerator.parallelism_config.sp_backend == "deepspeed" since:
+            # - accelerator.parallelism_config performs the `model.config._attn_implementation` checks already and it supports more than `dspa`
+            # - UlyssesSPDataLoaderAdapter called from Accelerate performs the `shift_label` creation - must not interfere
+            # - position_ids generation should be done by HF Trainer if it wasn't done by the user
 
             if "position_ids" not in inputs:
                 logger.warning_once("Position IDs not found in the inputs, generating manually")
                 inputs["position_ids"] = torch.arange(
                     inputs["input_ids"].size(1), device=inputs["input_ids"].device
                 ).expand(inputs["input_ids"].size(0), -1)
-            if "shift_labels" not in inputs:
-                logger.warning_once("Shift labels not found in the inputs, shifting manually")
-                if "labels" in inputs:
-                    _ignore_index = -100
-                    labels = nn.functional.pad(inputs["labels"], (0, 1), value=_ignore_index)
-                    inputs["shift_labels"] = labels[:, 1:].contiguous()
 
             buffers = []
             buffer_seq_dims = []
@@ -3713,7 +3759,7 @@ class Trainer:
 
         return ctx_stack
 
-    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
+    def autocast_smart_context_manager(self, cache_enabled: bool | None = True):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation. We rely on accelerate for autocast, hence we do nothing here.
@@ -3723,8 +3769,8 @@ class Trainer:
     def training_step(
         self,
         model: nn.Module,
-        inputs: dict[str, Union[torch.Tensor, Any]],
-        num_items_in_batch: Optional[torch.Tensor] = None,
+        inputs: dict[str, torch.Tensor | Any],
+        num_items_in_batch: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -3794,9 +3840,9 @@ class Trainer:
     def compute_loss(
         self,
         model: nn.Module,
-        inputs: dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, torch.Tensor | Any],
         return_outputs: bool = False,
-        num_items_in_batch: Optional[torch.Tensor] = None,
+        num_items_in_batch: torch.Tensor | None = None,
     ):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
@@ -3817,6 +3863,10 @@ class Trainer:
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculating might be slightly inaccurate when performing gradient accumulation.
         """
+        pc = getattr(self.accelerator, "parallelism_config", None)
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled:
+            return self._deepspeed_sp_compute_loss(model, inputs, return_outputs, pc)
+
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
@@ -3870,6 +3920,52 @@ class Trainer:
 
         return (loss, outputs) if return_outputs else loss
 
+    def _deepspeed_sp_compute_loss(self, model, inputs, return_outputs, pc):
+        """
+        How the loss is computed by the Trainer under sequence parallelism with sp_backend=="deepspeed" and sp_size>1.
+        Performs weighted loss aggregation across SP ranks, accounting for varying numbers of valid tokens per rank
+        (e.g., when some ranks receive only padding or prompt tokens that are masked with -100).
+
+        Args:
+            model (`nn.Module`):
+                The model to compute the loss for.
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
+                The input data for the model. Must include "shift_labels" key.
+            return_outputs (`bool`, *optional*, defaults to `False`):
+                Whether to return the model outputs along with the loss.
+            pc (`accelerate.parallelism_config.ParallelismConfig`):
+                self.accelerator.parallelism_config object (not None)
+
+        Returns:
+            The loss of the model along with its output if return_outputs was set to True
+        """
+
+        # DeepSpeed SP automatically injects shift_labels into inputs (pre-shifted labels for SP).
+        # The model's forward pass receives shift_labels via **kwargs and passes it to the loss function.
+        # Both standard transformer models and Liger-patched models handle shift_labels correctly,
+        # so we can directly use the computed loss from the model output.
+        # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
+        outputs = model(**inputs)
+        loss = outputs.loss
+
+        sp_group = self.accelerator.torch_device_mesh["sp"].get_group()
+        sp_world_size = pc.sp_size
+        # differentiable weighted per-shard-loss aggregation across ranks
+        losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
+        # special dealing with SFT that has prompt tokens that aren't used in loss computation
+        good_tokens = (inputs["shift_labels"] != -100).view(-1).sum()
+        good_tokens_per_rank = torch.distributed.nn.functional.all_gather(good_tokens, group=sp_group)
+        # Skip ranks with zero valid tokens
+        total_loss = sum(
+            losses_per_rank[rank] * good_tokens_per_rank[rank]
+            for rank in range(sp_world_size)
+            if good_tokens_per_rank[rank] > 0
+        )
+        total_good_tokens = sum(good_tokens_per_rank)
+        loss = total_loss / max(total_good_tokens, 1)
+
+        return (loss, outputs) if return_outputs else loss
+
     def is_local_process_zero(self) -> bool:
         """
         Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
@@ -3889,7 +3985,7 @@ class Trainer:
         else:
             return self.args.process_index == 0
 
-    def save_model(self, output_dir: Optional[str] = None, _internal_call: bool = False):
+    def save_model(self, output_dir: str | None = None, _internal_call: bool = False):
         """
         Will save the model, so you can reload it using `from_pretrained()`.
 
@@ -3910,7 +4006,9 @@ class Trainer:
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
         elif getattr(self.accelerator, "parallelism_config", None) is not None:
-            if self.accelerator.should_save_model:
+            # DeepSpeed SP already handles checkpoint saving below, so skip manual save in that case
+            pc = getattr(self.accelerator, "parallelism_config")
+            if self.accelerator.should_save_model and not (pc.sp_enabled and pc.sp_backend == "deepspeed"):
                 self._save(output_dir)
         # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
         elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
@@ -3943,7 +4041,7 @@ class Trainer:
         if self.args.push_to_hub and not _internal_call:
             self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
-    def _save_tpu(self, output_dir: Optional[str] = None):
+    def _save_tpu(self, output_dir: str | None = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
 
         logger.info(f"Saving model checkpoint to {output_dir}")
@@ -4015,7 +4113,7 @@ class Trainer:
         if self.processing_class is not None and self.args.should_save:
             self.processing_class.save_pretrained(output_dir)
 
-    def _save(self, output_dir: Optional[str] = None, state_dict=None):
+    def _save(self, output_dir: str | None = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
@@ -4133,8 +4231,8 @@ class Trainer:
 
     def evaluate(
         self,
-        eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
-        ignore_keys: Optional[list[str]] = None,
+        eval_dataset: Dataset | dict[str, Dataset] | None = None,
+        ignore_keys: list[str] | None = None,
         metric_key_prefix: str = "eval",
     ) -> dict[str, float]:
         """
@@ -4146,7 +4244,7 @@ class Trainer:
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]), *optional*):
+            eval_dataset (Union[`Dataset`, dict[str, `Dataset`]], *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
                 evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
@@ -4233,7 +4331,7 @@ class Trainer:
         return output.metrics
 
     def predict(
-        self, test_dataset: Dataset, ignore_keys: Optional[list[str]] = None, metric_key_prefix: str = "test"
+        self, test_dataset: Dataset, ignore_keys: list[str] | None = None, metric_key_prefix: str = "test"
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
@@ -4297,8 +4395,8 @@ class Trainer:
         self,
         dataloader: DataLoader,
         description: str,
-        prediction_loss_only: Optional[bool] = None,
-        ignore_keys: Optional[list[str]] = None,
+        prediction_loss_only: bool | None = None,
+        ignore_keys: list[str] | None = None,
         metric_key_prefix: str = "eval",
     ) -> EvalLoopOutput:
         """
@@ -4521,10 +4619,10 @@ class Trainer:
     def prediction_step(
         self,
         model: nn.Module,
-        inputs: dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, torch.Tensor | Any],
         prediction_loss_only: bool,
-        ignore_keys: Optional[list[str]] = None,
-    ) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+        ignore_keys: list[str] | None = None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
         """
         Perform an evaluation step on `model` using `inputs`.
 
@@ -4623,7 +4721,7 @@ class Trainer:
 
         return (loss, logits, labels)
 
-    def floating_point_ops(self, inputs: dict[str, Union[torch.Tensor, Any]]):
+    def floating_point_ops(self, inputs: dict[str, torch.Tensor | Any]):
         """
         For models that inherit from [`PreTrainedModel`], uses that method to compute the number of floating point
         operations for every backward + forward pass. If using another model, either implement such a method in the
@@ -4636,12 +4734,13 @@ class Trainer:
         Returns:
             `int`: The number of floating-point operations.
         """
-        if hasattr(self.model, "floating_point_ops"):
-            return self.model.floating_point_ops(inputs)
-        else:
-            return 0
+        if (main_input := getattr(self.model, "main_input_name", "input_ids")) in inputs and hasattr(
+            self.model, "num_parameters"
+        ):
+            return 6 * inputs[main_input].numel() * self.model.num_parameters(exclude_embeddings=True)
+        return 0
 
-    def init_hf_repo(self, token: Optional[str] = None):
+    def init_hf_repo(self, token: str | None = None):
         """
         Initializes a git repo in `self.args.hub_model_id`.
         """
@@ -4661,15 +4760,15 @@ class Trainer:
 
     def create_model_card(
         self,
-        language: Optional[str] = None,
-        license: Optional[str] = None,
-        tags: Union[str, list[str], None] = None,
-        model_name: Optional[str] = None,
-        finetuned_from: Optional[str] = None,
-        tasks: Union[str, list[str], None] = None,
-        dataset_tags: Union[str, list[str], None] = None,
-        dataset: Union[str, list[str], None] = None,
-        dataset_args: Union[str, list[str], None] = None,
+        language: str | None = None,
+        license: str | None = None,
+        tags: str | list[str] | None = None,
+        model_name: str | None = None,
+        finetuned_from: str | None = None,
+        tasks: str | list[str] | None = None,
+        dataset_tags: str | list[str] | None = None,
+        dataset: str | list[str] | None = None,
+        dataset_args: str | list[str] | None = None,
     ):
         """
         Creates a draft of a model card using the information available to the `Trainer`.
@@ -4810,10 +4909,10 @@ class Trainer:
 
     def push_to_hub(
         self,
-        commit_message: Optional[str] = "End of training",
+        commit_message: str | None = "End of training",
         blocking: bool = True,
-        token: Optional[str] = None,
-        revision: Optional[str] = None,
+        token: str | None = None,
+        revision: str | None = None,
         **kwargs,
     ) -> CommitInfo:
         """
@@ -4963,13 +5062,25 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
-        args = {"deepspeed_plugin": self.args.deepspeed_plugin, "dataloader_config": dataloader_config}
+        fsdp_plugin = None
+        if self.args.fsdp_plugin_args is not None:
+            from accelerate.utils import FullyShardedDataParallelPlugin
+
+            fsdp_plugin = FullyShardedDataParallelPlugin(**self.args.fsdp_plugin_args)
+
+        args = {
+            "mixed_precision": self.args.mixed_precision,
+            "dataloader_config": dataloader_config,
+            "fsdp_plugin": fsdp_plugin,
+            "deepspeed_plugin": self.args.deepspeed_plugin,
+        }
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
-            if not is_accelerate_available("1.10.1"):
+            min_accelerate_version = "1.12.0"
+            if not is_accelerate_available(min_accelerate_version):
                 raise ImportError(
-                    "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
+                    f"ParallelismConfig requires accelerate>={min_accelerate_version}). Please upgrade accelerate to use this feature."
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
@@ -4977,13 +5088,22 @@ class Trainer:
         if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
             if self.args.parallelism_config is not None:
-                if version.parse(accelerate_version) > version.parse("1.10.1"):
+                if is_accelerate_available("1.10.1"):
                     if self.args.parallelism_config is not None:
                         from accelerate import ParallelismConfig
 
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
+
+        if is_accelerate_available("1.2.0"):
+            # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
+            from accelerate.utils import TorchDynamoPlugin
+
+            dynamo_plugin = TorchDynamoPlugin(
+                backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode
+            )
+            args["dynamo_plugin"] = dynamo_plugin
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
@@ -5066,7 +5186,7 @@ class Trainer:
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> Optional[Union[torch.Tensor, int]]:
+    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> torch.Tensor | int | None:
         """
         Counts the number of items in the batches to properly scale the loss.
         Args:
@@ -5098,9 +5218,10 @@ class Trainer:
                 pass
 
         if num_items_in_batch is not None:
-            if self.args.average_tokens_across_devices and self.args.world_size >= 1:
-                num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
-            elif self.args.n_gpu >= 1:
+            if self.args.average_tokens_across_devices:
+                if self.args.world_size > 1:
+                    num_items_in_batch = self.accelerator.gather(num_items_in_batch.to(device)).sum()
+            elif self.args.n_gpu > 1:
                 # In DP case, if we don't average, we need to divide by the number of gpu. This is the simplest approximation.
                 # Otherwise, we would have to scatter labels and calculate num_items_in_batch for each gpu.
                 num_items_in_batch = num_items_in_batch // self.args.n_gpu
@@ -5119,7 +5240,7 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> tuple[list, Optional[Union[torch.Tensor, int]]]:
+    ) -> tuple[list, torch.Tensor | int | None]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """
@@ -5152,6 +5273,11 @@ class Trainer:
         # If max_steps is negative, we use the number of epochs to determine the number of total steps later
         epoch_based = max_steps < 0
         len_dataloader = len(dataloader) if has_length(dataloader) else None
+
+        # Account for Sequence Parallelism (SP) dataloader adapter's effect
+        sp_size = self.get_sp_size()
+        if sp_size > 1 and len_dataloader is not None:
+            len_dataloader = len_dataloader * sp_size
 
         # Case 2: We have a dataloader length and can extrapolate
         if len_dataloader is not None:

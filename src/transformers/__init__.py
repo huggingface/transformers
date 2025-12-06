@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.57.0.dev0"
+__version__ = "5.0.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -58,7 +58,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "audio_utils": [],
-    "commands": [],
+    "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
@@ -130,9 +130,8 @@ _import_structure = {
     ],
     "loss": [],
     "modelcard": ["ModelCard"],
-    # Models
-    "onnx": [],
     "pipelines": [
+        "AnyToAnyPipeline",
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
@@ -174,13 +173,13 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_utils": ["PreTrainedTokenizer"],
+    "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
         "CharSpan",
         "PreTrainedTokenizerBase",
-        "SpecialTokensMixin",
         "TokenSpan",
     ],
     "trainer_callback": [
@@ -204,10 +203,7 @@ _import_structure = {
     "utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
-        "PYTORCH_PRETRAINED_BERT_CACHE",
-        "PYTORCH_TRANSFORMERS_CACHE",
         "SPIECE_UNDERLINE",
-        "TRANSFORMERS_CACHE",
         "WEIGHTS_NAME",
         "TensorType",
         "add_end_docstrings",
@@ -279,7 +275,10 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
+    _import_structure["tokenization_utils_tokenizers"] = [
+        "TokenizersBackend",
+        "PreTrainedTokenizerFast",
+    ]
 
 
 try:
@@ -307,7 +306,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_mistral_common_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["tokenization_mistral_common"] = ["MistralCommonTokenizer"]
+    _import_structure["tokenization_mistral_common"] = ["MistralCommonBackend"]
 
 # Vision-specific objects
 try:
@@ -375,13 +374,8 @@ else:
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
-        "LineByLineTextDataset",
-        "LineByLineWithRefDataset",
-        "LineByLineWithSOPTextDataset",
         "SquadDataset",
         "SquadDataTrainingArguments",
-        "TextDataset",
-        "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["generation"].extend(
         [
@@ -389,6 +383,8 @@ else:
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "ClassifierFreeGuidanceLogitsProcessor",
+            "ContinuousBatchingManager",
+            "ContinuousMixin",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -441,7 +437,7 @@ else:
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
     _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["optimization"] = [
@@ -527,13 +523,8 @@ if TYPE_CHECKING:
     from .data.data_collator import default_data_collator as default_data_collator
     from .data.datasets import GlueDataset as GlueDataset
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
-    from .data.datasets import LineByLineTextDataset as LineByLineTextDataset
-    from .data.datasets import LineByLineWithRefDataset as LineByLineWithRefDataset
-    from .data.datasets import LineByLineWithSOPTextDataset as LineByLineWithSOPTextDataset
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
-    from .data.datasets import TextDataset as TextDataset
-    from .data.datasets import TextDatasetForNextSentencePrediction as TextDatasetForNextSentencePrediction
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -547,6 +538,8 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
+    from .generation import ContinuousBatchingManager as ContinuousBatchingManager
+    from .generation import ContinuousMixin as ContinuousMixin
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria
@@ -620,6 +613,7 @@ if TYPE_CHECKING:
     from .modelcard import ModelCard as ModelCard
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
+    from .modeling_rope_utils import RopeParameters as RopeParameters
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
@@ -648,6 +642,7 @@ if TYPE_CHECKING:
     from .optimization import get_wsd_schedule as get_wsd_schedule
 
     # Pipelines
+    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
@@ -690,14 +685,20 @@ if TYPE_CHECKING:
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
     # Tokenization
-    from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_python import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_python import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
     from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
-    from .tokenization_utils_base import SpecialTokensMixin as SpecialTokensMixin
     from .tokenization_utils_base import TokenSpan as TokenSpan
-    from .tokenization_utils_fast import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+
+    # Tokenization
+    from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
+    from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+    from .tokenization_utils_tokenizers import (
+        TokenizersBackend as TokenizersBackend,
+    )
 
     # Trainer
     from .trainer import Trainer as Trainer
@@ -721,10 +722,7 @@ if TYPE_CHECKING:
     # Files and general utilities
     from .utils import CONFIG_NAME as CONFIG_NAME
     from .utils import MODEL_CARD_NAME as MODEL_CARD_NAME
-    from .utils import PYTORCH_PRETRAINED_BERT_CACHE as PYTORCH_PRETRAINED_BERT_CACHE
-    from .utils import PYTORCH_TRANSFORMERS_CACHE as PYTORCH_TRANSFORMERS_CACHE
     from .utils import SPIECE_UNDERLINE as SPIECE_UNDERLINE
-    from .utils import TRANSFORMERS_CACHE as TRANSFORMERS_CACHE
     from .utils import WEIGHTS_NAME as WEIGHTS_NAME
     from .utils import TensorType as TensorType
     from .utils import add_end_docstrings as add_end_docstrings

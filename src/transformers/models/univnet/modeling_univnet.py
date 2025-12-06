@@ -427,6 +427,7 @@ class UnivNetLvcBlock(nn.Module):
 class UnivNetModel(PreTrainedModel):
     config: UnivNetConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: UnivNetConfig):
         super().__init__(config)
@@ -475,6 +476,7 @@ class UnivNetModel(PreTrainedModel):
         padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
         noise_sequence (`torch.FloatTensor`, *optional*):
@@ -589,13 +591,6 @@ class UnivNetModel(PreTrainedModel):
             waveforms=waveform,
             waveform_lengths=waveform_lengths,
         )
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

@@ -39,8 +39,6 @@ class GptqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    required_packages = ["optimum", "auto_gptq", "gptqmodel"]
-    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -120,5 +118,5 @@ class GptqHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return True

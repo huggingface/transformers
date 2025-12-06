@@ -48,7 +48,6 @@ Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingf
 - Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be decoded
   using [`Wav2Vec2CTCTokenizer`].
 
-
 ## Using Flash Attention 2
 
 Flash Attention 2 is an faster, optimized version of the model.

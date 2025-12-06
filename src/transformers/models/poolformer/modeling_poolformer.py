@@ -20,6 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -242,21 +243,17 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     config: PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = ["PoolFormerLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.GroupNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, PoolFormerLayer):
+        super()._init_weights(module)
+        if isinstance(module, PoolFormerLayer):
             if hasattr(module, "layer_scale_1"):
-                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
-                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -279,6 +276,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -342,6 +340,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

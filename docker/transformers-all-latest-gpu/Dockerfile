@@ -9,11 +9,14 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.8.0'
+ARG PYTORCH='2.9.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
-# Disable kernel mapping for now until all tests pass
-ENV DISABLE_KERNEL_MAPPING=1
+
+# This needs to be compatible with the above `PYTORCH`.
+ARG TORCHCODEC='0.8.0'
+
+ARG FLASH_ATTN='false'
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
@@ -23,14 +26,48 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
+
 # 1. Put several commands in a single `RUN` to avoid image/layer exporting issue. Could be revised in the future.
-# 2. Regarding `torch` part, We might need to specify proper versions for `torchvision` and `torchaudio`.
-#    Currently, let's not bother to specify their versions explicitly (so installed with their latest release versions).
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime] && [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile && echo torch=$VERSION && [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
+# 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
+#    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
+# 3. `set -e` means "exit immediately if any command fails".
+RUN set -e; \
+    # Determine torch version
+    if [ ${#PYTORCH} -gt 0 ] && [ "$PYTORCH" != "pre" ]; then \
+        VERSION="torch==${PYTORCH}.*"; \
+        TORCHCODEC_VERSION="torchcodec==${TORCHCODEC}.*"; \
+    else \
+        VERSION="torch"; \
+        TORCHCODEC_VERSION="torchcodec"; \
+    fi; \
+    \
+    # Log the version being installed
+    echo "Installing torch version: $VERSION"; \
+    \
+    # Install PyTorch packages
+    if [ "$PYTORCH" != "pre" ]; then \
+        python3 -m pip install --no-cache-dir -U \
+            $VERSION \
+            torchvision \
+            torchaudio \
+            --extra-index-url https://download.pytorch.org/whl/$CUDA; \
+        # We need to specify the version if the torch version is not the latest stable one.
+        python3 -m pip install --no-cache-dir -U \
+            $TORCHCODEC_VERSION --extra-index-url https://download.pytorch.org/whl/cpu; \
+    else \
+        python3 -m pip install --no-cache-dir -U --pre \
+            torch \
+            torchvision \
+            torchaudio \
+            --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA; \
+        python3 -m pip install --no-cache-dir -U --pre \
+            torchcodec --extra-index-url https://download.pytorch.org/whl/nightly/cpu; \
+    fi
 
 RUN python3 -m pip install --no-cache-dir -U timm
 
-RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git || echo "Don't install detectron2 with nightly torch"
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir --no-build-isolation git+https://github.com/facebookresearch/detectron2.git || echo "Don't install detectron2 with nightly torch"
 
 RUN python3 -m pip install --no-cache-dir pytesseract
 
@@ -55,7 +92,7 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 RUN python3 -m pip install --no-cache-dir quanto
 
 # After using A10 as CI runner, let's run FA2 tests
-RUN [ "$PYTORCH" != "pre" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
+RUN [ "$FLASH_ATTN" != "false" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
 
 # TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests

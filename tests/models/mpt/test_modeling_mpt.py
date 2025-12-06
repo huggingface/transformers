@@ -100,9 +100,6 @@ class MptModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return MptConfig.from_pretrained("mosaicml/mpt-7b")
-
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -353,10 +350,8 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
 
-    fx_compatible = False
     test_missing_keys = False
 
-    test_torchscript = False
     pipeline_model_mapping = (
         {
             "feature-extraction": MptModel,
@@ -533,6 +528,7 @@ class MptIntegrationTests(unittest.TestCase):
         for i, predicted_output in enumerate(decoded_outputs):
             self.assertEqual(predicted_output, expected_output[i])
 
+    @require_deterministic_for_xpu
     def test_model_logits(self):
         model_id = "mosaicml/mpt-7b"
 
@@ -551,7 +547,7 @@ class MptIntegrationTests(unittest.TestCase):
         expected_slices = Expectations(
             {
                 (None, None): torch.Tensor([-0.2520, -0.2178, -0.1953]),
-                ("xpu", 3): torch.Tensor([-0.2090, -0.2061, -0.1465]),
+                ("xpu", 3): torch.Tensor([-0.2656, -0.2246, -0.2637]),
                 ("cuda", 8): torch.Tensor([-0.2559, -0.2227, -0.2217]),
                 # TODO: This is quite a bit off, check BnB
                 ("rocm", (9, 5)): torch.Tensor([-0.3008, -0.1309, -0.1562]),

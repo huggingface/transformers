@@ -31,7 +31,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
-    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
+    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn2", help="Attention implementation")
     parser.add_argument("--samples", type=int, default=500)
     parser.add_argument("--max-new-tokens", type=int, default=32)
 
@@ -68,7 +68,6 @@ if __name__ == "__main__":
     _ = model.generate_batch(
         inputs=simple_batch_inputs[: min(5, args.samples)],
         generation_config=generation_config,
-        slice_inputs=True,
     )
 
     # Actual batch generation
@@ -77,7 +76,6 @@ if __name__ == "__main__":
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
-        slice_inputs=True,
     )
     end_time = time.time()
     print("Done with batch generation.")

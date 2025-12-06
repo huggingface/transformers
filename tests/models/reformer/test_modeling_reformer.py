@@ -603,7 +603,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         else ()
     )
 
-    test_torchscript = False
     test_sequence_classification_problem_types = True
 
     def setUp(self):
@@ -744,8 +743,6 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else {}
     )
-
-    test_torchscript = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
