@@ -1509,6 +1509,9 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             hard_failures.append(name)
             continue
         if old_doc != new_doc:
+            import pdb
+
+            pdb.set_trace()
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)
             else:

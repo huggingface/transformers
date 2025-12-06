@@ -736,6 +736,8 @@
         title: Zamba
       - local: model_doc/zamba2
         title: Zamba2
+      - local: model_doc/zaya
+        title: Zaya
       title: Text models
     - sections:
       - local: model_doc/aimv2
