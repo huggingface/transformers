@@ -674,7 +674,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
     def set_shape_embeddings(self, value):
         self.embeddings.shape_embed = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

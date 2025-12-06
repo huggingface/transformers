@@ -34,7 +34,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_pyctcdecode,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torchaudio,
     require_torchcodec,
     run_test_in_subprocess,
@@ -1808,7 +1808,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             assert run_model(lang) == TRANSCRIPTIONS[lang]
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_inference_ctc_fa2(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
@@ -1830,7 +1830,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_inference_ctc_fa2_batched(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(

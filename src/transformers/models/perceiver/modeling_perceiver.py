@@ -615,6 +615,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverModelOutput]:
         r"""
         inputs (`torch.FloatTensor`):
@@ -850,6 +851,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverMaskedLMOutput]:
         r"""
         inputs (`torch.FloatTensor`):
@@ -975,6 +977,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
@@ -1107,6 +1110,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
@@ -1229,6 +1233,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
@@ -1350,6 +1355,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
@@ -1487,6 +1493,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
@@ -1695,6 +1702,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):

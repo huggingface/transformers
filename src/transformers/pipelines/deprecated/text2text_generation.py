@@ -3,7 +3,7 @@ import warnings
 from typing import Any
 
 from ...generation import GenerationConfig
-from ...tokenization_utils import TruncationStrategy
+from ...tokenization_python import TruncationStrategy
 from ...utils import add_end_docstrings, is_torch_available, logging
 from ..base import Pipeline, build_pipeline_init_args
 

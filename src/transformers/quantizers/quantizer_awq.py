@@ -40,8 +40,6 @@ class AwqQuantizer(HfQuantizer):
     # AWQ requires data calibration - we support only inference
     requires_calibration = True
 
-    required_packages = ["awq", "accelerate"]
-
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 

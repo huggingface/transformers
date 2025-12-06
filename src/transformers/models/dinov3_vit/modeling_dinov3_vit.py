@@ -532,7 +532,7 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs()
+    @check_model_inputs
     @can_return_tuple
     def forward(
         self,

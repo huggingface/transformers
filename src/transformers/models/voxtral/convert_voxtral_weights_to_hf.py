@@ -23,7 +23,7 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import (
-    MistralCommonTokenizer,
+    MistralCommonBackend,
     VoxtralConfig,
     VoxtralForConditionalGeneration,
     VoxtralProcessor,
@@ -235,7 +235,7 @@ def write_model(
 
 
 def write_processor(input_path_or_repo: str, feature_extractor_path_or_repo: str, output_dir: str):
-    tokenizer = MistralCommonTokenizer.from_pretrained(input_path_or_repo)
+    tokenizer = MistralCommonBackend.from_pretrained(input_path_or_repo)
     feature_extractor = WhisperFeatureExtractor.from_pretrained(feature_extractor_path_or_repo)
 
     print("Creating the processor...")

@@ -36,13 +36,10 @@ class FPQuantHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    requires_parameters_quantization = True
     is_qat_trainable = True
-    required_packages = ["fp_quant"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, device_map, **kwargs):
         if not torch.cuda.is_available() and not is_torch_xpu_available():
@@ -68,15 +65,17 @@ class FPQuantHfQuantizer(HfQuantizer):
                 "You are attempting to load a FPQuant model without setting device_map."
                 " Please set device_map comprised of 'cuda' devices."
             )
-        elif (
-            isinstance(device_map, dict)
-            and ("cpu" in device_map.values() or "disk" in device_map.values())
-            and not self.quantization_config.pseudoquantization
-        ):
-            raise ValueError(
-                "You are attempting to load a FPQuant model with a device_map that contains a CPU or disk device."
-                " This is not supported. Please remove the CPU or disk device from the device_map."
-            )
+        elif isinstance(device_map, dict):
+            if (
+                not self.quantization_config.pseudoquantization
+                and len(device_map) > 1
+                and "cpu" in device_map.values()
+                or "disk" in device_map.values()
+            ):
+                raise ValueError(
+                    "You are attempting to load a FPQuant model with a device_map that contains a CPU or disk device."
+                    " This is not supported. Please remove the CPU or disk device from the device_map."
+                )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if dtype is None:
@@ -84,50 +83,17 @@ class FPQuantHfQuantizer(HfQuantizer):
             dtype = torch.bfloat16
         elif dtype != torch.bfloat16:
             raise ValueError(f"Invalid `dtype` {dtype}. fp_quant quantization only supports `dtype=torch.bfloat16`.")
-
         return dtype
 
-    def create_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        target_device: "torch.device",
-        **kwargs,
-    ):
-        module, _ = get_module_from_name(model, param_name)
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        from fp_quant import FPQuantLinear
 
-        if target_device == "cpu" and param_name.endswith("weight"):
-            # Works agains hard-coded missing key dispatch to CPU
-            return
-
-        # The module holds either:
-        #  * `weight` when `store_master_weights=True`
-        #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
-        #  * `dqweight` when `store_master_weights=False` and `pseudoquantization=True`
-
-        if param_name.endswith(".qweight"):
-            # Loading a real quantized checkpoint without master weights
-            module.qweight = torch.nn.Parameter(
-                param_value.to(target_device),
-                requires_grad=False,
-            )
-            module.weight = None
-            module.dqweight = None
-            return
-
-        if param_name.endswith(".dqweight"):
-            # Loading a pseudo-quantized checkpoint without master weights
-            module.dqweight = torch.nn.Parameter(param_value.to(target_device))
-            module.weight = None
-            module.qweight = None
-            module.scales = None
-            return
-
-        # Loading master weights or an unquantized checkpoint
-        module.weight = torch.nn.Parameter(param_value.to(target_device))
-        # Let pre-forward handle the quantization and set None where necessary
-        module.pre_forward()
+        module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, FPQuantLinear) and tensor_name in ["weight", "qweight", "dqweight"]:
+            # Only quantize weights of FPQuantLinear modules that are not already quantized
+            return True
+        else:
+            return False
 
     def _process_model_before_weight_loading(
         self,
@@ -142,20 +108,6 @@ class FPQuantHfQuantizer(HfQuantizer):
             model,
             fp_quant_linear_config=adapt_fp_quant_config(self.quantization_config),
         )
-        model.config.quantization_config = self.quantization_config
-
-    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
-        from fp_quant import FPQuantLinear
-
-        fp_quant_names = {name for name, module in model.named_modules() if isinstance(module, FPQuantLinear)}
-
-        def should_exclude(key: str) -> bool:
-            if key.endswith(".weight") or key.endswith(".bias"):
-                return False
-            full_key = f"{prefix}.{key}"
-            return any(name in key or name in full_key for name in fp_quant_names)
-
-        return [key for key in missing_keys if not should_exclude(key)]
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
@@ -166,15 +118,5 @@ class FPQuantHfQuantizer(HfQuantizer):
             )
         return trainable
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return True
-
-    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from fp_quant import FPQuantLinear
-
-        module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, FPQuantLinear) and tensor_name in ["weight", "qweight", "dqweight"]:
-            # Only quantize weights of FPQuantLinear modules that are not already quantized
-            return True
-        else:
-            return False

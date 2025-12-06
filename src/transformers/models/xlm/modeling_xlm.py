@@ -1082,6 +1082,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1190,6 +1191,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1291,6 +1293,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, XLMForQuestionAnsweringOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1406,6 +1409,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1491,6 +1495,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):

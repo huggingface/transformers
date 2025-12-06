@@ -1199,6 +1199,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model(
             pixel_values=pixel_values,

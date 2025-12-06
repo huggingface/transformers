@@ -15,9 +15,9 @@
 import inspect
 import json
 import os
-import re
 from typing import Any, Literal
 
+from ..core_model_loading import WeightRenaming, rename_source_key
 from ..utils import (
     CONFIG_NAME,
     cached_file,
@@ -294,20 +294,19 @@ class PeftAdapterMixin:
             adapter_state_dict = load_peft_weights(peft_model_id, token=token, device=device, **adapter_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
+        renamings = []
+        if key_mapping:
+            renamings = [entry for entry in key_mapping if isinstance(entry, WeightRenaming)]
         processed_adapter_state_dict = {}
         prefix = "base_model.model."
+        state_dict = self.state_dict()
         for key, value in adapter_state_dict.items():
             if key.startswith(prefix):
                 new_key = key[len(prefix) :]
             else:
                 new_key = key
 
-            if key_mapping:  # TODO dynamic weight loader for adapters
-                for pattern, replacement in key_mapping.items():
-                    new_key, n_replace = re.subn(pattern, replacement, new_key)
-                    # Early exit of the loop
-                    if n_replace > 0:
-                        break
+            new_key = rename_source_key(new_key, renamings, [], self.base_model_prefix, state_dict)[0]
 
             # For hotswapping, we need the adapter name to be present in the state dict keys
             if hotswap:

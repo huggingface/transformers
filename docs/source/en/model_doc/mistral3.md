@@ -242,9 +242,9 @@ messages = [
 
 [[autodoc]] Mistral3Config
 
-## MistralCommonTokenizer
+## MistralCommonBackend
 
-[[autodoc]] MistralCommonTokenizer
+[[autodoc]] MistralCommonBackend
 
 ## Mistral3Model
 

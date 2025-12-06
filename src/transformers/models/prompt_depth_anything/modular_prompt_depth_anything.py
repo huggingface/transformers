@@ -236,6 +236,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):

@@ -66,7 +66,8 @@ markers = [
     "flash_attn_3_test: marks tests related to flash attention 3 (deselect with '-m \"not flash_attn_3_test\"')",
     "flash_attn_test: marks tests related to flash attention (deselect with '-m \"not flash_attn_test\"')",
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
-    "generate: marks tests that use the GenerationTesterMixin"
+    "generate: marks tests that use the GenerationTesterMixin",
+    "is_training_test: marks tests that use the TrainingTesterMixin (deselect with '-m \"not is_training_test\"')",
 ]
 log_cli = 1
 log_cli_level = "WARNING"

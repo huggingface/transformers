@@ -380,7 +380,7 @@ class AlbertModel(AlbertPreTrainedModel):
     def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

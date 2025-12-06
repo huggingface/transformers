@@ -166,7 +166,7 @@ class GraniteMoeModel(MixtralModel):
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embedding_multiplier = config.embedding_multiplier
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

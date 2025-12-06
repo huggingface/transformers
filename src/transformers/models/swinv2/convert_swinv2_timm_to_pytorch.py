@@ -16,7 +16,6 @@
 
 import argparse
 import json
-from pathlib import Path
 
 import requests
 import timm
@@ -195,11 +194,7 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
 
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, swinv2_name),
-        organization="nandwalritik",
-        commit_message="Add model",
-    )
+    model.push_to_hub(repo_id=f"nandwalritik/{swinv2_name}", commit_message="Add model")
 
 
 if __name__ == "__main__":

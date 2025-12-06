@@ -449,9 +449,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None, **kwargs
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):

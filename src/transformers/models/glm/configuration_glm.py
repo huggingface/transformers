@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class GlmConfig(PreTrainedConfig):
@@ -48,7 +48,6 @@ class GlmConfig(PreTrainedConfig):
             by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -112,7 +111,6 @@ class GlmConfig(PreTrainedConfig):
         num_hidden_layers: Optional[int] = 40,
         num_attention_heads: Optional[int] = 32,
         num_key_value_heads: Optional[int] = 2,
-        partial_rotary_factor: Optional[float] = 0.5,
         head_dim: Optional[int] = 128,
         hidden_act: Optional[str] = "silu",
         attention_dropout: Optional[float] = 0.0,
@@ -134,7 +132,6 @@ class GlmConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.partial_rotary_factor = partial_rotary_factor
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
@@ -143,14 +140,8 @@ class GlmConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         super().__init__(
             pad_token_id=pad_token_id,

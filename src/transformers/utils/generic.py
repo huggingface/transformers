@@ -18,11 +18,10 @@ Generic utilities
 import inspect
 import json
 import os
-import tempfile
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
@@ -501,15 +500,6 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
     return dict(_flatten_dict(d, parent_key, delimiter))
 
 
-@contextmanager
-def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
-    if use_temp_dir:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            yield tmp_dir
-    else:
-        yield working_dir
-
-
 def transpose(array, axes=None):
     """
     Framework-agnostic version of transpose operation.
@@ -798,7 +788,7 @@ class OutputRecorder:
     class_name: str | None = None
 
 
-def check_model_inputs(tie_last_hidden_states=True):
+def check_model_inputs(func=None, *, tie_last_hidden_states=True):
     """
     Decorator to intercept specific layer outputs without using hooks.
     Compatible with torch.compile (Dynamo tracing).
@@ -972,6 +962,8 @@ def check_model_inputs(tie_last_hidden_states=True):
 
         return wrapper
 
+    if func is not None:
+        return wrapped_fn(func)
     return wrapped_fn
 
 

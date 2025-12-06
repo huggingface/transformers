@@ -397,8 +397,8 @@ def convert_sam3_checkpoint(
         if repo_id is None:
             raise ValueError("repo_id must be provided when push_to_hub=True")
         print(f"Pushing model to Hub: {repo_id}")
-        model.push_to_hub(repo_id, use_temp_dir=True)
-        processor.push_to_hub(repo_id, use_temp_dir=True)
+        model.push_to_hub(repo_id)
+        processor.push_to_hub(repo_id)
 
     print("Conversion complete!")
     print(f"Model saved successfully to: {output_path}")

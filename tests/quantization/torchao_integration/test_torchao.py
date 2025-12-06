@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torchao,
     require_torchao_version_greater_or_equal,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_torchao_available
@@ -139,6 +140,7 @@ class TorchAoConfigTest(unittest.TestCase):
 
 @require_torchao
 @require_torchao_version_greater_or_equal("0.8.0")
+@slow
 class TorchAoTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
@@ -674,6 +676,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
 
 @require_torchao_version_greater_or_equal("0.11.0")
+@slow
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
@@ -722,6 +725,7 @@ class TorchAoSerializationTest(unittest.TestCase):
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
+
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
                 tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization
             )
@@ -735,7 +739,7 @@ class TorchAoSerializationTest(unittest.TestCase):
 
 
 @require_torchao
-@require_torchao_version_greater_or_equal("0.14.0")
+@require_torchao_version_greater_or_equal("0.15.0")
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
@@ -760,6 +764,16 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
                 "What are we having for dinner?\n\nJess: (smiling) I",
             ),
             (torchao.quantization.Float8WeightOnlyConfig(), "What are we having for dinner?\n\nJessica: (smiling)"),
+            (Int4WeightOnlyConfig(), "What are we having for dinner?"),
+            (
+                Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d"),
+                "What are we having for dinner?\nRed, white, and green beans,",
+            ),
+            (
+                torchao.quantization.Int8DynamicActivationIntxWeightConfig(),
+                "What are we having for dinner?\n\nJessica: (smiling)",
+            ),
+            (torchao.quantization.IntxWeightOnlyConfig(), "What are we having for dinner?\n\nJessica: (smiling)"),
         ]
         if is_torchao_available()
         else []

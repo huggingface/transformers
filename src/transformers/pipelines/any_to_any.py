@@ -369,7 +369,7 @@ class AnyToAnyPipeline(Pipeline):
 
             # Handle Mistral tokenizer which does not accept processing kwargs
             chat_template_kwargs = {"add_generation_prompt": not continue_final_message, **processing_kwargs}
-            if self.processor.tokenizer.__class__.__name__ == "MistralCommonTokenizer":
+            if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
                     k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
                 }

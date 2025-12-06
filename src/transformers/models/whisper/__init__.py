@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from .modeling_whisper import *
     from .processing_whisper import *
     from .tokenization_whisper import *
-    from .tokenization_whisper_fast import *
 else:
     import sys
 

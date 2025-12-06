@@ -34,7 +34,7 @@ class UMT5Config(PreTrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 250112):
             Vocabulary size of the UMT5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`UMT5Model`] or [`TFUMT5Model`].
+            `inputs_ids` passed when calling [`UMT5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):

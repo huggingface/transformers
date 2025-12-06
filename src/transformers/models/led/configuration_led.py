@@ -37,7 +37,7 @@ class LEDConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the LED model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LEDModel`] or [`TFLEDModel`].
+            `inputs_ids` passed when calling [`LEDModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
