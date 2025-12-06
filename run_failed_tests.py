@@ -49,7 +49,7 @@ failed_tests = [
 ]
 
 import os
-for idx, failed_test in enumerate(failed_tests[0:21]):
+for idx, failed_test in enumerate(failed_tests[21:]):
     print(f"Running test {idx}: {failed_test}")
     output_dir = "captured"
     os.makedirs(output_dir, exist_ok=True)
