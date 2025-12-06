@@ -39,7 +39,6 @@ class SpQRHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not torch.cuda.is_available():
@@ -71,17 +70,15 @@ class SpQRHfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
-
         replace_with_spqr_linear(
             model,
             quantization_config=self.quantization_config,
             modules_to_not_convert=self.modules_to_not_convert,
         )
-        model.config.quantization_config = self.quantization_config
 
     @property
     def is_trainable(self):
         return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return True

@@ -696,14 +696,10 @@ class ProcessorMixin(PushToHubMixin):
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
-        if "tokenizer" in output:
-            del output["tokenizer"]
-        if "qformer_tokenizer" in output:
-            del output["qformer_tokenizer"]
-        if "protein_tokenizer" in output:
-            del output["protein_tokenizer"]
-        if "char_tokenizer" in output:
-            del output["char_tokenizer"]
+        for attribute in self.__class__.get_attributes():
+            if "tokenizer" in attribute and attribute in output:
+                del output[attribute]
+
         if "chat_template" in output:
             del output["chat_template"]
 
