@@ -65,6 +65,7 @@ from .integrations.accelerate import (
     expand_device_map,
     init_empty_weights,
 )
+from .integrations.bmm_moe import bmm_moe_forward
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
@@ -1228,6 +1229,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_init_check=True
         )
+        # Check the MoE implementation is supported, or set it if not yet set (on the internal attr, to avoid
+        # setting it recursively)
+        self.config._moe_implementation_internal = self._check_and_adjust_moe_implementation(
+            self.config._moe_implementation
+        )
         if self.can_generate():
             self.generation_config = GenerationConfig.from_model_config(config)
 
@@ -1423,6 +1429,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
+
+        # If passing `moe_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
+        if "moe_implementation" in kwargs:
+            config._moe_implementation = kwargs.pop("moe_implementation")
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -1966,6 +1976,55 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
+
+    def _check_and_adjust_moe_implementation(self, moe_implementation: Optional[str]) -> str:
+        """
+        Check that the `moe_implementation` exists and is supported by the models.
+
+        Args:
+            moe_implementation (`str` or `None`):
+                The MoE implementation to check for existence/validity.
+        Returns:
+            `str`: The final MoE implementation to use.
+        """
+        applicable_moe_implementation = moe_implementation or "eager"
+        if applicable_moe_implementation not in ["eager", "bmm"]:
+            raise ValueError(
+                f'Specified `moe_implementation="{applicable_moe_implementation}"` is not supported. The only possible arguments are '
+                '`moe_implementation="eager"` and `moe_implementation="bmm"`.'
+            )
+
+        # Default to eager
+        if moe_implementation is None:
+            applicable_moe_implementation = "eager"
+
+        return applicable_moe_implementation
+
+    def set_moe_implementation(self, moe_implementation: str):
+        """
+        Set the requested `moe_implementation` for this model.
+
+        Args:
+            moe_implementation (`str`):
+                The MoE implementation to set for this model.
+        """
+        applicable_implementation = self._check_and_adjust_moe_implementation(moe_implementation)
+
+        if applicable_implementation != self.config._moe_implementation:
+            # Apply the change (on the internal attr, to avoid setting it recursively)
+            self.config._moe_implementation_internal = applicable_implementation
+
+        # Apply it to all submodels as well
+        for submodule in self.modules():
+            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
+            # e.g. ForCausalLM has a Model inside, but no need to check it again)
+            if (
+                submodule is not self
+                and isinstance(submodule, PreTrainedModel)
+                and submodule.config.__class__ != self.config.__class__
+            ):
+                # Set the moe on the submodule
+                submodule.config._moe_implementation_internal = applicable_implementation
 
     def enable_input_require_grads(self):
         """
@@ -3910,6 +3969,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
+        if "moe_implementation" in kwargs:
+            config._moe_implementation = kwargs.pop("moe_implementation")
+
         hf_quantizer, config, dtype, device_map = get_hf_quantizer(
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
@@ -4673,6 +4735,23 @@ class AttentionInterface(GeneralInterface):
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
+
+
+class MoEInterface(GeneralInterface):
+    """
+    Dict-like object keeping track of allowed MoE functions. You can easily add a new MoE function
+    with a call to `register()`. If a model needs to locally overwrite an existing MoE function,
+    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
+    """
+
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # a new instance is created (in order to locally override a given function)
+    _global_mapping = {
+        "bmm": bmm_moe_forward,
+    }
+
+
+ALL_MOE_FUNCTIONS: MoEInterface = MoEInterface()
 
 
 class PreTrainedAudioTokenizerBase(PreTrainedModel):
