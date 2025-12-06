@@ -292,25 +292,24 @@ class StaticLayer(CacheLayerMixin):
         self.v_head_dim = value_states.shape[-1]
         self.k_head_dim = key_states.shape[-1]
 
-        self.keys_ = torch.zeros(
+        self.keys = torch.zeros(
             (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
             dtype=self.dtype,
             device=self.device,
         )
-        self.values_ = torch.zeros(
+        self.values = torch.zeros(
             (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
             dtype=self.dtype,
             device=self.device,
         )
-        self.keys = self.keys_
-        self.values = self.values_
+
         # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
         # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
         # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
         # prefill explicitly, but this should be avoided!)
         if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.keys_)
-            torch._dynamo.mark_static_address(self.values_)
+            torch._dynamo.mark_static_address(self.keys)
+            torch._dynamo.mark_static_address(self.values)
 
         self.is_initialized = True
 
@@ -342,23 +341,20 @@ class StaticLayer(CacheLayerMixin):
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
         batch_size = key_states.shape[0]
-        self.keys = self.keys_[:batch_size]
-        self.values = self.values_[:batch_size]
+        k_out = self.keys[:batch_size]
+        v_out = self.values[:batch_size]
         try:
-            self.keys.index_copy_(2, cache_position, key_states)
-            self.values.index_copy_(2, cache_position, value_states)
+            k_out.index_copy_(2, cache_position, key_states)
+            v_out.index_copy_(2, cache_position, value_states)
         except NotImplementedError:
-            self.keys[:, :, cache_position] = key_states
-            self.values[:, :, cache_position] = value_states
-
-        return self.keys, self.values
+            k_out[:, :, cache_position] = key_states
+            v_out[:, :, cache_position] = value_states
+        return k_out, v_out
 
     def reset(self):
         if self.is_initialized:
-            self.keys_.zero_()
-            self.values_.zero_()
-            self.keys = self.keys_
-            self.values = self.values_
+            self.keys.zero_()
+            self.values.zero_()
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -428,8 +424,8 @@ class StaticSlidingWindowLayer(StaticLayer):
         )
 
         batch_size = key_states.shape[0]
-        self.keys = self.keys_[:batch_size]
-        self.values = self.values_[:batch_size]
+        k_out = self.keys[:batch_size]
+        v_out = self.values[:batch_size]
 
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
@@ -441,23 +437,23 @@ class StaticSlidingWindowLayer(StaticLayer):
             # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
             if key_states.shape[-2] == 1:
                 # Roll all values to the left by 1 position
-                new_keys = self.keys.roll(-1, dims=-2)
-                new_values = self.values.roll(-1, dims=-2)
+                new_keys = k_out.roll(-1, dims=-2)
+                new_values = v_out.roll(-1, dims=-2)
                 # Overwrite the last position with new states
                 # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
                 index = torch.tensor([-1], dtype=int, device=self.device)
                 new_keys[:, :, index] = key_states
                 new_values[:, :, index] = value_states
 
-                # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-                self.keys.copy_(new_keys)
-                self.values.copy_(new_values)
-                # Very important to return the `self` tensors here, as they have the static dynamo address
-                return self.keys, self.values
+                # Copy back into the batch-sliced portion (NOT the full cache)
+                self.keys[:batch_size].copy_(new_keys)
+                self.values[:batch_size].copy_(new_values)
+                # Return the batch-sliced view
+                return k_out, v_out
             # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
             else:
-                full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
+                full_key_states = torch.cat((k_out[:, :, 1:, :], key_states), dim=-2)
+                full_value_states = torch.cat((v_out[:, :, 1:, :], value_states), dim=-2)
         # Not yet full, but becoming full on this update
         elif cumulative_length + key_states.shape[2] > self.max_cache_len:
             # Fast prefill path, no need to cat() in this case, as the cache is currently empty
@@ -465,23 +461,23 @@ class StaticSlidingWindowLayer(StaticLayer):
                 full_key_states = key_states
                 full_value_states = value_states
             else:
-                full_key_states = torch.cat((self.keys[:, :, :cumulative_length, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, :cumulative_length, :], value_states), dim=-2)
+                full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
+                full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
         else:
             try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
+                k_out.index_copy_(2, cache_position, key_states)
+                v_out.index_copy_(2, cache_position, value_states)
             except NotImplementedError:
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
+                k_out[:, :, cache_position] = key_states
+                v_out[:, :, cache_position] = value_states
 
-            # Very important to return the `self` tensors here, as they have the static dynamo address
-            return self.keys, self.values
+            # Return the batch-sliced view
+            return k_out, v_out
 
         # We only cache the last `sliding_window` tokens
-        self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
-        self.values.copy_(full_value_states[:, :, -self.max_cache_len :, :])
-        # we should return the whole states instead of `self.keys/values` here, as otherwise we lose some context
+        self.keys[:batch_size].copy_(full_key_states[:, :, -self.max_cache_len :, :])
+        self.values[:batch_size].copy_(full_value_states[:, :, -self.max_cache_len :, :])
+        # we should return the whole states instead of sliced cache here, as otherwise we lose some context
         return full_key_states, full_value_states
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
@@ -506,6 +502,12 @@ class StaticSlidingWindowLayer(StaticLayer):
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
+
+    def reset(self):
+        if self.is_initialized:
+            self.keys.zero_()
+            self.values.zero_()
+        self.cumulative_length = 0
 
 
 class QuantizedLayer(DynamicLayer):
