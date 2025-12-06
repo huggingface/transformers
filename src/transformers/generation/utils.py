@@ -3666,6 +3666,7 @@ class GenerationMixin(ContinuousMixin):
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
         assistant_ids_in_cache = None
         pad_token_id = generation_config._pad_token_tensor
+        decoder_start_token_tensor = generation_config._decoder_start_token_tensor
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
@@ -3781,7 +3782,12 @@ class GenerationMixin(ContinuousMixin):
 
             # 4.1. Get the valid continuation, after the matching tokens
             input_ids, outputs.past_key_values = repadd_batch_and_fix_cache(
-                input_ids, outputs.past_key_values, valid_tokens_padded, pad_token_id
+                input_ids,
+                outputs.past_key_values,
+                valid_tokens_padded,
+                pad_token_id,
+                self.config.is_encoder_decoder,
+                decoder_start_token_tensor,
             )
             if streamer is not None:
                 streamer.put(
@@ -3945,7 +3951,6 @@ def _speculative_sampling(
     """
     Applies sampling as in the speculative decoding paper (https://huggingface.co/papers/2211.17192, algorithm 1). Returns
     the selected tokens, as well as the number of candidate matches.
-
     NOTE: Unless otherwise stated, the variable names match those in the paper.
     """
     new_candidate_input_ids = candidate_input_ids[:, -candidate_length:]
@@ -4027,7 +4032,9 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     return outputs
 
 
-def repadd_batch_and_fix_cache(input_ids, past_key_values, accepted_tokens_padded, pad_token_id):
+def repadd_batch_and_fix_cache(
+    input_ids, past_key_values, accepted_tokens_padded, pad_token_id, is_encoder_decoder, decoder_start_token_tensor
+):
     """
     params
         input_ids: the input ids of the model (without the candidate tokens). shape: [B, S]
@@ -4035,11 +4042,15 @@ def repadd_batch_and_fix_cache(input_ids, past_key_values, accepted_tokens_padde
         accepted_tokens_padded: the accepted tokens padded with the bonus token. shape: [B, candidate_length+1].
         The bonus token is not always the last token (!). The rejected tokens are replaced with the pad_token_id.
         pad_token_id: the pad token id.
+        is_encoder_decoder: whether the model is an encoder-decoder model.
+        decoder_start_token_tensor: the decoder start token tensor. shape: [B, 1].
     returns:
         repadded_tensor: the repadded tensor. shape: [B, ..]
         cache: the cache after modifying the keys and values.
 
     """
+    if is_encoder_decoder and pad_token_id == decoder_start_token_tensor:
+        input_ids[:, 0] = -1  # placeholder to keep safe
     next_input_ids = torch.cat([input_ids, accepted_tokens_padded], dim=1)  # notive that accepted
     # this will let us know which locations in the kv cache we should remove.
     # we remove the last token because it is the bonus token and it does not appear in the cache.
@@ -4055,4 +4066,6 @@ def repadd_batch_and_fix_cache(input_ids, past_key_values, accepted_tokens_padde
     next_input_ids_padded = pad_sequence(
         next_input_ids_clean, batch_first=True, padding_value=pad_token_id, padding_side="left"
     )
+    if is_encoder_decoder and pad_token_id == decoder_start_token_tensor:
+        next_input_ids_padded[:, 0] = decoder_start_token_tensor
     return next_input_ids_padded, past_key_values
