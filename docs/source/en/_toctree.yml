@@ -767,6 +767,8 @@
         title: DETR
       - local: model_doc/dinat
         title: DiNAT
+      - local: model_doc/dino_detr
+        title: DINO DETR
       - local: model_doc/dinov2
         title: DINOV2
       - local: model_doc/dinov2_with_registers

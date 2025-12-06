@@ -223,6 +223,8 @@ OBJECTS_TO_IGNORE = {
     "DinatModel",
     "DINOv3ConvNextConfig",
     "DINOv3ViTConfig",
+    "DinoDetrConfig",
+    "DinoDetrImageProcessor",
     "DistilBertConfig",
     "DistilBertTokenizerFast",
     "DocumentQuestionAnsweringPipeline",
