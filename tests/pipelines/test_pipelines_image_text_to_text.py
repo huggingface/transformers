@@ -58,7 +58,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         return pipe, examples
 
     def run_pipeline_test(self, pipe, examples):
-        outputs = pipe(examples[0].get("images"), text=examples[0].get("text"))
+        outputs = pipe(images=examples[0].get("images"), text=examples[0].get("text"))
         self.assertEqual(
             outputs,
             [
@@ -69,19 +69,6 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
-        text = "What is the capital of France? Assistant:"
-
-        outputs = pipe(text=text)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "What is the capital of France? Assistant:",
-                    "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
-                }
-            ],
-        )
-
         messages = [
             [
                 {
@@ -100,75 +87,71 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 },
             ],
         ]
-        outputs = pipe(text=messages)
-        self.assertEqual(
-            outputs,
+        expected_outputs = [
             [
-                [
-                    {
-                        "input_text": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            }
-                        ],
-                        "generated_text": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            },
-                            {
-                                "role": "assistant",
-                                "content": "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and",
-                            },
-                        ],
-                    }
-                ],
-                [
-                    {
-                        "input_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
-                        ],
-                        "generated_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
-                            {"role": "assistant", "content": "Paris"},
-                        ],
-                    }
-                ],
+                {
+                    "input_text": messages[0],
+                    "generated_text": [
+                        messages[0][0],
+                        {
+                            "role": "assistant",
+                            "content": "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and",
+                        },
+                    ],
+                }
             ],
-        )
+            [
+                {
+                    "input_text": messages[1],
+                    "generated_text": [
+                        messages[1][0],
+                        {"role": "assistant", "content": "Paris"},
+                    ],
+                }
+            ],
+        ]
+
+        # single input
+        outputs = pipe(text=messages[1])
+        self.assertEqual(outputs, expected_outputs[1])
+
+        # multiple inputs
+        outputs = pipe(text=messages)
+        self.assertEqual(outputs, expected_outputs)
 
     @require_torch
     def test_small_model_pt_token(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        text = "<image> What this is? Assistant: This is"
 
-        outputs = pipe(image, text=text)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable. The photo captures a moment of tranquility and companionship between the two feline friends.",
-                }
-            ],
-        )
+        message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+                    {"type": "text", "text": "What this is?"},
+                ],
+            }
+        ]
+        expected_output = [
+            {
+                "input_text": message,
+                "generated_text": [
+                    message[0],
+                    {
+                        "role": "assistant",
+                        "content": "This is a photo of two cats lying on a pink blanket. One cat is on the left side of the photo, and the other cat is on the right side. Both cats appear to be resting comfortably, with their bodies relaxed and their heads resting on the blanket. The background is blurred, but it looks like a cozy indoor setting with a red couch.",
+                    },
+                ],
+            }
+        ]
 
-        outputs = pipe([image, image], text=[text, text])
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
-                },
-                {
-                    "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
-                },
-            ],
-        )
+        # single input
+        outputs = pipe(message)
+        self.assertEqual(outputs, expected_output)
+
+        # multiple inputs
+        outputs = pipe([message, message])
+        self.assertEqual(outputs, [expected_output, expected_output])
 
     @require_torch
     def test_consistent_batching_behaviour(self):
@@ -176,8 +159,8 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         prompt = "a photo of"
 
-        outputs = pipe([image, image], text=[prompt, prompt], max_new_tokens=10)
-        outputs_batched = pipe([image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
+        outputs = pipe(images=[image, image], text=[prompt, prompt], max_new_tokens=10)
+        outputs_batched = pipe(images=[image, image], text=[prompt, prompt], batch_size=2, max_new_tokens=10)
         self.assertEqual(outputs, outputs_batched)
 
     @slow
@@ -198,7 +181,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         ]
         # Deprecated behavior should raise an error after v5
         with self.assertRaises(ValueError):
-            outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
+            outputs = pipe(images=[image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
 
         messages = [
             {
@@ -248,7 +231,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                         },
                         {
                             "role": "assistant",
-                            "content": "The first image shows a statue of Liberty in the",
+                            "content": "The first image shows a statue of the Statue of",
                         },
                     ],
                 }
@@ -361,18 +344,17 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url(self):
+        # test OpenAI usage, passing a URL (27/11/2025): https://platform.openai.com/docs/guides/images-vision?api-mode=responses#giving-a-model-images-as-input
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         messages = [
             {
                 "role": "user",
                 "content": [
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                        },
+                        "type": "input_image",
+                        "image_url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                     },
-                    {"type": "text", "text": "Describe this image in one sentence."},
+                    {"type": "input_text", "text": "Describe this image in one sentence."},
                 ],
             }
         ]
@@ -382,6 +364,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url_base64(self):
+        # test OpenAI usage, passing a Base64 encoded image (27/11/2025): https://platform.openai.com/docs/guides/images-vision?api-mode=responses#giving-a-model-images-as-input
         with open("./tests/fixtures/tests_samples/COCO/000000039769.png", "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode("utf-8")
 
@@ -391,10 +374,10 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                        "type": "input_image",
+                        "image_url": f"data:image/jpeg;base64,{base64_image}",
                     },
-                    {"type": "text", "text": "Describe this image in one sentence."},
+                    {"type": "input_text", "text": "Describe this image in one sentence."},
                 ],
             }
         ]
