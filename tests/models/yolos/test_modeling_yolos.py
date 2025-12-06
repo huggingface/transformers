@@ -367,7 +367,7 @@ class YolosModelIntegrationTest(unittest.TestCase):
                 [0.2038, 0.7735, 0.3670],
                 [0.7692, 0.4056, 0.4549],
             ],
-            device=torch_device
+            device=torch_device,
         )
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
