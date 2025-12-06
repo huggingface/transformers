@@ -1,5 +1,5 @@
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
+# from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
 class Jais2Config(PretrainedConfig):
@@ -171,16 +171,9 @@ class Jais2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        # if self.rope_scaling is not None and "type" in self.rope_scaling:
-        #     self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_parameters = kwargs.pop("rope_parameters", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate and standardize RoPE parameters
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        
+        # Set up rope_parameters from rope_scaling
+        self.rope_parameters = rope_scaling
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -189,6 +182,10 @@ class Jais2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+        # Validate and standardize RoPE parameters using inherited mixin methods
+        self.standardize_rope_params()
+        self.validate_rope()
 
 
 __all__ = ["Jais2Config"]

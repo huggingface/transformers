@@ -80,7 +80,7 @@ class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
     #     return False
 
 
-JAIS2_8B_CHECKPOINT = "/lustre/scratch/users/sarath.chandran/llm-evals/checkpoints/8B/v0.5_excl_poetry_corruption_SFT_6036_hf"
+JAIS2_8B_CHECKPOINT = "inceptionai/jais-2-8b"
 
 
 @require_torch
