@@ -1295,9 +1295,6 @@ def _process_parameter_type(param, param_name, func):
     args = get_args(param_annotation)
     optional_flag = False
     type_hint_str = ""
-    # Optional[sth], under the hood is equivalent to Union[sth, None]
-    # if the type hint is None, I mean something like age:None, it would be considered optional, very few developers would write it though.
-    # if the type hint is Optional[None] or Union[None], it would be considered optional, very few developers would write it though.
     if (
         (origin is Union and type(None) in args)
         or default_value is not inspect._empty
@@ -1306,16 +1303,11 @@ def _process_parameter_type(param, param_name, func):
         or param_annotation is None
     ):
         optional_flag = True
-    """
-    to get the string representation of type hint int, param.annotation.__name__ has to be accessed BUT
-    types.UnionType, like int|str, before python 3.14 has no attribute __name__, to get the string representation of int|str, access param.annotation ONLY.
-    """
     if param_annotation is not inspect._empty:
-        param_str: str = str(param)
-        if "=" in param_str:
-            type_hint_str = param_str.split(":", maxsplit=1)[1].split("=", maxsplit=1)[0].strip()
+        if (type(param_annotation) is not type) or not hasattr(param_annotation, "__name__"):
+            type_hint_str = str(param_annotation)
         else:
-            type_hint_str = param_str.split(":", maxsplit=1)[1].strip()
+            type_hint_str = param_annotation.__name__
 
     return type_hint_str, optional_flag
 
