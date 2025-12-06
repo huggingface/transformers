@@ -20,8 +20,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-import pytest  # added for skip logic
-
+import pytest
 from huggingface_hub import snapshot_download, upload_folder
 
 import transformers
@@ -54,10 +53,7 @@ from transformers.models.auto.video_processing_auto import get_video_processor_c
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
-from transformers.utils import (
-    FEATURE_EXTRACTOR_NAME,
-    PROCESSOR_NAME,
-)
+from transformers.utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))

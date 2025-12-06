@@ -56,13 +56,14 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
 )
 
-from . import __version__  # hf_logging removed from top-level import
+from . import __version__
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     get_torch_version,
     is_torch_available,
     is_training_run_on_sagemaker,
 )
+
 
 LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
 CHAT_TEMPLATE_FILE = "chat_template.jinja"
