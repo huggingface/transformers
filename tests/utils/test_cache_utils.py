@@ -56,6 +56,7 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
+    from transformers.cache_utils import DynamicLayer
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
@@ -112,6 +113,69 @@ class CacheTest(unittest.TestCase):
         )
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
+
+
+@require_torch
+class TestAlignCache(unittest.TestCase):
+    """Test suite for the align_cache function."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.device = torch_device
+        self.dtype = torch.float32
+        self.pad_token_id = 0
+        self.num_layers = 3
+        self.num_heads = 4
+        self.head_dim = 8
+
+    def _create_cache(self, seq_len: int, batch_size: int) -> Cache:
+        """Helper to create a cache with specified sequence length."""
+        shape = (batch_size, self.num_heads, seq_len, self.head_dim)
+        layers = []
+        for _ in range(self.num_layers):
+            layer = DynamicLayer()
+            # Initialize with dummy key/value states to set up the cache structure
+            key_states = torch.randn(*shape, dtype=self.dtype, device=self.device)
+            value_states = torch.randn(*shape, dtype=self.dtype, device=self.device)
+            layer.lazy_initialization(key_states)
+            layer.keys = key_states
+            layer.values = value_states
+            layers.append(layer)
+        return Cache(layers=layers)
+
+    def test_align_cache(self):
+        """Test alignment."""
+        input_ids_in_cache = torch.tensor(
+            [
+                [56, 19712, 8182, 314, 354, 1440, 29, 7032, 2727, 338],
+                [0, 0, 0, 0, 23297, 314, 253, 6256, 1789, 338],
+                [0, 0, 0, 0, 0, 29968, 1380, 314, 4013, 975],
+            ],
+            dtype=torch.long,
+        )
+
+        current_input_ids = torch.tensor(
+            [
+                [56, 19712, 8182, 314, 354, 1440, 29, 7032, 2727, 338, 2433],
+                [0, 0, 0, 23297, 314, 253, 6256, 1789, 338, 314, 4889],
+                [0, 0, 0, 0, 0, 0, 29968, 1380, 314, 4013, 28],
+            ],
+            dtype=torch.long,
+        )
+
+        ids_in_cache_after_fixing = torch.tensor(
+            [
+                [56, 19712, 8182, 314, 354, 1440, 29, 7032, 2727, 338],
+                [0, 0, 0, 0, 23297, 314, 253, 6256, 1789, 338],
+                [0, 0, 0, 0, 0, 0, 29968, 1380, 314, 4013],
+            ],
+            dtype=torch.long,
+        )
+        cache = self._create_cache(seq_len=input_ids_in_cache.shape[1], batch_size=input_ids_in_cache.shape[0])
+        new_input_ids_in_cache = cache.align(
+            current_input_ids, input_ids_in_cache, self.pad_token_id, return_new_ids_in_cache=True
+        )
+        self.assertTrue(torch.allclose(new_input_ids_in_cache, ids_in_cache_after_fixing))
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
