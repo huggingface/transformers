@@ -38,6 +38,7 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
+from .test_training_mixin import TrainingTesterMixin
 
 
 if is_torch_available():
@@ -304,7 +305,7 @@ class CausalLMModelTester:
 
 
 @require_torch
-class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
+class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin):
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None
@@ -439,7 +440,13 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         _set_config_rope_params(
-            config, {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor}
+            config,
+            {
+                "rope_type": "default",
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+                "original_max_position_embeddings": 16384,
+            },
         )
         original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
@@ -649,7 +656,9 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
-    config.rope_parameters = rope_params
+    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+    config.rope_parameters.update(rope_params)
+
     if any(name in config.__class__.__name__.lower() for name in ["gemma3", "modernbert"]):
         config.rope_parameters = {layer_type: config.rope_parameters.copy() for layer_type in config.layer_types}
 

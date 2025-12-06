@@ -35,11 +35,9 @@ class VptqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-    required_packages = ["vptq"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -48,21 +46,15 @@ class VptqHfQuantizer(HfQuantizer):
         if not is_vptq_available():
             raise ImportError("Using `vptq` quantization requires VPTQ>=0.0.4: `pip install -U vptq`")
 
+        if not torch.cuda.is_available():
+            raise RuntimeError("GPU is required to run VTPQ quantized model.")
+
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if dtype is None:
-            if torch.cuda.is_available():
-                dtype = torch.float16
-                logger.info(
-                    "CUDA available. Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `dtype` manually."
-                )
-            else:
-                import vptq
-
-                device_availability = getattr(vptq, "device_availability", lambda device: False)
-                if device_availability("cpu") is True:
-                    raise RuntimeError("No GPU found. Please wait for the next release of VPTQ to use CPU inference")
-                dtype = torch.float32
-                logger.info("No GPU found. Assuming VPTQ inference on CPU and loading the model in `torch.float32`.")
+            dtype = torch.float16
+            logger.info(
+                "Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `dtype` manually."
+            )
         return dtype
 
     def _process_model_before_weight_loading(
@@ -71,22 +63,16 @@ class VptqHfQuantizer(HfQuantizer):
         keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
-        """
-        we don't have param like modules_to_not_convert to indicate which layers should not be quantized
-        because `quantization_config` include the layers that should be quantized
-        """
         from ..integrations import replace_with_vptq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
-
         replace_with_vptq_linear(
             model,
             quantization_config=self.quantization_config,
             modules_to_not_convert=self.modules_to_not_convert,
         )
-        model.config.quantization_config = self.quantization_config
 
     @property
     def is_trainable(self) -> bool:

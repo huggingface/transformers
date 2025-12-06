@@ -1976,13 +1976,44 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
 
-        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        hooks = []
+        seen_modules = set()
+
+        for module in self.modules():
+            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+                continue
+
+            input_embeddings = module.get_input_embeddings()
+
+            if input_embeddings is None:
+                continue
+
+            embedding_id = id(input_embeddings)
+            if embedding_id in seen_modules:
+                continue
+
+            seen_modules.add(embedding_id)
+            hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+
+        self._require_grads_hooks = hooks
+        if hooks:
+            # for BC
+            self._require_grads_hook = hooks[0]
 
     def disable_input_require_grads(self):
         """
         Removes the `_require_grads_hook`.
         """
-        self._require_grads_hook.remove()
+        hooks = getattr(self, "_require_grads_hooks", None)
+        if not hooks:
+            return
+
+        for hook in hooks:
+            hook.remove()
+
+        self._require_grads_hooks = []
+        if hasattr(self, "_require_grads_hook"):
+            del self._require_grads_hook
 
     def get_encoder(self, modality: Optional[str] = None):
         """
@@ -2073,7 +2104,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         possible_module_names = ["language_model", "text_model", "decoder"]
         for name in possible_module_names:
             if hasattr(self, name):
-                print(name)
                 setattr(self, name, decoder)
                 return
 
@@ -2283,6 +2313,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If `recompute_mapping=True`, it will re-check all internal submodels and their config to determine the params
         that need to be tied. This is the default when `model.tie_weights()` is called on its own, outside of
         `__init__`, and `from_pretrained`, in case the config values were changed somewhere.
+
+        Note that during `from_pretrained`, tying is *symmetric*: if the mapping says "tie target -> source" but
+        `source` is missing in the checkpoint while `target` exists, we *swap* source and target so we can still
+        tie everything to the parameter that actually exists.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
         if not recompute_mapping:
@@ -2290,30 +2324,72 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
-        for target_param_name, source_param_name in tied_keys.items():
-            source_param = self.get_parameter_or_buffer(source_param_name)
-            if "." in target_param_name:
-                parent_name, name = target_param_name.rsplit(".", 1)
-                parent = self.get_submodule(parent_name)
-            else:
-                name = target_param_name
-                parent = self
-            setattr(parent, name, source_param)
-            self._adjust_bias(parent, source_param)
+        tied_keys = list(tied_keys.items())
+        for i, (target_param_name, source_param_name) in enumerate(tied_keys):
+            # Usually we tie a single target to a single source, but when both are missing we may later tie
+            # both the source and target to a third "backup" parameter that is present in the checkpoint, so we use
+            # a list here
+            target_param_names = [target_param_name]
+
+            # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
+                remove_from_missing = True
                 source_is_there = source_param_name not in missing_keys
                 target_is_there = target_param_name not in missing_keys
-                # If we tied correctly, remove the target from the missing keys
-                if source_is_there:
-                    missing_keys.discard(target_param_name)
-                # If the source is not present, but the target is, the checkpoint is corrupted
-                # TODO: maybe we could simply tie in the opposite direction here instead of error?
-                elif target_is_there:
-                    raise ValueError(
-                        f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
-                        f"{source_param_name} (which should be present and is not), to {target_param_name} (which is "
-                        f"present)."
+                # Both are already present -> it means the config is wrong and do not reflect the actual
+                # checkpoint -> let's raise a warning and do nothing
+                if source_is_there and target_is_there:
+                    logger.warning(
+                        f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
+                        f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
+                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
                     )
+                    # Skip to next iteration
+                    continue
+                # We're missing the source but we have the target -> we swap them, tying the parameter that exists
+                elif not source_is_there and target_is_there:
+                    target_param_name, source_param_name = source_param_name, target_param_name
+                    target_param_names = [target_param_name]
+                # Both are missing -> check other keys in case more than 2 keys are tied to the same weight
+                elif not source_is_there and not target_is_there:
+                    for target_backup, source_backup in tied_keys[i + 1 :]:
+                        # In case of more than 2 keys tied to the same weight, they are guaranteed to all have
+                        # the same source thanks to `get_expanded_tied_weights_keys` so this check is enough
+                        if source_backup == source_param_name:
+                            target_backup_is_there = target_backup not in missing_keys
+                            # If the target is present, we found the correct weight to tie into (we know the source is missing)
+                            if target_backup_is_there:
+                                source_param_name = target_backup
+                                # Append the source as well, since both are missing we'll tie both
+                                target_param_names.append(source_param_name)
+                                break
+                    # If we did not break from the loop, it was impossible to find a source key -> let's raise
+                    else:
+                        # TODO Cyril: here ideally we want to raise instead of warning, but will break our CI as we have
+                        # tests loading model from empty dicts to perform init checks - since we don't raise, add a flag
+                        # to NOT remove from missing keys as it's actually still missing
+                        remove_from_missing = False
+                        logger.warning(
+                            f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
+                            f"{source_param_name} to {target_param_name}, but both are absent from the checkpoint, "
+                            "and we could not find another related tied weight for those keys"
+                        )
+
+            # Perform the actual tying
+            source_param = self.get_parameter_or_buffer(source_param_name)
+            for target_param_name in target_param_names:
+                if "." in target_param_name:
+                    parent_name, name = target_param_name.rsplit(".", 1)
+                    parent = self.get_submodule(parent_name)
+                else:
+                    name = target_param_name
+                    parent = self
+                # Tie the weights
+                setattr(parent, name, source_param)
+                self._adjust_bias(parent, source_param)
+                # Remove from missing if necesary
+                if missing_keys is not None and remove_from_missing:
+                    missing_keys.discard(target_param_name)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
@@ -4013,10 +4089,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
             disk_offload_index = accelerate_disk_offload(
+                model,
                 disk_offload_folder,
                 checkpoint_files,
                 device_map,
-                expected_keys,
                 sharded_metadata,
                 dtype,
                 weight_mapping,
@@ -4103,7 +4179,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():  # TODO to avaoid this buffer could be added to the ckpt
+            for buffer in model.buffers():  # TODO to avoid this buffer could be added to the ckpt
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
 

@@ -35,6 +35,7 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
+        ("afmoe", "AfmoeConfig"),
         ("aimv2", "Aimv2Config"),
         ("aimv2_vision_model", "Aimv2VisionConfig"),
         ("albert", "AlbertConfig"),
@@ -147,6 +148,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("falcon", "FalconConfig"),
         ("falcon_h1", "FalconH1Config"),
         ("falcon_mamba", "FalconMambaConfig"),
+        ("fast_vlm", "FastVlmConfig"),
         ("fastspeech2_conformer", "FastSpeech2ConformerConfig"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGanConfig"),
         ("flaubert", "FlaubertConfig"),
@@ -219,6 +221,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("kosmos-2", "Kosmos2Config"),
         ("kosmos-2.5", "Kosmos2_5Config"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextConfig"),
+        ("lasr_ctc", "LasrCTCConfig"),
+        ("lasr_encoder", "LasrEncoderConfig"),
         ("layoutlm", "LayoutLMConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("layoutlmv3", "LayoutLMv3Config"),
@@ -257,6 +261,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mimi", "MimiConfig"),
         ("minimax", "MiniMaxConfig"),
         ("ministral", "MinistralConfig"),
+        ("ministral3", "Ministral3Config"),
         ("mistral", "MistralConfig"),
         ("mistral3", "Mistral3Config"),
         ("mixtral", "MixtralConfig"),
@@ -394,6 +399,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("switch_transformers", "SwitchTransformersConfig"),
         ("t5", "T5Config"),
         ("t5gemma", "T5GemmaConfig"),
+        ("t5gemma2", "T5Gemma2Config"),
         ("table-transformer", "TableTransformerConfig"),
         ("tapas", "TapasConfig"),
         ("textnet", "TextNetConfig"),
@@ -458,6 +464,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
 MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
+        ("afmoe", "AFMoE"),
         ("aimv2", "AIMv2"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
         ("albert", "ALBERT"),
@@ -581,6 +588,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("falcon3", "Falcon3"),
         ("falcon_h1", "FalconH1"),
         ("falcon_mamba", "FalconMamba"),
+        ("fast_vlm", "FastVlm"),
         ("fastspeech2_conformer", "FastSpeech2Conformer"),
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGan"),
         ("flan-t5", "FLAN-T5"),
@@ -656,6 +664,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("kosmos-2", "KOSMOS-2"),
         ("kosmos-2.5", "KOSMOS-2.5"),
         ("kyutai_speech_to_text", "KyutaiSpeechToText"),
+        ("lasr", "Lasr"),
+        ("lasr_ctc", "Lasr"),
+        ("lasr_encoder", "LasrEncoder"),
         ("layoutlm", "LayoutLM"),
         ("layoutlmv2", "LayoutLMv2"),
         ("layoutlmv3", "LayoutLMv3"),
@@ -700,6 +711,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mimi", "Mimi"),
         ("minimax", "MiniMax"),
         ("ministral", "Ministral"),
+        ("ministral3", "Ministral3"),
         ("mistral", "Mistral"),
         ("mistral3", "Mistral3"),
         ("mixtral", "Mixtral"),
@@ -843,6 +855,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("switch_transformers", "SwitchTransformers"),
         ("t5", "T5"),
         ("t5gemma", "T5Gemma"),
+        ("t5gemma2", "T5Gemma2"),
         ("t5v1.1", "T5v1.1"),
         ("table-transformer", "Table Transformer"),
         ("tapas", "TAPAS"),
@@ -969,6 +982,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        ("lasr_encoder", "lasr"),
+        ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
     ]
 )

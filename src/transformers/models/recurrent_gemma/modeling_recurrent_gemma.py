@@ -460,6 +460,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         use_cache: bool = True,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         _, seq_len, _ = input_states.shape
+        batch_size = input_states.shape[0]
 
         y_branch = self.linear_y(input_states)
         y_branch = self.act_fn(y_branch)
@@ -468,6 +469,17 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         x_branch = x_branch.transpose(1, 2)
 
         if use_cache:
+            # Check if cache needs initialization (None or batch size mismatch)
+            if self.conv1d_state is None or self.conv1d_state.shape[0] != batch_size:
+                self.conv1d_state = torch.zeros(
+                    (batch_size, self.hidden_size, self.conv1d_width - 1),
+                    device=input_states.device,
+                    dtype=input_states.dtype,
+                )
+                self.rg_lru.recurrent_states = torch.zeros(
+                    (batch_size, self.lru_width), device=input_states.device, dtype=torch.float32
+                )
+
             if cache_position.shape[0] != 1:  # prefill
                 self.conv1d_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
@@ -643,6 +655,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -13,6 +13,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -105,6 +106,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -185,6 +187,7 @@ class PhiAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.rotary_fn = apply_rotary_pos_emb
         self.dense = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         self.rotary_ndims = int(self.head_dim * config.rope_parameters["partial_rotary_factor"])
         self.qk_layernorm = config.qk_layernorm
@@ -360,7 +363,7 @@ class PhiModel(PhiPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

@@ -55,9 +55,15 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # importlib.metadata works with the distribution package, which may be different from the import
             # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
             distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
-            # In most cases, the packages are well-behaved and both have the same name. If it's not the case, we
-            # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
-            distribution_name = pkg_name if pkg_name in distributions else distributions[0]
+            # Per PEP 503, underscores and hyphens are equivalent in package names.
+            # Prefer the distribution that matches the (normalized) package name.
+            normalized_pkg_name = pkg_name.replace("_", "-")
+            if normalized_pkg_name in distributions:
+                distribution_name = normalized_pkg_name
+            elif pkg_name in distributions:
+                distribution_name = pkg_name
+            else:
+                distribution_name = distributions[0]
             package_version = importlib.metadata.version(distribution_name)
         except (importlib.metadata.PackageNotFoundError, KeyError):
             # If we cannot find the metadata (because of editable install for example), try to import directly.
@@ -69,6 +75,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         return package_exists, package_version
     else:
         return package_exists
+
+
+def is_env_variable_true(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a true value in the environment"""
+    return os.getenv(env_variable, "false").lower() in ("true", "1", "y", "yes", "on")
+
+
+def is_env_variable_false(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a false value in the environment"""
+    return os.getenv(env_variable, "true").lower() in ("false", "0", "n", "no", "off")
 
 
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
@@ -506,6 +522,29 @@ def is_torch_tf32_available() -> bool:
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
     return True
+
+
+@lru_cache
+def enable_tf32(enable: bool) -> None:
+    """
+    Set TF32 mode using the appropriate PyTorch API.
+    For PyTorch 2.9+, uses the new fp32_precision API.
+    For older versions, uses the legacy allow_tf32 flags.
+    Args:
+        enable: Whether to enable TF32 mode
+    """
+    import torch
+
+    pytorch_version = version.parse(get_torch_version())
+    if pytorch_version >= version.parse("2.9.0"):
+        precision_mode = "tf32" if enable else "ieee"
+        torch.backends.fp32_precision = precision_mode
+    else:
+        if is_torch_musa_available():
+            torch.backends.mudnn.allow_tf32 = enable
+        else:
+            torch.backends.cuda.matmul.allow_tf32 = enable
+            torch.backends.cudnn.allow_tf32 = enable
 
 
 @lru_cache
@@ -1003,11 +1042,6 @@ def is_gptqmodel_available() -> bool:
 
 
 @lru_cache
-def is_eetq_available() -> bool:
-    return _is_package_available("eetq")
-
-
-@lru_cache
 def is_fbgemm_gpu_available() -> bool:
     return _is_package_available("fbgemm_gpu")
 
@@ -1283,11 +1317,20 @@ def is_jit_tracing() -> bool:
         return False
 
 
+def is_cuda_stream_capturing() -> bool:
+    try:
+        import torch
+
+        return torch.cuda.is_current_stream_capturing()
+    except Exception:
+        return False
+
+
 def is_tracing(tensor=None) -> bool:
-    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, or torch.fx"""
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx or CUDA stream capturing"""
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
-    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing()
+    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
     return _is_tracing
