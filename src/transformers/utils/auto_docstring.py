@@ -16,8 +16,9 @@
 import inspect
 import os
 import textwrap
+import types
 from pathlib import Path
-from typing import get_args
+from typing import Union, get_args, get_origin
 
 import regex as re
 
@@ -1289,29 +1290,27 @@ def _process_parameter_type(param, param_name, func):
         param_name (`str`): The name of the parameter
         func (`function`): The function the parameter belongs to
     """
-    optional = False
-    if param.annotation != inspect.Parameter.empty:
-        param_type = param.annotation
-        if "typing" in str(param_type):
-            param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
-        elif hasattr(param_type, "__module__"):
-            param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
-            if param_type[0] == ".":
-                param_type = param_type[1:]
+    param_annotation = param.annotation
+    default_value = param.default
+    origin = get_origin(param_annotation)
+    args = get_args(param_annotation)
+    optional_flag = False
+    type_hint_str = ""
+    if (
+        (origin is Union and type(None) in args)
+        or default_value is not inspect._empty
+        or (origin is types.UnionType and type(None) in args)
+        or param_annotation is types.NoneType
+        or param_annotation is None
+    ):
+        optional_flag = True
+    if param_annotation is not inspect._empty:
+        if (type(param_annotation) is not type) or not hasattr(param_annotation, "__name__"):
+            type_hint_str = str(param_annotation)
         else:
-            if False:
-                print(
-                    f"[ERROR] {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
-                )
-        if "ForwardRef" in param_type:
-            param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-        if "Optional" in param_type:
-            param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-            optional = True
-    else:
-        param_type = ""
+            type_hint_str = param_annotation.__name__
 
-    return param_type, optional
+    return type_hint_str, optional_flag
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
