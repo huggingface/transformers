@@ -380,7 +380,7 @@ class YolosModelIntegrationTest(unittest.TestCase):
         expected_labels = [75, 75, 17, 63, 17]
         expected_slice_boxes = torch.tensor([331.8438, 80.5440, 369.9546, 188.0579]).to(torch_device)
 
-        self.assertEqual(len(results["scores"]), 70)
+        self.assertEqual(len(results["scores"]), 5)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)
