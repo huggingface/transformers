@@ -1314,9 +1314,12 @@ def _prepare_attention_mask(
 
     mask = model_kwargs[mask_key]
     mask_length_diff = new_length - mask.shape[1]
-    if input_ids is not None and pad_token_id is not None:
+    if mask_length_diff == 0:
+        pass # no need to do anything
+    elif input_ids is not None and pad_token_id is not None:
+        # this could be a problem if the original mask is ignoring tokens that are not pad tokens. 
         model_kwargs[mask_key] = (input_ids != pad_token_id).to(mask.dtype)
-    elif mask_length_diff < 0:  # not sure when we get into this case
+    elif mask_length_diff < 0:
         model_kwargs[mask_key] = mask[:, :mask_length_diff]
     elif mask_length_diff > 0:
         model_kwargs[mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], mask_length_diff))], dim=-1)

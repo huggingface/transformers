@@ -3693,8 +3693,8 @@ class GenerationMixin(ContinuousMixin):
                 candidate_kwargs,
                 candidate_input_ids.shape[1],
                 self.config.is_encoder_decoder,
-                candidate_input_ids,
-                pad_token_id,
+                candidate_input_ids if batch_size > 1 else None,
+                pad_token_id if batch_size > 1 else None,
             )
             candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
             if "cache_position" in candidate_kwargs:
