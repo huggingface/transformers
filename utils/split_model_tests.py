@@ -93,7 +93,7 @@ if __name__ == "__main__":
          "models/mlcd", "models/sam", "models/siglip", "models/superglue", "models/swin", "models/swinv2",
          "models/vilt", "models/vision_encoder_decoder", "models/yolos"]
     ]
-    model_splits = [
-        ["models/altclip"]
-    ]
+    # model_splits = [
+    #     ["models/altclip"]
+    # ]
     print(model_splits)
