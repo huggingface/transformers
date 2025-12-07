@@ -170,6 +170,11 @@ class BltModelTester(CausalLMModelTester):
 class BltModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BltModelTester
 
+    # Override training overfit for BLT
+    training_loss_reduction_threshold = 0.9
+    # Grad norm empirically drops by ~81% for the tiny BLT config
+    training_grad_norm_reduction_threshold = 0.8
+
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
@@ -177,9 +182,9 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = BltForCausalLM if is_torch_available() else None
 
-    @unittest.skip("BLT model requires special handling for training overfit test")
-    def test_training_overfit(self):
-        pass
+    # @unittest.skip("BLT model requires special handling for training overfit test")
+    # def test_training_overfit(self):
+    #     pass
 
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
