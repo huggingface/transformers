@@ -182,7 +182,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = BltForCausalLM if is_torch_available() else None
 
-
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     @unittest.skip(
