@@ -4116,6 +4116,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
             missing_keys, unexpected_keys, mismatched_keys, misc = set(), set(), set(), set()
         else:
+            # Skip weight initialization for quantized models (int8 weights)
+            if is_quantized:
+                print("Skipping weight initialization for quantized model.")
+                return missing_keys, unexpected_keys, mismatched_keys, None, set()
+
             all_pointer = set()
             # Checkpoints are safetensors
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
