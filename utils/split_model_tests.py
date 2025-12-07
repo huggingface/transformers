@@ -85,5 +85,15 @@ if __name__ == "__main__":
         if len(d[start:end]) > 0:
             model_splits.append(d[start:end])
 
-    model_splits = [["models/vit"]]
+    model_splits = [
+        ["models/altclip", "models/aya_vision", "models/chinese_clip", "models/clip", "models/clipseg",
+         "models/convnext", "models/convnextv2", "models/cvt", "models/dinov2", "models/dinov2_with_registers",
+         "models/flava", "models/florence2", "models/focalnet", "models/gemma3", "models/git", "models/hiera",
+         "models/instructblip", "models/kosmos2_5", "models/lightglue", "models/llava", "models/metaclip_2",
+         "models/mlcd", "models/sam", "models/siglip", "models/superglue", "models/swin", "models/swinv2",
+         "models/vilt", "models/vision_encoder_decoder", "models/yolos"]
+    ]
+    model_splits = [
+        ["models/altclip"]
+    ]
     print(model_splits)

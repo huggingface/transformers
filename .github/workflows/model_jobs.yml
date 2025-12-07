@@ -156,72 +156,52 @@ jobs:
           pytest_marker: ${{ inputs.pytest_marker }}
           model: ${{ matrix.folders }}
         run: |
-          python3 run_failed_tests.py          
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports python3 -m pytest -rsfE -v -m '${pytest_marker}' --make-reports=${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports tests/${model}" test_outputs.txt
           ls -la
+          # Extract the exit code from the output file
+          EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)
+          exit ${EXIT_CODE:-1}
 
-      - name: "Upload"
+      - name: Failure short reports
+        if: ${{ failure() }}
+        # This step is only to show information on Github Actions log.
+        # Always mark this step as successful, even if the report directory or the file `failures_short.txt` in it doesn't exist
+        continue-on-error: true
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
+        run: cat "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/failures_short.txt"
+
+      - name: Captured information
+        if: ${{ failure() }}
+        continue-on-error: true
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
+        run: |
+          cat "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/captured_info.txt"
+
+      - name: Copy test_outputs.txt
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
+        run: |
+          cp /transformers/test_outputs.txt "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: captured
-          path: /transformers/captured/
+          name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
 
-
-#
-#
-#      - name: Run all tests on GPU
-#        working-directory: /transformers
-#        env:
-#          report_name_prefix: ${{ inputs.report_name_prefix }}
-#          pytest_marker: ${{ inputs.pytest_marker }}
-#          model: ${{ matrix.folders }}
-#        run: |
-#          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports python3 -m pytest -rsfE -v -m '${pytest_marker}' --make-reports=${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports tests/${model}" test_outputs.txt
-#          ls -la
-#          # Extract the exit code from the output file
-#          EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)
-#          exit ${EXIT_CODE:-1}
-#
-#      - name: Failure short reports
-#        if: ${{ failure() }}
-#        # This step is only to show information on Github Actions log.
-#        # Always mark this step as successful, even if the report directory or the file `failures_short.txt` in it doesn't exist
-#        continue-on-error: true
-#        env:
-#          report_name_prefix: ${{ inputs.report_name_prefix }}
-#        run: cat "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/failures_short.txt"
-#
-#      - name: Captured information
-#        if: ${{ failure() }}
-#        continue-on-error: true
-#        env:
-#          report_name_prefix: ${{ inputs.report_name_prefix }}
-#        run: |
-#          cat "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/captured_info.txt"
-#
-#      - name: Copy test_outputs.txt
-#        if: ${{ always() }}
-#        continue-on-error: true
-#        env:
-#          report_name_prefix: ${{ inputs.report_name_prefix }}
-#        run: |
-#          cp /transformers/test_outputs.txt "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"
-#
-#      - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
-#        if: ${{ always() }}
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
-#          path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
-#
-#  collated_reports:
-#    name: Collated Reports
-#    if: ${{ always() && inputs.runner_type != '' }}
-#    needs: run_models_gpu
-#    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
-#    with:
-#      job: run_models_gpu
-#      report_repo_id: ${{ inputs.report_repo_id }}
-#      gpu_name: ${{ inputs.runner_type }}
-#      machine_type: ${{ needs.run_models_gpu.outputs.machine_type }}
-#    secrets: inherit
+  collated_reports:
+    name: Collated Reports
+    if: ${{ always() && inputs.runner_type != '' }}
+    needs: run_models_gpu
+    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
+    with:
+      job: run_models_gpu
+      report_repo_id: ${{ inputs.report_repo_id }}
+      gpu_name: ${{ inputs.runner_type }}
+      machine_type: ${{ needs.run_models_gpu.outputs.machine_type }}
+    secrets: inherit
