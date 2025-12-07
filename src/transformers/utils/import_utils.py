@@ -902,6 +902,35 @@ def is_flash_attn_3_available() -> bool:
 
 
 @lru_cache
+def is_flash_attn_4_available() -> bool:
+    """
+    Check if Flash Attention 4 is available.
+
+    FA4 requires:
+    - CUDA availability
+    - SM 8.0+ GPU (Hopper: H100/H200, or Blackwell architecture)
+    - flash_attn package with the cute module
+
+    Reference: https://github.com/huggingface/transformers/issues/42405
+    """
+    if not is_torch_cuda_available():
+        return False
+
+    try:
+        import torch
+
+        # FA4 requires SM 8.0+ (Hopper/Blackwell architectures)
+        if torch.cuda.get_device_capability()[0] < 8:
+            return False
+        # FA4 uses the flash_attn.cute module
+        from flash_attn.cute import flash_attn_func  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+@lru_cache
 def is_flash_attn_greater_or_equal_2_10() -> bool:
     _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
