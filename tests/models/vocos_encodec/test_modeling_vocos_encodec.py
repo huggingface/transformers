@@ -30,7 +30,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_torch_available():
     import torch
 
-    from transformers import VocosFeatureExtractor, VocosModel
+    from transformers import VocosEncodecModel, VocosEncodecProcessor, VocosModel
 
 
 from transformers import VocosConfig
@@ -228,7 +228,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class VocosModelIntegrationTest(unittest.TestCase):
+class VocosEncodecModelIntegrationTest(unittest.TestCase):
     """
     See code for reproducing expected outputs: https://gist.github.com/Manalelaidouni/853f4c902ab0ce0a512e5217d87d564c
     Outputs should be computed on GPU because the mel spectrogram outputs differ on CPU and GPU.
@@ -241,51 +241,94 @@ class VocosModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def setUp(self):
-        with open("tests/fixtures/vocos/vocos_mel_integration.json", "r") as f:
-            self.mel_expected = json.load(f)[0]
-        with open("tests/fixtures/vocos/vocos_mel_batch_integration.json", "r") as f:
-            self.mel_batch_expected = json.load(f)
+        with open("tests/fixtures/vocos/vocos_encodec_integration.json", "r") as f:
+            self.encodec_expected = json.load(f)
+        with open("tests/fixtures/vocos/vocos_encodec_batch_integration.json", "r") as f:
+            self.encodec_batch_expected = json.load(f)
 
     @slow
     @require_torch_gpu
     def test_inference(self):
-        hf_repo_id = "hf-audio/vocos-mel-24khz"
-        processor = VocosFeatureExtractor.from_pretrained(hf_repo_id)
-        model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+        hf_repo_id = "hf-audio/vocos-encodec-24khz"
+        model = VocosEncodecModel.from_pretrained(hf_repo_id).to(torch_device).eval()
+        processor = VocosEncodecProcessor.from_pretrained(hf_repo_id)
 
         audio_np = self._load_datasamples(1)[0]
         audio = torch.tensor(audio_np, dtype=torch.float32).unsqueeze(0).to(torch_device)
 
-        EXPECTED_AUDIO = torch.tensor(self.mel_expected["reconstructed_audio"], dtype=torch.float32).to(torch_device)
+        for entry in self.encodec_expected:
+            # now resconstructing audio from raw audio :
+            inputs = processor(audio=audio, bandwidth=entry["bandwidth"], return_tensors="pt").to(torch_device)
+            with torch.no_grad():
+                output_from_audio = model(**inputs).audio
 
-        inputs = processor(audio, return_tensors="pt").to(torch_device)
-        with torch.no_grad():
-            audio_output = model(**inputs).audio
+            EXPECTED_AUDIO = torch.tensor(entry["reconstructed_from_audio"], dtype=torch.float32).to(torch_device)
 
-        torch.testing.assert_close(
-            audio_output.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
-            EXPECTED_AUDIO,
-            rtol=1e-5,
-            atol=1e-5,
-        )
+            torch.testing.assert_close(
+                output_from_audio.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
+                EXPECTED_AUDIO,
+                rtol=1e-5,
+                atol=1e-5,
+            )
+
+            # now testing resconstructing audio from quantized codes :
+            codes = torch.tensor(entry["input_codes"], dtype=torch.long)
+            inputs = processor(codes=codes, bandwidth=entry["bandwidth"], return_tensors="pt")
+
+            with torch.no_grad():
+                output_from_codes = model(**inputs.to(torch_device)).audio
+
+            EXPECTED_AUDIO_FROM_CODES = torch.tensor(entry["reconstructed_from_codes"], dtype=torch.float32).to(
+                torch_device
+            )
+
+            torch.testing.assert_close(
+                output_from_codes.squeeze(0)[: EXPECTED_AUDIO_FROM_CODES.shape[0]],
+                EXPECTED_AUDIO_FROM_CODES,
+                rtol=1e-5,
+                atol=1e-5,
+            )
 
     @slow
     @require_torch_gpu
-    def test_inference_batch(self):
-        repo_id = "hf-audio/vocos-mel-24khz"
-        processor = VocosFeatureExtractor.from_pretrained(repo_id)
-        model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
+    def test_batch(self):
+        repo_id = "hf-audio/vocos-encodec-24khz"
+        processor = VocosEncodecProcessor.from_pretrained(repo_id)
+        model = VocosEncodecModel.from_pretrained(repo_id).to(torch_device).eval()
 
+        # reconstruction from batch of audios
         audios = self._load_datasamples(3)
 
-        inputs = processor(audio=audios, return_tensors="pt").to(torch_device)
-        hf_batch_output = model(**inputs).audio
+        for entry in self.encodec_batch_expected:
+            if "reconstructed_from_audio" not in entry:
+                continue
+            bandwidth = entry["bandwidth"]
+            inputs = processor(audio=audios, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            hf_batch = model(**inputs).audio
 
-        for i, saved in enumerate(self.mel_batch_expected["reconstructed_audio"]):
-            expected = torch.tensor(saved, dtype=torch.float32, device=torch_device)
-            torch.testing.assert_close(
-                hf_batch_output[i, : expected.shape[0]],
-                expected,
-                rtol=1e-4,
-                atol=1e-4,
-            )
+            for idx, saved in enumerate(entry["reconstructed_from_audio"]):
+                expected = torch.tensor(saved, dtype=torch.float32, device=torch_device)
+                torch.testing.assert_close(
+                    hf_batch[idx, : expected.shape[0]],
+                    expected,
+                    rtol=1e-4,
+                    atol=1e-4,
+                )
+
+        # reconstruction from batch of quantized codes
+        for entry in self.encodec_batch_expected:
+            if "audio_codes" not in entry:
+                continue
+            codes = torch.tensor(entry["audio_codes"], dtype=torch.long, device=torch_device)
+            bandwidth = entry["bandwidth"]
+            inputs = processor(codes=codes, bandwidth=bandwidth, return_tensors="pt").to(torch_device)
+            hf_batch = model(**inputs).audio
+
+            for idx, saved in enumerate(entry["reconstructed_from_codes"]):
+                expected = torch.tensor(saved, dtype=torch.float32, device=torch_device)
+                torch.testing.assert_close(
+                    hf_batch[idx, : expected.shape[0]],
+                    expected,
+                    rtol=1e-4,
+                    atol=1e-4,
+                )

@@ -19,11 +19,9 @@ import os
 import torch
 
 from transformers import (
-    EncodecModel,
     VocosConfig,
     VocosFeatureExtractor,
     VocosModel,
-    VocosProcessor,
 )
 
 
@@ -32,8 +30,16 @@ def convert_old_keys_to_new_keys(original_state_dict) -> dict[str, torch.Tensor]
     for key, value in original_state_dict.items():
         if key.startswith("feature_extractor."):
             continue
-        key = key.replace("backbone.convnext.", "backbone.layers.")
+        # Remove backbone prefix and flatten the structure
+        key = key.replace("backbone.embed.", "embed.")
+        key = key.replace("backbone.norm.", "norm.")
+        key = key.replace("backbone.convnext.", "layers.")
+        key = key.replace("backbone.final_layer_norm.", "final_layer_norm.")
         key = key.replace(".gamma", ".layer_scale_parameter")
+        # Rename of ISTFT head
+        key = key.replace("head.", "decoder.")
+        if "istft.window" in key:
+            key = key.replace("istft.window", "window")
         converted_checkpoint[key] = value
     return converted_checkpoint
 
@@ -75,17 +81,10 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 
     feature_extractor = VocosFeatureExtractor()
 
-    # don't have to convert it here  because it's not used in mel variant
-    audio_tokenizer = EncodecModel.from_pretrained("facebook/encodec_24khz")
-
-    processor = VocosProcessor(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
-
-    processor.save_pretrained(pytorch_dump_folder_path)
-
     if push_to_hub:
         model.push_to_hub(push_to_hub)
-        processor.push_to_hub(push_to_hub)
-        print(f"Pushed model and processor to {push_to_hub}")
+        feature_extractor.push_to_hub(push_to_hub)
+        print(f"Pushed model and feature extractor to {push_to_hub}")
 
 
 """

@@ -82,13 +82,6 @@ print(audio.shape)
 write_wav("vocos.wav", sampling_rate, audio[0].detach().cpu().numpy())
 ```
 
-To listen from an IPython notebook:
-```python
-from IPython.display import Audio
-
-Audio(audio.detach().numpy(), rate=sampling_rate)
-```
-
 ### Neural audio codec variant (with EnCodec)
 
 Instead of reconstructing audio from mel spectrograms, recent research has started to utilize learned neural audio codec features. Vocos supports [EnCodec](./encodec)-based reconstruction for high-quality audio generation.
@@ -156,20 +149,24 @@ fine_generation_config = BarkFineGenerationConfig(**bark.generation_config.fine_
 
 # generating the RVQ codes
 semantic_tokens = bark.semantic.generate(
-    input_ids=bark_inputs.input_ids,
-    attention_mask=bark_inputs.attention_mask,
-    semantic_generation_config=semantic_generation_config)
+    **bark_inputs,
+    semantic_generation_config=semantic_generation_config,
+)
+
 coarse_tokens = bark.coarse_acoustics.generate(
     semantic_tokens,
     semantic_generation_config=semantic_generation_config,
     coarse_generation_config=coarse_generation_config,
-    codebook_size=bark.generation_config.codebook_size)
+    codebook_size=bark.generation_config.codebook_size,
+)
+
 fine_tokens = bark.fine_acoustics.generate(
     coarse_tokens,
     semantic_generation_config=semantic_generation_config,
     coarse_generation_config=coarse_generation_config,
     fine_generation_config=fine_generation_config,
-    codebook_size=bark.generation_config.codebook_size)
+    codebook_size=bark.generation_config.codebook_size,
+)
 
 codes = fine_tokens.squeeze(0)
 # -- `codes` shape (8 codebooks, * frames)
