@@ -127,6 +127,8 @@ from .import_utils import (
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
+    is_env_variable_false,
+    is_env_variable_true,
     is_essentia_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
