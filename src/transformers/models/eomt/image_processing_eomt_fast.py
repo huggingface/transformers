@@ -388,24 +388,16 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         if patch_offsets:
             output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
         else:
-            if target_sizes is not None:
-                if len(segmentation_logits) != len(target_sizes):
-                    raise ValueError(
-                        "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                    )
+            output_logits = []
 
-                output_logits = []
-
-                for idx in range(len(segmentation_logits)):
-                    resized_logits = torch.nn.functional.interpolate(
-                        segmentation_logits[idx].unsqueeze(dim=0),
-                        size=target_sizes[idx],
-                        mode="bilinear",
-                        align_corners=False,
-                    )
-                    output_logits.append(resized_logits[0])
-            else:
-                output_logits = [segmentation_logits[i] for i in range(segmentation_logits.shape[0])]
+            for idx in range(len(segmentation_logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation_logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+                output_logits.append(resized_logits[0])
 
         preds = [logit.argmax(dim=0) for logit in output_logits]
         return preds
