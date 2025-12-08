@@ -467,10 +467,13 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         # Check that the caches are the same
         for layer_idx in range(len(no_parallelism_cache)):
-            for kv_idx in range(2):  # 0 = key, 1 = value
-                torch.testing.assert_close(
-                    actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
-                )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].keys, expected=no_parallelism_cache.layers[layer_idx].keys
+            )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].values,
+                expected=no_parallelism_cache.layers[layer_idx].values,
+            )
 
     @require_torch_gpu
     def test_static_cache_no_cuda_graph_skips(self):

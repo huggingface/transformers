@@ -482,8 +482,8 @@ class GenerationConfig(PushToHubMixin):
         # property and part of the `__repr__`
         if self.constraints is not None or self.force_words_ids is not None:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
-        elif self.num_beams == 1:
-            if self.do_sample is False:
+        elif self.num_beams is None or self.num_beams == 1:
+            if self.do_sample is not True:
                 if (
                     self.top_k is not None
                     and self.top_k > 1
@@ -496,7 +496,7 @@ class GenerationConfig(PushToHubMixin):
             else:
                 generation_mode = GenerationMode.SAMPLE
         else:
-            if self.num_beam_groups > 1:
+            if self.num_beam_groups is not None and self.num_beam_groups > 1:
                 generation_mode = GenerationMode.GROUP_BEAM_SEARCH
             elif self.do_sample is True:
                 generation_mode = GenerationMode.BEAM_SAMPLE
@@ -623,9 +623,9 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 2.4. check `num_return_sequences`
-        if self.num_return_sequences is not None and self.num_return_sequences != 1:
-            if self.num_beams == 1:
-                if self.do_sample is False:
+        if self.num_return_sequences is not None and self.num_return_sequences > 1:
+            if self.num_beams is None or self.num_beams == 1:
+                if self.do_sample is not True:
                     raise ValueError(
                         "Greedy methods without beam search do not support `num_return_sequences` different than 1 "
                         f"(got {self.num_return_sequences})."
@@ -670,7 +670,6 @@ class GenerationConfig(PushToHubMixin):
             "streamer",
             "negative_prompt_ids",
             "negative_prompt_attention_mask",
-            "use_model_defaults",
         )
         for arg in generate_arguments:
             if hasattr(self, arg):

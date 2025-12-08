@@ -884,7 +884,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
                 # and returns all kwargs that were not used to update the generation config
                 prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                    generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
+                    generation_config=default_pipeline_generation_config, **kwargs
                 )
                 self.generation_config = prepared_generation_config
                 # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default

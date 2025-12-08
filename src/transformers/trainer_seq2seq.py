@@ -334,6 +334,8 @@ class Seq2SeqTrainer(Trainer):
 
         # Retrieves GenerationConfig from model.generation_config
         gen_config = self.model.generation_config
+        default_gen_config = self.config._get_global_generation_defaults()
+        gen_config.update(**default_gen_config, defaults_only=True)
         # in case the batch is shorter than max length, the output should be padded
         if generated_tokens.shape[-1] < gen_config.max_length:
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)

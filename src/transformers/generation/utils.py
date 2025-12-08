@@ -1785,12 +1785,13 @@ class GenerationMixin(ContinuousMixin):
         # `torch.export.export` usually raises an exception if it is called
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
-        model_kwargs = generation_config.update(**kwargs)
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
 
         # Set default generation values (BC) if not already re-set by users
         global_defaults = PreTrainedConfig._get_global_generation_defaults()
         generation_config.update(**global_defaults, defaults_only=True)
+
+        model_kwargs = generation_config.update(**kwargs)
 
         # Related to #40039: prior to this PR, models with sliding window attention were forced to have
         # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
