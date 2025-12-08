@@ -20,7 +20,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from huggingface_hub import create_repo
 
@@ -446,8 +446,8 @@ class GenerationConfig(PushToHubMixin):
             if kwargs.get("force_bos_token_to_be_generated", False):
                 self.forced_bos_token_id = self.bos_token_id
                 logger.warning_once(
-                f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
-            )
+                    f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
+                )
 
         # Validate the values of the attributes
         self.validate()
