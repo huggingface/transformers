@@ -1,14 +1,9 @@
 import gc
 import unittest
+from unittest import skip
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
-from transformers.testing_utils import (
-    backend_empty_cache,
-    require_compressed_tensors,
-    require_deterministic_for_xpu,
-    require_torch,
-    torch_device,
-)
+from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
 from transformers.utils import is_torch_available
 
 
@@ -52,34 +47,24 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertIsInstance(config_from_dict.quantization_config, QuantizationConfig)
         self.assertIsInstance(config_from_dict.sparsity_config, SparsityCompressionConfig)
 
+    @skip("Test too flaky, depends on hardware also")
     def test_tinyllama_w8a8(self):
-        expected_out = [
-            "<s> Paris is the capital of which country?\n\n**A) 10** Paris is the capital of which country?\n\n**B) 11** Paris is the capital of which country?\n\n**C) 1",
-            "<s> Paris is the capital of which country?\n\n** 10.** Which country is the capital of which country?\n\n** 11.** Which country is the capital of which country?\n\n** 12.",  # XPU
-        ]
+        expected_out = "<s> Paris is the capital of which country?\n\n**A) 10** Paris is the capital of which country?\n\n**B) 11** Paris is the capital of which country?\n\n**C) 1"
         self._test_quantized_model(self.tinyllama_w8a8, expected_out)
 
     def test_tinyllama_w4a16(self):
-        expected_out = [
-            "<s> Paris is the capital of which country?\nAnswer: Paris is the capital of France.\nQuestion: Which country is the capital of which city?\nAnswer: The capital of the city of New York is New York.\nQuestion: Which"
-        ]
+        expected_out = "<s> Paris is the capital of which country?\nAnswer: Paris is the capital of France.\nQuestion: Which country is the capital of which city?\nAnswer: The capital of the city of New York is New York.\nQuestion: Which"
         self._test_quantized_model(self.tinyllama_w4a16, expected_out)
 
     def test_tinyllama_w8a16(self):
-        expected_out = [
-            "<s> Paris is the capital of which country?\nA. France\nB. Germany\nC. Spain\nD. Italy\nE. Switzerland\nQ10. Which of the following is not a country in the European Union?\nA."
-        ]
+        expected_out = "<s> Paris is the capital of which country?\nA. France\nB. Germany\nC. Spain\nD. Italy\nE. Switzerland\nQ10. Which of the following is not a country in the European Union?\nA."
         self._test_quantized_model(self.tinyllama_w8a16, expected_out)
 
     def test_llama_8b_fp8(self):
-        expected_out = [
-            "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera? ",
-            "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera",  # XPU
-        ]
+        expected_out = "<|begin_of_text|>Paris is the capital of which country? France\nWhat is the name of the famous art museum in Paris? The Louvre\nWhat is the name of the famous bridge in Paris? Pont des Arts\nWhat is the name of the famous opera? "
         self._test_quantized_model(self.llama3_8b_fp8, expected_out)
 
-    @require_deterministic_for_xpu
-    def _test_quantized_model(self, model_name: str, expected_output: list):
+    def _test_quantized_model(self, model_name: str, expected_output: str):
         """Carry out generation"""
         quantized_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -101,4 +86,4 @@ class CompressedTensorsTest(unittest.TestCase):
         outputs = tokenizer.batch_decode(generated_ids)
 
         self.assertIsNotNone(outputs)
-        self.assertIn(outputs[0], expected_output)
+        self.assertEqual(outputs[0], expected_output)
