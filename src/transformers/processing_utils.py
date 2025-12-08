@@ -1462,6 +1462,7 @@ class ProcessorMixin(PushToHubMixin):
         for sub_processor_type in sub_processors:
             if "FuyuProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
                 from .tokenization_utils_tokenizers import TokenizersBackend
+
                 args.append(TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs))
             elif sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
