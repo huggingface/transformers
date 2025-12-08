@@ -43,8 +43,6 @@ causal_conv1d_update, causal_conv1d_fn = (
     (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn) if causal_conv1d is not None else (None, None)
 )
 
-global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-
 mamba_ssm = lazy_load_kernel("mamba-ssm")
 selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = (
     (
