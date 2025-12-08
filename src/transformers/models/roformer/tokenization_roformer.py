@@ -131,6 +131,23 @@ class RoFormerTokenizer(PreTrainedTokenizerFast):
 
         return output
 
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
+        """
+        Create token type IDs for RoFormer sequence pairs.
+
+        The first sequence and associated special tokens are mapped to 0, while the second sequence (if provided) and
+        its trailing separator are mapped to 1.
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
