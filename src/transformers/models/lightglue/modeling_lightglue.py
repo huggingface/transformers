@@ -870,6 +870,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, "LightGlueKeypointMatchingOutput"]:
         loss = None
         if labels is not None:

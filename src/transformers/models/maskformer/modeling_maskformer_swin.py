@@ -738,6 +738,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         output_hidden_states=None,
         interpolate_pos_encoding=False,
         return_dict=None,
+        **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -815,6 +816,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
