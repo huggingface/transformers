@@ -134,6 +134,7 @@ class MiniMaxM2Config(PreTrainedConfig):
     attribute_map = {
         "num_experts": "num_local_experts",
     }
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -160,7 +161,6 @@ class MiniMaxM2Config(PreTrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
-        rope_theta: Optional[float] = 1000000.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
