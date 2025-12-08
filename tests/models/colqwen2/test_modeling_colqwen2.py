@@ -279,6 +279,10 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    @unittest.skip(reason="This architecture doesn't support weight tying/untying.")
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 @require_torch
 class ColQwen2ModelIntegrationTest(unittest.TestCase):

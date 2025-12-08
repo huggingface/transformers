@@ -244,6 +244,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, UniSpeechBaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -351,6 +352,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, UniSpeechForPreTrainingOutput]:
         r"""
         Example:

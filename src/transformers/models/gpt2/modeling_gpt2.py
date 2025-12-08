@@ -1021,6 +1021,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -1148,6 +1149,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -1228,6 +1230,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):

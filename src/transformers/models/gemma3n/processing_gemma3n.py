@@ -147,5 +147,13 @@ class Gemma3nProcessor(ProcessorMixin):
         text_inputs["token_type_ids"] = token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs, **audio_inputs}, tensor_type=return_tensors)
 
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
+        image_processor_input_names = self.image_processor.model_input_names
+        audio_processor_input_names = self.feature_extractor.model_input_names
+        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
+        return list(tokenizer_input_names + image_processor_input_names + audio_processor_input_names)
+
 
 __all__ = ["Gemma3nProcessor"]

@@ -91,7 +91,7 @@ class AyaVisionMultiModalProjector(nn.Module):
 class AyaVisionPreTrainedModel(PreTrainedModel):
     config: AyaVisionConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -260,7 +260,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
             )
         return special_image_mask
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

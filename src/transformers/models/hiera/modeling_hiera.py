@@ -774,7 +774,7 @@ class HieraPreTrainedModel(PreTrainedModel):
     config: HieraConfig
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -848,6 +848,7 @@ class HieraModel(HieraPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
@@ -1132,6 +1133,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, HieraForPreTrainingOutput]:
         r"""
         noise (`torch.FloatTensor` of shape `(batch_size, num_mask_units)`, *optional*):
@@ -1249,6 +1251,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, HieraForImageClassificationOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1325,6 +1328,7 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         """
         Returns:

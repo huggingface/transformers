@@ -37,7 +37,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -853,7 +853,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(

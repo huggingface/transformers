@@ -16,7 +16,7 @@
 import itertools
 from typing import Optional, Union
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
 
 
 class ParakeetTokenizerFast(PreTrainedTokenizerFast):

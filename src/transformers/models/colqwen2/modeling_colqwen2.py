@@ -41,7 +41,7 @@ if is_torch_available():
 class ColQwen2PreTrainedModel(PreTrainedModel):
     config: ColQwen2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -141,6 +141,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
