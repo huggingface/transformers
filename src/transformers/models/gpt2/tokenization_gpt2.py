@@ -105,6 +105,7 @@ class GPT2Tokenizer(TokenizersBackend):
         pad_token: Optional[Union[AddedToken, str]] = None,
         add_prefix_space=False,
         add_bos_token=False,
+        add_eos_token=False,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -125,10 +126,6 @@ class GPT2Tokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = False
-
         super().__init__(
             errors=errors,
             unk_token=unk_token,
@@ -137,6 +134,7 @@ class GPT2Tokenizer(TokenizersBackend):
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
             add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
             **kwargs,
         )
 
