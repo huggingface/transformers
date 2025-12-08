@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -197,15 +197,6 @@ class FalconH1Config(PreTrainedConfig):
 
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
         self.projectors_bias = projectors_bias
         mamba_intermediate = mamba_expand * hidden_size if mamba_d_ssm is None else mamba_d_ssm
 
@@ -275,6 +266,7 @@ class FalconH1Config(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.rope_parameters = rope_parameters
         super().__init__(**kwargs)
 
     @property

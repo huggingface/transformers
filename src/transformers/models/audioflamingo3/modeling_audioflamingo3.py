@@ -30,7 +30,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import eager_mask, padding_mask_function
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
@@ -257,34 +257,12 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
 class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     config: AudioFlamingo3Config
     base_model_prefix = "model"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["AudioFlamingo3Attention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # important: this ported version of AudioFlamingo3 isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
 
 
 @auto_docstring(
@@ -345,6 +323,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         self,
         input_features: torch.Tensor,
         input_features_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -358,20 +337,10 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
                 - 0 for tokens that are **masked**.
         """
 
-        # Prepare attention mask for transformer layers
-        batch_size = input_features.shape[0]
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-
         input_features_lengths = input_features_mask.sum(-1)
         input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
         input_features_mask = torch.arange(seq_len, device=input_features.device) < input_features_lengths[:, None]
-        attention_mask = eager_mask(
-            batch_size=batch_size,
-            cache_position=torch.arange(seq_len, device=input_features.device),
-            kv_length=seq_len,
-            mask_function=padding_mask_function(input_features_mask),
-            dtype=self.conv1.weight.dtype,
-        )
 
         # Conv front-end
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
@@ -381,6 +350,12 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         # Add positions, dropout
         hidden_states = inputs_embeds + self.embed_positions.weight
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=input_features_mask,
+        )
 
         # Transformer stack
         for layer in self.layers:

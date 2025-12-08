@@ -408,6 +408,10 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip(reason="Kosmos2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     @pytest.mark.generate
     @unittest.skip(reason="Kosmos2 does not support generation from no inputs")
     def test_generate_without_input_ids(self):

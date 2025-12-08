@@ -744,21 +744,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     # Flaky logits
     _supports_sdpa = False
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
 
 
 class PegasusXEncoder(PegasusXPreTrainedModel):
@@ -835,6 +821,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1003,6 +990,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1216,9 +1204,6 @@ class PegasusXModel(PegasusXPreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_encoder(self):
-        return self.encoder
-
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings matrix of the model if `new_num_position_embeddings !=
@@ -1258,6 +1243,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1365,12 +1351,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings matrix of the model if `new_num_position_embeddings !=
@@ -1411,6 +1391,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):

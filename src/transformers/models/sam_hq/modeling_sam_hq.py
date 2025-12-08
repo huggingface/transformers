@@ -32,6 +32,7 @@ from torch import Tensor, nn
 from transformers.modeling_outputs import ModelOutput
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -417,7 +418,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     config: SamHQConfig
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["SamHQVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -427,11 +428,11 @@ class SamHQPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamHQVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class SamHQPatchEmbeddings(nn.Module):
@@ -1229,7 +1230,7 @@ class SamHQPromptEncoder(nn.Module):
     """
 )
 class SamHQModel(SamHQPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
@@ -1310,7 +1311,7 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

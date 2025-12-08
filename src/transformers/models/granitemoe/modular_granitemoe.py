@@ -18,6 +18,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
@@ -152,7 +153,7 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GraniteMoeParallelExperts):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -165,7 +166,7 @@ class GraniteMoeModel(MixtralModel):
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embedding_multiplier = config.embedding_multiplier
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

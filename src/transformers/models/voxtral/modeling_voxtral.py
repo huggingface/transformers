@@ -220,7 +220,7 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
 class VoxtralPreTrainedModel(PreTrainedModel):
     config: VoxtralConfig
     base_model_prefix = "model"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
     _skip_keys_device_placement = "past_key_values"
@@ -230,28 +230,6 @@ class VoxtralPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # important: this ported version of Voxtral isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
 
 
 @auto_docstring(
@@ -314,7 +292,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_features,

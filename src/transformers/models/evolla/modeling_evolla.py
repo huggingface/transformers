@@ -27,10 +27,11 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -517,22 +518,6 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
         ],
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
@@ -546,7 +531,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.Tensor],
@@ -1066,6 +1051,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -1130,6 +1116,7 @@ class EvollaAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -1274,11 +1261,11 @@ class EvollaPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         super()._init_weights(module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
-            module.gate_attention.zero_()
-            module.gate_ffw.zero_()
-            module.attention_norm.weight.fill_(1.0)
+            init.zeros_(module.gate_attention)
+            init.zeros_(module.gate_ffw)
+            init.ones_(module.attention_norm.weight)
         elif isinstance(module, EvollaSequenceCompressorResampler):
-            module.latents.normal_(mean=0.0, std=std)
+            init.normal_(module.latents, mean=0.0, std=std)
 
 
 class EvollaModel(EvollaPreTrainedModel):
@@ -1310,7 +1297,7 @@ class EvollaModel(EvollaPreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

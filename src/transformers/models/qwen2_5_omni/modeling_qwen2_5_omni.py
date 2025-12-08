@@ -42,6 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, check_torch_load_is_safe, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.hub import cached_file
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from .configuration_qwen2_5_omni import (
@@ -64,7 +65,7 @@ logger = logging.get_logger(__name__)
 class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     config: Qwen2_5OmniConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "audio", "text"]
+    input_modalities = ("image", "video", "audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5OmniDecoderLayer", "Qwen2_5OmniVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -75,7 +76,7 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
-    input_modalities = ["image", "video", "audio", "text"]
+    input_modalities = ("image", "video", "audio", "text")
 
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
@@ -1075,7 +1076,8 @@ class Qwen2_5OmniPatchMerger(nn.Module):
 class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniVisionEncoderConfig
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
-    input_modalities = ["image", "video"]
+    _input_embed_layer = "patch_embed"
+    input_modalities = ("image", "video")
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1530,7 +1532,7 @@ class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTextConfig):
@@ -1824,7 +1826,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
             raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
             )
 
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -1955,11 +1957,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             audio_feature_lengths = None
 
         if attention_mask is not None and position_ids is None:
-            if (
-                cache_position is None
-                or (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-            ):
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if past_key_values_length == 0 or self.rope_deltas is None:
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
@@ -1974,7 +1973,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 self.rope_deltas = rope_deltas
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
+                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -2104,7 +2103,7 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 @auto_docstring
 class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniTalkerConfig
-    input_modalities = ["image", "video", "audio", "text"]
+    input_modalities = ("image", "video", "audio", "text")
 
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
@@ -2262,7 +2261,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5OmniPreTrainedModel):
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniTalkerConfig
     base_model_prefix = "talker"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)
@@ -2314,6 +2313,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Qwen2_5OmniTalkerCausalLMOutputWithPast]:
         r"""
         thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -2363,11 +2363,8 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None and position_ids is None:
-            if (
-                cache_position is None
-                or (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-            ):
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if past_key_values_length == 0 or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_text_ids,
                     image_grid_thw,
@@ -2387,8 +2384,8 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
                 self.rope_deltas = rope_deltas
 
             else:
-                batch_size, seq_length = input_ids.shape
-                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
+                batch_size, seq_length, _ = inputs_embeds.shape
+                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -3456,7 +3453,7 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
         decibel_spectrum = self.amplitude_to_db(amplitude_spectrum, -115) - 20
         return self.normalize_spectrogram(decibel_spectrum, 1, -115)
 
-    def forward(self, mel_spectrogram):
+    def forward(self, mel_spectrogram, **kwargs):
         processed_spectrogram = self.process_mel_spectrogram(mel_spectrogram)
         hidden_representation = self.conv_pre(processed_spectrogram)
 
@@ -3589,6 +3586,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         drop_audio_conditioning=False,
         drop_code=False,
         apply_cfg=True,
+        **kwargs,
     ):
         batch_size = hidden_states.shape[0]
         if time_step.ndim == 0:
@@ -3764,7 +3762,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
 )
 class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     config: Qwen2_5OmniConfig
-    output_modalities = ["audio", "text"]
+    output_modalities = ("audio", "text")
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
         "Qwen2_5OmniToken2WavModel",
@@ -3848,13 +3846,13 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         return model
 
     @torch.no_grad()
+    @deprecate_kwarg("return_audio", version="v5", new_name="generation_mode")
     # TODO: raushan, defaults should be saved in generation config
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
         speaker: str = "Chelsie",
         use_audio_in_video: bool = False,
-        return_audio: Optional[bool] = None,
         thinker_max_new_tokens: int = 1024,
         talker_max_new_tokens: int = 4096,
         talker_do_sample: bool = True,
@@ -3875,8 +3873,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 Which speaker should be used in audio response.
             use_audio_in_video (`bool`, defaults to False):
                 Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
-            return_audio (`Optional[bool]`, *optional*):
-                Whether or not return response in audio format. When `return_audio=None`, this parameter is same as `config.enable_audio_output`.
+            generation_mode (`Optional[str]`, *optional*):
+                Whether or not return response in audio format. When `generation_mode="audio"`, this parameter is same as `config.enable_audio_output`.
             kwargs (*optional*):
                 - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
                 - With a *thinker_*, *talker_*, *token2wav_* prefix, they will be input for the `generate` method of the
@@ -3888,6 +3886,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
                 - **Text** (`torch.Tensor`): Generated text token sequence.
                 - **Audio waveform** (`torch.Tensor`): Generated audio waveform.
         """
+        # check `False` on purpose because the paramter can be `str/bool`. This is needed for BC
+        generation_mode = kwargs.pop("generation_mode", None)
+        return_audio = generation_mode != "text" and generation_mode is not False
+
         if speaker not in self.speaker_map:
             raise ValueError(f"{speaker} is not available, available speakers: {self.speaker_map.keys()}")
         if return_audio and not self.has_talker:

@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class SmolLM3Config(PreTrainedConfig):
@@ -72,7 +72,7 @@ class SmolLM3Config(PreTrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 128001):
             The id of the end of sentence token.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
@@ -108,6 +108,7 @@ class SmolLM3Config(PreTrainedConfig):
 
     model_type = "smollm3"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 2000000.0
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -152,7 +153,6 @@ class SmolLM3Config(PreTrainedConfig):
         tie_word_embeddings: Optional[bool] = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -201,10 +201,8 @@ class SmolLM3Config(PreTrainedConfig):
         self.layer_types = layer_types
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 2000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        super().__init__(**kwargs)
 
 
 __all__ = ["SmolLM3Config"]

@@ -32,6 +32,7 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
@@ -369,6 +370,7 @@ class BambaAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -1130,9 +1132,9 @@ class BambaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BambaMixer):
-            module.dt_bias.fill_(1.0)
-            module.A_log.copy_(torch.log(torch.arange(1, module.num_heads + 1)))
-            module.D.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
 
 
 @auto_docstring

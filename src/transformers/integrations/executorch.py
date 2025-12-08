@@ -11,7 +11,6 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from typing import Optional
 
 import torch
 
@@ -193,9 +192,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        batch_size: Optional[int] = None,
-        max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        batch_size: int | None = None,
+        max_cache_len: int | None = None,
+        device: torch.device | None = None,
     ) -> None:
         """
         Initializes the exportable module.
@@ -225,9 +224,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
@@ -248,11 +247,11 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
 
     def export(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        dynamic_shapes: Optional[dict] = None,
-        strict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
+        dynamic_shapes: dict | None = None,
+        strict: bool | None = None,
     ) -> torch.export.ExportedProgram:
         """
         Export the wrapped module using `torch.export`.
@@ -461,9 +460,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        batch_size: Optional[int] = None,
-        max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        batch_size: int | None = None,
+        max_cache_len: int | None = None,
+        device: torch.device | None = None,
     ) -> None:
         """
         Initializes the wrapper module with the pretrained model.
@@ -534,9 +533,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Forward pass of the module, which is compatible with the ExecuTorch runtime.
@@ -640,9 +639,9 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-        batch_size: Optional[int] = None,
-        max_cache_len: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        batch_size: int | None = None,
+        max_cache_len: int | None = None,
+        device: torch.device | None = None,
     ) -> None:
         """
         Initializes the exportable module.
@@ -702,9 +701,9 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
@@ -733,10 +732,10 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
 def convert_and_export_with_cache(
     model: PreTrainedModel,
-    example_input_ids: Optional[torch.Tensor] = None,
-    example_cache_position: Optional[torch.Tensor] = None,
-    dynamic_shapes: Optional[dict] = None,
-    strict: Optional[bool] = None,
+    example_input_ids: torch.Tensor | None = None,
+    example_cache_position: torch.Tensor | None = None,
+    dynamic_shapes: dict | None = None,
+    strict: bool | None = None,
 ):
     """
     Convert a `PreTrainedModel` into an exportable module and export it using `torch.export`,
@@ -1003,8 +1002,8 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
 def export_with_dynamic_cache(
     model: PreTrainedModel,
-    example_input_ids: Optional[torch.Tensor] = None,
-    example_attention_mask: Optional[torch.Tensor] = None,
+    example_input_ids: torch.Tensor | None = None,
+    example_attention_mask: torch.Tensor | None = None,
 ):
     """
     Export a model with DynamicCache using `torch.export`, ensuring the exported model is compatible with `ExecuTorch`.

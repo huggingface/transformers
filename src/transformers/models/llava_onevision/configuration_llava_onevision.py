@@ -58,8 +58,6 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         image_grid_pinpoints (`List`, *optional*):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
 
@@ -102,7 +100,6 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         vision_feature_layer=-1,
         vision_aspect_ratio="anyres_max_9",
         image_grid_pinpoints=None,
-        tie_word_embeddings=False,
         multimodal_projector_bias=True,
         **kwargs,
     ):
@@ -188,7 +185,6 @@ class LlavaOnevisionConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

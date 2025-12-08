@@ -19,13 +19,14 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, can_return_tuple, logging
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoePreTrainedModel,
@@ -105,7 +106,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         head_dim (`int`, *optional*):
@@ -127,6 +128,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
     model_type = "qwen3_vl_moe_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     # Default tensor parallel plan for base model `Qwen3VLMoe`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -187,14 +189,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim or hidden_size // num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 5000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
+        self.rope_parameters = rope_parameters
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -204,7 +199,10 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
         self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(**kwargs)
+        super().__init__(
+            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
+            **kwargs,
+        )
 
 
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
@@ -368,8 +366,8 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
         else:
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
         if isinstance(module, Qwen3VLMoeTextExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
 
 
 class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
@@ -389,6 +387,7 @@ class Qwen3VLMoeModel(Qwen3VLModel):
 
 
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -498,6 +497,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
 

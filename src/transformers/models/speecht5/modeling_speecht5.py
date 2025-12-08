@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -433,8 +434,8 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
         pos_seq = torch.arange(0, seq_len).to(device=hidden_states.device, dtype=torch.long)
         pos_seq = pos_seq[:, None] - pos_seq[None, :]
 
-        pos_seq[pos_seq < -self.max_length] = -self.max_length
-        pos_seq[pos_seq >= self.max_length] = self.max_length - 1
+        pos_seq = torch.where(pos_seq < -self.max_length, -self.max_length, pos_seq)
+        pos_seq = torch.where(pos_seq >= self.max_length, self.max_length - 1, pos_seq)
         pos_seq = pos_seq + self.max_length
 
         return self.pe_k(pos_seq)
@@ -1175,37 +1176,38 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, SpeechT5PositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, SpeechT5ScaledPositionalEncoding):
-            module.alpha.fill_(1.0)
+            init.ones_(module.alpha)
         elif isinstance(module, SpeechT5FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
         if hasattr(module, "masked_spec_embed"):
-            nn.init.uniform_(module.masked_spec_embed)
+            init.uniform_(module.masked_spec_embed)
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
@@ -1237,6 +1239,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         """
         Args:
@@ -1340,6 +1343,7 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         hidden_states, attention_mask = self.prenet(input_values, attention_mask)
 
@@ -1380,6 +1384,7 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         hidden_states = self.prenet(input_values)
 
@@ -1414,6 +1419,7 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         return self.wrapped_encoder(
             hidden_states=input_values,
@@ -1452,6 +1458,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -1611,6 +1618,7 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
 
@@ -1661,6 +1669,7 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         decoder_hidden_states, attention_mask = self.prenet(input_values, attention_mask, past_key_values)
 
@@ -1705,6 +1714,7 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         outputs = self.wrapped_decoder(
             hidden_states=input_values,
@@ -1880,9 +1890,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             self.decoder.set_input_embeddings(value)
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1906,6 +1913,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
@@ -2019,12 +2027,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -2053,6 +2055,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -2316,7 +2319,7 @@ def _generate_speech(
     """
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
-    input_modalities = "text"
+    input_modalities = ("text",)
     main_input_name = "input_ids"
 
     def __init__(self, config: SpeechT5Config):
@@ -2346,12 +2349,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         # but we need to override it so as to do `GenerationConfig` handling in multiple parts of the codebase.
         return True
 
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
-
     @auto_docstring
     def forward(
         self,
@@ -2369,6 +2366,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         labels: Optional[torch.FloatTensor] = None,
         stop_labels: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2683,12 +2681,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.speecht5.get_encoder()
-
-    def get_decoder(self):
-        return self.speecht5.get_decoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -2713,6 +2705,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         labels: Optional[torch.FloatTensor] = None,
         stop_labels: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -3015,14 +3008,6 @@ class SpeechT5HifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm"):
@@ -3050,7 +3035,7 @@ class SpeechT5HifiGan(PreTrainedModel):
         waveform.
         """
     )
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         r"""
         spectrogram (`torch.FloatTensor`):
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,

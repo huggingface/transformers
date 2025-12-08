@@ -29,10 +29,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
@@ -142,6 +143,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -530,12 +532,12 @@ class DogePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
-                module.A.zero_()
+                init.zeros_(module.A)
         elif isinstance(module, DogeDecoderLayer):
             if hasattr(module, "input_residual"):
-                module.input_residual.fill_(1.0)
+                init.ones_(module.input_residual)
             if hasattr(module, "post_attention_residual"):
-                module.post_attention_residual.fill_(1.0)
+                init.ones_(module.post_attention_residual)
 
 
 @auto_docstring
@@ -556,7 +558,7 @@ class DogeModel(DogePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

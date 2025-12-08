@@ -34,7 +34,7 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 RUN python3 -m pip uninstall -y kernels
 
 # On ROCm, torchcodec is required to decode audio files and 0.4 or 0.6 fails
-RUN python3 -m pip install --no-cache-dir "torchcodec==0.5"
+RUN python3 -m pip install --no-cache-dir "torchcodec==0.7"
 
 # Install flash attention from source. Tested with commit 6387433156558135a998d5568a9d74c1778666d8
 RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \

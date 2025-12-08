@@ -19,6 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
@@ -257,22 +258,16 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config: ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["ConvNextV2Layer"]
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, ConvNextV2GRN):
-            module.weight.zero_()
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, ConvNextV2GRN):
+            init.zeros_(module.weight)
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -294,7 +289,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
@@ -398,9 +393,7 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:

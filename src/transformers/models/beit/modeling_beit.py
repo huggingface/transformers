@@ -23,6 +23,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -667,7 +668,7 @@ class BeitEncoder(nn.Module):
 class BeitPreTrainedModel(PreTrainedModel):
     config: BeitConfig
     base_model_prefix = "beit"
-    input_modalities = "image"
+    input_modalities = ("image",)
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BeitLayer"]
@@ -677,29 +678,19 @@ class BeitPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, BeitEmbeddings):
-            module.cls_token.zero_()
+        super()._init_weights(module)
+        if isinstance(module, BeitEmbeddings):
+            init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                module.mask_token.zero_()
+                init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.zero_()
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, BeitRelativePositionBias):
-            module.relative_position_bias_table.zero_()
+            init.zeros_(module.relative_position_bias_table)
         elif isinstance(module, BeitLayer):
             if module.lambda_1 is not None:
-                module.lambda_1.fill_(self.config.layer_scale_init_value)
-                module.lambda_2.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+                init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -735,6 +726,7 @@ class BeitModel(BeitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BeitModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -827,6 +819,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
@@ -920,6 +913,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1253,6 +1247,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SemanticSegmenterOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1380,6 +1375,7 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:

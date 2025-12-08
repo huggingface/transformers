@@ -33,9 +33,10 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -294,6 +295,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -384,6 +386,7 @@ class FalconH1Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.rotary_fn = apply_rotary_pos_emb
         self.key_multiplier = config.key_multiplier
 
     def forward(
@@ -1196,21 +1199,11 @@ class FalconH1PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Module):
-            for name, param in module.named_parameters(recurse=True):
-                if not param.requires_grad:
-                    continue
-                if "layernorm" in name.lower() and "weight" in name:
-                    # LayerNorm weights usually initialized to 1
-                    param.fill_(1.0)
-                elif "bias" in name:
-                    param.zero_()
-                else:
-                    try:
-                        param.normal_(mean=0.0, std=std)
-                    except Exception as e:
-                        print(f"Skipping init for {name} due to error: {e}")
+        super()._init_weights(module)
+        if isinstance(module, FalconH1Mixer):
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
 
 
 def compute_mup_vector(config):

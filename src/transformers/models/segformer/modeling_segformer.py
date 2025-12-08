@@ -412,22 +412,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
     config: SegformerConfig
     base_model_prefix = "segformer"
     main_input_name = "pixel_values"
-    input_modalities = "image"
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+    input_modalities = ("image",)
 
 
 @auto_docstring
@@ -449,6 +434,7 @@ class SegformerModel(SegformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -501,6 +487,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SegFormerImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -587,7 +574,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
 
         self.config = config
 
-    def forward(self, encoder_hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, encoder_hidden_states: torch.FloatTensor, **kwargs) -> torch.Tensor:
         batch_size = encoder_hidden_states[-1].shape[0]
 
         all_hidden_states = ()
@@ -642,6 +629,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SemanticSegmenterOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

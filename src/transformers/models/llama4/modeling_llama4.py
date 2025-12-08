@@ -24,6 +24,7 @@ import torch.nn.functional as F
 
 from transformers.models.llama4.configuration_llama4 import Llama4VisionConfig
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -462,7 +463,7 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
     config: Llama4Config
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -474,37 +475,25 @@ class Llama4PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, Llama4TextRMSNorm):
-            module.weight.fill_(1.0)
-        elif isinstance(module, Llama4TextExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.down_proj.normal_(mean=0.0, std=std)
+        if isinstance(module, Llama4TextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Llama4VisionModel):
-            module.class_embedding.normal_(std=module.scale)
-            module.positional_embedding_vlm.normal_(std=module.scale)
+            init.normal_(module.class_embedding, std=module.scale)
+            init.normal_(module.positional_embedding_vlm, std=module.scale)
 
 
 @auto_docstring
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
-    input_modalities = "text"
+    input_modalities = ("text",)
     config: Llama4TextConfig
     _can_record_outputs = {
         "attentions": Llama4TextAttention,
@@ -529,7 +518,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1041,7 +1030,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["Llama4VisionEncoderLayer"]
     config: Llama4VisionConfig
 
@@ -1083,6 +1072,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
         r"""
 
@@ -1177,7 +1167,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
-    base_model_prefix = ""
+    base_model_prefix = "model"
     config: Llama4Config
 
     def __init__(self, config: Llama4Config):

@@ -32,6 +32,7 @@ from torch import Tensor
 
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -303,28 +304,17 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
     config_class = EdgeTamConfig
     base_model_prefix = "edgetam"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+        super()._init_weights(module)
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.zero_()
+                init.zeros_(module.no_memory_embedding)
 
 
 # copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
@@ -447,7 +437,7 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -921,7 +911,7 @@ class EdgeTamMaskDecoder(nn.Module):
     """
 )
 class EdgeTamModel(EdgeTamPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
@@ -1024,7 +1014,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1113,7 +1103,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
 
         >>> # Postprocess masks
         >>> masks = processor.post_process_masks(
-        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
+        ...     outputs.pred_masks, inputs["original_sizes"]
         ... )
         ```
         """

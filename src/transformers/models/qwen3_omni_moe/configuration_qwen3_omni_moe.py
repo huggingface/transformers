@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -215,7 +215,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -267,6 +267,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
     base_model_tp_plan = {
@@ -274,9 +275,9 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -333,14 +334,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -356,7 +350,10 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__init__(
+            ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
+            **kwargs,
+        )
 
 
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
@@ -506,7 +503,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -607,9 +604,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -625,13 +619,9 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(**kwargs)
+        self.rope_parameters = rope_parameters
         self.num_code_groups = num_code_groups
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
@@ -678,7 +668,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -737,9 +727,9 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -796,14 +786,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -978,7 +961,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 8000):
             Maximum sequence length that the autoregressive decoder can handle. Determines positional embedding size.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         num_attention_heads (`int`, *optional*, defaults to 16):
@@ -1047,7 +1030,6 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         attention_dropout=0.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.codebook_size = codebook_size
         self.hidden_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
@@ -1065,15 +1047,9 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         self.upsampling_ratios = upsampling_ratios
         self.decoder_dim = decoder_dim
         self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        super().__init__(**kwargs)
 
     @property
     def layer_types(self):

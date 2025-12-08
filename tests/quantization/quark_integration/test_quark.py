@@ -56,6 +56,7 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I'm here to tell you about it. It's a beautiful day,")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris at all! I am not in Paris, but")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am in Paris, but I am not in Paris\nToday I am")
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None

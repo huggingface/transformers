@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class DistilBertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DistilBertModel`] or a [`TFDistilBertModel`]. It
+    This is the configuration class to store the configuration of a [`DistilBertModel`]. It
     is used to instantiate a DistilBERT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the DistilBERT
     [distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased) architecture.
@@ -34,7 +34,7 @@ class DistilBertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the DistilBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`DistilBertModel`] or [`TFDistilBertModel`].
+            the `inputs_ids` passed when calling [`DistilBertModel`].
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).

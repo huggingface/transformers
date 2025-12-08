@@ -7,7 +7,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
@@ -82,7 +82,7 @@ class MinistralConfig(MistralConfig, PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 4096):
@@ -131,7 +131,6 @@ class MinistralConfig(MistralConfig, PreTrainedConfig):
         layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(self, **kwargs)
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -156,19 +155,15 @@ class MinistralConfig(MistralConfig, PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.layer_types = layer_types
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if self.sliding_window is not None else "full_attention"
             ] * num_hidden_layers
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+
+        PreTrainedConfig.__init__(self, **kwargs)
 
 
 class MinistralMLP(Qwen2MLP):
@@ -205,7 +200,7 @@ class MinistralModel(Qwen2Model):
         super().__init__(config)
         del self.has_sliding_layers
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

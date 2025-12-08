@@ -19,6 +19,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -26,7 +27,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -92,12 +93,11 @@ class GptOssExperts(nn.Module):
         """
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size)  # (num_tokens, hidden_size)
-        num_experts = routing_weights.shape[1]
         if hidden_states.device.type == "cpu" or self.training:
             next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
                 expert_mask = torch.nn.functional.one_hot(
-                    router_indices, num_classes=num_experts + 1
+                    router_indices, num_classes=self.num_experts
                 )  # masking is also a class
                 expert_mask = expert_mask.permute(2, 1, 0)
                 # we sum on the top_k and on the sequence length to get which experts
@@ -107,10 +107,10 @@ class GptOssExperts(nn.Module):
                 # expert_idx only have 1 element, so we can use scale for fast indexing
                 expert_idx = expert_idx[0]
                 # skip masking index
-                if expert_idx == num_experts:
+                if expert_idx == self.num_experts:
                     continue
                 with torch.no_grad():
-                    _, token_idx = torch.where(expert_mask[expert_idx])
+                    top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
                 current_state = hidden_states[token_idx]
                 gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
                 gate, up = gate_up[..., ::2], gate_up[..., 1::2]
@@ -119,12 +119,13 @@ class GptOssExperts(nn.Module):
                 glu = gate * torch.sigmoid(gate * self.alpha)
                 gated_output = (up + 1) * glu
                 out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
-                weighted_output = out * routing_weights[token_idx, expert_idx, None]
+                weighted_output = out * routing_weights[token_idx, top_k_pos, None]
                 next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
             next_states = next_states.view(batch_size, -1, self.hidden_size)
         else:
-            hidden_states = hidden_states.repeat(num_experts, 1)
-            hidden_states = hidden_states.view(num_experts, -1, self.hidden_size)
+            num_tokens = hidden_states.shape[0]
+            hidden_states = hidden_states.repeat(self.num_experts, 1)
+            hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
             gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
             gate, up = gate_up[..., ::2], gate_up[..., 1::2]
             gate = gate.clamp(min=None, max=self.limit)
@@ -132,8 +133,15 @@ class GptOssExperts(nn.Module):
             glu = gate * torch.sigmoid(gate * self.alpha)
             next_states = torch.bmm(((up + 1) * glu), self.down_proj)
             next_states = next_states + self.down_proj_bias[..., None, :]
-            next_states = next_states.view(num_experts, batch_size, -1, self.hidden_size)
-            next_states = next_states * routing_weights.transpose(0, 1).view(num_experts, batch_size, -1)[..., None]
+            next_states = next_states.view(self.num_experts, batch_size, -1, self.hidden_size)
+
+            full_routing_weights = torch.zeros(
+                num_tokens, self.num_experts, device=routing_weights.device, dtype=routing_weights.dtype
+            )
+            full_routing_weights.scatter_(1, router_indices, routing_weights)
+            full_routing_weights = full_routing_weights.transpose(0, 1).view(self.num_experts, batch_size, -1, 1)
+
+            next_states = next_states * full_routing_weights
             next_states = next_states.sum(dim=0)
         return next_states
 
@@ -152,8 +160,8 @@ class GptOssTopKRouter(nn.Module):
         router_logits = F.linear(hidden_states, self.weight, self.bias)  # (seq_len, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
@@ -164,7 +172,7 @@ class GptOssMLP(nn.Module):
         self.experts = GptOssExperts(config)
 
     def forward(self, hidden_states):
-        router_scores, router_indices = self.router(hidden_states)
+        _, router_scores, router_indices = self.router(hidden_states)
         routed_out = self.experts(hidden_states, router_indices, router_scores)
         return routed_out, router_scores
 
@@ -358,35 +366,24 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Parameter):
-            module.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, GptOssRMSNorm):
-            module.weight.fill_(1.0)
-        elif isinstance(module, GptOssExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=std)
-            module.gate_up_proj_bias.zero_()
-            module.down_proj.normal_(mean=0.0, std=std)
-            module.down_proj_bias.zero_()
+        if isinstance(module, GptOssExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.zeros_(module.gate_up_proj_bias)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+            init.zeros_(module.down_proj_bias)
         elif isinstance(module, GptOssAttention):
-            module.sinks.normal_(mean=0.0, std=std)
+            init.normal_(module.sinks, mean=0.0, std=std)
         elif isinstance(module, GptOssTopKRouter):
-            module.weight.normal_(mean=0.0, std=std)
-            module.bias.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.bias, mean=0.0, std=std)
 
 
 class GptOssModel(MixtralModel):
     _no_split_modules = ["GptOssDecoderLayer"]
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

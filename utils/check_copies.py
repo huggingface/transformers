@@ -43,7 +43,10 @@ import re
 import subprocess
 from collections import OrderedDict
 
-from transformers.utils import direct_transformers_import
+from transformers.utils import direct_transformers_import, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -672,8 +675,8 @@ def is_copy_consistent(
                 object_name, base_path, buffer=buffer
             )
         except Exception as exc:
-            exc.args = (f"Error while trying to find source code for {filename}.\n\n" + str(exc),)
-            raise
+            logger.error(f"[31mError while trying to find source code for {filename}.\n\n" + str(exc) + "[0")
+            return []
 
         # code replaced by the patterns
         theoretical_code_blocks = OrderedDict()

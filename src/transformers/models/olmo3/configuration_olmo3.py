@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Olmo3Config(PreTrainedConfig):
@@ -73,7 +73,7 @@ class Olmo3Config(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -143,7 +143,6 @@ class Olmo3Config(PreTrainedConfig):
         layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -167,10 +166,6 @@ class Olmo3Config(PreTrainedConfig):
         self.eos_token_id = eos_token_id
 
         self.rms_norm_eps = rms_norm_eps
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
         self.sliding_window = sliding_window
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -179,10 +174,9 @@ class Olmo3Config(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Olmo3Config"]

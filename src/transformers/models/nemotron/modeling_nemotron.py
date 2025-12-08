@@ -23,6 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Size, Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
@@ -131,7 +132,7 @@ class NemotronRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -249,7 +250,7 @@ class NemotronAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
 
-        self.partial_rotary_factor = config.partial_rotary_factor
+        self.partial_rotary_factor = config.rope_parameters["partial_rotary_factor"]
         self.is_causal = True
         self.rotary_emb = NemotronRotaryEmbedding(config=config)
 
@@ -612,18 +613,10 @@ class NemotronPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, NemotronLayerNorm1P):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, NemotronLayerNorm1P):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -664,6 +657,7 @@ class NemotronModel(NemotronPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

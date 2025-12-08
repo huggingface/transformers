@@ -21,6 +21,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
@@ -202,7 +203,7 @@ class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -740,16 +741,16 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Qwen3NextGatedDeltaNet):
-            module.dt_bias.fill_(1.0)
-            module.A_log.uniform_(0, 16).log_()
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.empty_like(module.A_log).uniform_(0, 16).log_())
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, Qwen3NextRMSNorm):
-            module.weight.zero_()
-        if isinstance(module, Qwen3NextExperts):
-            module.gate_up_proj.normal_(mean=0.0, std=self.config.initializer_range)
-            module.down_proj.normal_(mean=0.0, std=self.config.initializer_range)
-        if isinstance(module, Qwen3NextSparseMoeBlock):
-            module.gate.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.weight)
+        elif isinstance(module, Qwen3NextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Qwen3NextSparseMoeBlock):
+            init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class Qwen3NextModel(Qwen3NextPreTrainedModel):
@@ -765,7 +766,7 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

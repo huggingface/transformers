@@ -506,6 +506,10 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_generate_without_input_ids(self):
         pass
 
+    @unittest.skip(reason="BLIP2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -790,6 +794,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
             "image-to-text": Blip2ForConditionalGeneration,
             "visual-question-answering": Blip2ForConditionalGeneration,
             "image-text-to-text": Blip2ForConditionalGeneration,
+            "any-to-any": Blip2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -859,6 +864,10 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     @pytest.mark.generate
     @unittest.skip(reason="Blip2Model does not support generation from no inputs")
     def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="BLIP2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

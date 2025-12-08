@@ -26,6 +26,7 @@ from torch import Tensor, nn
 
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -998,7 +999,7 @@ class SamPreTrainedModel(PreTrainedModel):
     config: SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["SamVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -1008,11 +1009,11 @@ class SamPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SamVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.zero_()
-                module.rel_pos_w.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class SamVisionEncoder(SamPreTrainedModel):
@@ -1102,7 +1103,7 @@ class SamVisionModel(SamPreTrainedModel):
     """
 )
 class SamModel(SamPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
     def __init__(self, config: SamConfig):
@@ -1181,7 +1182,7 @@ class SamModel(SamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
