@@ -32,7 +32,7 @@ Ci sono benefici significativi nell'usare un modello pre-addestrato. Si riducono
 
 Prima di poter fare il fine-tuning di un modello pre-addestrato, scarica un dataset e preparalo per l'addestramento. La precedente esercitazione ti ha mostrato come processare i dati per l'addestramento e adesso hai l'opportunità di metterti alla prova!
 
-Inizia caricando il dataset [Yelp Reviews](https://huggingface.co/datasets/yelp_review_full):
+Inizia caricando il dataset [Yelp Reviews](https://huggingface.co/datasets/Yelp/yelp_review_full):
 
 ```py
 >>> from datasets import load_dataset
@@ -73,7 +73,7 @@ Se vuoi, puoi creare un sottoinsieme più piccolo del dataset per il fine-tuning
 
 🤗 Transformers mette a disposizione la classe [`Trainer`] ottimizzata per addestrare modelli 🤗 Transformers, rendendo semplice iniziare l'addestramento senza scrivere manualmente il tuo ciclo di addestramento. L'API [`Trainer`] supporta un'ampia gamma di opzioni e funzionalità di addestramento come logging, gradient accumulation e mixed precision.
 
-Inizia caricando il tuo modello e specificando il numero di etichette (labels) attese. Nel dataset Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), sai che ci sono cinque etichette:
+Inizia caricando il tuo modello e specificando il numero di etichette (labels) attese. Nel dataset Yelp Review [dataset card](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields), sai che ci sono cinque etichette:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification

@@ -149,14 +149,14 @@ def arange_like(x, dim: int) -> torch.Tensor:
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number
+    Base class for outputs of SuperGlue keypoint matching models. Due to the nature of keypoint detection and matching, the number
     of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of
     images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask tensor is
     used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
     information.
     """
 )
-class KeypointMatchingOutput(ModelOutput):
+class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Loss computed during training.
@@ -468,7 +468,7 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     config: SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
@@ -670,7 +670,8 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, KeypointMatchingOutput]:
+        **kwargs,
+    ) -> Union[tuple, SuperGlueKeypointMatchingOutput]:
         r"""
         Examples:
 
@@ -738,7 +739,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 if v is not None
             )
 
-        return KeypointMatchingOutput(
+        return SuperGlueKeypointMatchingOutput(
             loss=loss,
             matches=matches,
             matching_scores=matching_scores,

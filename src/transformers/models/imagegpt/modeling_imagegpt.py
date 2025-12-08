@@ -363,7 +363,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     config: ImageGPTConfig
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["ImageGPTBlock"]
 
@@ -493,9 +493,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + input_shape[-1], device=device
-            )
+            cache_position: torch.Tensor = torch.arange(input_shape[-1], device=device) + past_seen_tokens
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)

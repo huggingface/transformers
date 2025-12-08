@@ -22,7 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_read_token, require_torch, slow, torch_device
 from transformers.utils import check_torch_load_is_safe
 
 from ...test_configuration_common import ConfigTester
@@ -184,20 +184,23 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
+        # Get the actual batch size from the inputs (may differ from model_tester.batch_size in some tests)
+        batch_size = inputs_dict["past_values"].shape[0]
+
         #  if PatchTSTForPretraining
         if model_class == PatchTSTForPretraining:
-            inputs_dict.pop("future_values")
+            inputs_dict.pop("future_values", None)
         # else if classification model:
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed)
-            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
+            labels = ids_tensor([batch_size], self.model_tester.num_targets, rng=rng)
             inputs_dict["target_values"] = labels
-            inputs_dict.pop("future_values")
+            inputs_dict.pop("future_values", None)
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed)
-            target_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
+            target_values = floats_tensor([batch_size, self.model_tester.num_targets], rng=rng)
             inputs_dict["target_values"] = target_values
-            inputs_dict.pop("future_values")
+            inputs_dict.pop("future_values", None)
         return inputs_dict
 
     def test_save_load_strict(self):
@@ -329,7 +332,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_close(output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
-    # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
+    @require_read_token
     def test_prediction_head(self):
         model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
@@ -349,6 +352,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         )
         torch.testing.assert_close(output[0, :1, :7], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
+    @require_read_token
     def test_prediction_generation(self):
         model = PatchTSTForPrediction.from_pretrained("namctin/patchtst_etth1_forecast").to(torch_device)
         batch = prepare_batch(file="test-batch.pt")

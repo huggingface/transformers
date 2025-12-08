@@ -19,9 +19,13 @@ and simplicity/ease of use.
 import copy
 import inspect
 import os
+import re
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
+
+from safetensors import safe_open
+from safetensors.torch import save_file
 
 from ..utils import (
     is_accelerate_available,
@@ -204,13 +208,18 @@ def check_and_set_device_map(device_map: "torch.device | int | str | dict | None
 
 
 def compute_module_sizes(
-    model: "PreTrainedModel", hf_quantizer: "HfQuantizer | None" = None, buffers_only: bool = False
+    model: "PreTrainedModel",
+    hf_quantizer: "HfQuantizer | None" = None,
+    buffers_only: bool = False,
+    only_modules: bool = True,
 ) -> tuple[dict[str, int], dict[str, int]]:
     """
     Compute the size of each submodule of a given model (in bytes).
     Returns a tuple of 2 dicts, the fist one containing a mapping of all the modules and the corresponding size
     in bytes, and the 2nd one containing a mapping from all leaf modules (modules containing parameters, the end of
     the model graph) and the corresponding sizes.
+    If `only_modules` is set to False, the first mapping will not only contain the size of all modules, but also
+    the size of all parameters and buffers.
     """
     all_module_sizes = defaultdict(int)
     leaves_module_sizes = defaultdict(int)
@@ -232,7 +241,7 @@ def compute_module_sizes(
         if name in tied_keys:
             continue
         if hf_quantizer is not None:
-            dtype_size = hf_quantizer.param_element_size(model, name)
+            dtype_size = hf_quantizer.param_element_size(model, name, param)
         else:
             dtype_size = param.element_size()
         size = param.numel() * dtype_size
@@ -241,6 +250,9 @@ def compute_module_sizes(
             all_module_sizes[".".join(name_parts[:idx])] += size
         if "." in name:
             leaves_module_sizes[name.rsplit(".", 1)[0]] += size
+        # If we want to also have the full leaves in `all_module_sizes`
+        if not only_modules:
+            all_module_sizes[name] += size
 
     return all_module_sizes, leaves_module_sizes
 
@@ -380,6 +392,15 @@ def _get_device_map(
             )
         else:
             inferred_max_memory = get_max_memory(max_memory)
+
+        # If the user does not provide `max_memory`, accelerate sets the WHOLE cpu available memory as available.
+        # This is unwanted, as we don't want to set extremely tight bound and pressure for cpu if we are memory-constrained,
+        # especially if the model uses WeightConverter (because there will be some uncontrollable cpu memory spikes during
+        # the conversions before we resave the weights). In those cases, it's better to offload to disk a bit more
+        # if we were in-between, as otherwise we blow-up cpu memory
+        if max_memory is None:
+            inferred_max_memory["cpu"] *= 0.90
+
         if hf_quantizer is not None:
             inferred_max_memory = hf_quantizer.adjust_max_memory(inferred_max_memory)
 
@@ -437,83 +458,112 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         dispatch_model(model, **device_map_kwargs)
 
 
-def get_disk_only_shard_files(device_map, weight_map):
-    """
-    Returns the list of shard files containing only weights offloaded to disk.
-    """
-    files_content = defaultdict(list)
-    for weight_name, filename in weight_map.items():
-        while len(weight_name) > 0 and weight_name not in device_map:
-            weight_name = ".".join(weight_name.split(".")[:-1])
-        files_content[filename].append(device_map[weight_name])
-
-    return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
-
-
 def expand_device_map(device_map, param_names):
     """
     Expand a device map to return the correspondence parameter name to device.
     """
+    # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
+    device_map_regex = re.compile(
+        "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
+    )
     new_device_map = {}
-    for module, device in device_map.items():
-        new_device_map.update(
-            {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
-        )
+    for param in param_names:
+        device_match = device_map_regex.match(param)
+        new_device_map[param] = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+
     return new_device_map
 
 
 def accelerate_disk_offload(
-    disk_offload_folder,
-    checkpoint_files,
-    device_map,
-    checkpoint_keys,
-    sharded_metadata,
-    dtype,
+    model: "PreTrainedModel",
+    disk_offload_folder: str | None,
+    checkpoint_files: list[str] | None,
+    device_map: dict,
+    sharded_metadata: dict | None,
+    dtype: torch.dtype | None,
+    weight_mapping=None,
 ):
-    disk_only_shard_files = []
+    """
+    Prepare the `disk_offload_index` that will be used for reading offloaded parameters. If reading from a safetensors
+    file, parameters which do not need any special WeightConverter operation during loading (i.e. they are used as-is, or only
+    renamed) will be mapped to where they already reside on disk. Otherwise, the parameters will be resaved inside
+    `disk_offload_folder` during loading.
+    """
+    from ..core_model_loading import WeightRenaming, rename_source_key
+
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
-    if disk_offload_folder is None and not is_offloaded_safetensors:
-        raise ValueError(
-            "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
-            " for them. Alternatively, make sure you have `safetensors` installed if the model you are using"
-            " offers the weights in this format."
-        )
+
+    renamings = []
+    if weight_mapping is not None:
+        renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+
+    # In this case, the offload index is simply the existing safetensors (except if using custom weight loading
+    # Operation, e.g. the MoE models, where we need to resave the weights that were changed at loading time)
     if is_offloaded_safetensors:
-        param_device_map = expand_device_map(device_map, checkpoint_keys)
+        meta_state_dict = model.state_dict()
+        param_device_map = expand_device_map(device_map, meta_state_dict.keys())
         str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
         if sharded_metadata is None:
-            weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
+            weight_map = dict.fromkeys(safe_open(checkpoint_files[0], framework="pt").keys(), checkpoint_files[0])
         else:
             folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
-            weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
-            # Find potential checkpoints containing only offloaded weights
-            disk_only_shard_files = get_disk_only_shard_files(device_map, weight_map)
+            weight_map = {k: os.path.join(folder, v) for k, v in sharded_metadata["weight_map"].items()}
+
+        # Update the weight names according to the `weight_mapping`
+        weight_renaming_map = {
+            rename_source_key(k, renamings, [], model.base_model_prefix, meta_state_dict)[0]: k for k in weight_map
+        }
+
+        # Prepare the index using existing safetensors files
         disk_offload_index = {
-            name: {
-                "safetensors_file": file,
-                "weight_name": name,
+            target_name: {
+                "safetensors_file": weight_map[source_name],
+                "weight_name": source_name,
                 "dtype": str_dtype,
             }
-            for name, file in weight_map.items()
-            if param_device_map[name] == "disk"
+            for target_name, source_name in weight_renaming_map.items()
+            # Need to check if it's in the mapping in case of unexpected keys that would result in KeyError (we skip them)
+            if target_name in param_device_map and param_device_map[target_name] == "disk"
         }
+    # In this case we will resave every offloaded weight
     else:
         disk_offload_index = {}
-    return disk_offload_index, disk_only_shard_files, is_offloaded_safetensors
+
+    return disk_offload_index
+
+
+def offload_weight(weight: torch.Tensor, weight_name: str, offload_folder: str | None, offload_index: dict) -> dict:
+    """Write `weight` to disk inside `offload_folder`, and update `offload_index` accordingly. Everything is
+    saved in `safetensors` format."""
+
+    if offload_folder is None:
+        raise ValueError(
+            "The current `device_map` had weights offloaded to the disk, which needed to be re-saved. This is either "
+            "because the weights are not in `safetensors` format, or because the model uses an internal weight format "
+            "different than the one saved (i.e. most MoE models). Please provide an `offload_folder` for them in "
+            "`from_pretrained`."
+        )
+    # Write the weight to disk
+    safetensor_file = os.path.join(offload_folder, f"{weight_name}.safetensors")
+    save_file({weight_name: weight}, safetensor_file)
+    # Update the offloading index
+    str_dtype = str(weight.dtype).replace("torch.", "")
+    offload_index[weight_name] = {"safetensors_file": safetensor_file, "weight_name": weight_name, "dtype": str_dtype}
+    return offload_index
 
 
 def _init_infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
-    tied_parameters: Optional[list[list[str]]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: list[str] | None = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ) -> tuple[
-    list[Union[int, str]],
-    dict[Union[int, str], Union[int, str]],
-    list[Union[int, str]],
+    list[int | str],
+    dict[int | str, int | str],
+    list[int | str],
     list[int],
     dict[str, int],
     list[list[str]],
@@ -542,7 +592,7 @@ def _init_infer_auto_device_map(
     else:
         main_devices = ["cpu"]
 
-    module_sizes, _ = compute_module_sizes(model, hf_quantizer)
+    module_sizes, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
 
     if tied_parameters is None:
         if len(model.all_tied_weights_keys) > 0:
@@ -576,12 +626,12 @@ def _init_infer_auto_device_map(
 
 def infer_auto_device_map(
     model: nn.Module,
-    max_memory: Optional[dict[Union[int, str], Union[int, str]]] = None,
-    no_split_module_classes: Optional[list[str]] = None,
+    max_memory: dict[int | str, int | str] | None = None,
+    no_split_module_classes: list[str] | None = None,
     verbose: bool = False,
     clean_result: bool = True,
     offload_buffers: bool = False,
-    tied_parameters: Optional[list[list[str]]] = None,
+    tied_parameters: list[list[str]] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
 ):
     """
