@@ -799,7 +799,8 @@ Hey how are you doing"""  # noqa: W293
     def _run_integration_checks(self, tokenizer, tokenizer_type):
         # Test 1: Tokens match expected
         tokens = tokenizer.tokenize(self.integration_test_input_string)
-        self.assertEqual(
+        self.maxDiff = None
+        self.assertListEqual(
             tokens,
             self.integration_expected_tokens,
             f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",

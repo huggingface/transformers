@@ -110,13 +110,14 @@ class BigBirdTokenizer(TokenizersBackend):
         # Convert vocab to list of (token, score) tuples
         if vocab is None:
             vocab = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(bos_token), 0.0), (str(unk_token), 0.0)]
-            unk_id = 5
+            unk_id = 3
         elif isinstance(vocab, list):
             # vocab.insert(100, (str(unk_token), 0.0))  # Ensure unk_token is in vocab at index 100
             unk_id = vocab.index((str(unk_token), 0.0)) if (str(unk_token), 0.0) in vocab else 100
+
         self._tokenizer = Tokenizer(Unigram(vocab, unk_id=unk_id, byte_fallback=False))
         self._tokenizer.normalizer = normalizers.Sequence(
-            [normalizers.Strip(left=False, right=True), normalizers.Replace(Regex(r" {2,}"), SPIECE_UNDERLINE)]
+            [normalizers.Strip(left=False, right=False), normalizers.Replace(Regex(r" {2,}"), SPIECE_UNDERLINE)]
         )
 
         prepend_scheme = "always" if add_prefix_space else "never"

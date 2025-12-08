@@ -108,7 +108,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
             ]
             unk_id = 1
         elif isinstance(vocab, list):
-            unk_id = vocab.index((str(unk_token),0.0)) if (str(unk_token),0.0) in vocab else unk_id
+            unk_id = vocab.index((str(unk_token), 0.0)) if (str(unk_token), 0.0) in vocab else unk_id
 
         self._vocab = vocab
         self._tokenizer = Tokenizer(
