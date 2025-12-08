@@ -110,9 +110,7 @@ class GPT2Tokenizer(TokenizersBackend):
     ):
         self.add_prefix_space = add_prefix_space
         self._vocab = vocab if vocab is not None else {}
-
         self._merges = merges or []
-
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -123,7 +121,6 @@ class GPT2Tokenizer(TokenizersBackend):
                 fuse_unk=False,
             )
         )
-
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
         super().__init__(

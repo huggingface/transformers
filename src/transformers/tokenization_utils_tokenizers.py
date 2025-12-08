@@ -285,11 +285,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Set backend to "tokenizers" if not already set
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
-
+        self._add_bos_token = kwargs.get("add_bos_token", False)
+        self._add_eos_token = kwargs.get("add_eos_token", False)
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
-        self.add_bos_token = kwargs.get("add_bos_token", False)
-        self.add_eos_token = kwargs.get("add_eos_token", False)
+
 
         if vocab_file is not None:
             self.vocab_file = vocab_file
