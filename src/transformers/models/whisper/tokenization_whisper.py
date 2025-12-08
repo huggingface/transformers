@@ -276,18 +276,7 @@ class WhisperTokenizer(TokenizersBackend):
         self.language = language
         self.task = task
         self.predict_timestamps = predict_timestamps
-
-        self._post_init()
-
-    def _post_init(self):
-        """Post-initialization hook to set up prefix tokens after the tokenizer is fully loaded."""
-        super()._post_init()
-        # Set up prefix tokens if language or task is specified (may be set from config in from_pretrained)
-        if hasattr(self, "language") and hasattr(self, "task") and hasattr(self, "predict_timestamps"):
-            if self.language is not None or self.task is not None:
-                self.set_prefix_tokens(
-                    language=self.language, task=self.task, predict_timestamps=self.predict_timestamps
-                )
+        self.set_prefix_tokens()
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
     def _decode_with_timestamps(
