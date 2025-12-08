@@ -1,6 +1,6 @@
-import torch
+from collections.abc import Callable
 
-from typing import Callable
+import torch
 
 
 def eager_moe_forward(
