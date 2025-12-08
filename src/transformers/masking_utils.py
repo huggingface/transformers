@@ -383,13 +383,9 @@ def sdpa_mask_recent_torch(
     if padding_mask is not None:
         mask_function = and_masks(mask_function, padding_mask_function(padding_mask))
 
-    batch_arange = torch.arange(batch_size, device=cache_position.device)
-    head_arange = torch.arange(1, device=cache_position.device)
-    # This creates the 4D mask easily. Note that we need this context manager as vmap cannot handle slicing a tensor from
-    # scalar tensor (it internally calls `.item()` which vmap does not allow, but this context works around it
-    # We don't need to add an offset to the mask_function either, as we vmap directly the correct indices for k and kv indices
-    with TransformGetItemToIndex():
-        causal_mask = _vmap_for_bhqkv(mask_function)(batch_arange, head_arange, cache_position, kv_arange)
+    q_indices = torch.arange(kv_length - q_length, kv_length)
+    k_indices = torch.arange(kv_length)
+    causal_mask = q_indices[:, None] >= k_indices[None, :]
 
     return causal_mask
 
