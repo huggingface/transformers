@@ -44,7 +44,7 @@ class Bnb4bitQuantize(ConversionOps):
         we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
         value = list(input_dict.values())[0]
-        value = value[0] if isinstance(value, list) else value
+        value = value[0]
 
         # update param name to get the weights instead of the quantized stats
         module, _ = get_module_from_name(model, full_layer_name)
@@ -223,7 +223,9 @@ def _replace_with_bnb_linear(
                             if pre_quantized:
                                 # this is kind of an edge case when supporting both loading and quantization ...
                                 # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
-                                new_module.weight.data = new_module.weight.data.to(dtype=torch.uint8)
+                                new_module.weight.data = new_module.weight.data.to(
+                                    dtype=quantization_config.bnb_4bit_quant_storage
+                                )
                             model._modules[name] = new_module
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later

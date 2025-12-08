@@ -315,16 +315,16 @@ if is_torch_available():
         def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
                 # First offline load should fail
-                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                     with pytest.raises(OSError):
                         AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
                 # Enable online mode for download
-                with patch("transformers.utils.hub.is_offline_mode", return_value=False):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
                     snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
                 # Load again in offline mode - should work now
-                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                     AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
@@ -2227,6 +2227,41 @@ class ModelUtilsTest(TestCasePlus):
         # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
+
+    def test_loading_respect_env_variable_for_threading(self):
+        """Test that we can correctly control threading during loading"""
+        model = BaseModel(PreTrainedConfig())
+
+        # Monkey patch Thread.__init__ to add a counter of launched threads
+        original_init = threading.Thread.__init__
+        counter = 0
+
+        def tracking_init(self, *args, **kwargs):
+            nonlocal counter
+            counter += 1
+            original_init(self, *args, **kwargs)
+
+        threading.Thread.__init__ = tracking_init
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # Use threading
+            os.environ["HF_DEACTIVATE_ASYNC_LOAD"] = "0"
+            before = counter
+            _ = BaseModel.from_pretrained(tmpdirname)
+            after = counter
+            self.assertTrue(after - before > 0, "Loading should have spawned new threads!")
+
+            # Deactivate threading
+            os.environ["HF_DEACTIVATE_ASYNC_LOAD"] = "1"
+            before = counter
+            _ = BaseModel.from_pretrained(tmpdirname)
+            after = counter
+            self.assertTrue(after == before, "It looks like loading did spawn new threads, but it should not have!")
+
+        # Reverse monkey patch
+        threading.Thread.__init__ = original_init
 
 
 @slow

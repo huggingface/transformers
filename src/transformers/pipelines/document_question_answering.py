@@ -146,7 +146,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.tokenizer is not None and not self.tokenizer.__class__.__name__.endswith("Fast"):
+        if self.tokenizer is not None and not (
+            self.tokenizer.__class__.__name__.endswith("Fast") or self.tokenizer.backend == "tokenizers"
+        ):
             raise ValueError(
                 "`DocumentQuestionAnsweringPipeline` requires a fast tokenizer, but a slow tokenizer "
                 f"(`{self.tokenizer.__class__.__name__}`) is provided."
