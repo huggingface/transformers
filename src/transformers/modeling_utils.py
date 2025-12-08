@@ -65,13 +65,13 @@ from .integrations.accelerate import (
     expand_device_map,
     init_empty_weights,
 )
-from .integrations.bmm_moe import bmm_moe_forward
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import is_kernel
+from .integrations.moe import batched_mm_moe_forward, grouped_mm_moe_forward
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -1988,10 +1988,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final MoE implementation to use.
         """
         applicable_moe_implementation = moe_implementation or "eager"
-        if applicable_moe_implementation not in ["eager", "bmm"]:
+        if applicable_moe_implementation not in ["eager", "batched_mm", "grouped_mm"]:
             raise ValueError(
                 f'Specified `moe_implementation="{applicable_moe_implementation}"` is not supported. The only possible arguments are '
-                '`moe_implementation="eager"` and `moe_implementation="bmm"`.'
+                '`moe_implementation="eager"`, `moe_implementation="batched_mm"` and `moe_implementation="grouped_mm"`.'
             )
 
         # Default to eager
@@ -4747,7 +4747,8 @@ class MoEInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
-        "bmm": bmm_moe_forward,
+        "batched_mm": batched_mm_moe_forward,
+        "grouped_mm": grouped_mm_moe_forward,
     }
 
 

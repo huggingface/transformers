@@ -545,7 +545,7 @@ def _get_leaf_tensors(obj: any) -> dict[str, torch.Tensor]:
         raise ValueError(f"Unsupported type: {type(obj)}")
 
 
-TEST_EAGER_MATCHES_BMM_INFERENCE_PARAMETERIZATION = [
+TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION = [
     (
         # test name for the test runner
         f"{dtype}",
@@ -556,7 +556,7 @@ TEST_EAGER_MATCHES_BMM_INFERENCE_PARAMETERIZATION = [
 ]
 
 
-def _test_eager_matches_bmm_inference(self, name, dtype):
+def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
     if not self.has_moes:
         self.skipTest(reason="Model architecture does not support Mixture of Experts (MoE)")
 
@@ -581,43 +581,41 @@ def _test_eager_matches_bmm_inference(self, name, dtype):
         set_config_for_less_flaky_test(config)
         model = model_class(config)
 
+        # Load with dtype
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = model_class.from_pretrained(tmpdirname, dtype=dtype).eval().to(torch_device)
+            set_model_for_less_flaky_test(model)
+
         # Disable cache for now
         inputs_dict.pop("use_cache", None)
         for module in model.modules():
             if hasattr(module, "config") and hasattr(module.config, "use_cache"):
                 module.config.use_cache = False
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-
-            # set using moe_implementation in from_pretrained
-            model_bmm = model_class.from_pretrained(tmpdirname, dtype=dtype, moe_implementation="bmm")
-            model_bmm = model_bmm.eval().to(torch_device)
-
-            # set using set_moe_implementation after from_pretrained
-            model_eager = deepcopy(model_bmm)
-            model_eager.set_moe_implementation("eager")
-
-        self.assertEqual(model_eager.config._moe_implementation, "eager")
-        self.assertEqual(model_bmm.config._moe_implementation, "bmm")
-
-        set_model_for_less_flaky_test(model_eager)
-        set_model_for_less_flaky_test(model_bmm)
-
         with torch.no_grad():
             inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
             prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
 
-            outputs_eager = model_eager(**prepared_inputs)
-            outputs_bmm = model_bmm(**prepared_inputs)
+            model.set_moe_implementation("eager")
+            outputs_eager = model(**prepared_inputs)
+
+            model.set_moe_implementation("batched_mm")
+            outputs_batched_mm = model(**prepared_inputs)
+
+            model.set_moe_implementation("grouped_mm")
+            outputs_grouped_mm = model(**prepared_inputs)
 
         outputs_eager = _get_leaf_tensors(outputs_eager)
-        outputs_bmm = _get_leaf_tensors(outputs_bmm)
+        outputs_batched_mm = _get_leaf_tensors(outputs_batched_mm)
+        outputs_grouped_mm = _get_leaf_tensors(outputs_grouped_mm)
 
         self.assertTrue(outputs_eager, "No outputs from eager implementation")
-        self.assertTrue(outputs_bmm, "No outputs from bmm implementation")
+        self.assertTrue(outputs_batched_mm, "No outputs from batched_mm implementation")
+        self.assertTrue(outputs_grouped_mm, "No outputs from grouped_mm implementation")
 
-        torch.testing.assert_close(outputs_eager, outputs_bmm, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-4, atol=1e-4)
 
 
 def _config_zero_init(config):
@@ -3196,9 +3194,9 @@ class ModelTesterMixin:
             self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
         )
 
-    @parameterized.expand(TEST_EAGER_MATCHES_BMM_INFERENCE_PARAMETERIZATION)
-    def test_eager_matches_bmm_inference(self, name, dtype):
-        _test_eager_matches_bmm_inference(self, name, dtype)
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
     @require_torch_accelerator
     @slow
