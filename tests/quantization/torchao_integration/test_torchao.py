@@ -669,10 +669,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
-        EXPECTED_OUTPUTS = ["What are we having for dinner?\n\nJessica: (smiling)",
-                            "What are we having for dinner?"
-                            ]
-
+        EXPECTED_OUTPUTS = ["What are we having for dinner?\n\nJessica: (smiling)", "What are we having for dinner?"]
 
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"

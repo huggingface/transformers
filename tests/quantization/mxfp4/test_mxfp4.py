@@ -240,7 +240,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         result_dtype = quantizer.update_dtype(torch.float32)
         self.assertEqual(result_dtype, torch.float32)
 
-
     def test_get_param_name_dequantize(self):
         """Test parameter name updating when dequantizing"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
