@@ -57,8 +57,12 @@ def flush_memory(flush_compile: bool = True) -> None:
                 if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
                     torch._inductor.codecache.TritonFuture._compile_cache.clear()
     # Clear CUDA cache
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    elif torch.xpu.is_available():
+        torch.xpu.empty_cache()
+        torch.xpu.synchronize()
     gc.collect()
 
 
@@ -187,6 +191,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         # Skip the test if Flash Attention 2 is required but not available
         if attn_implementation == "flash_attention_2" and not (is_flash_attn_2_available() or is_kernels_available()):
             self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
+        # Skip the test if cuda graph is on but the device is not CUDA
+        if use_cuda_graph and torch_device != "cuda":
+            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
 
         # Prepare continuous batching inputs
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
