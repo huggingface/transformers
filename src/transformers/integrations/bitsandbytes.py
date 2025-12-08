@@ -1,5 +1,4 @@
 import inspect
-from inspect import signature
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
@@ -160,7 +159,7 @@ def replace_with_bnb_linear(
     model: torch.nn.Module, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
     """
-    A helper function to replace all `torch.nn.Linear` modules by bnb modules from the `bitsandbytes` library. 
+    A helper function to replace all `torch.nn.Linear` modules by bnb modules from the `bitsandbytes` library.
 
     Args:
         model (`torch.nn.Module`):
@@ -314,12 +313,12 @@ def dequantize_and_replace(
             new_module.to(module.weight.device)
             model.set_submodule(module_name, new_module)
             has_been_replaced = True
-            
+
     if not has_been_replaced:
         logger.warning(
             "For some reason the model has not been properly dequantized. You might see unexpected behavior."
         )
-    return model 
+    return model
 
 
 def validate_bnb_backend_availability(raise_exception=False):
