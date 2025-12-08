@@ -20,30 +20,35 @@ sys.stderr.reconfigure(line_buffering=True)
 
 
 def print_both(message, flush=True):
-    """Print to both stdout (log file) and all terminals."""
+    """Print to stdout and write to all active terminal sessions."""
     print(message, flush=flush)
     
-    # Try to write to the original terminal (if it exists)
+    # Write to all active PTY terminals (where users are logged in)
     try:
-        with open('/dev/tty', 'w') as tty:
-            tty.write(message + '\n')
+        import glob
+        import os
+        
+        # Find all active PTY devices
+        for pty in glob.glob('/dev/pts/*'):
+            # Skip if not a number (like /dev/pts/ptmx)
+            if not os.path.basename(pty).isdigit():
+                continue
+            try:
+                # Try to write to this terminal
+                with open(pty, 'w') as f:
+                    f.write(message + '\n')
+            except:
+                # Terminal might not be writable, skip it
+                pass
     except:
         pass
     
-    # Also write to a shared file that users can monitor
+    # Also write to a persistent file
     try:
-        with open('/tmp/memory_monitor_alerts.txt', 'a') as f:
+        with open('/tmp/memory_monitor_last_alert.txt', 'a') as f:
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"[{timestamp}] {message}\n")
-    except:
-        pass
-    
-    # Try to broadcast to all logged-in terminals using wall
-    # This works even if the monitor started before SSH
-    try:
-        import subprocess
-        subprocess.run(['wall', message], stderr=subprocess.DEVNULL, timeout=1)
     except:
         pass
 
