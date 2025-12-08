@@ -69,11 +69,11 @@ _import_structure = {
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
         "LayerRepository",
+        "inject_module",
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
         "use_kernel_func_from_hub",
-        "inject_module",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
