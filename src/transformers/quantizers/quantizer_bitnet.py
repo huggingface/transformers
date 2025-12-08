@@ -37,14 +37,10 @@ class BitNetHfQuantizer(HfQuantizer):
     Check out the paper introducing this method: https://huggingface.co/papers/2402.17764
     """
 
-    requires_parameters_quantization = False
     requires_calibration = True
-
-    required_packages = ["accelerate"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -62,8 +58,8 @@ class BitNetHfQuantizer(HfQuantizer):
                 "You have loaded a BitNet model on CPU and have a CUDA device available, make sure to set "
                 "your model on a GPU device in order to run your model."
             )
-        elif device_map is not None:
-            if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        elif isinstance(device_map, dict):
+            if len(device_map) > 1 and "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
                     "You are attempting to load a BitNet model with a device_map that contains a CPU or disk device."
                     "This is not supported. Please remove the CPU or disk device from the device_map."

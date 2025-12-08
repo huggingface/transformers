@@ -279,9 +279,6 @@ class PeftAdapterMixin:
             )
             peft_config.inference_mode = not is_trainable
 
-        if peft_config.peft_type != PeftType.LORA:
-            raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
-
         if not hotswap:
             # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
@@ -299,13 +296,14 @@ class PeftAdapterMixin:
             renamings = [entry for entry in key_mapping if isinstance(entry, WeightRenaming)]
         processed_adapter_state_dict = {}
         prefix = "base_model.model."
+        state_dict = self.state_dict()
         for key, value in adapter_state_dict.items():
             if key.startswith(prefix):
                 new_key = key[len(prefix) :]
             else:
                 new_key = key
 
-            new_key = rename_source_key(new_key, renamings, [])[0]
+            new_key = rename_source_key(new_key, renamings, [], self.base_model_prefix, state_dict)[0]
 
             # For hotswapping, we need the adapter name to be present in the state dict keys
             if hotswap:
