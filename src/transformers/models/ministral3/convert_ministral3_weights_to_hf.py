@@ -38,22 +38,22 @@ from transformers.quantizers.auto import AutoQuantizationConfig
 STATE_DICT_MAPPING = {
     # Text model keys
     r"^output.weight":                            r"lm_head.weight",
-    r"^norm.weight":                              r"model.language_model.norm.weight",
-    r"^tok_embeddings.weight":                    r"model.language_model.embed_tokens.weight",
-    r"^layers.(\d+).attention_norm.weight":       r"model.language_model.layers.\1.input_layernorm.weight",
-    r"^layers.(\d+).ffn_norm.weight":             r"model.language_model.layers.\1.post_attention_layernorm.weight",
-    r"^layers.(\d+).attention.w(q|k|v|o).weight": r"model.language_model.layers.\1.self_attn.\2_proj.weight",
-    r"^layers.(\d+).feed_forward.w1.weight":      r"model.language_model.layers.\1.mlp.gate_proj.weight",
-    r"^layers.(\d+).feed_forward.w2.weight":      r"model.language_model.layers.\1.mlp.down_proj.weight",
-    r"^layers.(\d+).feed_forward.w3.weight":      r"model.language_model.layers.\1.mlp.up_proj.weight",
-    r"^layers.(\d+).attention.w(q|k|v|o).qscale_act": r"model.language_model.layers.\1.self_attn.\2_proj.activation_scale",
-    r"^layers.(\d+).feed_forward.w1.qscale_act":      r"model.language_model.layers.\1.mlp.gate_proj.activation_scale",
-    r"^layers.(\d+).feed_forward.w2.qscale_act":      r"model.language_model.layers.\1.mlp.down_proj.activation_scale",
-    r"^layers.(\d+).feed_forward.w3.qscale_act":      r"model.language_model.layers.\1.mlp.up_proj.activation_scale",
-    r"^layers.(\d+).attention.w(q|k|v|o).qscale_weight": r"model.language_model.layers.\1.self_attn.\2_proj.weight_scale_inv",
-    r"^layers.(\d+).feed_forward.w1.qscale_weight":      r"model.language_model.layers.\1.mlp.gate_proj.weight_scale_inv",
-    r"^layers.(\d+).feed_forward.w2.qscale_weight":      r"model.language_model.layers.\1.mlp.down_proj.weight_scale_inv",
-    r"^layers.(\d+).feed_forward.w3.qscale_weight":      r"model.language_model.layers.\1.mlp.up_proj.weight_scale_inv",
+    r"^norm.weight":                              r"model.norm.weight",
+    r"^tok_embeddings.weight":                    r"model.embed_tokens.weight",
+    r"^layers.(\d+).attention_norm.weight":       r"model.layers.\1.input_layernorm.weight",
+    r"^layers.(\d+).ffn_norm.weight":             r"model.layers.\1.post_attention_layernorm.weight",
+    r"^layers.(\d+).attention.w(q|k|v|o).weight": r"model.layers.\1.self_attn.\2_proj.weight",
+    r"^layers.(\d+).feed_forward.w1.weight":      r"model.layers.\1.mlp.gate_proj.weight",
+    r"^layers.(\d+).feed_forward.w2.weight":      r"model.layers.\1.mlp.down_proj.weight",
+    r"^layers.(\d+).feed_forward.w3.weight":      r"model.layers.\1.mlp.up_proj.weight",
+    r"^layers.(\d+).attention.w(q|k|v|o).qscale_act": r"model.layers.\1.self_attn.\2_proj.activation_scale",
+    r"^layers.(\d+).feed_forward.w1.qscale_act":      r"model.layers.\1.mlp.gate_proj.activation_scale",
+    r"^layers.(\d+).feed_forward.w2.qscale_act":      r"model.layers.\1.mlp.down_proj.activation_scale",
+    r"^layers.(\d+).feed_forward.w3.qscale_act":      r"model.layers.\1.mlp.up_proj.activation_scale",
+    r"^layers.(\d+).attention.w(q|k|v|o).qscale_weight": r"model.layers.\1.self_attn.\2_proj.weight_scale_inv",
+    r"^layers.(\d+).feed_forward.w1.qscale_weight":      r"model.layers.\1.mlp.gate_proj.weight_scale_inv",
+    r"^layers.(\d+).feed_forward.w2.qscale_weight":      r"model.layers.\1.mlp.down_proj.weight_scale_inv",
+    r"^layers.(\d+).feed_forward.w3.qscale_weight":      r"model.layers.\1.mlp.up_proj.weight_scale_inv",
 
     # Vision model keys
     r"vision_encoder.transformer.layers.(\d+).attention_norm.weight": r"model.vision_tower.transformer.layers.\1.attention_norm.weight",
@@ -114,10 +114,11 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
             key_value_dim = head_dim * num_attention_heads
             query_dim = head_dim * num_attention_heads
         else:
-            num_attention_heads = config.text_config.num_attention_heads
-            hidden_size = config.text_config.hidden_size
-            head_dim = config.text_config.head_dim
-            num_key_value_heads = config.text_config.num_key_value_heads
+            text_config = config.text_config if isinstance(config, Mistral3Config) else config
+            num_attention_heads = text_config.num_attention_heads
+            hidden_size = text_config.hidden_size
+            head_dim = text_config.head_dim
+            num_key_value_heads = text_config.num_key_value_heads
             key_value_dim = head_dim * num_key_value_heads
             query_dim = head_dim * num_attention_heads
 
@@ -161,7 +162,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
         "beta_slow": float(original_config["yarn"]["alpha"]),
         "mscale_all_dim": 1.0,
         "mscale": 1.0,
-        "llama_4_scaling_beta": original_config["llama_4_scaling"]["beta"],
+        # "llama_4_scaling_beta": original_config["llama_4_scaling"]["beta"],
     }
 
     # These are not always defined depending on `params.json`
@@ -173,10 +174,22 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
     if new_text_config_kwargs["sliding_window"] is not None:
         new_text_config_kwargs["sliding_window"] = int(new_text_config_kwargs["sliding_window"])
 
-    new_text_config = Ministral3Config(**new_text_config_kwargs)
+    def get_maybe_quant_config() -> dict:
+        kwargs = {}
+        if original_config.get("quantization", {}).get("qformat_weight") == "fp8_e4m3":
+            assert original_config["quantization"]["qscheme_act"] == "TENSOR"
+            quantization_config = {
+                "activation_scheme": "static",
+                "modules_to_not_convert": ["model.vision_tower", "model.multi_modal_projector", "lm_head"],
+                "quant_method": "fp8",
+                "weight_block_size": None,
+            }
+            kwargs['quantization_config'] = AutoQuantizationConfig.from_dict(quantization_config)
+        return kwargs
 
     # No vision
     if original_vision_config is None:
+        new_text_config = Ministral3Config(**new_text_config_kwargs, **get_maybe_quant_config())
         return new_text_config
 
     # Vision config
@@ -191,17 +204,6 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
     _ = new_vision_config.pop("max_image_size")
     new_vision_config = PixtralVisionConfig(hidden_act="silu", **new_vision_config)
 
-    kwargs = {}
-    if original_config.get("quantization", {}).get("qformat_weight") == "fp8_e4m3":
-        assert original_config["quantization"]["qscheme_act"] == "TENSOR"
-        quantization_config = {
-            "activation_scheme": "static",
-            "modules_to_not_convert": ["model.vision_tower", "model.multi_modal_projector", "lm_head"],
-            "quant_method": "fp8",
-            "weight_block_size": None,
-        }
-        kwargs["quantization_config"] = AutoQuantizationConfig.from_dict(quantization_config)
-
     new_config = Mistral3Config(
         vision_config=new_vision_config,
         text_config=new_text_config,
@@ -209,7 +211,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
         image_token_id=image_token_id,
         spatial_merge_size=spatial_merge_size,
         vision_feature_layer=-1,
-        **kwargs,
+        **get_maybe_quant_config()
     )
     return new_config
 
@@ -228,8 +230,9 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
         new_dict = convert_state_dict(original_state_dict, config)
         full_state_dict.update(new_dict)
 
-    if config.text_config.tie_word_embeddings:
-        full_state_dict["lm_head.weight"] = full_state_dict["model.language_model.embed_tokens.weight"]
+    text_config = config.text_config if isinstance(config, Mistral3Config) else config
+    if text_config.tie_word_embeddings:
+        full_state_dict["lm_head.weight"] = full_state_dict["model.embed_tokens.weight"]
 
     # Load weights into model and resave them
     with torch.device("meta"):
