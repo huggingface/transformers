@@ -34,13 +34,6 @@ if is_vision_available():
         FRAME_TIMESTAMP_MESSAGE,
     )
 
-if is_vision_available():
-    from .video_processing_smolvlm import (
-        DEFAULT_MEDIA_OUTTRO,
-        DEFAULT_VIDEO_INTRO,
-        FRAME_TIMESTAMP_MESSAGE,
-    )
-
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
