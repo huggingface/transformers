@@ -332,26 +332,14 @@ class StaticLayer(CacheLayerMixin):
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
 
-        # ROCm: use slice assignment (index_copy_ unreliable on HIP)
-        use_index_copy = torch.version.hip is None
-        if use_index_copy:
-            try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-                return self.keys, self.values
-            except NotImplementedError:
-                pass    
-        # fallback for ROCm or if index_copy_ isn't supported
-        # Avoid graph break by using tensor indexing directly
-        if cache_position.numel() == 1:
-            # For single position, use squeeze to get scalar tensor (not Python int)
-            idx = cache_position.squeeze()
-            self.keys[:, :, idx:idx+1, :] = key_states
-            self.values[:, :, idx:idx+1, :] = value_states
-        else:
-            # For multiple positions, use tensor directly
-            self.keys[:, :, cache_position, :] = key_states
-            self.values[:, :, cache_position, :] = value_states
+        # Update the cache
+        try:
+            self.keys.index_copy_(2, cache_position, key_states)
+            self.values.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            self.keys[:, :, cache_position] = key_states
+            self.values[:, :, cache_position] = value_states
         return self.keys, self.values
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
@@ -456,26 +444,12 @@ class StaticSlidingWindowLayer(StaticLayer):
                 full_key_states = torch.cat((self.keys[:, :, :cumulative_length, :], key_states), dim=-2)
                 full_value_states = torch.cat((self.values[:, :, :cumulative_length, :], value_states), dim=-2)
         else:
-            # ROCm: use slice assignment (index_copy_ unreliable on HIP)
-            use_index_copy = torch.version.hip is None
-            if use_index_copy:
-                try:
-                    self.keys.index_copy_(2, cache_position, key_states)
-                    self.values.index_copy_(2, cache_position, value_states)
-                    return self.keys, self.values
-                except NotImplementedError:
-                    pass    
-            # fallback for ROCm or if index_copy_ isn't supported
-            # Avoid graph break by using tensor indexing directly
-            if cache_position.numel() == 1:
-                # For single position, use squeeze to get scalar tensor (not Python int)
-                idx = cache_position.squeeze()
-                self.keys[:, :, idx:idx+1, :] = key_states
-                self.values[:, :, idx:idx+1, :] = value_states
-            else:
-                # For multiple positions, use tensor directly
-                self.keys[:, :, cache_position, :] = key_states
-                self.values[:, :, cache_position, :] = value_states
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
