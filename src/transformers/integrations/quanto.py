@@ -57,7 +57,7 @@ class QuantoQuantize(ConversionOps):
 def replace_with_quanto_layers(
     model,
     quantization_config=None,
-    modules_to_not_convert=None,
+    modules_to_not_convert: list[str] | None = None,
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with Quanto quantized layers.
@@ -68,7 +68,7 @@ def replace_with_quanto_layers(
             The model to convert, can be any `torch.nn.Module` instance.
         quantization_config (`QuantoConfig`, defaults to `None`):
             The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`list`, *optional*, defaults to `None`):
+        modules_to_not_convert (`list`, defaults to `None`):
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
             converted.
     """
