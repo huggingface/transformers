@@ -376,7 +376,8 @@ def use_kernelized_func(module_names: list[Callable]):
         def new_init(self, *args, **kwargs):
             orig_init(self, *args, **kwargs)
             for fn in module_names:
-                setattr(self, fn.kernel_layer_name, fn)
+                # we hardcode the name of the function to "rotary_fn" for now
+                setattr(self, "rotary_fn", fn)
 
         cls.__init__ = new_init
         return cls
