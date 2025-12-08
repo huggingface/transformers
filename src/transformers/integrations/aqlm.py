@@ -27,7 +27,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 def replace_with_aqlm_linear(
-    model: torch.nn.Module, modules_to_not_convert: list[str] | None = None, quantization_config=None
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with AQLM quantized layers.
