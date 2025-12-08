@@ -18,7 +18,7 @@ import os
 from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -28,7 +28,6 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     copy_func,
-    is_offline_mode,
     logging,
     safe_load_json_file,
 )

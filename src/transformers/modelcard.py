@@ -23,7 +23,7 @@ from typing import Any, Optional, Union
 
 import httpx
 import yaml
-from huggingface_hub import model_info
+from huggingface_hub import is_offline_mode, model_info
 from huggingface_hub.errors import OfflineModeIsEnabled
 from huggingface_hub.utils import HFValidationError
 
@@ -50,7 +50,6 @@ from .utils import (
     MODEL_CARD_NAME,
     cached_file,
     is_datasets_available,
-    is_offline_mode,
     is_tokenizers_available,
     is_torch_available,
     logging,
