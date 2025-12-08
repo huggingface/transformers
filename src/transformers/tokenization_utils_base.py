@@ -2021,8 +2021,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-        if hasattr(tokenizer, "_post_init") and not getattr(tokenizer, "_post_init_done", False):
-            tokenizer._post_init()
         return tokenizer
 
     @classmethod
