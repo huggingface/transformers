@@ -57,19 +57,6 @@ else:
 
 logger = logging.get_logger(__name__)
 
-
-class AutoTokenizerError(ValueError):
-    """Base class for AutoTokenizer loading errors."""
-
-
-class AutoTokenizerBackendError(AutoTokenizerError):
-    """Raised when the requested tokenizer backend cannot be used."""
-
-
-class AutoTokenizerLoadError(AutoTokenizerError):
-    """Raised when no tokenizer can be loaded from a checkpoint."""
-
-
 # V5: Simplified mapping - single tokenizer class per model type (always prefer tokenizers-based)
 REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
 REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
