@@ -457,7 +457,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             "exponential_decay_length_penalty": None,
             "suppress_tokens": None,
             "begin_suppress_tokens": None,
-            "use_cache": True,
             # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
             "num_beam_groups": 1,
             "diversity_penalty": 0.0,

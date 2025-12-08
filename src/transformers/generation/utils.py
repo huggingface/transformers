@@ -1800,6 +1800,10 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
 
+        # TODO: fixme tmrw, rn lets see what tests can fails except for cache related tests
+        if generation_config.cache_implementation is not None and generation_config.use_cache is None:
+            generation_config.use_cache = True
+
         # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
