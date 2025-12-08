@@ -80,6 +80,38 @@ jobs:
         run: |
           nvidia-smi
 
+      - name: Create python alias
+        run: |
+          ln -sf $(which python3) /usr/local/bin/python
+          ln -sf $(which pip3) /usr/local/bin/pip
+          echo "✅ python -> python3 symlink created"
+
+      - name: Install psutil for memory monitor
+        run: |
+          pip install psutil --break-system-packages
+
+      - name: Download memory monitor script
+        working-directory: /transformers
+        run: |
+          apt-get update && apt-get install -y curl
+          curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
+
+      - name: Start memory monitor
+        working-directory: /transformers
+        continue-on-error: true  # Don't fail workflow if monitor has issues
+        run: |
+          python3 memory_monitor.py --threshold 90 --interval 1 > memory_monitor.log 2>&1 &
+          echo $! > memory_monitor.pid
+          echo "Memory monitor started with PID $(cat memory_monitor.pid)"
+          # Give it a moment to start
+          sleep 2
+          # Verify it's running
+          ps aux | grep memory_monitor | grep -v grep || echo "Warning: memory monitor may not be running"
+
+      - name: Install utilities
+        run: |
+          apt-get install -y nano
+
       - name: Store Slack infos
         #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
         shell: bash
@@ -91,6 +123,36 @@ jobs:
           github_actor=${github_actor/'-'/'_'}
           echo "$github_actor"
           echo "github_actor=$github_actor" >> $GITHUB_ENV
+
+      - name: Setup automatic environment for SSH login
+        run: |
+          # Create shared environment setup
+          cat > /root/.env_setup << 'EOF'
+          # Auto-setup (non-sensitive vars)
+          export HF_HOME=/mnt/cache
+          export TRANSFORMERS_IS_CI=yes
+          export OMP_NUM_THREADS=8
+          export MKL_NUM_THREADS=8
+          export RUN_SLOW=yes
+          export TF_FORCE_GPU_ALLOW_GROWTH=true
+          export CUDA_VISIBLE_DEVICES=0,1
+          
+          cd /transformers 2>/dev/null || true
+          
+          # Remind user to set token if needed
+          if [ -z "$HF_HUB_READ_TOKEN" ]; then
+              echo "⚠️  HF_HUB_READ_TOKEN not set. Set it with:"
+              echo "    export HF_HUB_READ_TOKEN=hf_xxxxx"
+          else
+              echo "✅ HF_HUB_READ_TOKEN is set"
+          fi
+          
+          echo "📁 Working directory: $(pwd)"
+          EOF
+          
+          # Source from both .bash_profile and .bashrc
+          echo 'source /root/.env_setup' >> /root/.bash_profile
+          echo 'source /root/.env_setup' >> /root/.bashrc
 
       - name: Store Slack infos
         #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
