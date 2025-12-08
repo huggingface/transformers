@@ -1651,6 +1651,35 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 }
 
             vocab_files = {**cls.vocab_files_names, **additional_files_names}
+            
+            # Check for versioned tokenizer files
+            if "tokenizer_file" in vocab_files:
+                fast_tokenizer_file = FULL_TOKENIZER_FILE
+                try:
+                    resolved_config_file = cached_file(
+                        pretrained_model_name_or_path,
+                        TOKENIZER_CONFIG_FILE,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        token=token,
+                        revision=revision,
+                        local_files_only=local_files_only,
+                        subfolder=subfolder,
+                        user_agent=user_agent,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
+                    )
+                    if resolved_config_file is not None:
+                        with open(resolved_config_file, encoding="utf-8") as reader:
+                            tokenizer_config = json.load(reader)
+                            if "fast_tokenizer_files" in tokenizer_config:
+                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                        commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+                except Exception:
+                    pass
+                vocab_files["tokenizer_file"] = fast_tokenizer_file
+            
             # This block looks for any extra chat template files
             if is_local:
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
