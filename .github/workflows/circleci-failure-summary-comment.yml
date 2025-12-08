@@ -111,8 +111,9 @@ jobs:
           failure_summary_url=$(echo "$artifacts" | jq -r '.items[] | select(.path == "outputs/failure_summary.json") | .url')
           
           if [ -z "$failure_summary_url" ]; then
-            echo "failure_summary.json not found in artifacts"
-            exit 1
+            echo "failure_summary.json not found in artifacts - PR may not have latest main merged. Skipping."
+            echo "artifact_found=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
           
           echo "Downloading failure_summary.json from: ${failure_summary_url}"
@@ -123,18 +124,21 @@ jobs:
           echo "Downloaded failure_summary.json successfully"
           
           # Verify the file was downloaded
-          if [ -f outputs/failure_summary.json ]; then
-            echo "File size: $(wc -c < outputs/failure_summary.json) bytes"
-          else
-            echo "Failed to download failure_summary.json"
-            exit 1
+          if [ ! -f outputs/failure_summary.json ]; then
+            echo "Failed to download failure_summary.json - skipping."
+            echo "artifact_found=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
           
+          echo "File size: $(wc -c < outputs/failure_summary.json) bytes"
+          
           # Export variables for next steps
+          echo "artifact_found=true" >> $GITHUB_OUTPUT
           echo "workflow_id=${workflow_id}" >> $GITHUB_OUTPUT
           echo "collection_job_number=${collection_job_number}" >> $GITHUB_OUTPUT
 
       - name: Upload summaries to Hub
+        if: steps.circleci.outputs.artifact_found == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_CI_WRITE_TOKEN }}
           CIRCLECI_RESULTS_DATASET_ID: "transformers-community/circleci-test-results"
@@ -170,6 +174,7 @@ jobs:
           EOF
 
       - name: Post comment with helper link
+        if: steps.circleci.outputs.artifact_found == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
