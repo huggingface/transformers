@@ -107,8 +107,10 @@ class DebertaV2Tokenizer(TokenizersBackend):
                 (str(mask_token), 0.0),
             ]
             unk_id = 1
-        self._vocab = vocab
+        elif isinstance(vocab, list):
+            unk_id = vocab.index((str(unk_token),0.0)) if (str(unk_token),0.0) in vocab else unk_id
 
+        self._vocab = vocab
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab,
