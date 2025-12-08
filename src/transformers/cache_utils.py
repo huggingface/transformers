@@ -281,6 +281,8 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
+        self.keys = self.keys_full
+        self.values = self.values_full
 
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.keys_full)
@@ -352,7 +354,7 @@ class StaticLayer(CacheLayerMixin):
         if beam_idx.device != self.device:
             beam_idx = beam_idx.to(self.device)
 
-        # We must reorder the BACKING STORAGE (keys_full)
+        # We must reorder the BACKING STORAGE (keys_)
         current_batch_size = beam_idx.shape[0]
 
         # Select the beams from backing storage
