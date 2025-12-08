@@ -95,7 +95,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     _tokenizer = None
 
     @classmethod
-    def convert_to_native_format(cls, **kwargs):
+    def convert_to_native_format(cls, trust_remote_code=False, **kwargs):
         """s
         Build a `tokenizers.Tokenizer` backend from the available serialization files (tokenizer.json, sentencepiece
         models, tekken.json, vocab/merges).
@@ -107,7 +107,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if (
             fast_tokenizer_file is not None
             and os.path.isfile(fast_tokenizer_file)
-            and (cls is TokenizersBackend or "__init__" not in cls.__dict__)
+            and (cls is TokenizersBackend or "__init__" not in cls.__dict__ or trust_remote_code)
         ):
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
             return local_kwargs

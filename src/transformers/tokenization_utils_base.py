@@ -1999,7 +1999,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # for `tokenizers` based tokenizer, we actually want to have vocab and merges pre-extracted from whatever inputs
         # for `none` (PythonBackend) based tokenizer, we also want the vocab file / merge files not extracted.
         # for `sentencepiece` based tokenizer, we pass the sentencepiece model file directly.
-        init_kwargs = cls.convert_to_native_format(**init_kwargs)
+        init_kwargs = cls.convert_to_native_format(**init_kwargs, trust_remote_code=trust_remote_code)
 
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
