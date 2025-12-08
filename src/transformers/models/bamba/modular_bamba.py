@@ -73,6 +73,7 @@ mamba_split_conv1d_scan_combined = (
 
 is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
+
 logger = logging.get_logger(__name__)
 
 
