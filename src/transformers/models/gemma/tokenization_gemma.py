@@ -71,8 +71,8 @@ class GemmaTokenizer(TokenizersBackend):
         add_eos_token: bool = False,
         **kwargs,
     ):
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
         if vocab is None:
             vocab = {
                 str(pad_token): 0,

@@ -126,8 +126,8 @@ class GPT2Tokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
 
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = False
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = False
 
         super().__init__(
             errors=errors,

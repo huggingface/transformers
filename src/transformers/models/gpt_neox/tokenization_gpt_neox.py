@@ -112,8 +112,8 @@ class GPTNeoXTokenizer(TokenizersBackend):
         trim_offsets: bool = True,
         **kwargs,
     ):
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
 

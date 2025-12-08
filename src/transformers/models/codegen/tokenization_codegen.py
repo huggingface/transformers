@@ -133,8 +133,8 @@ class CodeGenTokenizer(TokenizersBackend):
         )
 
         # Set these before calling super().__init__() so the base class _post_init() can use them
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = False
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = False
 
         super().__init__(
             unk_token=unk_token,

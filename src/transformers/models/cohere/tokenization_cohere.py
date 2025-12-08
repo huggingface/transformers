@@ -131,8 +131,8 @@ class CohereTokenizer(TokenizersBackend):
         add_prefix_space: bool = False,
         **kwargs,
     ):
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
         self.add_prefix_space = add_prefix_space
         self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)

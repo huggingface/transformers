@@ -395,7 +395,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # If eos_token is None and add_eos_token is True, silently disable add_eos_token
         # This allows tokenizers to set add_eos_token even if eos_token is not configured
         if eos is None and self.add_eos_token:
-            self._add_eos_token = False
+            self.add_eos_token = False
             return
 
         single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"

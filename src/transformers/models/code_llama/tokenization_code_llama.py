@@ -186,8 +186,8 @@ class CodeLlamaTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
 
         self._prefix_token = prefix_token
         self._middle_token = middle_token
