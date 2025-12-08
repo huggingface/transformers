@@ -51,7 +51,7 @@ class Ernie4_5_VLImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to `None`):
+    temporal_patch_size (`int`, *optional*):
         The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
@@ -96,31 +96,31 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
     Constructs a Ernie 4.5 VL image processor that dynamically resizes images based on the original images.
 
     Args:
-            do_resize (`bool`, *optional*, defaults to `True`):
-                Whether to resize the image's (height, width) dimensions.
-            size (`dict[str, int]`, *optional*, defaults to `{"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}`):
-                Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-                Resampling filter to use when resizing the image.
-            do_rescale (`bool`, *optional*, defaults to `True`):
-                Whether to rescale the image by the specified scale `rescale_factor`.
-            rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-                Scale factor to use if rescaling the image.
-            do_normalize (`bool`, *optional*, defaults to `True`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-                Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-            image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-                Standard deviation to use if normalizing the image. This is a float or list of floats for each channel
-                in the image.
-            do_convert_rgb (`bool`, *optional*, defaults to `True`):
-                Whether to convert the image to RGB.
-            patch_size (`int`, *optional*, defaults to 14):
-                The spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*):
-                The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
-            merge_size (`int`, *optional*, defaults to 2):
-                The merge size of the vision encoder to llm encoder.
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's (height, width) dimensions.
+        size (`dict[str, int]`, *optional*, defaults to `{"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}`):
+            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+            Resampling filter to use when resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image.
+        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
+            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
+        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel
+            in the image.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
+        patch_size (`int`, *optional*, defaults to 14):
+            The spatial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*):
+            The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
     """
 
     model_input_names = ["pixel_values", "image_grid_thw"]
@@ -208,7 +208,7 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
                 The spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*, defaults to `None`):
+            temporal_patch_size (`int`, *optional*):
                 The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
             merge_size (`int`, *optional*, defaults to `self.merge_size`):
                 The merge size of the vision encoder to llm encoder.

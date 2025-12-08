@@ -1215,7 +1215,7 @@ class Ernie4_5_VLImageProcessorKwargs(Glm4vImageProcessorKwargs):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to `None`):
+    temporal_patch_size (`int`, *optional*):
         The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
@@ -1248,7 +1248,7 @@ class Ernie4_5_VLImageProcessor(Glm4vImageProcessor):
             Whether to convert the image to RGB.
         patch_size (`int`, *optional*, defaults to 14):
             The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to `None`):
+        temporal_patch_size (`int`, *optional*):
             The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
@@ -1336,7 +1336,7 @@ class Ernie4_5_VLImageProcessor(Glm4vImageProcessor):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
                 The spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*, defaults to `None`):
+            temporal_patch_size (`int`, *optional*):
                 The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
             merge_size (`int`, *optional*, defaults to `self.merge_size`):
                 The merge size of the vision encoder to llm encoder.
