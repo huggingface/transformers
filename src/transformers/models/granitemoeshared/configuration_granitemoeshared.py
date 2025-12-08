@@ -187,4 +187,5 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
 
         super().__init__(**kwargs)
 
+
 __all__ = ["GraniteMoeSharedConfig"]

@@ -189,7 +189,6 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         max_window_layers: Optional[int] = 80,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
-        pad_token_id: Optional[int] = None,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         bos_token_id: Optional[int] = 151643,
         eos_token_id: Optional[int] = 151645,

@@ -215,6 +215,7 @@ class Gemma2Config(PreTrainedConfig):
 
         super().__init__(**kwargs)
 
+
 class Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
