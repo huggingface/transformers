@@ -4093,9 +4093,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
-            # If we are using timm backbone, we need to make sure weights get loaded after the model is initialized
-            if getattr(config, "use_timm_backbone", False) and getattr(config, "use_pretrained_backbone", False):
-                config.use_pretrained_backbone = False
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
