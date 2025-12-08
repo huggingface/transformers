@@ -508,6 +508,118 @@ def _test_eager_matches_sdpa_inference(
                 )
 
 
+def _is_pure_python_object(obj: any) -> bool:
+    if isinstance(obj, (int, float, bool, str)) or obj is None:
+        return True
+    elif isinstance(obj, (list, tuple, set)):
+        return all(_is_pure_python_object(o) for o in obj)
+    elif isinstance(obj, dict):
+        return all(_is_pure_python_object(v) for v in obj.values())
+    else:
+        return False
+
+
+def _get_leaf_tensors(obj: any) -> dict[str, torch.Tensor]:
+    """
+    Recursively retrieves all leaf tensors from a potentialy nested structure.
+    Args:
+        obj (`Any`):
+            The object from which to retrieve leaf tensors.
+    Returns:
+        `dict[str, torch.Tensor]`: A dictionary mapping names to leaf tensors.
+    """
+    if _is_pure_python_object(obj):
+        return {}
+    elif isinstance(obj, torch.Tensor):
+        return {"": obj}
+    elif isinstance(obj, (list, tuple, set)):
+        return _get_leaf_tensors(dict(enumerate(obj)))
+    elif isinstance(obj, dict):
+        leaf_tensors = {}
+        for key, value in obj.items():
+            for sub_key, tensor in _get_leaf_tensors(value).items():
+                full_key = f"{key}.{sub_key}" if sub_key else key
+                leaf_tensors[full_key] = tensor
+        return leaf_tensors
+    else:
+        raise ValueError(f"Unsupported type: {type(obj)}")
+
+
+TEST_EAGER_MATCHES_BMM_INFERENCE_PARAMETERIZATION = [
+    (
+        # test name for the test runner
+        f"{dtype}",
+        # parameterization
+        *(dtype,),
+    )
+    for dtype in ("fp16", "fp32", "bf16")
+]
+
+
+def _test_eager_matches_bmm_inference(self, name, dtype):
+    if not self.has_moes:
+        self.skipTest(reason="Model architecture does not support Mixture of Experts (MoE)")
+
+    # convert shorthand name to torch.dtype
+    if dtype == "fp16":
+        dtype = torch.float16
+    elif dtype == "bf16":
+        dtype = torch.bfloat16
+    elif dtype == "fp32":
+        dtype = torch.float32
+
+    if not is_torch_fp16_available_on_device(torch_device) and dtype == torch.float16:
+        self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+    if not is_torch_bf16_available_on_device(torch_device) and dtype == torch.bfloat16:
+        self.skipTest(
+            f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+        )
+
+    for model_class in self.all_model_classes:
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
+        model = model_class(config)
+
+        # Disable cache for now
+        inputs_dict.pop("use_cache", None)
+        for module in model.modules():
+            if hasattr(module, "config") and hasattr(module.config, "use_cache"):
+                module.config.use_cache = False
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # set using moe_implementation in from_pretrained
+            model_bmm = model_class.from_pretrained(tmpdirname, dtype=dtype, moe_implementation="bmm")
+            model_bmm = model_bmm.eval().to(torch_device)
+
+            # set using set_moe_implementation after from_pretrained
+            model_eager = deepcopy(model_bmm)
+            model_eager.set_moe_implementation("eager")
+
+        self.assertEqual(model_eager.config._moe_implementation, "eager")
+        self.assertEqual(model_bmm.config._moe_implementation, "bmm")
+
+        set_model_for_less_flaky_test(model_eager)
+        set_model_for_less_flaky_test(model_bmm)
+
+        with torch.no_grad():
+            inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            outputs_eager = model_eager(**prepared_inputs)
+            outputs_bmm = model_bmm(**prepared_inputs)
+
+        outputs_eager = _get_leaf_tensors(outputs_eager)
+        outputs_bmm = _get_leaf_tensors(outputs_bmm)
+
+        self.assertTrue(outputs_eager, "No outputs from eager implementation")
+        self.assertTrue(outputs_bmm, "No outputs from bmm implementation")
+
+        torch.testing.assert_close(outputs_eager, outputs_bmm, rtol=1e-4, atol=1e-4)
+
+
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__:
@@ -578,6 +690,7 @@ class ModelTesterMixin:
     test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
+    has_moes = False
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
 
@@ -3082,6 +3195,10 @@ class ModelTesterMixin:
         _test_eager_matches_sdpa_inference(
             self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
         )
+
+    @parameterized.expand(TEST_EAGER_MATCHES_BMM_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_bmm_inference(self, name, dtype):
+        _test_eager_matches_bmm_inference(self, name, dtype)
 
     @require_torch_accelerator
     @slow

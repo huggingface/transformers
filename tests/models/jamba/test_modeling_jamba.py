@@ -340,6 +340,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
+    has_moes = True
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)

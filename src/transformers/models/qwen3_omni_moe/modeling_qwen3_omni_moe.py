@@ -47,7 +47,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ALL_MOE_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
 from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
@@ -1318,6 +1318,37 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         return freqs_t
 
 
+def eager_moe_forward(
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    gate_up_proj: torch.Tensor,
+    down_proj: torch.Tensor,
+    act_fn: Callable,
+) -> torch.Tensor:
+    num_experts = gate_up_proj.size(0)
+    final_hidden_states = torch.zeros_like(hidden_states)
+
+    with torch.no_grad():
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts)
+        expert_mask = expert_mask.permute(2, 1, 0)
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+    for expert_idx in expert_hit:
+        expert_idx = expert_idx[0]
+        if expert_idx == num_experts:
+            continue
+        top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+        current_state = hidden_states[token_idx]
+        gate, up = nn.functional.linear(current_state, gate_up_proj[expert_idx]).chunk(2, dim=-1)
+        current_hidden_states = act_fn(gate) * up
+        current_hidden_states = nn.functional.linear(current_hidden_states, down_proj[expert_idx])
+        current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+        final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+    return final_hidden_states
+
+
 class Qwen3OmniMoeThinkerTextExperts(nn.Module):
     """
     ModuleList of experts.
@@ -1325,8 +1356,9 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
 
     def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.config = config
         self.hidden_dim = config.hidden_size
+        self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
@@ -1338,23 +1370,18 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        moe_forward: Callable = eager_moe_forward
+        if self.config._moe_implementation != "eager":
+            moe_forward = ALL_MOE_FUNCTIONS[self.config._moe_implementation]
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+        final_hidden_states = moe_forward(
+            hidden_states,
+            top_k_index,
+            top_k_weights,
+            gate_up_proj=self.gate_up_proj,
+            down_proj=self.down_proj,
+            act_fn=self.act_fn,
+        )
 
         return final_hidden_states
 
@@ -2750,8 +2777,9 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.config = config
         self.hidden_dim = config.hidden_size
+        self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
@@ -2763,23 +2791,18 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        moe_forward: Callable = eager_moe_forward
+        if self.config._moe_implementation != "eager":
+            moe_forward = ALL_MOE_FUNCTIONS[self.config._moe_implementation]
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+        final_hidden_states = moe_forward(
+            hidden_states,
+            top_k_index,
+            top_k_weights,
+            gate_up_proj=self.gate_up_proj,
+            down_proj=self.down_proj,
+            act_fn=self.act_fn,
+        )
 
         return final_hidden_states
 

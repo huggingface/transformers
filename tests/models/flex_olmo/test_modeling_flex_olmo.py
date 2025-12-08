@@ -57,6 +57,8 @@ class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = FlexOlmoForCausalLM if is_torch_available() else None
 
+    has_moes = True
+
     @unittest.skip("Dynamic control flow in MoE")
     @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):

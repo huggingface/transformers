@@ -266,6 +266,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
     _is_composite = True
     model_split_percents = [0.5, 0.9]
+    has_moes = True
 
     def setUp(self):
         self.model_tester = Qwen3OmniMoeThinkerForConditionalGenerationTester(self)
