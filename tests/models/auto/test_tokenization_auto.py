@@ -184,6 +184,12 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(AutoTokenizer.from_pretrained("google-bert/bert-base-cased"), BertTokenizerFast)
 
     @require_tokenizers
+    @slow
+    def test_custom_tokenizer_from_hub(self):
+        tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM-Llama3-V-2_5", trust_remote_code=True, revision="fd7f352fac0e06d0d818b23f98e3ec8c64267a57")
+        self.assertTrue(tokenizer.__class__.__module__.startswith("transformers_modules."))
+
+    @require_tokenizers
     def test_voxtral_tokenizer_converts_from_tekken(self):
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
         tokenization_auto = transformers.models.auto.tokenization_auto
