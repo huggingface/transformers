@@ -230,7 +230,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         super().__init__(
-            ignore_keys_at_rope_validation={"mrope"},
+            ignore_keys_at_rope_validation={"mrope_section"},
             **kwargs,
         )
 
