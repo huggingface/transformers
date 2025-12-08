@@ -191,7 +191,7 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
 
     def test_shortened_model_generation(self):
         # This is gibberish which is expected as the model are the first x layers of the original 28B model
-        EXPECTED_TEXT_COMPLETION = 'User: Hey, are you conscious? Can you talk to me?\nAssistant: 不了的 tongues说话 dagat绵席裹着头phonesurfingapps提供商懿enbergel疡疡疡疡疡疡疡疡疡疡疡疡疡疡疡'  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = 'User: Hey, are you conscious? Can you talk to me?\nAssistant: 不了的 tongues说话 dagat绵席裹着头phones<mask:11>odikèkèk<mask:11><mask:11>bun褶席席地说起来这么说的话的话retti upside upsideolate疡疡疡'  # fmt: skip
 
         model = self.get_small_model()
         tokenizer = AutoTokenizer.from_pretrained("baidu/ERNIE-4.5-21B-A3B-PT")
