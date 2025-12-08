@@ -828,7 +828,10 @@ class EomtImageProcessor(BaseImageProcessor):
 
                 for idx in range(len(segmentation_logits)):
                     resized_logits = torch.nn.functional.interpolate(
-                        segmentation_logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                        segmentation_logits[idx].unsqueeze(dim=0),
+                        size=target_sizes[idx],
+                        mode="bilinear",
+                        align_corners=False,
                     )[0]
                     output_logits.append(resized_logits[0])
             else:
