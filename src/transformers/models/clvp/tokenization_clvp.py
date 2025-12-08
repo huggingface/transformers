@@ -134,6 +134,8 @@ class ClvpTokenizer(PreTrainedTokenizer):
         "input_ids",
         "attention_mask",
     ]
+    add_bos_token = True
+    add_eos_token = True
 
     def __init__(
         self,
