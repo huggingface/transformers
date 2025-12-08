@@ -340,11 +340,18 @@ class StaticLayer(CacheLayerMixin):
                 self.values.index_copy_(2, cache_position, value_states)
                 return self.keys, self.values
             except NotImplementedError:
-                pass
+                pass    
         # fallback for ROCm or if index_copy_ isn't supported
-        p = int(cache_position) if cache_position.numel() == 1 else cache_position
-        idx = slice(p, p + 1) if isinstance(p, int) else p
-        self.keys[:, :, idx, :], self.values[:, :, idx, :] = key_states, value_states
+        # Avoid graph break by using tensor indexing directly
+        if cache_position.numel() == 1:
+            # For single position, use squeeze to get scalar tensor (not Python int)
+            idx = cache_position.squeeze()
+            self.keys[:, :, idx:idx+1, :] = key_states
+            self.values[:, :, idx:idx+1, :] = value_states
+        else:
+            # For multiple positions, use tensor directly
+            self.keys[:, :, cache_position, :] = key_states
+            self.values[:, :, cache_position, :] = value_states
         return self.keys, self.values
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
@@ -457,11 +464,18 @@ class StaticSlidingWindowLayer(StaticLayer):
                     self.values.index_copy_(2, cache_position, value_states)
                     return self.keys, self.values
                 except NotImplementedError:
-                    pass
+                    pass    
             # fallback for ROCm or if index_copy_ isn't supported
-            p = int(cache_position) if cache_position.numel() == 1 else cache_position
-            idx = slice(p, p + 1) if isinstance(p, int) else p
-            self.keys[:, :, idx, :], self.values[:, :, idx, :] = key_states, value_states
+            # Avoid graph break by using tensor indexing directly
+            if cache_position.numel() == 1:
+                # For single position, use squeeze to get scalar tensor (not Python int)
+                idx = cache_position.squeeze()
+                self.keys[:, :, idx:idx+1, :] = key_states
+                self.values[:, :, idx:idx+1, :] = value_states
+            else:
+                # For multiple positions, use tensor directly
+                self.keys[:, :, cache_position, :] = key_states
+                self.values[:, :, cache_position, :] = value_states
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
             return self.keys, self.values
