@@ -658,6 +658,7 @@ class RotaryEmbeddingConfigMixin:
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = getattr(self, "rope_parameters", None) or {}
+        layer_types = getattr(self, "layer_types", None)
 
         # Case 0: no RoPE params defined
         if not (rope_parameters or rope_theta):
@@ -665,14 +666,14 @@ class RotaryEmbeddingConfigMixin:
             logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
             return
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        elif getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
+        elif layer_types is None or rope_parameters == {} or not set(rope_parameters.keys()).issubset(layer_types):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
                 rope_parameters["partial_rotary_factor"] = partial_rotary_factor
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
-            for layer_type in self.layer_types:
+            for layer_type in layer_types:
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
                 if partial_rotary_factor is not None:
