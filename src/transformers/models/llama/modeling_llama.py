@@ -26,7 +26,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, inject_module
+from ...integrations import inject_module, use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -222,6 +222,7 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
 
 @inject_module([("rotary_fn", apply_rotary_pos_emb)])
 class LlamaAttention(nn.Module):

@@ -211,11 +211,11 @@ if TYPE_CHECKING:
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
+        inject_module,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
-        inject_module,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
