@@ -110,8 +110,11 @@ class BigBirdTokenizer(TokenizersBackend):
         # Convert vocab to list of (token, score) tuples
         if vocab is None:
             vocab = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(bos_token), 0.0), (str(unk_token), 0.0)]
-
-        self._tokenizer = Tokenizer(Unigram(vocab, unk_id=4, byte_fallback=False))
+            unk_id = 5
+        elif isinstance(vocab, list):
+            # vocab.insert(100, (str(unk_token), 0.0))  # Ensure unk_token is in vocab at index 100
+            unk_id = vocab.index((str(unk_token), 0.0)) if (str(unk_token), 0.0) in vocab else 100
+        self._tokenizer = Tokenizer(Unigram(vocab, unk_id=unk_id, byte_fallback=False))
         self._tokenizer.normalizer = normalizers.Sequence(
             [normalizers.Strip(left=False, right=True), normalizers.Replace(Regex(r" {2,}"), SPIECE_UNDERLINE)]
         )
@@ -130,16 +133,15 @@ class BigBirdTokenizer(TokenizersBackend):
             mask_token=mask_token,
             cls_token=cls_token,
             sep_token=sep_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
-
-        self.init_kwargs["add_prefix_space"] = add_prefix_space
 
         # Ensure cls_token and sep_token are in vocab
         cls_token_str = str(cls_token)
         sep_token_str = str(sep_token)
-        cls_token_id = self.convert_tokens_to_ids(cls_token_str)
-        sep_token_id = self.convert_tokens_to_ids(sep_token_str)
+        cls_token_id = self.cls_token_id
+        sep_token_id = self.sep_token_id
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls_token_str}:0 $A:0 {sep_token_str}:0",
