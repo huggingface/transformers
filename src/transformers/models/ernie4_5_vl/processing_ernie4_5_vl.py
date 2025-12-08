@@ -12,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os.path
+from pathlib import Path
+from shutil import SameFileError, copyfile
 from typing import Optional, Union
 
 import numpy as np
@@ -65,6 +68,16 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         self.video_start_token_id = tokenizer.video_start_token_id
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
+        """We additionally save a copy of the font to the `save_directory` (if we found a file there)"""
+        if os.path.isfile(self.video_processor.font):
+            try:
+                copyfile(self.video_processor.font, Path(save_directory, Path(self.video_processor.font).name))
+            except SameFileError:  # already exists which we allow (copy if needed)
+                pass
+
+        return super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     def __call__(
         self,

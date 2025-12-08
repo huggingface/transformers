@@ -28,7 +28,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Ernie4_5_VLImageProcessor, Ernie4_5_VLProcessor
+    from transformers import Ernie4_5_VLImageProcessorFast, Ernie4_5_VLProcessor
 
 if is_torch_available():
     import torch
@@ -95,7 +95,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, LlamaTokenizerFast)
-        self.assertIsInstance(processor.image_processor, Ernie4_5_VLImageProcessor)
+        self.assertIsInstance(processor.image_processor, Ernie4_5_VLImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()

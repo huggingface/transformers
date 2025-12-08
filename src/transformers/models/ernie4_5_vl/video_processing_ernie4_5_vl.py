@@ -15,6 +15,7 @@
 import os.path
 from functools import partial
 from pathlib import Path
+from shutil import SameFileError, copyfile
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -149,12 +150,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         return super().from_dict(video_processor_dict, **kwargs)
 
     def to_dict(self) -> dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary.
-
-        Returns:
-            `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
-        """
+        """Overriden to strip the prefix of the full path for the font, e.g. `tmp/folder/font.tff` -> `font.tff`"""
         output = super().to_dict()
 
         if os.path.isfile(output.get("font")):
@@ -166,6 +162,16 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             )
 
         return output
+
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+        """We additionally save a copy of the font to the `save_directory` (if we found a file there)"""
+        if os.path.isfile(self.font):
+            try:
+                copyfile(self.font, Path(save_directory, Path(self.font).name))
+            except SameFileError:  # already exists which we allow (copy if needed)
+                pass
+
+        return super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     def _further_process_kwargs(
         self,
