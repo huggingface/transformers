@@ -325,7 +325,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("roberta", "RobertaTokenizer"),
         ("roberta-prelayernorm", "RobertaTokenizer"),
         ("roc_bert", "RoCBertTokenizer"),
-        ("roformer", "RoFormerTokenizerFast" if is_tokenizers_available() else None),
+        ("roformer", "RoFormerTokenizer" if is_tokenizers_available() else None),
         ("rwkv", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("seamless_m4t", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
         ("seamless_m4t_v2", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
