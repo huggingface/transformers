@@ -5091,6 +5091,7 @@ class Trainer:
                 if is_accelerate_available("1.12.0"):
                     if self.args.parallelism_config is None:
                         from accelerate import ParallelismConfig
+
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
