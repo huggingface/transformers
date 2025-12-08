@@ -186,6 +186,7 @@ if TYPE_CHECKING:
     from .jetmoe import *
     from .kosmos2 import *
     from .kyutai_speech_to_text import *
+    from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
     from .layoutlmv3 import *

@@ -39,12 +39,9 @@ class AqlmHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-    required_packages = ["aqlm"]
-    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -77,7 +74,6 @@ class AqlmHfQuantizer(HfQuantizer):
             quantization_config=self.quantization_config,
             linear_weights_not_to_quantize=self.quantization_config.linear_weights_not_to_quantize,
         )
-        model.config.quantization_config = self.quantization_config
 
     @property
     def is_trainable(self) -> bool:
@@ -90,5 +86,5 @@ class AqlmHfQuantizer(HfQuantizer):
             )
             return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self, **kwargs):
         return True
