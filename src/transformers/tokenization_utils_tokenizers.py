@@ -29,7 +29,6 @@ from huggingface_hub import is_offline_mode
 from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
-from tokenizers import normalizers as tokenizers_normalizers
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
@@ -233,6 +232,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         add_prefix_space = kwargs.get("add_prefix_space", False)
         vocab_file = kwargs.get("vocab_file")
 
+
         fast_tokenizer = None
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
@@ -289,6 +289,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+        self.add_bos_token = kwargs.get("add_bos_token", False)
+        self.add_eos_token = kwargs.get("add_eos_token", False)
+
         if vocab_file is not None:
             self.vocab_file = vocab_file
         # Ensure add_prefix_space is set correctly after parent init
@@ -440,27 +443,22 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if token_value is None:
                 continue
             if isinstance(token_value, AddedToken):
-                if self._tokenizer.token_to_id(str(token_value)) is None:
-                    tokens_to_add.append(token_value)
+                tokens_to_add.append(token_value)
             elif isinstance(token_value, str):
-                if self._tokenizer.token_to_id(token_value) is None:
-                    tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
+                tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
 
         # V5: Check extra special tokens
         for token in self._extra_special_tokens:
             if isinstance(token, AddedToken):
-                if self._tokenizer.token_to_id(str(token)) is None:
-                    tokens_to_add.append(token)
+                tokens_to_add.append(token)
             elif isinstance(token, str):
-                if self._tokenizer.token_to_id(token) is None:
-                    tokens_to_add.append(AddedToken(token, special=True, normalized=False))
+                tokens_to_add.append(AddedToken(token, special=True, normalized=False))
 
         if tokens_to_add:
             # Ensure special tokens are added as such to the backend
             self.add_tokens(tokens_to_add, special_tokens=True)
 
-        if hasattr(self, "_add_bos_token") or hasattr(self, "_add_eos_token"):
-            self.update_post_processor()
+        self.update_post_processor()
 
     @property
     def vocab_size(self) -> int:

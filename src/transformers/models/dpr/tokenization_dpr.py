@@ -39,6 +39,10 @@ class DPRContextEncoderTokenizer(BertTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = False
+
 
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
@@ -51,6 +55,10 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = False
 
 
 DPRSpanPrediction = collections.namedtuple(
@@ -315,6 +323,10 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = False
 
 
 __all__ = ["DPRContextEncoderTokenizer", "DPRQuestionEncoderTokenizer", "DPRReaderOutput", "DPRReaderTokenizer"]
