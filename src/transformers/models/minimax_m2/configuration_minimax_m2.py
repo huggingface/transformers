@@ -94,8 +94,6 @@ class MiniMaxM2Config(PreTrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`Optional`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        rope_theta (`Optional`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
