@@ -308,6 +308,7 @@ class EncoderDecoderMixin:
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values
+        enc_dec_model.generation_config.max_length = 20
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(

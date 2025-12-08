@@ -1097,8 +1097,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         Gets the non-default generation parameters on the PreTrainedConfig instance
         """
         generation_params = {}
+        default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
         for key in self._get_global_generation_defaults().keys():
-            if hasattr(self, key) and getattr(self, key) is not None:
+            if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
                 generation_params[key] = getattr(self, key)
 
         return generation_params
