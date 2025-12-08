@@ -149,7 +149,6 @@ class CohereTokenizer(TokenizersBackend):
         )
 
         self._merges = merges or []
-
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -180,7 +179,6 @@ class CohereTokenizer(TokenizersBackend):
             sep_token=sep_token,
             mask_token=mask_token,
             add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             add_prefix_space=add_prefix_space,
             **kwargs,
