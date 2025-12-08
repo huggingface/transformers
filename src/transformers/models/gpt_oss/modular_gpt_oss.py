@@ -383,6 +383,17 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 class GptOssModel(MixtralModel):
     _no_split_modules = ["GptOssDecoderLayer"]
 
+    def __init__(self, config: GptOssConfig):
+        super().__init__(config)
+
+        if config._attn_implementation in ["flash_attention_2", "flash_attention_3"]:
+            raise ValueError(
+                f"GPT-OSS models do not support {config._attn_implementation} because they utilize "
+                "attention sinks, which are not currently supported by the standard Flash Attention kernels. "
+                "Please use 'eager' implementation (attn_implementation='eager') or a custom kernel if available."
+            )
+
+            
     @check_model_inputs
     @auto_docstring
     def forward(
