@@ -596,9 +596,9 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-            `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
-            installed, `"none"` for no integrations.
+            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"swanlab"`,
+            `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
+            for no integrations.
         project (`str`, *optional*, defaults to `"huggingface"`):
             The name of the project to use for logging. Currently, only used by Trackio.
         trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
@@ -2386,8 +2386,8 @@ class TrainingArguments:
             report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
-                `"neptune"`, `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all
-                integrations installed, `"none"` for no integrations.
+                `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
+                installed, `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):
