@@ -22,6 +22,7 @@ from transformers.generation.continuous_batching.cache import group_layers_by_at
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_kernels,
     require_read_token,
     require_torch_accelerator,
@@ -137,6 +138,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                 f"Actual mask:\n{str_mask}"
             )
 
+    @require_deterministic_for_xpu
     def _continuous_batching_parity(
         self, model_id: str, attn_implementation: str, expected_outputs: dict[str, str]
     ) -> None:
