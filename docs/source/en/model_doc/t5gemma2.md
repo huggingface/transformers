@@ -15,6 +15,7 @@ rendered properly in your Markdown viewer.
 
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-01.*
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">

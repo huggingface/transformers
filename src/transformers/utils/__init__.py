@@ -91,7 +91,6 @@ from .hub import (
     extract_commit_hash,
     has_file,
     http_user_agent,
-    is_offline_mode,
     list_repo_templates,
     try_to_load_from_cache,
 )
@@ -129,6 +128,8 @@ from .import_utils import (
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
+    is_env_variable_false,
+    is_env_variable_true,
     is_essentia_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
