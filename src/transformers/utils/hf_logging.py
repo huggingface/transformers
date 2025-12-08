@@ -9,7 +9,6 @@ def get_logger(name: str = "transformers"):
     return logging.getLogger(name)
 
 
-
 # import logging
 
 # _logger = None

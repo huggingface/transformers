@@ -104,9 +104,7 @@ def is_offline_mode():
 # The best way to set the cache path is with the environment variable HF_HOME. For more details, check out this
 # documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
 
-HF_MODULES_CACHE = os.getenv(
-    "HF_MODULES_CACHE", os.path.join(constants.HF_HOME, "modules")
-)
+HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(constants.HF_HOME, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
 
@@ -179,11 +177,7 @@ def list_repo_templates(
     templates_dir = Path(snapshot_dir, CHAT_TEMPLATE_DIR)
     if not templates_dir.is_dir():
         return []
-    return [
-        entry.stem
-        for entry in templates_dir.iterdir()
-        if entry.is_file() and entry.name.endswith(".jinja")
-    ]
+    return [entry.stem for entry in templates_dir.iterdir() if entry.is_file() and entry.name.endswith(".jinja")]
 
 
 def define_sagemaker_information():
@@ -196,14 +190,8 @@ def define_sagemaker_information():
         dlc_tag = None
 
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
-    runs_distributed_training = (
-        "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
-    )
-    account_id = (
-        os.getenv("TRAINING_JOB_ARN").split(":")[4]
-        if "TRAINING_JOB_ARN" in os.environ
-        else None
-    )
+    runs_distributed_training = "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
+    account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
 
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
@@ -228,9 +216,7 @@ def http_user_agent(user_agent: dict | str | None = None) -> str:
     if constants.HF_HUB_DISABLE_TELEMETRY:
         return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
-        ua += "; " + "; ".join(
-            f"{k}/{v}" for k, v in define_sagemaker_information().items()
-        )
+        ua += "; " + "; ".join(f"{k}/{v}" for k, v in define_sagemaker_information().items())
     # CI will set this value to True
     if os.environ.get("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
         ua += "; is_ci/true"
@@ -241,9 +227,7 @@ def http_user_agent(user_agent: dict | str | None = None) -> str:
     return ua
 
 
-def extract_commit_hash(
-    resolved_file: str | None, commit_hash: str | None
-) -> str | None:
+def extract_commit_hash(resolved_file: str | None, commit_hash: str | None) -> str | None:
     """
     Extracts the commit hash from a resolved filename toward a cache file.
     """
@@ -411,9 +395,7 @@ def cached_files(
         if os.path.isdir(path_or_repo_id):
             resolved_file = os.path.join(path_or_repo_id, filename)
             if not os.path.isfile(resolved_file):
-                if _raise_exceptions_for_missing_entries and filename != os.path.join(
-                    subfolder, "config.json"
-                ):
+                if _raise_exceptions_for_missing_entries and filename != os.path.join(subfolder, "config.json"):
                     revision_ = "main" if revision is None else revision
                     raise OSError(
                         f"{path_or_repo_id} does not appear to have a file named {filename}. Checkout "
@@ -450,9 +432,7 @@ def cached_files(
                 elif not _raise_exceptions_for_missing_entries:
                     file_counter += 1
                 else:
-                    raise OSError(
-                        f"Could not locate {filename} inside {path_or_repo_id}."
-                    )
+                    raise OSError(f"Could not locate {filename} inside {path_or_repo_id}.")
 
     # Either all the files were found, or some were _CACHED_NO_EXIST but we do not raise for missing entries
     if file_counter == len(full_filenames):
@@ -494,9 +474,7 @@ def cached_files(
                     local_files_only=local_files_only,
                 )
 
-            with ThreadPoolExecutor(
-                max_workers=min(8, len(full_filenames))
-            ) as executor:
+            with ThreadPoolExecutor(max_workers=min(8, len(full_filenames))) as executor:
                 resolved_files = list(executor.map(download_file, full_filenames))
     except Exception as e:
         # We cannot recover from them
@@ -524,9 +502,7 @@ def cached_files(
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(
-                path_or_repo_id, filename, cache_dir, revision, repo_type
-            )
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
             for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
@@ -557,39 +533,25 @@ def cached_files(
         elif isinstance(e, HfHubHTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
-            raise OSError(
-                f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}"
-            ) from e
+            raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}") from e
         # Any other Exception type should now be re-raised, in order to provide helpful error messages and break the execution flow
         # (EntryNotFoundError will be treated outside this block and correctly re-raised if needed)
         elif not isinstance(e, EntryNotFoundError):
             raise e
 
     resolved_files = [
-        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision)
-        for filename in full_filenames
+        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
     ]
     # If there are any missing file and the flag is active, raise
-    if (
-        any(file is None for file in resolved_files)
-        and _raise_exceptions_for_missing_entries
-    ):
-        missing_entries = [
-            original
-            for original, resolved in zip(full_filenames, resolved_files)
-            if resolved is None
-        ]
+    if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
+        missing_entries = [original for original, resolved in zip(full_filenames, resolved_files) if resolved is None]
         # Last escape
-        if len(resolved_files) == 1 and missing_entries[0] == os.path.join(
-            subfolder, "config.json"
-        ):
+        if len(resolved_files) == 1 and missing_entries[0] == os.path.join(subfolder, "config.json"):
             return None
         # Now we raise for missing entries
         revision_ = "main" if revision is None else revision
         msg = (
-            f"a file named {missing_entries[0]}"
-            if len(missing_entries) == 1
-            else f"files named {(*missing_entries,)}"
+            f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
         )
         raise OSError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
@@ -652,9 +614,7 @@ def has_file(
     # Check if the file exists
     try:
         response = get_session().head(
-            hf_hub_url(
-                path_or_repo, filename=filename, revision=revision, repo_type=repo_type
-            ),
+            hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
             follow_redirects=False,
             timeout=10,
@@ -677,9 +637,7 @@ def has_file(
         ) from e
     except RepositoryNotFoundError as e:
         get_logger_instance().error(e)
-        raise OSError(
-            f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'."
-        ) from e
+        raise OSError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.") from e
     except RevisionNotFoundError as e:
         get_logger_instance().error(e)
         raise OSError(
@@ -702,10 +660,7 @@ class PushToHubMixin:
         """
         Returns the list of files with their last modification timestamp.
         """
-        return {
-            f: os.path.getmtime(os.path.join(working_dir, f))
-            for f in os.listdir(working_dir)
-        }
+        return {f: os.path.getmtime(os.path.join(working_dir, f)) for f in os.listdir(working_dir)}
 
     def _upload_modified_files(
         self,
@@ -737,16 +692,14 @@ class PushToHubMixin:
         modified_files = [
             f
             for f in os.listdir(working_dir)
-            if f not in files_timestamps
-            or os.path.getmtime(os.path.join(working_dir, f)) > files_timestamps[f]
+            if f not in files_timestamps or os.path.getmtime(os.path.join(working_dir, f)) > files_timestamps[f]
         ]
 
         # filter for actual files + folders at the root level
         modified_files = [
             f
             for f in modified_files
-            if os.path.isfile(os.path.join(working_dir, f))
-            or os.path.isdir(os.path.join(working_dir, f))
+            if os.path.isfile(os.path.join(working_dir, f)) or os.path.isdir(os.path.join(working_dir, f))
         ]
 
         operations = []
@@ -771,9 +724,7 @@ class PushToHubMixin:
 
         if revision is not None and not revision.startswith("refs/pr"):
             try:
-                create_branch(
-                    repo_id=repo_id, branch=revision, token=token, exist_ok=True
-                )
+                create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
             except HfHubHTTPError as e:
                 if e.response.status_code == 403 and create_pr:
                     # If we are creating a PR on a repo we don't have access to, we can't create the branch.
@@ -783,9 +734,7 @@ class PushToHubMixin:
                 else:
                     raise
 
-        get_logger_instance().info(
-            f"Uploading the following files to {repo_id}: {','.join(modified_files)}"
-        )
+        get_logger_instance().info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
             repo_id=repo_id,
             operations=operations,
@@ -858,9 +807,7 @@ class PushToHubMixin:
         ```
         """
         # Create repo if it doesn't exist yet
-        repo_id = create_repo(
-            repo_id, private=private, token=token, exist_ok=True
-        ).repo_id
+        repo_id = create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
 
         # Load model card or create a new one + eventually tag it
         model_card = create_and_tag_model_card(repo_id, tags, token=token)
@@ -919,9 +866,7 @@ def convert_file_size_to_int(size: int | str):
     if size.upper().endswith("KB"):
         int_size = int(size[:-2]) * (10**3)
         return int_size // 8 if size.endswith("b") else int_size
-    raise ValueError(
-        "`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'."
-    )
+    raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
 
 def get_checkpoint_shard_files(
@@ -949,9 +894,7 @@ def get_checkpoint_shard_files(
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
     if not os.path.isfile(index_filename):
-        raise ValueError(
-            f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}."
-        )
+        raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
     with open(index_filename) as f:
         index = json.loads(f.read())
@@ -963,10 +906,7 @@ def get_checkpoint_shard_files(
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
-        shard_filenames = [
-            os.path.join(pretrained_model_name_or_path, subfolder, f)
-            for f in shard_filenames
-        ]
+        shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
         return shard_filenames, sharded_metadata
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub. Try to get everything from cache,
@@ -988,9 +928,7 @@ def get_checkpoint_shard_files(
     return cached_filenames, sharded_metadata
 
 
-def create_and_tag_model_card(
-    repo_id: str, tags: list[str] | None = None, token: str | None = None
-) -> ModelCard:
+def create_and_tag_model_card(repo_id: str, tags: list[str] | None = None, token: str | None = None) -> ModelCard:
     """
     Creates or loads an existing model card and tags it.
 
@@ -1008,12 +946,8 @@ def create_and_tag_model_card(
     except EntryNotFoundError:
         # Otherwise create a simple model card from template
         model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
-        card_data = ModelCardData(
-            tags=[] if tags is None else tags, library_name="transformers"
-        )
-        model_card = ModelCard.from_template(
-            card_data, model_description=model_description
-        )
+        card_data = ModelCardData(tags=[] if tags is None else tags, library_name="transformers")
+        model_card = ModelCard.from_template(card_data, model_description=model_description)
 
     if tags is not None:
         # Ensure model_card.data.tags is a list and not None
