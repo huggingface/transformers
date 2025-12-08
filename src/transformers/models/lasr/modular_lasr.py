@@ -259,6 +259,9 @@ class LasrCTCConfig(ParakeetCTCConfig):
                 The config object or dictionary of the encoder.
             pad_token_id (`int`, *optional*, defaults to 0):
                 Padding token id. Also used as blank token id.
+            hop_length (`int`, *optional*, defaults to 160):
+                Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients. Should be
+                equal to the value used in LasrFeatureExtractor.
     Example:
         ```python
         >>> from transformers import LasrForCTC, LasrCTCConfig
@@ -280,6 +283,7 @@ class LasrCTCConfig(ParakeetCTCConfig):
         ctc_zero_infinity=True,
         encoder_config: Union[dict, LasrEncoderConfig] = None,
         pad_token_id=0,
+        hop_length=160,
         **kwargs,
     ):
         super().__init__(
@@ -290,6 +294,14 @@ class LasrCTCConfig(ParakeetCTCConfig):
             pad_token_id=pad_token_id,
             **kwargs,
         )
+        self.hop_length = hop_length
+
+    # Used in chunked decoding [https://huggingface.co/blog/asr-chunking] in the ASR pipeline
+    # [https://github.com/huggingface/transformers/blob/142ae3d9182e68dfcbf6b595a18a25a7f2d503ea/src/transformers/pipelines/automatic_speech_recognition.py#L450].
+    @property
+    def inputs_to_logits_ratio(self):
+        """The ratio between the number of speech samples and output logits."""
+        return self.hop_length * self.encoder_config.subsampling_conv_stride**2
 
 
 class LasrEncoderSubsampling(nn.Module):
