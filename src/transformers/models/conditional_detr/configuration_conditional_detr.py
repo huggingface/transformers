@@ -86,7 +86,7 @@ class ConditionalDetrConfig(PreTrainedConfig):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
         backbone_kwargs (`dict`, *optional*):
             Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
