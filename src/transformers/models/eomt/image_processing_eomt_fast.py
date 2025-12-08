@@ -402,7 +402,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                         size=target_sizes[idx],
                         mode="bilinear",
                         align_corners=False,
-                    )[0]
+                    )
                     output_logits.append(resized_logits[0])
             else:
                 output_logits = [segmentation_logits[i] for i in range(segmentation_logits.shape[0])]
