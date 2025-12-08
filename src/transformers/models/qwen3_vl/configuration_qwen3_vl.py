@@ -171,6 +171,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
         super().__init__(

@@ -157,6 +157,8 @@ class T5GemmaModuleConfig(PreTrainedConfig):
         add_cross_attention: Optional[bool] = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -187,8 +189,6 @@ class T5GemmaModuleConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
         self.rope_parameters = rope_parameters
 
         super().__init__(**kwargs)

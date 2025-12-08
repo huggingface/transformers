@@ -230,6 +230,12 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
             Indicate which layers use Qwen3OmniMoeTextMLP rather than Qwen3OmniMoeTextSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTextModel, Qwen3OmniMoeTextConfig
@@ -324,6 +330,10 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
@@ -450,6 +460,8 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         eos_token_id: Optional[int] = None,
         **kwargs,
     ):
+        self.sliding_window = sliding_window
+        self.num_code_groups = num_code_groups
         super().__init__(
             vocab_size,
             hidden_size,
@@ -478,8 +490,6 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
         )
         del self.use_sliding_window
         del self.max_window_layers
-        self.sliding_window = sliding_window
-        self.num_code_groups = num_code_groups
 
 
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):

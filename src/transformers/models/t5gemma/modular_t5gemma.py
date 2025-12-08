@@ -177,6 +177,8 @@ class T5GemmaModuleConfig(Gemma2Config):
         add_cross_attention: Optional[bool] = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -206,8 +208,6 @@ class T5GemmaModuleConfig(Gemma2Config):
         )
 
         del self.use_bidirectional_attention
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
 
 
 class T5GemmaConfig(PreTrainedConfig):
