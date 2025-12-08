@@ -149,6 +149,7 @@ class LlamaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+        self.update_post_processor()
 
 
 __all__ = ["LlamaTokenizer", "LlamaTokenizerFast"]
