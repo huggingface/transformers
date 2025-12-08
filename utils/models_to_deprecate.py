@@ -105,6 +105,7 @@ EXTRA_TAGS_MAPPING = {
     "maskformer": ["maskformer-swin"],
     "mbart": ["mbart50"],
     "parakeet": ["parakeet_ctc", "parakeet_encoder"],
+    "lasr": ["lasr_ctc", "lasr_encoder"],
     "perception_lm": ["perception_encoder"],
     "pix2struct": ["deplot", "matcha"],
     "qwen2_5_vl": ["qwen2_5_vl_text"],
