@@ -1472,9 +1472,7 @@ class ProcessorMixin(PushToHubMixin):
 
                 from .models.llama import LlamaTokenizer
 
-                tokenizer = LlamaTokenizer.from_pretrained(
-                    pretrained_model_name_or_path, add_bos_token=True, **kwargs
-                )
+                tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, add_bos_token=True, **kwargs)
                 tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
                     [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
                 )
