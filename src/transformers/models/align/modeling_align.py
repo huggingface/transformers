@@ -316,6 +316,8 @@ class AlignVisionSqueezeExciteLayer(nn.Module):
 
         hidden_states = self.expand(hidden_states)
         hidden_states = self.act_expand(hidden_states)
+
+        inputs = inputs.to(hidden_states.device)
         hidden_states = torch.mul(inputs, hidden_states)
 
         return hidden_states
