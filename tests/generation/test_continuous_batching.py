@@ -32,7 +32,7 @@ from transformers.generation.continuous_batching.continuous_api import build_att
 from transformers.testing_utils import (
     Expectations,
     require_torch_accelerator,
-    # slow,  NOTE: this is commented rn as there are no more slow tests, but if one takes too much time, mark it as slow
+    slow,
     torch_device,
 )
 from transformers.utils import is_flash_attn_2_available, is_kernels_available
@@ -264,6 +264,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         del model
         flush_memory(flush_compile=use_compile)
 
+    @slow
     @require_torch_accelerator
     @parameterized.expand(
         list(
@@ -289,6 +290,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
+    @slow
     @require_torch_accelerator
     @parameterized.expand(
         list(
@@ -304,6 +306,11 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             self._test_continuous_batching_parity(model_id, True, "flash_attention_2", use_cuda_graph, use_compile)
         finally:
             flush_memory(flush_compile=use_compile)
+
+    @require_torch_accelerator
+    def test_continuous_batching_fast(self) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self._test_continuous_batching_parity(model_id, False, "sdpa", False, False)
 
     @require_torch_accelerator
     def test_continuous_batching_long_generate(self) -> None:
