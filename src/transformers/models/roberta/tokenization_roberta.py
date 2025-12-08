@@ -59,29 +59,33 @@ class RobertaTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods.
 
     Args:
+        vocab (`str`, `dict` or `list`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+        merges (`str` or `list`, *optional*):
+            Custom merges list. If not provided, merges are loaded from merges_file.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
+    
             <Tip>
-
+    
             When building a sequence using special tokens, this is not the token that is used for the beginning of
             sequence. The token used is the `cls_token`.
-
+    
             </Tip>
-
+    
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-
+    
             <Tip>
-
+    
             When building a sequence using special tokens, this is not the token that is used for the end of sequence.
             The token used is the `sep_token`.
-
+    
             </Tip>
-
+    
         sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
@@ -102,10 +106,6 @@ class RobertaTokenizer(TokenizersBackend):
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`str` or `list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

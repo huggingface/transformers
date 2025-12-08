@@ -67,6 +67,10 @@ class CodeGenTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -83,10 +87,6 @@ class CodeGenTokenizer(TokenizersBackend):
             Whether or not to add an initial beginning of sentence token to the input.
         return_token_type_ids (`bool`, *optional*, defaults to `False`):
             Whether to return token type IDs.
-        vocab (`str` or `dict[str, int]`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
-        merges (`str` or `list[str]`, *optional*):
-            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

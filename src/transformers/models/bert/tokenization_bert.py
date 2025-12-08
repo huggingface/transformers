@@ -48,6 +48,8 @@ class BertTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods.
 
     Args:
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
@@ -70,8 +72,6 @@ class BertTokenizer(TokenizersBackend):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        vocab (`str` or `dict[str, int]`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
