@@ -121,16 +121,6 @@ class FPQuantHfQuantizer(HfQuantizer):
     def is_serializable(self, **kwargs):
         return True
 
-    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from fp_quant import FPQuantLinear
-
-        module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, FPQuantLinear) and tensor_name in ["weight", "qweight", "dqweight"]:
-            # Only quantize weights of FPQuantLinear modules that are not already quantized
-            return True
-        else:
-            return False
-
     def get_quantize_ops(self):
         from ..integrations.fp_quant import FpQuantQuantize
 
