@@ -21,14 +21,12 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 if is_torch_available():
-    import torch
     import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
-def replace_with_vptq_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None
-):
+
+def replace_with_vptq_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
     Public method that recursively replaces the Linear layers of the given model with SPQR quantized layers.
 
@@ -52,7 +50,9 @@ def replace_with_vptq_linear(
             continue
         with init_empty_weights():
             if isinstance(module, nn.Linear):
-                layer_params = config_for_layers.get(module_name, None) or shared_layer_config.get(module_name.rsplit(".")[1], None)
+                layer_params = config_for_layers.get(module_name, None) or shared_layer_config.get(
+                    module_name.rsplit(".")[1], None
+                )
                 new_module = VQuantLinear(
                     module.in_features,
                     module.out_features,

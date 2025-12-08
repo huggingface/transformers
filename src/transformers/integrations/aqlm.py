@@ -21,14 +21,12 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 if is_torch_available():
-    import torch
     import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
-def replace_with_aqlm_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None
-):
+
+def replace_with_aqlm_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
     Public method that recursively replaces the Linear layers of the given model with AQLM quantized layers.
 
@@ -51,14 +49,14 @@ def replace_with_aqlm_linear(
         with init_empty_weights():
             if isinstance(module, nn.Linear):
                 new_module = QuantizedLinear(
-                        module.in_features,
-                        module.out_features,
-                        bias=module.bias is not None,
-                        in_group_size=quantization_config.in_group_size,
-                        out_group_size=quantization_config.out_group_size,
-                        num_codebooks=quantization_config.num_codebooks,
-                        nbits_per_codebook=quantization_config.nbits_per_codebook,
-                    )
+                    module.in_features,
+                    module.out_features,
+                    bias=module.bias is not None,
+                    in_group_size=quantization_config.in_group_size,
+                    out_group_size=quantization_config.out_group_size,
+                    num_codebooks=quantization_config.num_codebooks,
+                    nbits_per_codebook=quantization_config.nbits_per_codebook,
+                )
                 new_module.source_cls = type(module)
                 new_module.requires_grad_(False)
                 model.set_submodule(module_name, new_module)

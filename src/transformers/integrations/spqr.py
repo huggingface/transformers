@@ -21,14 +21,12 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 if is_torch_available():
-    import torch
     import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
-def replace_with_spqr_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None
-):
+
+def replace_with_spqr_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
     Public method that recursively replaces the Linear layers of the given model with SPQR quantized layers.
 
@@ -54,17 +52,17 @@ def replace_with_spqr_linear(
                 shapes = quantization_config.shapes
 
                 new_module = QuantizedLinear.create_placehodler(
-                        rows=module.out_features,
-                        cols=module.in_features,
-                        bits=quantization_config.bits,
-                        beta1=quantization_config.beta1,
-                        beta2=quantization_config.beta2,
-                        dense_weights_shape=shapes[f"{module_name}.dense_weights.shape"],
-                        row_offsets_shape=shapes[f"{module_name}.row_offsets.shape"],
-                        col_vals_shape=shapes[f"{module_name}.col_vals.shape"],
-                        in_perm_shape=shapes[f"{module_name}.in_perm.shape"]
-                    )
-                    # Force requires grad to False to avoid unexpected errors
+                    rows=module.out_features,
+                    cols=module.in_features,
+                    bits=quantization_config.bits,
+                    beta1=quantization_config.beta1,
+                    beta2=quantization_config.beta2,
+                    dense_weights_shape=shapes[f"{module_name}.dense_weights.shape"],
+                    row_offsets_shape=shapes[f"{module_name}.row_offsets.shape"],
+                    col_vals_shape=shapes[f"{module_name}.col_vals.shape"],
+                    in_perm_shape=shapes[f"{module_name}.in_perm.shape"],
+                )
+                # Force requires grad to False to avoid unexpected errors
                 model._modules[module_name].requires_grad_(False)
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
