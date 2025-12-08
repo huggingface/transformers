@@ -35,7 +35,7 @@ from transformers.utils.generic import TransformersKwargs
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import inject_module, use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -205,7 +205,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@inject_module([("rotary_fn", apply_rotary_pos_emb)])
+@use_kernelized_func([apply_rotary_pos_emb])
 class Olmo2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

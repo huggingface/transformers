@@ -13,7 +13,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import inject_module, use_kernel_func_from_hub
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
     GenericForSequenceClassification,
@@ -172,7 +172,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@inject_module([("rotary_fn", apply_rotary_pos_emb)])
+@use_kernelized_func([apply_rotary_pos_emb])
 class PhiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

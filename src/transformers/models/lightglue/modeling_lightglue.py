@@ -27,7 +27,7 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2FN
-from ...integrations import inject_module
+from ...integrations import use_kernelized_func
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -175,7 +175,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@inject_module([("rotary_fn", apply_rotary_pos_emb)])
+@use_kernelized_func([apply_rotary_pos_emb])
 class LightGlueAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

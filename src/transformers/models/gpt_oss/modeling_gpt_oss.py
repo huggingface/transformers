@@ -28,7 +28,7 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import inject_module
+from ...integrations import use_kernelized_func
 from ...integrations.hub_kernels import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import (
@@ -308,7 +308,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@inject_module([("rotary_fn", apply_rotary_pos_emb)])
+@use_kernelized_func([apply_rotary_pos_emb])
 class GptOssAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
