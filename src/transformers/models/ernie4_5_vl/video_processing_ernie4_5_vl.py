@@ -157,12 +157,12 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         """
         output = super().to_dict()
 
-        if os.path.isfile(output["font"]):
+        if os.path.isfile(output.get("font")):
             output["font"] = Path(output["font"]).name
-        else:
+        elif output.get("draw_on_frames"):
             raise ValueError(
                 f"The video processor dict contains an invalid path to its font: {output['font']}. "
-                "Please make sure to contain a valid path."
+                "Please make sure to contain a valid path or disable `draw_on_frames`."
             )
 
         return output
