@@ -386,6 +386,7 @@ def sdpa_mask_recent_torch(
     q_indices = torch.arange(kv_length - q_length, kv_length)
     k_indices = torch.arange(kv_length)
     causal_mask = q_indices[:, None] >= k_indices[None, :]
+    causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
 
     return causal_mask
 
