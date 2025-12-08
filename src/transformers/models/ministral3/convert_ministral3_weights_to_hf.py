@@ -196,7 +196,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
         assert original_config["quantization"]["qscheme_act"] == "TENSOR"
         quantization_config = {
             "activation_scheme": "static",
-            "modules_to_not_convert": ["model.vision_tower", "model.multi_modal_projector"],
+            "modules_to_not_convert": ["model.vision_tower", "model.multi_modal_projector", "lm_head"],
             "quant_method": "fp8",
             "weight_block_size": None,
         }
