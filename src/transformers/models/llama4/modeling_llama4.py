@@ -340,7 +340,7 @@ class Llama4TextAttention(nn.Module):
             attn_scales = (
                 torch.log1p(torch.floor((cache_position.float() + 1.0) / self.floor_scale)) * self.attn_scale + 1.0
             )
-            attn_scales = attn_scales.view((1, input_shape[-1], 1, 1)).expand((*input_shape, 1, 1))  # batch size > 1
+            attn_scales = attn_scales.view((1, -1, 1, 1)).expand((*input_shape, 1, 1))  # batch size > 1
             query_states = (query_states * attn_scales).to(query_states.dtype)
 
         query_states = query_states.transpose(1, 2)
