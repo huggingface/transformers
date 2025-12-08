@@ -584,11 +584,10 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
 
     def __init__(self, config: Ernie4_5_VLTextConfig):
         super().__init__(config)
+        self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.embed_tokens = nn.Embedding(
-            self.vocab_size,
-            config.hidden_size,
-        )
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [Ernie4_5_VLDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -599,7 +598,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -620,8 +619,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_VLPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # torch.jit.trace() doesn't support cache objects in the output
-        if use_cache and past_key_values is None and not torch.jit.is_tracing():
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
@@ -787,8 +785,8 @@ class Ernie4_5_VLVisionAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if self.config._attn_implementation == "flash_attention_2":
-            # Flash Attention 2: Use cu_seqlens for variable length attention
+        if "flash" in self.config._attn_implementation:
+            # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
@@ -834,7 +832,7 @@ class Ernie4_5_VLVisionAttention(nn.Module):
 
 
 class Ernie4_5_VLVisionBlock(GradientCheckpointingLayer):
-    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+    def __init__(self, config) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
@@ -1874,10 +1872,6 @@ class Ernie4_5_VLForConditionalGeneration(Ernie4_5_VLPreTrainedModel, Generation
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
-
-    @property
-    def visual(self):
-        return self.model.vision_tower
 
 
 __all__ = [

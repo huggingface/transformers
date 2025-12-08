@@ -286,7 +286,7 @@ def convert_processor(model_path, save_dir):
     processor = Ernie4_5_VLProcessor(
         image_processor=Ernie4_5_VLImageProcessorFast(),
         tokenizer=tokenizer,
-        video_processor=Ernie4_5_VLVideoProcessor(),
+        video_processor=Ernie4_5_VLVideoProcessor(font=str(Path(save_dir, FONT_NAME))),
         chat_template=tokenizer.chat_template,
     )
     processor.save_pretrained(save_dir)

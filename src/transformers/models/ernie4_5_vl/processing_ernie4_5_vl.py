@@ -57,12 +57,12 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         self.video_end_token = tokenizer.video_end_token
         self.video_start_token = tokenizer.video_start_token
 
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
-        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
-        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
-        self.video_end_token_id = tokenizer.convert_tokens_to_ids(self.video_end_token)
-        self.video_start_token_id = tokenizer.convert_tokens_to_ids(self.video_start_token)
+        self.image_token_id = tokenizer.image_token_id
+        self.image_end_token_id = tokenizer.image_end_token_id
+        self.image_start_token_id = tokenizer.image_start_token_id
+        self.video_token_id = tokenizer.video_token_id
+        self.video_end_token_id = tokenizer.video_end_token_id
+        self.video_start_token_id = tokenizer.video_start_token_id
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
@@ -223,33 +223,6 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
             vision_data["num_video_tokens"] = num_video_tokens
 
         return MultiModalData(**vision_data)
-
-    def post_process_image_text_to_text(
-        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
-    ):
-        """
-        Post-process the output of the model to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
-
-        Returns:
-            `list[str]`: The decoded text.
-        """
-        return self.tokenizer.batch_decode(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
 
 
 __all__ = ["Ernie4_5_VLProcessor"]

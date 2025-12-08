@@ -28,8 +28,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_large_accelerator,
-    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -267,8 +265,8 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @slow
-@require_torch_multi_accelerator
-@require_torch_large_accelerator
+# @require_torch_multi_accelerator
+# @require_torch_large_accelerator
 @require_torch
 class Ernie4_5_VLIntegrationTest(unittest.TestCase):
     model = None

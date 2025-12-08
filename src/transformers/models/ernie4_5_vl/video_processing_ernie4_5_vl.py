@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os.path
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -123,7 +124,7 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     @classmethod
     def from_dict(cls, video_processor_dict: dict[str, Any], **kwargs):
         """
-        Specifc logic to this ernie model where we expect an associated font name to be saved within dict
+        Specific logic to this ernie model where we expect an associated font name to be saved within dict
         and the specific font file to exist along side the json in a separate file.
 
         Note that this is only relevant when we use `draw_on_frames` as this is required to have a font.
@@ -146,6 +147,25 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
                 )
 
         return super().from_dict(video_processor_dict, **kwargs)
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
+        """
+        output = super().to_dict()
+
+        if os.path.isfile(output["font"]):
+            output["font"] = Path(output["font"]).name
+        else:
+            raise ValueError(
+                f"The video processor dict contains an invalid path to its font: {output['font']}. "
+                "Please make sure to contain a valid path."
+            )
+
+        return output
 
     def _further_process_kwargs(
         self,
