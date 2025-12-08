@@ -109,12 +109,7 @@ class BigBirdTokenizer(TokenizersBackend):
 
         # Convert vocab to list of (token, score) tuples
         if vocab is None:
-            vocab = [
-                (str(pad_token), 0.0),
-                (str(eos_token), 0.0),
-                (str(bos_token), 0.0),
-                (str(unk_token), 0.0)
-            ]
+            vocab = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(bos_token), 0.0), (str(unk_token), 0.0)]
 
         self._tokenizer = Tokenizer(Unigram(vocab, unk_id=4, byte_fallback=False))
         self._tokenizer.normalizer = normalizers.Sequence(

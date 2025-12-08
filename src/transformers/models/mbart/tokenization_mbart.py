@@ -99,9 +99,7 @@ class MBartTokenizer(TokenizersBackend):
             vocab.append((str(mask_token), 0.0))
 
         self._vocab = vocab
-        self._tokenizer = Tokenizer(
-            Unigram(self._vocab, unk_id=3, byte_fallback=False)
-        )
+        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
         self._tokenizer.normalizer = None
 

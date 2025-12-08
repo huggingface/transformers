@@ -44,7 +44,6 @@ from transformers import (
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
     TOKENIZER_MAPPING,
-    AutoTokenizerBackendError,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )

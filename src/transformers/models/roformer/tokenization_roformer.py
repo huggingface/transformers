@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization class for RoFormer backed by 🤗 Tokenizers."""
 
-import json
 from typing import Optional
 
 from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors
@@ -28,7 +27,6 @@ from .tokenization_utils import JiebaPreTokenizer
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
-
 
 
 class RoFormerTokenizer(PreTrainedTokenizerFast):
@@ -96,6 +94,7 @@ class RoFormerTokenizer(PreTrainedTokenizerFast):
                 (sep_, self.sep_token_id),
             ],
         )
+
     def __getstate__(self):
         state = self.__dict__.copy()
         tokenizer_copy = Tokenizer.from_str(state["_tokenizer"].to_str())

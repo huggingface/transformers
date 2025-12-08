@@ -447,7 +447,7 @@ Hey how are you doing"""  # noqa: W293
         extractor = TokenizersExtractor(tokenizer_json_path)
         vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
         vocab = vocab_scores
-        if _type:=getattr(self.tokenizer_class, "model", None):
+        if _type := getattr(self.tokenizer_class, "model", None):
             if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
                 vocab = vocab_ids
 

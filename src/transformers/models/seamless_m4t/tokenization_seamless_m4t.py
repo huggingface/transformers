@@ -209,7 +209,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             "</s>": 3,
         }
         for i, token in enumerate(list(vocab.keys())):
-            _vocab[token] = i + 1 # offset by 1 to account for special tokens
+            _vocab[token] = i + 1  # offset by 1 to account for special tokens
         kwargs["vocab"] = _vocab
         return kwargs
 
