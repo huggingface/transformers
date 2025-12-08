@@ -368,6 +368,17 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
     return mapping[kernel_name]
 
+def inject_module(module_names: list[tuple[str, Callable]]):
+    def decorator(cls):
+        orig_init = cls.__init__
+        def new_init(self, *args, **kwargs):
+            orig_init(self, *args, **kwargs)
+            for fn in module_names:
+                setattr(self, fn[0], fn[1])
+
+        cls.__init__ = new_init
+        return cls
+    return decorator
 
 __all__ = [
     "LayerRepository",
@@ -377,4 +388,5 @@ __all__ = [
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
+    "inject_module",
 ]
