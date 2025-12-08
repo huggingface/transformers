@@ -35,46 +35,48 @@ from transformers.quantizers.auto import AutoQuantizationConfig
 
 
 # fmt: off
-STATE_DICT_MAPPING = {
-    # Text model keys
-    r"^output.weight":                            r"lm_head.weight",
-    r"^norm.weight":                              r"model.norm.weight",
-    r"^tok_embeddings.weight":                    r"model.embed_tokens.weight",
-    r"^layers.(\d+).attention_norm.weight":       r"model.layers.\1.input_layernorm.weight",
-    r"^layers.(\d+).ffn_norm.weight":             r"model.layers.\1.post_attention_layernorm.weight",
-    r"^layers.(\d+).attention.w(q|k|v|o).weight": r"model.layers.\1.self_attn.\2_proj.weight",
-    r"^layers.(\d+).feed_forward.w1.weight":      r"model.layers.\1.mlp.gate_proj.weight",
-    r"^layers.(\d+).feed_forward.w2.weight":      r"model.layers.\1.mlp.down_proj.weight",
-    r"^layers.(\d+).feed_forward.w3.weight":      r"model.layers.\1.mlp.up_proj.weight",
-    r"^layers.(\d+).attention.w(q|k|v|o).qscale_act": r"model.layers.\1.self_attn.\2_proj.activation_scale",
-    r"^layers.(\d+).feed_forward.w1.qscale_act":      r"model.layers.\1.mlp.gate_proj.activation_scale",
-    r"^layers.(\d+).feed_forward.w2.qscale_act":      r"model.layers.\1.mlp.down_proj.activation_scale",
-    r"^layers.(\d+).feed_forward.w3.qscale_act":      r"model.layers.\1.mlp.up_proj.activation_scale",
-    r"^layers.(\d+).attention.w(q|k|v|o).qscale_weight": r"model.layers.\1.self_attn.\2_proj.weight_scale_inv",
-    r"^layers.(\d+).feed_forward.w1.qscale_weight":      r"model.layers.\1.mlp.gate_proj.weight_scale_inv",
-    r"^layers.(\d+).feed_forward.w2.qscale_weight":      r"model.layers.\1.mlp.down_proj.weight_scale_inv",
-    r"^layers.(\d+).feed_forward.w3.qscale_weight":      r"model.layers.\1.mlp.up_proj.weight_scale_inv",
+def get_sd_mapping(has_vision: bool) -> dict:
+    model_key = "model.language_model" if has_vision else "model"
+    return {
+        # Text model keys
+        r"^output.weight":                            r"lm_head.weight",
+        r"^norm.weight":                              rf"{model_key}.norm.weight",
+        r"^tok_embeddings.weight":                    rf"{model_key}.embed_tokens.weight",
+        r"^layers.(\d+).attention_norm.weight":       rf"{model_key}.layers.\1.input_layernorm.weight",
+        r"^layers.(\d+).ffn_norm.weight":             rf"{model_key}.layers.\1.post_attention_layernorm.weight",
+        r"^layers.(\d+).attention.w(q|k|v|o).weight": rf"{model_key}.layers.\1.self_attn.\2_proj.weight",
+        r"^layers.(\d+).feed_forward.w1.weight":      rf"{model_key}.layers.\1.mlp.gate_proj.weight",
+        r"^layers.(\d+).feed_forward.w2.weight":      rf"{model_key}.layers.\1.mlp.down_proj.weight",
+        r"^layers.(\d+).feed_forward.w3.weight":      rf"{model_key}.layers.\1.mlp.up_proj.weight",
+        r"^layers.(\d+).attention.w(q|k|v|o).qscale_act": rf"{model_key}.layers.\1.self_attn.\2_proj.activation_scale",
+        r"^layers.(\d+).feed_forward.w1.qscale_act":      rf"{model_key}.layers.\1.mlp.gate_proj.activation_scale",
+        r"^layers.(\d+).feed_forward.w2.qscale_act":      rf"{model_key}.layers.\1.mlp.down_proj.activation_scale",
+        r"^layers.(\d+).feed_forward.w3.qscale_act":      rf"{model_key}.layers.\1.mlp.up_proj.activation_scale",
+        r"^layers.(\d+).attention.w(q|k|v|o).qscale_weight": rf"{model_key}.layers.\1.self_attn.\2_proj.weight_scale_inv",
+        r"^layers.(\d+).feed_forward.w1.qscale_weight":      rf"{model_key}.layers.\1.mlp.gate_proj.weight_scale_inv",
+        r"^layers.(\d+).feed_forward.w2.qscale_weight":      rf"{model_key}.layers.\1.mlp.down_proj.weight_scale_inv",
+        r"^layers.(\d+).feed_forward.w3.qscale_weight":      rf"{model_key}.layers.\1.mlp.up_proj.weight_scale_inv",
 
-    # Vision model keys
-    r"vision_encoder.transformer.layers.(\d+).attention_norm.weight": r"model.vision_tower.transformer.layers.\1.attention_norm.weight",
-    r"^vision_encoder.transformer.layers.(\d+).ffn_norm.weight": r"model.vision_tower.transformer.layers.\1.ffn_norm.weight",
-    r"^vision_encoder.transformer.layers.(\d+).attention.w(q|k|v|o).weight": r"model.vision_tower.transformer.layers.\1.attention.\2_proj.weight",
-    r"^vision_encoder.transformer.layers.(\d+).feed_forward.w1.weight": r"model.vision_tower.transformer.layers.\1.feed_forward.gate_proj.weight",
-    r"^vision_encoder.transformer.layers.(\d+).feed_forward.w2.weight": r"model.vision_tower.transformer.layers.\1.feed_forward.down_proj.weight",
-    r"^vision_encoder.transformer.layers.(\d+).feed_forward.w3.weight": r"model.vision_tower.transformer.layers.\1.feed_forward.up_proj.weight",
-    r"^vision_language_adapter.w_in": r"model.multi_modal_projector.linear_1",
-    r"^vision_language_adapter.w_out": r"model.multi_modal_projector.linear_2",
-    r"^vision_encoder.ln_pre.weight": r"model.vision_tower.ln_pre.weight",
-    r"^vision_encoder.patch_conv.weight": r"model.vision_tower.patch_conv.weight",
-    r"^patch_merger.merging_layer.weight": r"model.multi_modal_projector.patch_merger.merging_layer.weight",
-    r"^pre_mm_projector_norm.weight": r"model.multi_modal_projector.norm.weight",
-}
+        # Vision model keys
+        r"vision_encoder.transformer.layers.(\d+).attention_norm.weight": r"model.vision_tower.transformer.layers.\1.attention_norm.weight",
+        r"^vision_encoder.transformer.layers.(\d+).ffn_norm.weight": r"model.vision_tower.transformer.layers.\1.ffn_norm.weight",
+        r"^vision_encoder.transformer.layers.(\d+).attention.w(q|k|v|o).weight": r"model.vision_tower.transformer.layers.\1.attention.\2_proj.weight",
+        r"^vision_encoder.transformer.layers.(\d+).feed_forward.w1.weight": r"model.vision_tower.transformer.layers.\1.feed_forward.gate_proj.weight",
+        r"^vision_encoder.transformer.layers.(\d+).feed_forward.w2.weight": r"model.vision_tower.transformer.layers.\1.feed_forward.down_proj.weight",
+        r"^vision_encoder.transformer.layers.(\d+).feed_forward.w3.weight": r"model.vision_tower.transformer.layers.\1.feed_forward.up_proj.weight",
+        r"^vision_language_adapter.w_in": r"model.multi_modal_projector.linear_1",
+        r"^vision_language_adapter.w_out": r"model.multi_modal_projector.linear_2",
+        r"^vision_encoder.ln_pre.weight": r"model.vision_tower.ln_pre.weight",
+        r"^vision_encoder.patch_conv.weight": r"model.vision_tower.patch_conv.weight",
+        r"^patch_merger.merging_layer.weight": r"model.multi_modal_projector.patch_merger.merging_layer.weight",
+        r"^pre_mm_projector_norm.weight": r"model.multi_modal_projector.norm.weight",
+    }
 # fmt: on
 
 
-def map_old_key_to_new(old_key):
+def map_old_key_to_new(old_key, mapping):
     """Map of a key of the original state dict to the equivalent key in HF format"""
-    for pattern, replacement in STATE_DICT_MAPPING.items():
+    for pattern, replacement in mapping.items():
         new_key, n_replace = re.subn(pattern, replacement, old_key)
         # Early exit of the loop
         if n_replace > 0:
@@ -100,11 +102,13 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
     """Convert a state dict file, when a single `nn.Module` is never sharded in different files (usual case)."""
     new_dict = {}
 
+    is_vision = isinstance(config, Mistral3Config)
+    mapping = get_sd_mapping(is_vision)
     for old_key, tensor in original_state_dict.items():
         if "fake_quantizer" in old_key:
             continue
 
-        new_key = map_old_key_to_new(old_key)
+        new_key = map_old_key_to_new(old_key, mapping)
 
         if "vision" in old_key:
             num_attention_heads = config.vision_config.num_attention_heads
@@ -114,7 +118,7 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
             key_value_dim = head_dim * num_attention_heads
             query_dim = head_dim * num_attention_heads
         else:
-            text_config = config.text_config if isinstance(config, Mistral3Config) else config
+            text_config = config.text_config if is_vision else config
             num_attention_heads = text_config.num_attention_heads
             hidden_size = text_config.hidden_size
             head_dim = text_config.head_dim
@@ -162,7 +166,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
         "beta_slow": float(original_config["yarn"]["alpha"]),
         "mscale_all_dim": 1.0,
         "mscale": 1.0,
-        # "llama_4_scaling_beta": original_config["llama_4_scaling"]["beta"],
+        "llama_4_scaling_beta": original_config.get("llama_4_scaling", {}).get("beta", 0),
     }
 
     # These are not always defined depending on `params.json`
