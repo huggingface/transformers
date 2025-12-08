@@ -101,10 +101,10 @@ class MarkupLMTokenizer(TokenizersBackend):
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
-        merges_file (`str`):
-            Path to the merges file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, the vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
@@ -146,14 +146,10 @@ class MarkupLMTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
-        vocab (`str` or `dict[str, int]`, *optional*):
-            Custom vocabulary dictionary. If not provided, the vocabulary is loaded from `vocab_file`.
-        merges (`str` or `list[str]`, *optional*):
-            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
     model = BPE
 
     def __init__(
@@ -232,11 +228,15 @@ class MarkupLMTokenizer(TokenizersBackend):
         )
         sep_token_str = str(sep_token)
         cls_token_str = str(cls_token)
-        self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(sep_token_str, self.convert_tokens_to_ids(sep_token_str)),
-            cls=(cls_token_str, self.convert_tokens_to_ids(cls_token_str)),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
+        cls_token_id = self.convert_tokens_to_ids(cls_token_str)
+        sep_token_id = self.convert_tokens_to_ids(sep_token_str)
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls_token_str} $A {sep_token_str}",
+            pair=f"{cls_token_str} $A {sep_token_str} $B {sep_token_str}",
+            special_tokens=[
+                (cls_token_str, cls_token_id),
+                (sep_token_str, sep_token_id),
+            ],
         )
 
         self.tags_dict = tags_dict
