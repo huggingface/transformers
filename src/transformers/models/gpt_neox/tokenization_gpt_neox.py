@@ -106,14 +106,10 @@ class GPTNeoXTokenizer(TokenizersBackend):
         bos_token: str = "<|endoftext|>",
         eos_token: str = "<|endoftext|>",
         pad_token: str = "<|padding|>",
-        add_bos_token: bool = False,
-        add_eos_token: bool = False,
         add_prefix_space: bool = False,
         trim_offsets: bool = True,
         **kwargs,
     ):
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
         self.add_prefix_space = add_prefix_space
         self.trim_offsets = trim_offsets
 
@@ -142,14 +138,11 @@ class GPTNeoXTokenizer(TokenizersBackend):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
             **kwargs,
         )
 
-        self.update_post_processor()
 
 
 __all__ = ["GPTNeoXTokenizer"]

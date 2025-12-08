@@ -102,7 +102,6 @@ class CodeGenTokenizer(TokenizersBackend):
         eos_token: str = "<|endoftext|>",
         pad_token=None,
         add_prefix_space: bool = False,
-        add_bos_token: bool = False,
         return_token_type_ids: bool = False,
         **kwargs,
     ):
@@ -132,22 +131,15 @@ class CodeGenTokenizer(TokenizersBackend):
             add_prefix_space=True, use_regex=True, trim_offsets=False
         )
 
-        # Set these before calling super().__init__() so the base class _post_init() can use them
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = False
-
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
             return_token_type_ids=return_token_type_ids,
             **kwargs,
         )
-
-        self._post_init()
 
     def decode(
         self,

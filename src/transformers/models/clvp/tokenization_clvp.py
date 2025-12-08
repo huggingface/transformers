@@ -145,8 +145,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         eos_token="[STOP]",
         pad_token="[STOP]",
         add_prefix_space=False,
-        add_bos_token=False,
-        add_eos_token=False,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
@@ -154,20 +152,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
 
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
         self._normalizer = None
-
-        # Set special_tokens_pattern based on add_bos_token and add_eos_token flags
-        if add_bos_token and add_eos_token:
-            kwargs["special_tokens_pattern"] = "bos_eos"
-        elif add_bos_token:
-            kwargs["special_tokens_pattern"] = "bos"
-        elif add_eos_token:
-            kwargs["special_tokens_pattern"] = "eos"
-        else:
-            kwargs["special_tokens_pattern"] = "none"
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -191,8 +176,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             **kwargs,
         )
 

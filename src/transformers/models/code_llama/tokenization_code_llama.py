@@ -127,7 +127,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
         fill_token="<FILL_ME>",
         additional_special_tokens=None,
         add_bos_token: bool = True,
-        add_eos_token: bool = False,
         use_default_system_prompt: bool = False,
         add_prefix_space: Optional[bool] = True,
         **kwargs,
@@ -174,7 +173,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
             bos_token=bos_token,
             eos_token=eos_token,
             add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             add_prefix_space=add_prefix_space,
             prefix_token=prefix_token,
@@ -185,10 +183,6 @@ class CodeLlamaTokenizer(TokenizersBackend):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
-
         self._prefix_token = prefix_token
         self._middle_token = middle_token
         self._suffix_token = suffix_token
