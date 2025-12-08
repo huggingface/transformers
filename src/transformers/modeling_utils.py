@@ -2268,9 +2268,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_mapping = self._tied_weights_keys
         # If the config does not specify any tying, return empty dict
-        if not self.config.tie_word_embeddings and (
-            not self.config.is_encoder_decoder or not self.config.tie_encoder_decoder
-        ):
+        # NOTE: not all modules have `tie_word_embeddings` attr, for example vision-only
+        # modules do not have any word embeddings!
+        tie_word_embeddings = getattr(self.config, "tie_word_embeddings", False)
+        tie_encoder_decoder = self.config.is_encoder_decoder and self.config.tie_encoder_decoder
+        if not tie_word_embeddings and not tie_encoder_decoder:
             return {}
         # If None, return empty dict
         elif tied_mapping is None:
