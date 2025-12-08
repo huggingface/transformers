@@ -61,6 +61,7 @@ def flush_memory(flush_compile: bool = True) -> None:
     torch.cuda.synchronize()
     gc.collect()
 
+
 class ContinuousBatchingNonGenerationTest(unittest.TestCase):
     @parameterized.expand(
         [
@@ -169,7 +170,6 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
 
 
 class ContinuousBatchingGenerationTest(unittest.TestCase):
-
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
@@ -219,7 +219,13 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Prepare non-continuous batching inputs
         inputs = tokenizer.apply_chat_template(
-            chats, add_generation_prompt=True, return_tensors="pt", padding=True, return_dict=True, return_attention_mask=True)
+            chats,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            padding=True,
+            return_dict=True,
+            return_attention_mask=True,
+        )
         num_input_tokens = inputs.input_ids.shape[1]
 
         # Generation without continuous batching
@@ -253,15 +259,21 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
     @require_torch_accelerator
     @parameterized.expand(
-        list(itertools.product(
-            [False, True],
-            ["eager", "sdpa", "flash_attention_2"],
-            [False, True],
-            [False, True],
-        ))
+        list(
+            itertools.product(
+                [False, True],
+                ["eager", "sdpa", "flash_attention_2"],
+                [False, True],
+                [False, True],
+            )
+        )
     )
     def test_continuous_batching_config_combinations(
-        self, allow_prefix_sharing: bool, attn_implementation: str, use_cuda_graph: bool, use_compile: bool,
+        self,
+        allow_prefix_sharing: bool,
+        attn_implementation: str,
+        use_cuda_graph: bool,
+        use_compile: bool,
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(
@@ -272,11 +284,13 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
     @require_torch_accelerator
     @parameterized.expand(
-        list(itertools.product(
-            ["TinyLlama/TinyLlama-1.1B-Chat-v1.0", "google/gemma-2-2b-it"],
-            [False, True],
-            [False, True],
-        ))
+        list(
+            itertools.product(
+                ["TinyLlama/TinyLlama-1.1B-Chat-v1.0", "google/gemma-2-2b-it"],
+                [False, True],
+                [False, True],
+            )
+        )
     )
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         try:
