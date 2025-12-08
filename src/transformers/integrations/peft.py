@@ -299,13 +299,14 @@ class PeftAdapterMixin:
             renamings = [entry for entry in key_mapping if isinstance(entry, WeightRenaming)]
         processed_adapter_state_dict = {}
         prefix = "base_model.model."
+        state_dict = self.state_dict()
         for key, value in adapter_state_dict.items():
             if key.startswith(prefix):
                 new_key = key[len(prefix) :]
             else:
                 new_key = key
 
-            new_key = rename_source_key(new_key, renamings, [])[0]
+            new_key = rename_source_key(new_key, renamings, [], self.base_model_prefix, state_dict)[0]
 
             # For hotswapping, we need the adapter name to be present in the state dict keys
             if hotswap:

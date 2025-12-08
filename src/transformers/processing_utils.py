@@ -28,7 +28,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -54,7 +54,6 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
-    is_offline_mode,
     is_torch_available,
     list_repo_templates,
     logging,
@@ -696,14 +695,10 @@ class ProcessorMixin(PushToHubMixin):
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
-        if "tokenizer" in output:
-            del output["tokenizer"]
-        if "qformer_tokenizer" in output:
-            del output["qformer_tokenizer"]
-        if "protein_tokenizer" in output:
-            del output["protein_tokenizer"]
-        if "char_tokenizer" in output:
-            del output["char_tokenizer"]
+        for attribute in self.__class__.get_attributes():
+            if "tokenizer" in attribute and attribute in output:
+                del output[attribute]
+
         if "chat_template" in output:
             del output["chat_template"]
 
