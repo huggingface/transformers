@@ -12,13 +12,22 @@ def bmm_moe_forward(
     final_hidden_states = torch.zeros_like(hidden_states)
 
     device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
-    tok_idx = torch.arange(num_tokens, device=device).unsqueeze(-1).expand(*top_k_index.shape)
+    num_experts = gate_up_proj.size(0)
 
-    # Flatten token x top_k pairs
+    # Flatten indices for gathering
     expert_ids = top_k_index.reshape(-1)  # (S,)
-    weights = top_k_weights.reshape(-1)  # (S,)
-    tok_idx = tok_idx.reshape(-1)  # (S,)
+    tok_idx = torch.arange(num_tokens, device=device).unsqueeze(-1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    # top_k_weights can be either:
+    #  - per-top-k: shape (num_tokens, num_top_k) -> each column is a top-k position
+    #  - per-expert: shape (num_tokens, num_experts) -> each column is an expert
+    if top_k_weights.shape == (num_tokens, num_top_k):
+        weights = top_k_weights.reshape(-1)
+    elif top_k_weights.shape == (num_tokens, num_experts):
+        weights = top_k_weights[tok_idx, expert_ids]
+    else:
+        weights = top_k_weights.reshape(-1)
 
     # Gather inputs for all selected (token, expert) pairs
     current_states = hidden_states[tok_idx]  # (S, hidden_dim)
@@ -26,8 +35,9 @@ def bmm_moe_forward(
     # Compute MoE forward pass for all selected pairs
     # Up projection: gate_up_proj (num_experts, 2*intermediate_dim, hidden_dim) -> (S, 2*intermediate_dim, hidden_dim)
     gate_up = gate_up_proj[expert_ids]  # (S, 2*intermediate_dim, hidden_dim)
-    gate_up_out = torch.bmm(gate_up, current_states.unsqueeze(-1)).squeeze(-1)  # (S, 2*intermediate_dim)
-    gate, up = gate_up_out.chunk(2, dim=-1)  # each (S, intermediate_dim)
+    gate, up = (
+        torch.bmm(gate_up, current_states.unsqueeze(-1)).squeeze(-1).chunk(2, dim=-1)
+    )  # gate: (S, intermediate_dim), up: (S, intermediate_dim)
 
     # Apply activation to gate and combine with up projection
     current_hidden = act_fn(gate) * up  # (S, intermediate_dim)
