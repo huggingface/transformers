@@ -672,8 +672,8 @@ class TorchAoAcceleratorTest(TorchAoTest):
         EXPECTED_OUTPUTS = ["What are we having for dinner?\n\nJessica: (smiling)",
                             "What are we having for dinner?"
                             ]
-        
-        
+
+
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
