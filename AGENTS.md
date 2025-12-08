@@ -36,4 +36,9 @@ After making changes, you should usually run `make fixup` to ensure any copies a
 the model you made the changes in and any other models that were updated by `make fixup`. Tests can be run with `pytest tests/models/[name]/test_modeling_[name].py`
 If your changes affect code in other classes like tokenizers or processors, you should run those tests instead, like `test_processing_[name].py` or `test_tokenization_[name].py`.
 
-In order to run tests, you may need to install dependencies. You can do this with `pip install -e ".[testing]"`. You will probably also need to `pip install torch accelerate` if your environment does not already have them.
+To run tests, you may need to install additional dependencies.
+First, install the testing extras:
+`pip install -e ".[testing]"`
+
+If your environment does not already include them, you may also need to install PyTorch and Accelerate.
+`pip install torch accelerate`
