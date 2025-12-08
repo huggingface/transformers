@@ -10,7 +10,6 @@ from transformers.testing_utils import (
     require_torch,
     torch_device,
 )
-
 from transformers.utils import is_torch_available
 
 
@@ -53,7 +52,7 @@ class CompressedTensorsTest(unittest.TestCase):
 
         self.assertIsInstance(config_from_dict.quantization_config, QuantizationConfig)
         self.assertIsInstance(config_from_dict.sparsity_config, SparsityCompressionConfig)
-    
+
     @skip("Test too flaky, depends on hardware also")
     def test_tinyllama_w8a8(self):
         expected_out = [
