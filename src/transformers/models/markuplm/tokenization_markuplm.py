@@ -228,8 +228,8 @@ class MarkupLMTokenizer(TokenizersBackend):
         )
         sep_token_str = str(sep_token)
         cls_token_str = str(cls_token)
-        cls_token_id = self.convert_tokens_to_ids(cls_token_str)
-        sep_token_id = self.convert_tokens_to_ids(sep_token_str)
+        cls_token_id = self.cls_token_id
+        sep_token_id = self.sep_token_id
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls_token_str} $A {sep_token_str}",
             pair=f"{cls_token_str} $A {sep_token_str} $B {sep_token_str}",
