@@ -1651,7 +1651,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 }
 
             vocab_files = {**cls.vocab_files_names, **additional_files_names}
-            
+
             # Check for versioned tokenizer files
             if "tokenizer_file" in vocab_files:
                 fast_tokenizer_file = FULL_TOKENIZER_FILE
@@ -1679,7 +1679,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 except Exception:
                     pass
                 vocab_files["tokenizer_file"] = fast_tokenizer_file
-            
+
             # This block looks for any extra chat template files
             if is_local:
                 template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)

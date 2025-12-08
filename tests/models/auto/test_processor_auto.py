@@ -51,7 +51,6 @@ from transformers.models.auto.image_processing_auto import get_image_processor_c
 from transformers.models.auto.video_processing_auto import get_video_processor_config
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
-from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
     PROCESSOR_NAME,
