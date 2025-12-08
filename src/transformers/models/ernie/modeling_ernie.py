@@ -113,6 +113,8 @@ class ErnieEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        inputs_embeds = inputs_embeds.to(token_type_embeddings.device)
         embeddings = inputs_embeds + token_type_embeddings
 
         position_embeddings = self.position_embeddings(position_ids)
