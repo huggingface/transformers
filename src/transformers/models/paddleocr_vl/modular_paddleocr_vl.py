@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...activations import GELUActivation
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
@@ -43,8 +43,8 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
 )
-from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...processing_utils import (
@@ -54,6 +54,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.generic import check_model_inputs
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
@@ -639,6 +640,75 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
 
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+        elif position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            text_position_ids = None
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                position_ids=text_position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
+
 
 class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
@@ -1124,43 +1194,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        model_inputs["position_ids"] = None
-
-        if cache_position[0] != 0:
-            model_inputs["pixel_values"] = None
-
-        return model_inputs
 
 
 __all__ = [

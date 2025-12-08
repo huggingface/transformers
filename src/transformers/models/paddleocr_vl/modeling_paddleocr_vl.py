@@ -487,7 +487,15 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+        elif position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            text_position_ids = None
 
         causal_mask = create_causal_mask(
             config=self.config,
@@ -495,7 +503,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
-            position_ids=position_ids,
+            position_ids=text_position_ids,
         )
 
         hidden_states = inputs_embeds
@@ -506,7 +514,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -1456,6 +1464,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         pixel_values=None,
         pixel_values_videos=None,
         image_grid_thw=None,
+        video_grid_thw=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1470,14 +1479,42 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
             use_cache=use_cache,
             **kwargs,
         )
 
-        model_inputs["position_ids"] = None
+        # Qwen2-VL position_ids are prepareed with rope_deltas in forward
+        if position_ids is None:
+            # Calculate RoPE index once per generation in the pre-fill stage only.
+            # When compiling, we can't check tensor values thus we check only input length
+            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
+            # models currently cannot do asssisted decoding
+            if model_inputs["cache_position"][0] == 0 or self.model.rope_deltas is None:
+                vision_positions, rope_deltas = self.model.get_rope_index(
+                    model_inputs.get("input_ids", None),
+                    image_grid_thw=image_grid_thw,
+                    video_grid_thw=video_grid_thw,
+                    attention_mask=attention_mask,
+                )
+                self.model.rope_deltas = rope_deltas
+            # then use the prev pre-calculated rope-deltas to get the correct position ids
+            elif "position_ids" in model_inputs:
+                batch_size, seq_length = model_inputs["position_ids"].shape
+                device = model_inputs["position_ids"].device
+                position_ids = torch.arange(seq_length, device=device)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
+                delta = cache_position[0] + self.model.rope_deltas
+                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
+                vision_positions = position_ids + delta.expand_as(position_ids)
 
-        if cache_position[0] != 0:
+            # Concatenate "text + vision" positions into [4, bs, seq-len]
+            text_positions = model_inputs["position_ids"][None, ...]
+            model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
+
+        if model_inputs["cache_position"][0] != 0:
             model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
 
         return model_inputs
 
