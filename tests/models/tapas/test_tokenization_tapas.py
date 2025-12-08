@@ -34,11 +34,10 @@ from transformers.models.tapas.tokenization_tapas import (
 from transformers.testing_utils import (
     require_pandas,
     require_tokenizers,
-    require_torch,
     slow,
 )
 
-from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
+from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
 @require_tokenizers
@@ -139,46 +138,20 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "unwanted, running"
         return input_text, output_text
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
+    def convert_batch_encode_plus_format_to_encode_plus(self, batch_encode_plus_sequences):
+        """Helper to convert batch_encode_plus outputs to a list of encode_plus-style dicts."""
+        first_key = list(batch_encode_plus_sequences.keys())[0]
+        batch_size = len(batch_encode_plus_sequences[first_key])
 
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
+        encode_plus_sequences = []
+        for i in range(batch_size):
+            single_sequence = {}
+            for key, value in batch_encode_plus_sequences.items():
+                if key != "encodings":
+                    single_sequence[key] = value[i]
+            encode_plus_sequences.append(single_sequence)
 
-        sequence = "UNwant\u00e9d,running"
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
-        # With lower casing
-        tokenizer = self.get_tokenizer(do_lower_case=True)
-        rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
-
-        sequence = "UNwant\u00e9d,running"
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
+        return encode_plus_sequences
 
     @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
     def test_chat_template_batched(self):
@@ -249,6 +222,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
         )
 
+    def test_batch_encode_dynamic_overflowing(self):
+        self.skipTest("TapasTokenizer requires a table input for encoding.")
+
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 
@@ -311,58 +287,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
         assert encoded_pair == [101] + text + [102] + text_2
-
-    def test_offsets_with_special_characters(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-
-                sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
-                tokens = tokenizer_r.encode_plus(
-                    sentence,
-                    return_attention_mask=False,
-                    return_token_type_ids=False,
-                    return_offsets_mapping=True,
-                    add_special_tokens=True,
-                )
-
-                do_lower_case = tokenizer_r.do_lower_case if hasattr(tokenizer_r, "do_lower_case") else False
-                expected_results = (
-                    [
-                        ((0, 0), tokenizer_r.cls_token),
-                        ((0, 1), "A"),
-                        ((1, 2), ","),
-                        ((3, 5), "na"),
-                        ((5, 6), "##ï"),
-                        ((6, 8), "##ve"),
-                        ((9, 15), tokenizer_r.mask_token),
-                        ((16, 21), "Allen"),
-                        ((21, 23), "##NL"),
-                        ((23, 24), "##P"),
-                        ((25, 33), "sentence"),
-                        ((33, 34), "."),
-                        ((0, 0), tokenizer_r.sep_token),
-                    ]
-                    if not do_lower_case
-                    else [
-                        ((0, 0), tokenizer_r.cls_token),
-                        ((0, 1), "a"),
-                        ((1, 2), ","),
-                        ((3, 8), "naive"),
-                        ((9, 15), tokenizer_r.mask_token),
-                        ((16, 21), "allen"),
-                        ((21, 23), "##nl"),
-                        ((23, 24), "##p"),
-                        ((25, 33), "sentence"),
-                        ((33, 34), "."),
-                        ((0, 0), tokenizer_r.sep_token),
-                    ]
-                )
-
-                self.assertEqual(
-                    [e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"])
-                )
-                self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
     def test_add_special_tokens(self):
         tokenizers: list[TapasTokenizer] = self.get_tokenizers(do_lower_case=False)
@@ -967,49 +891,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Do the same test as modeling common.
                 self.assertIn(0, output["token_type_ids"][0])
-
-    @require_torch
-    @slow
-    def test_torch_encode_plus_sent_to_model(self):
-        import torch
-
-        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
-
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
-
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-                    self.skipTest(f"{tokenizer.__class__} is not in the MODEL_TOKENIZER_MAPPING")
-
-                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-                config = config_class()
-
-                if config.is_encoder_decoder or config.pad_token_id is None:
-                    self.skipTest(reason="Model is an encoder-decoder or has no padding token set.")
-
-                model = model_class(config)
-
-                # Make sure the model contains at least the full vocabulary size in its embedding matrix
-                is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
-                assert (
-                    (model.get_input_embeddings().weight.shape[0] >= len(tokenizer))
-                    if is_using_common_embeddings
-                    else True
-                )
-
-                # Build sequence
-                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-                sequence = " ".join(first_ten_tokens)
-                table = self.get_table(tokenizer, length=0)
-                encoded_sequence = tokenizer.encode_plus(table, sequence, return_tensors="pt")
-                batch_encoded_sequence = tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="pt")
-                # This should not fail
-
-                with torch.no_grad():  # saves some time
-                    model(**encoded_sequence)
-                    model(**batch_encoded_sequence)
 
     @unittest.skip(reason="TAPAS doesn't handle pre-tokenized inputs.")
     def test_pretokenized_inputs(self):

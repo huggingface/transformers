@@ -1208,7 +1208,7 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     config: ZoeDepthConfig
     base_model_prefix = "zoedepth"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
 
@@ -1251,6 +1251,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

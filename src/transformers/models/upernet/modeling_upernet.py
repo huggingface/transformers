@@ -269,7 +269,7 @@ class UperNetFCNHead(nn.Module):
 class UperNetPreTrainedModel(PreTrainedModel):
     config: UperNetConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = []
 
 
@@ -301,6 +301,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SemanticSegmenterOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

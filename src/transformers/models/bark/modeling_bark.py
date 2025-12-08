@@ -34,7 +34,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
-from ...modeling_utils import PreTrainedModel, get_parameter_device
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     is_accelerate_available,
@@ -338,7 +338,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self, "_hf_hook"):
-            return get_parameter_device(self)
+            return super().device
         for module in self.modules():
             if (
                 hasattr(module, "_hf_hook")
@@ -347,13 +347,13 @@ class BarkPreTrainedModel(PreTrainedModel):
             ):
                 return torch.device(module._hf_hook.execution_device)
 
-        return get_parameter_device(self)
+        return super().device
 
 
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config):
         super().__init__(config)
@@ -426,6 +426,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
@@ -651,8 +652,10 @@ class BarkSemanticModel(BarkCausalModel):
         )  # size: 10048
 
         # take the generated semantic tokens
-        semantic_output = semantic_output[:, max_input_semantic_length + 1 :]
-
+        if kwargs.get("return_dict_in_generate", False):
+            semantic_output = semantic_output.sequences[:, max_input_semantic_length + 1 :]
+        else:
+            semantic_output = semantic_output[:, max_input_semantic_length + 1 :]
         return semantic_output
 
 
@@ -865,7 +868,10 @@ class BarkCoarseModel(BarkCausalModel):
 
             input_coarse_len = input_coarse.shape[1]
 
-            x_coarse = torch.hstack([x_coarse, output_coarse[:, input_coarse_len:]])
+            if kwargs.get("return_dict_in_generate", False):
+                x_coarse = torch.hstack([x_coarse, output_coarse.sequences[:, input_coarse_len:]])
+            else:
+                x_coarse = torch.hstack([x_coarse, output_coarse[:, input_coarse_len:]])
             total_generated_len = x_coarse.shape[1] - len_coarse_history
 
             del output_coarse
@@ -1023,6 +1029,7 @@ class BarkFineModel(BarkPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         codebook_idx (`int`):
@@ -1318,7 +1325,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         # for bark_model, device must be verified on its sub-models
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self.semantic, "_hf_hook"):
-            return get_parameter_device(self)
+            return super().device
         for module in self.semantic.modules():
             if (
                 hasattr(module, "_hf_hook")

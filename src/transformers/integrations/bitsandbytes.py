@@ -1,6 +1,8 @@
 import inspect
 from inspect import signature
 
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import (
     get_available_devices,
     is_accelerate_available,
@@ -27,12 +29,140 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
+class Bnb4bitQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        full_layer_name: str | None = None,
+        model: torch.nn.Module | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        """
+        we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
+        """
+        value = list(input_dict.values())[0]
+        value = value[0]
+
+        # update param name to get the weights instead of the quantized stats
+        module, _ = get_module_from_name(model, full_layer_name)
+
+        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+        # Since weights are saved in the correct "orientation", we skip transposing when loading.
+        if issubclass(module.source_cls, Conv1D):
+            value = value.T
+
+        old_value = model.get_parameter_or_buffer(full_layer_name)
+        new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
+        module._is_hf_initialized = True
+        return {full_layer_name: new_value}
+
+
+class Bnb4bitDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        """
+        Deserialization of bnb keys. We need 6 keys to recreate the quantized weights
+        """
+        if len(input_dict) == 1:
+            return input_dict
+
+        for key, value in input_dict.items():
+            if isinstance(value, list):
+                input_dict[key] = value[0]
+
+        key_weight = "weight"
+        weight = input_dict.pop(key_weight)
+        module, _ = get_module_from_name(model, full_layer_name)
+        new_value = bnb.nn.Params4bit.from_prequantized(
+            data=weight,
+            quantized_stats=input_dict,
+            requires_grad=False,
+            device=weight.device,
+            module=module,
+        )
+        module._is_hf_initialized = True
+        return {key_weight: new_value}
+
+
+class Bnb8bitQuantize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        value = list(input_dict.values())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        module, _ = get_module_from_name(model, full_layer_name)
+
+        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+        # Since weights are saved in the correct "orientation", we skip transposing when loading.
+        if issubclass(module.source_cls, Conv1D):
+            value = value.T
+        value_device = value.device
+        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
+        kwargs.pop("SCB", None)
+        new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
+        return {full_layer_name: new_value}
+
+
+class Bnb8bitDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        """
+        Deserialization of bnb keys.
+        """
+        if len(input_dict) == 1:
+            # special case when we only fetched the weight
+            # since we collected keys, we need to return it like that
+            return input_dict
+
+        for key, value in input_dict.items():
+            if isinstance(value, list):
+                input_dict[key] = value[0]
+
+        module, _ = get_module_from_name(model, full_layer_name)
+
+        key_weight = "weight"
+        weight = input_dict[key_weight]
+        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
+        kwargs["SCB"] = input_dict["SCB"]
+        new_value = bnb.nn.Int8Params(weight, requires_grad=False, **kwargs).to(weight.device)
+        module._is_hf_initialized = True
+        return {key_weight: new_value}
+
+
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,
     current_key_name=None,
     quantization_config=None,
     has_been_replaced=False,
+    pre_quantized=False,
 ):
     """
     Private method that wraps the recursion for module replacement.
@@ -58,13 +188,16 @@ def _replace_with_bnb_linear(
                         out_features = module.out_features
 
                     if quantization_config.quantization_method() == "llm_int8":
-                        model._modules[name] = bnb.nn.Linear8bitLt(
+                        new_module = bnb.nn.Linear8bitLt(
                             in_features,
                             out_features,
                             module.bias is not None,
                             has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
                             threshold=quantization_config.llm_int8_threshold,
                         )
+                        if pre_quantized:
+                            new_module.weight.data = new_module.weight.data.to(dtype=torch.int8)
+                        model._modules[name] = new_module
                         has_been_replaced = True
                     else:
                         if (
@@ -78,7 +211,7 @@ def _replace_with_bnb_linear(
                                 if "quant_storage" in list(signature(bnb.nn.Linear4bit).parameters)
                                 else {}
                             )
-                            model._modules[name] = bnb.nn.Linear4bit(
+                            new_module = bnb.nn.Linear4bit(
                                 in_features,
                                 out_features,
                                 module.bias is not None,
@@ -87,6 +220,13 @@ def _replace_with_bnb_linear(
                                 quant_type=quantization_config.bnb_4bit_quant_type,
                                 **extra_kwargs,
                             )
+                            if pre_quantized:
+                                # this is kind of an edge case when supporting both loading and quantization ...
+                                # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
+                                new_module.weight.data = new_module.weight.data.to(
+                                    dtype=quantization_config.bnb_4bit_quant_storage
+                                )
+                            model._modules[name] = new_module
                             has_been_replaced = True
                     # Store the module class in case we need to transpose the weight later
                     model._modules[name].source_cls = type(module)
@@ -99,13 +239,16 @@ def _replace_with_bnb_linear(
                 current_key_name,
                 quantization_config,
                 has_been_replaced=has_been_replaced,
+                pre_quantized=pre_quantized,
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)
     return model, has_been_replaced
 
 
-def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+def replace_with_bnb_linear(
+    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False
+):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `LLM.int8():
@@ -137,7 +280,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     """
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
     model, has_been_replaced = _replace_with_bnb_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config
+        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized
     )
 
     if not has_been_replaced:

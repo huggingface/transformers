@@ -34,10 +34,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import (
-    is_mamba_ssm_available,
-    is_mambapy_available,
-)
+from ...utils.import_utils import is_mamba_ssm_available, is_mambapy_available, is_torchdynamo_compiling
 from .configuration_mamba import MambaConfig
 
 
@@ -444,7 +441,7 @@ class MambaMixer(nn.Module):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
@@ -643,6 +640,7 @@ class MambaModel(MambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, MambaOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):

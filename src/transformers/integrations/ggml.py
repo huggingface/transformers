@@ -76,7 +76,7 @@ GGUF_CONFIG_MAPPING = {
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
         "vocab_size": "vocab_size",
     },
-    "qwen2moe": {
+    "qwen2_moe": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",

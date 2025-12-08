@@ -33,6 +33,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_scipy_available, is_torch_available, is_vision_available, logging
 
 
@@ -50,6 +51,18 @@ if TYPE_CHECKING:
     from .modeling_vitpose import VitPoseEstimatorOutput
 
 logger = logging.get_logger(__name__)
+
+
+class VitPoseImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_affine_transform (`bool`, *optional*):
+        Whether to apply an affine transformation to the input images based on the bounding boxes.
+    normalize_factor (`float`, *optional*, defaults to `200.0`):
+        Width and height scale factor used for normalization when computing center and scale from bounding boxes.
+    """
+
+    do_affine_transform: Optional[bool]
+    normalize_factor: Optional[float]
 
 
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
@@ -348,6 +361,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
+    valid_kwargs = VitPoseImageProcessorKwargs
     model_input_names = ["pixel_values"]
 
     def __init__(

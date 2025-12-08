@@ -177,6 +177,10 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = BltForCausalLM if is_torch_available() else None
 
+    @unittest.skip("BLT model requires special handling for training overfit test")
+    def test_training_overfit(self):
+        pass
+
     @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     @unittest.skip(
@@ -220,6 +224,11 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         _test_eager_matches_sdpa_inference(
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
+
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest("BLT always has an attention_mask input")
 
 
 @require_torch_accelerator

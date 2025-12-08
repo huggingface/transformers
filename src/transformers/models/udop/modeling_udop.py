@@ -252,7 +252,7 @@ class UdopPatchEmbeddings(nn.Module):
 class UdopPreTrainedModel(PreTrainedModel):
     config: UdopConfig
     base_model_prefix = "transformer"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
@@ -1105,6 +1105,7 @@ class UdopStack(UdopPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1455,9 +1456,6 @@ class UdopModel(UdopPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1477,6 +1475,7 @@ class UdopModel(UdopPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> tuple[Tensor, ...]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
@@ -1635,9 +1634,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1658,6 +1654,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> tuple[Tensor, ...]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
@@ -1815,9 +1812,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1830,6 +1824,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

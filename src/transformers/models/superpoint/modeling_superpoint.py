@@ -325,7 +325,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     config: SuperPointConfig
     base_model_prefix = "superpoint"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
 
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
@@ -378,6 +378,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SuperPointKeypointDescriptionOutput]:
         r"""
         Examples:
