@@ -176,7 +176,7 @@ class DeformableDetrConfig(PreTrainedConfig):
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
-        use_pretrained_backbone=True,
+        use_pretrained_backbone=False,
         backbone_kwargs=None,
         dilation=False,
         num_feature_levels=4,

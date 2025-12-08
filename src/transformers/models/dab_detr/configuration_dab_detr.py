@@ -147,7 +147,7 @@ class DabDetrConfig(PreTrainedConfig):
         use_timm_backbone=True,
         backbone_config=None,
         backbone="resnet50",
-        use_pretrained_backbone=True,
+        use_pretrained_backbone=False,
         backbone_kwargs=None,
         num_queries=300,
         encoder_layers=6,
