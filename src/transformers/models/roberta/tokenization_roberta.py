@@ -156,12 +156,6 @@ class RobertaTokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-        self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(sep_token), self._vocab.get(str(sep_token), 3)),
-            cls=(str(cls_token), self._vocab.get(str(cls_token), 2)),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
-        )
 
         super().__init__(
             errors=errors,
@@ -175,6 +169,12 @@ class RobertaTokenizer(TokenizersBackend):
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
             **kwargs,
+        )
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(str(sep_token), self.sep_token_id),
+            cls=(str(cls_token), self.cls_token_id),
+            add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
         )
 
 
