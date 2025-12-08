@@ -314,9 +314,8 @@ class AutoBitLinear(nn.Linear):
             output = output * self.weight_scale
         return output
 
-def replace_with_bitnet_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None
-):
+
+def replace_with_bitnet_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
     Public method that recursively replaces the kinear layers of the given model with bitnet quantized layers.
 
@@ -339,27 +338,27 @@ def replace_with_bitnet_linear(
             if isinstance(module, nn.Linear):
                 if quantization_config and quantization_config.linear_class == "autobitlinear":
                     new_module = AutoBitLinear(
-                                in_features=module.in_features,
-                                out_features=module.out_features,
-                                bias=module.bias is not None,
-                                device=module.weight.device,
-                                dtype=module.weight.dtype,
-                                online_quant=(quantization_config.quantization_mode == "online"),
-                                use_rms_norm=quantization_config.use_rms_norm,
-                                rms_norm_eps=quantization_config.rms_norm_eps,
-                            )
+                        in_features=module.in_features,
+                        out_features=module.out_features,
+                        bias=module.bias is not None,
+                        device=module.weight.device,
+                        dtype=module.weight.dtype,
+                        online_quant=(quantization_config.quantization_mode == "online"),
+                        use_rms_norm=quantization_config.use_rms_norm,
+                        rms_norm_eps=quantization_config.rms_norm_eps,
+                    )
                     if quantization_config.quantization_mode == "offline":
                         new_module.requires_grad_(False)
                 else:
                     new_module = BitLinear(
-                    in_features=module.in_features,
-                    out_features=module.out_features,
-                    bias=module.bias is not None,
-                    device=module.weight.device,
-                    dtype=module.weight.dtype,
-                    use_rms_norm=quantization_config.use_rms_norm if quantization_config else False,
-                    rms_norm_eps=quantization_config.rms_norm_eps if quantization_config else 1e-6,
-                )
+                        in_features=module.in_features,
+                        out_features=module.out_features,
+                        bias=module.bias is not None,
+                        device=module.weight.device,
+                        dtype=module.weight.dtype,
+                        use_rms_norm=quantization_config.use_rms_norm if quantization_config else False,
+                        rms_norm_eps=quantization_config.rms_norm_eps if quantization_config else 1e-6,
+                    )
                     new_module.requires_grad_(False)
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
@@ -372,4 +371,3 @@ def replace_with_bitnet_linear(
         )
 
     return model
-

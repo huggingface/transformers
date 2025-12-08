@@ -35,6 +35,7 @@ if is_hadamard_available():
 
 logger = logging.get_logger(__name__)
 
+
 def pad_to_block(tensor, dims, had_block_size, value=0):
     pad_dims = [0 for _ in range(2 * len(tensor.shape))]
     for dim in dims:
@@ -548,9 +549,8 @@ class HiggsLinear(torch.nn.Module):
             hadamard_size=self.hadamard_size,
         )
 
-def replace_with_higgs_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None
-):
+
+def replace_with_higgs_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
     Public method that recursively replaces the Linear layers of the given model with HIGGS quantized layers.
 
@@ -572,13 +572,13 @@ def replace_with_higgs_linear(
         with init_empty_weights():
             if isinstance(module, nn.Linear):
                 new_module = HiggsLinear(
-                        module.in_features,
-                        module.out_features,
-                        bias=module.bias is not None,
-                        num_bits=quantization_config.bits,
-                        hadamard_size=quantization_config.hadamard_size,
-                        group_size=quantization_config.group_size,
-                    )
+                    module.in_features,
+                    module.out_features,
+                    bias=module.bias is not None,
+                    num_bits=quantization_config.bits,
+                    hadamard_size=quantization_config.hadamard_size,
+                    group_size=quantization_config.group_size,
+                )
                 new_module.source_cls = type(module)
                 new_module.requires_grad_(False)
                 model.set_submodule(module_name, new_module)

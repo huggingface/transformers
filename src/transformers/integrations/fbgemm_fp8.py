@@ -216,12 +216,8 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
 
 
 def replace_with_fbgemm_fp8_linear(
-    model,
-    modules_to_not_convert: list[str] | None = None,
-    quantization_config=None,
-    pre_quantized=False,
-    tp_plan=None
-    ):
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False, tp_plan=None
+):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
     This will enable running your models using high performance fp8 kernel from FBGEMM library.

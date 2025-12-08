@@ -589,10 +589,8 @@ class FP8Expert(nn.Module):
 
 
 def replace_with_fp8_linear(
-    model,
-    modules_to_not_convert: list[str] | None = None,
-    quantization_config=None,
-    pre_quantized=False):
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
+):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FP8Linear` modules.
 

@@ -86,9 +86,7 @@ class EetqLinear(nn.Module):
         return output
 
 
-def replace_with_eetq_linear(
-    model, modules_to_not_convert: list[str] | None = None, pre_quantized=False
-):
+def replace_with_eetq_linear(model, modules_to_not_convert: list[str] | None = None, pre_quantized=False):
     """
     A helper function to replace all `torch.nn.Linear` modules by `EetqLinear` modules.
 

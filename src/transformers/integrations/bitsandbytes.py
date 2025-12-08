@@ -156,7 +156,10 @@ class Bnb8bitDeserialize(ConversionOps):
 
 
 def replace_with_bnb_linear(
-    model: torch.nn.Module, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
+    model: torch.nn.Module,
+    modules_to_not_convert: list[str] | None = None,
+    quantization_config=None,
+    pre_quantized=False,
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by bnb modules from the `bitsandbytes` library.
@@ -188,26 +191,26 @@ def replace_with_bnb_linear(
             if isinstance(module, nn.Linear):
                 if quantization_config.quantization_method() == "llm_int8":
                     new_module = bnb.nn.Linear8bitLt(
-                            in_features,
-                            out_features,
-                            module.bias is not None,
-                            has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
-                            threshold=quantization_config.llm_int8_threshold,
-                        )
+                        in_features,
+                        out_features,
+                        module.bias is not None,
+                        has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
+                        threshold=quantization_config.llm_int8_threshold,
+                    )
                     if pre_quantized:
                         # this is kind of an edge case when supporting both loading and quantization ...
                         # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
                         new_module.weight.data = new_module.weight.data.to(dtype=torch.int8)
                 else:
                     new_module = bnb.nn.Linear4bit(
-                                in_features,
-                                out_features,
-                                module.bias is not None,
-                                quantization_config.bnb_4bit_compute_dtype,
-                                compress_statistics=quantization_config.bnb_4bit_use_double_quant,
-                                quant_type=quantization_config.bnb_4bit_quant_type,
-                                quant_storage=quantization_config.bnb_4bit_quant_storage
-                            )
+                        in_features,
+                        out_features,
+                        module.bias is not None,
+                        quantization_config.bnb_4bit_compute_dtype,
+                        compress_statistics=quantization_config.bnb_4bit_use_double_quant,
+                        quant_type=quantization_config.bnb_4bit_quant_type,
+                        quant_storage=quantization_config.bnb_4bit_quant_storage,
+                    )
                     if pre_quantized:
                         # same here
                         new_module.weight.data = new_module.weight.data.to(
