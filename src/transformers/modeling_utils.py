@@ -4046,7 +4046,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = weight_conversions  # TODO: Dynamic weight loader for adapters
+            adapter_kwargs["key_mapping"] = key_mapping
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
