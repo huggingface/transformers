@@ -1,5 +1,7 @@
 import torch
 
+from typing import Callable
+
 
 def eager_moe_forward(
     hidden_states: torch.Tensor,
@@ -7,7 +9,7 @@ def eager_moe_forward(
     top_k_weights: torch.Tensor,
     gate_up_proj: torch.Tensor,
     down_proj: torch.Tensor,
-    act_fn: callable,
+    act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
     num_experts = gate_up_proj.size(0)
     final_hidden_states = torch.zeros_like(hidden_states)
@@ -38,7 +40,7 @@ def batched_mm_moe_forward(
     top_k_weights: torch.Tensor,
     gate_up_proj: torch.Tensor,
     down_proj: torch.Tensor,
-    act_fn: callable,
+    act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
     final_hidden_states = torch.zeros_like(hidden_states)
 
@@ -125,7 +127,7 @@ def grouped_mm_moe_forward(
     top_k_weights: torch.Tensor,
     gate_up_proj: torch.Tensor,
     down_proj: torch.Tensor,
-    act_fn: callable,
+    act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
     final_hidden_states = torch.zeros_like(hidden_states)
 
@@ -169,6 +171,8 @@ def grouped_mm_moe_forward(
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # Important: torch._grouped_mm requires mat_a.dtype == out_dtype when out_dtype is provided.
+    # Important: torch._grouped_mm requires mat_a and mat_b to have strides that are multiples of 16
+    # still can't find a reference for this constraint but I had models failing if not respected
     mat_a_up = current_states_g
     mat_b_up = gate_up_proj.transpose(-2, -1)
 
