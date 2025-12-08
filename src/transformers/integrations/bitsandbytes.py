@@ -182,13 +182,12 @@ def replace_with_bnb_linear(
             continue
         new_module = None
         with init_empty_weights():
-            if isinstance(module, Conv1D):
-                in_features, out_features = module.weight.shape
-            else:
-                in_features = module.in_features
-                out_features = module.out_features
-
-            if isinstance(module, nn.Linear):
+            if (isinstance(module, (nn.Linear, Conv1D))):
+                if isinstance(module, Conv1D):
+                    in_features, out_features = module.weight.shape
+                else:
+                    in_features = module.in_features
+                    out_features = module.out_features
                 if quantization_config.quantization_method() == "llm_int8":
                     new_module = bnb.nn.Linear8bitLt(
                         in_features,
