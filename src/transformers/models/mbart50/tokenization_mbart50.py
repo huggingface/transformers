@@ -176,7 +176,8 @@ class MBart50Tokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
-
+        additional_special_tokens = kwargs.pop("additional_special_tokens", []) or []
+        additional_special_tokens.extend(FAIRSEQ_LANGUAGE_CODES)
         super().__init__(
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -186,6 +187,7 @@ class MBart50Tokenizer(TokenizersBackend):
             unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
