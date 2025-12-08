@@ -279,9 +279,6 @@ class PeftAdapterMixin:
             )
             peft_config.inference_mode = not is_trainable
 
-        if peft_config.peft_type != PeftType.LORA:
-            raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
-
         if not hotswap:
             # TODO: WE NEED TOO APPLY OUR DYNAMIC WEIGHT CONVERSION AT SOME POINT HERE!
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
