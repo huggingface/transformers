@@ -182,7 +182,7 @@ def replace_with_bnb_linear(
             continue
         new_module = None
         with init_empty_weights():
-            if (isinstance(module, (nn.Linear, Conv1D))):
+            if isinstance(module, (nn.Linear, Conv1D)):
                 if isinstance(module, Conv1D):
                     in_features, out_features = module.weight.shape
                 else:
