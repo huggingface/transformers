@@ -606,7 +606,7 @@ def replace_with_fp8_linear(
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
         with init_empty_weights():
-            if "gate_up_proj" in module_name or "down_proj" in module_name and "experts" in module_name:
+            if module_name.endswith(".experts"):
                 new_module = FP8Expert(
                     config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
                 )
