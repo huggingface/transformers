@@ -386,7 +386,7 @@ class GitEncoder(nn.Module):
 class GitPreTrainedModel(PreTrainedModel):
     config: GitConfig
     base_model_prefix = "git"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -807,7 +807,7 @@ class GitVisionTransformer(nn.Module):
 class GitVisionModel(GitPreTrainedModel):
     config: GitVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP->Git
     def __init__(self, config: GitVisionConfig):
@@ -827,6 +827,7 @@ class GitVisionModel(GitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Examples:
@@ -972,6 +973,7 @@ class GitModel(GitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
         Examples:

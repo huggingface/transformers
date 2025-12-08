@@ -118,7 +118,7 @@ class MoonshineRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -264,6 +264,7 @@ class MoonshineAttention(nn.Module):
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.rotary_fn = apply_rotary_pos_emb
 
         # Pad head dimension to the next specified multiple.
         if self.config.pad_head_dim_to_multiple_of is not None:
@@ -549,7 +550,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -634,7 +635,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -860,9 +861,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_encoder(self):
         """
         Calling this function will disable the gradient computation for the Moonshine encoder so that its parameters will
@@ -1018,12 +1016,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def get_output_embeddings(self):
         return self.proj_out

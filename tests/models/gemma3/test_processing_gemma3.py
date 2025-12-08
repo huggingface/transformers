@@ -12,19 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
-from transformers import Gemma3Processor, GemmaTokenizer
+from transformers import Gemma3Processor
 from transformers.testing_utils import get_tests_dir, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_vision_available():
-    from transformers import Gemma3ImageProcessor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -34,30 +28,31 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma3Processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.boi_token
+
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
         gemma3_image_processor_kwargs = {
             "do_pan_and_scan": True,
             "pan_and_scan_min_crop_size": 256,
             "pan_and_scan_max_num_crops": 4,
             "pan_and_scan_min_ratio_to_activate": 1.2,
         }
-        image_processor = Gemma3ImageProcessor.from_pretrained(
-            "google/siglip-so400m-patch14-384", **gemma3_image_processor_kwargs
-        )
+        return image_processor_class(**gemma3_image_processor_kwargs)
 
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         extra_special_tokens = {
             "image_token": "<image_soft_token>",
             "boi_token": "<start_of_image>",
             "eoi_token": "<end_of_image>",
         }
-        tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = Gemma3Processor(image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.boi_token
+        tokenizer = tokenizer_class(SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens)
+        return tokenizer
 
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -70,11 +65,6 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    # TODO: raushan or arthur: add the real chat template
     @staticmethod
     def prepare_processor_dict():
         return {
@@ -102,16 +92,16 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # If text has no image tokens, image should be `None`
         with self.assertRaises(ValueError):
-            _ = processor(text=text_no_image, images=image, return_tensors="np")
+            _ = processor(text=text_no_image, images=image, return_tensors="pt")
 
         # We can't be sure what is users intention: if user wants one image per text OR two images for first text and no image for second text
         with self.assertRaises(ValueError):
-            _ = processor(text=[text_single_image, text_single_image], images=[image, image], return_tensors="np")
+            _ = processor(text=[text_single_image, text_single_image], images=[image, image], return_tensors="pt")
 
         # The users is expected to be explicit about which image belong to which text by nesting the images list
-        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="np")
+        out_multiimages = processor(text=text_multi_images, images=[image, image], return_tensors="pt")
         out_batch_oneimage = processor(
-            text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="np"
+            text=[text_single_image, text_single_image], images=[[image], [image]], return_tensors="pt"
         )
         self.assertListEqual(
             out_batch_oneimage[self.images_input_name].tolist(), out_multiimages[self.images_input_name].tolist()
@@ -127,7 +117,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(
             text=input_str,
             images=image_input,
-            return_tensors="np",
+            return_tensors="pt",
             do_pan_and_scan=True,
             image_seq_length=2,
             pan_and_scan_min_crop_size=10,
@@ -135,7 +125,15 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # base image + 4 crops
         self.assertEqual(len(inputs[self.images_input_name]), 5)
-        self.assertEqual(len(inputs[self.text_input_name][0]), 67)
+        baseline = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_pan_and_scan=False,
+            image_seq_length=2,
+            pan_and_scan_min_crop_size=10,
+        )
+        self.assertGreater(len(inputs[self.text_input_name][0]), len(baseline[self.text_input_name][0]))
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""

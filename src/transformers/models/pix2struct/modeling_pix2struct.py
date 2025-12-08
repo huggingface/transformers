@@ -336,7 +336,7 @@ class Pix2StructVisionEncoder(nn.Module):
 @auto_docstring
 class Pix2StructPreTrainedModel(PreTrainedModel):
     config: Pix2StructConfig
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
 
     _can_compile_fullgraph = False
 
@@ -454,7 +454,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     config: Pix2StructVisionConfig
     main_input_name = "flattened_patches"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
 
@@ -481,6 +481,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         flattened_patches (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
@@ -956,7 +957,7 @@ class Pix2StructTextBlock(GradientCheckpointingLayer):
 )
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config: Pix2StructTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
     _no_split_modules = ["Pix2StructTextBlock"]
     _tied_weights_keys = {"lm_head.weight": "embed_tokens.weight"}
     supports_gradient_checkpointing = True
@@ -1343,9 +1344,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
     def set_output_embeddings(self, new_embeddings):
         self.decoder.set_output_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1362,6 +1360,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         flattened_patches (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):

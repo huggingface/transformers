@@ -21,7 +21,7 @@ from packaging import version
 from transformers import OlmoConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
+from transformers.models.gpt_neox.tokenization_gpt_neox import GPTNeoXTokenizer as GPTNeoXTokenizerFast
 from transformers.testing_utils import (
     require_tokenizers,
     require_torch,

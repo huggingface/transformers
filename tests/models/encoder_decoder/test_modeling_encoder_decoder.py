@@ -504,9 +504,9 @@ class EncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             input_ids,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def create_and_check_encoder_decoder_shared_weights(
         self,

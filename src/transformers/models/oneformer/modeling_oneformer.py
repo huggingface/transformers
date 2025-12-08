@@ -2765,7 +2765,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     config: OneFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -2872,6 +2872,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> OneFormerModelOutput:
         r"""
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -3058,6 +3059,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> OneFormerForUniversalSegmentationOutput:
         r"""
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

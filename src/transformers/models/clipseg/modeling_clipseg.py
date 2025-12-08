@@ -425,7 +425,7 @@ class CLIPSegEncoderLayer(GradientCheckpointingLayer):
 class CLIPSegPreTrainedModel(PreTrainedModel):
     config: CLIPSegConfig
     base_model_prefix = "clip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -651,7 +651,7 @@ class CLIPSegTextTransformer(nn.Module):
 
 class CLIPSegTextModel(CLIPSegPreTrainedModel):
     config: CLIPSegTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     _no_split_modules = ["CLIPSegTextEmbeddings", "CLIPSegEncoderLayer"]
 
@@ -676,6 +676,7 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -757,7 +758,7 @@ class CLIPSegVisionTransformer(nn.Module):
 class CLIPSegVisionModel(CLIPSegPreTrainedModel):
     config: CLIPSegVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: CLIPSegVisionConfig):
         super().__init__(config)
@@ -776,6 +777,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -933,6 +935,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, CLIPSegOutput]:
         r"""
         return_loss (`bool`, *optional*):
@@ -1125,6 +1128,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
+        **kwargs,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1239,6 +1243,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, CLIPSegOutput]:
         r"""
         conditional_pixel_values (`torch.FloatTensor`, *optional*):

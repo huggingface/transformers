@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class FlaubertConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`FlaubertModel`] or a [`TFFlaubertModel`]. It is
+    This is the configuration class to store the configuration of a [`FlaubertModel`]. It is
     used to instantiate a FlauBERT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FlauBERT
     [flaubert/flaubert_base_uncased](https://huggingface.co/flaubert/flaubert_base_uncased) architecture.
@@ -40,7 +40,7 @@ class FlaubertConfig(PreTrainedConfig):
             Structured Dropout. ICLR 2020)
         vocab_size (`int`, *optional*, defaults to 30145):
             Vocabulary size of the FlauBERT model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`FlaubertModel`] or [`TFFlaubertModel`].
+            the `inputs_ids` passed when calling [`FlaubertModel`].
         emb_dim (`int`, *optional*, defaults to 2048):
             Dimensionality of the encoder layers and the pooler layer.
         n_layer (`int`, *optional*, defaults to 12):

@@ -427,7 +427,8 @@ def write_model(
         print("Saving in the Transformers format.")
         if push_to_hub:
             print("Pushing to the hub.")
-            model.push_to_hub(model_path, safe_serialization=safe_serialization, private=True, use_temp_dir=True)
+            model_name = model_path.split(os.path.sep)[-1]
+            model.push_to_hub(model_name, safe_serialization=safe_serialization, private=True)
         else:
             print("Saving to disk.")
             model.save_pretrained(model_path, safe_serialization=safe_serialization)
@@ -511,7 +512,8 @@ def write_tokenizer(
 
     if push_to_hub:
         print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
-        tokenizer.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
+        model_name = tokenizer_path.split(os.path.sep)[-1]
+        tokenizer.push_to_hub(model_name, private=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
         tokenizer.save_pretrained(tokenizer_path)

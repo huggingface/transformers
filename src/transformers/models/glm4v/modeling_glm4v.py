@@ -425,7 +425,7 @@ class Glm4vTextRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -691,7 +691,7 @@ class Glm4vModelOutputWithPast(ModelOutput):
 class Glm4vPreTrainedModel(PreTrainedModel):
     config: Glm4vConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -708,7 +708,7 @@ class Glm4vPreTrainedModel(PreTrainedModel):
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -768,7 +768,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -820,7 +820,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 @auto_docstring
 class Glm4vTextModel(Glm4vPreTrainedModel):
     config: Glm4vTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
@@ -839,7 +839,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -926,7 +926,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
 
 @auto_docstring
 class Glm4vModel(Glm4vPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -947,12 +947,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_rope_index(
         self,
@@ -1381,12 +1375,6 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -1394,15 +1382,6 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def visual(self):
-        return self.model.visual
 
     @can_return_tuple
     @auto_docstring

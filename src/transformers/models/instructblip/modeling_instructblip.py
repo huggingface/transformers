@@ -309,7 +309,7 @@ class InstructBlipEncoderLayer(GradientCheckpointingLayer):
 class InstructBlipPreTrainedModel(PreTrainedModel):
     config: InstructBlipConfig
     base_model_prefix = "blip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -373,7 +373,7 @@ class InstructBlipEncoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     config: InstructBlipVisionConfig
     _can_record_outputs = {
         "hidden_states": InstructBlipEncoderLayer,
@@ -845,7 +845,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1142,8 +1142,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
     def get_output_embeddings(self) -> nn.Module:
         return self.language_model.get_output_embeddings()
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
     def get_decoder(self):
         return self.language_model.get_decoder()

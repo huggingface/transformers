@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 このガイドでは、次の方法を説明します。
 
-1. [Food-101](https://huggingface.co/datasets/food101) データセットの [ViT](model_doc/vit) を微調整して、画像内の食品を分類します。
+1. [Food-101](https://huggingface.co/datasets/ethz/food101) データセットの [ViT](model_doc/vit) を微調整して、画像内の食品を分類します。
 2. 微調整したモデルを推論に使用します。
 
 <Tip>
@@ -58,7 +58,7 @@ Datasets、🤗 データセット ライブラリから Food-101 データセ�
 ```py
 >>> from datasets import load_dataset
 
->>> food = load_dataset("food101", split="train[:5000]")
+>>> food = load_dataset("ethz/food101", split="train[:5000]")
 ```
 
 [`~datasets.Dataset.train_test_split`] メソッドを使用して、データセットの `train` 分割をトレイン セットとテスト セットに分割します。
@@ -255,7 +255,7 @@ Datasets、🤗 データセット ライブラリから Food-101 データセ�
 推論を実行したい画像を読み込みます。
 
 ```py
->>> ds = load_dataset("food101", split="validation[:10]")
+>>> ds = load_dataset("ethz/food101", split="validation[:10]")
 >>> image = ds["image"][0]
 ```
 

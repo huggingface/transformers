@@ -544,8 +544,6 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
 
 @auto_docstring
 class GPT2Model(GPT2PreTrainedModel):
-    _supports_param_buffer_assignment = False
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1023,6 +1021,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -1150,6 +1149,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -1230,6 +1230,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):

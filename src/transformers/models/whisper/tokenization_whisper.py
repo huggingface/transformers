@@ -16,16 +16,21 @@
 
 import json
 import os
+import re
+import warnings
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
-import regex as re
+from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers.models import BPE
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 
+
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -33,54 +38,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
     "normalizer_file": "normalizer.json",
 }
-
-
-MAX_MODEL_INPUT_SIZES = {
-    "openai/whisper-base": 448,
-}
-
-
-# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
-def bytes_to_unicode():
-    """
-    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
-    characters the bpe code barfs on.
-
-    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
-    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
-    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
-    tables between utf-8 bytes and unicode strings.
-    """
-    bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
-    )
-    cs = bs[:]
-    n = 0
-    for b in range(2**8):
-        if b not in bs:
-            bs.append(b)
-            cs.append(2**8 + n)
-            n += 1
-    cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
-
-
-logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
-def get_pairs(word):
-    """
-    Return set of symbol pairs in a word.
-
-    Word is represented as tuple of symbols (symbols being variable-length strings).
-    """
-    pairs = set()
-    prev_char = word[0]
-    for char in word[1:]:
-        pairs.add((prev_char, char))
-        prev_char = char
-    return pairs
 
 
 LANGUAGES = {
@@ -206,23 +163,23 @@ TO_LANGUAGE_CODE = {
 TASK_IDS = ["translate", "transcribe"]
 
 
-class WhisperTokenizer(PreTrainedTokenizer):
+class WhisperTokenizer(TokenizersBackend):
     """
-    Construct a Whisper tokenizer.
+    Construct a "fast" Whisper tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
-    the superclass for more information regarding such methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
-        merges_file (`str`):
+        merges_file (`str`, *optional*):
             Path to the merges file.
         normalizer_file (`str`, *optional*):
             Path to the normalizer_file file.
-        errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See
-            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        tokenizer_file (`str`, *optional*):
+            Path to [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -231,11 +188,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
             `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
-        pad_token (`str`, *optional*):
-            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word.
+            other word. (Whisper tokenizer detect beginning of words by the preceding space).
         language (`str`, *optional*):
             The language of the transcription text. The corresponding language id token is appended to the start of the
             sequence for multilingual speech recognition and speech translation tasks, e.g. for Spanish the token
@@ -252,14 +207,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file,
-        merges_file,
+        vocab=None,
+        merges=None,
         normalizer_file=None,
-        errors="replace",
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
-        pad_token=None,
         add_prefix_space=False,
         language=None,
         task=None,
@@ -281,24 +234,36 @@ class WhisperTokenizer(PreTrainedTokenizer):
             if isinstance(unk_token, str)
             else unk_token
         )
-        pad_token = (
-            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
-            if isinstance(pad_token, str)
-            else pad_token
+
+        self._vocab = vocab if vocab is not None else {}
+        self._merges = merges if merges is not None else []
+
+        self._tokenizer = Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
         )
 
-        with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
-        self.decoder = {v: k for k, v in self.encoder.items()}
-        self.errors = errors  # how to handle errors in decoding
-        self.byte_encoder = bytes_to_unicode()
-        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        with open(merges_file, encoding="utf-8") as merges_handle:
-            bpe_merges = merges_handle.read().split("\n")[1:-1]
-        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
-        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
-        self.cache = {}
-        self.add_prefix_space = add_prefix_space
+        self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
+        self._tokenizer.decoder = decoders.ByteLevel()
+
+        super().__init__(
+            tokenizer_object=self._tokenizer,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            add_prefix_space=add_prefix_space,
+            normalizer_file=normalizer_file,
+            language=language,
+            task=task,
+            predict_timestamps=predict_timestamps,
+            **kwargs,
+        )
 
         if normalizer_file is not None:
             with open(normalizer_file, encoding="utf-8") as vocab_handle:
@@ -306,215 +271,25 @@ class WhisperTokenizer(PreTrainedTokenizer):
         else:
             self.english_spelling_normalizer = None
 
-        # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
         self.timestamp_pat = re.compile(r"<\|(\d+\.\d+)\|>")
 
         self.language = language
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
-        )
-
         self.task = task
         self.predict_timestamps = predict_timestamps
 
-    @property
-    def vocab_size(self) -> int:
-        return len(self.encoder)
+        self._post_init()
 
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe with GPT2 -> Whisper
-    def bpe(self, token):
-        if token in self.cache:
-            return self.cache[token]
-        word = tuple(token)
-        pairs = get_pairs(word)
-
-        if not pairs:
-            return token
-
-        while True:
-            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
-            if bigram not in self.bpe_ranks:
-                break
-            first, second = bigram
-            new_word = []
-            i = 0
-            while i < len(word):
-                try:
-                    j = word.index(first, i)
-                except ValueError:
-                    new_word.extend(word[i:])
-                    break
-                else:
-                    new_word.extend(word[i:j])
-                    i = j
-
-                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
-                    new_word.append(first + second)
-                    i += 2
-                else:
-                    new_word.append(word[i])
-                    i += 1
-            new_word = tuple(new_word)
-            word = new_word
-            if len(word) == 1:
-                break
-            else:
-                pairs = get_pairs(word)
-        word = " ".join(word)
-        self.cache[token] = word
-        return word
-
-    def set_prefix_tokens(
-        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
-    ):
-        """
-        Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
-        update the prefix tokens as required when fine-tuning. Example:
-
-        ```python
-        >>> # instantiate the tokenizer and set the prefix token to Spanish
-        >>> tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
-        >>> # now switch the prefix token from Spanish to French
-        >>> tokenizer.set_prefix_tokens(language="french")
-        ```
-
-        Args:
-            language (`str`, *optional*, defaults to `None`):
-                The language of the transcription text.
-            task (`str`, *optional*, defaults to `None`):
-                Task identifier to append at the start of sequence (if any).
-            predict_timestamps (`bool`, *optional*, defaults to `None`):
-                Whether to omit the `<|notimestamps|>` token at the start of the sequence.
-        """
-        self.language = language if language is not None else self.language
-        self.task = task if task is not None else self.task
-        self.predict_timestamps = predict_timestamps if predict_timestamps is not None else self.predict_timestamps
-
-    @property
-    def prefix_tokens(self) -> list[int]:
-        bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
-        translate_token_id = self.convert_tokens_to_ids("<|translate|>")
-        transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
-        notimestamps_token_id = self.convert_tokens_to_ids("<|notimestamps|>")
-        langs = tuple(LANGUAGES.keys())
-
-        if self.language is not None:
-            self.language = self.language.lower()
-            if self.language in TO_LANGUAGE_CODE:
-                language_id = TO_LANGUAGE_CODE[self.language]
-            elif self.language in TO_LANGUAGE_CODE.values():
-                language_id = self.language
-            else:
-                is_language_code = len(self.language) == 2
-                raise ValueError(
-                    f"Unsupported language: {self.language}. Language should be one of:"
-                    f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
+    def _post_init(self):
+        """Post-initialization hook to set up prefix tokens after the tokenizer is fully loaded."""
+        super()._post_init()
+        # Set up prefix tokens if language or task is specified (may be set from config in from_pretrained)
+        if hasattr(self, "language") and hasattr(self, "task") and hasattr(self, "predict_timestamps"):
+            if self.language is not None or self.task is not None:
+                self.set_prefix_tokens(
+                    language=self.language, task=self.task, predict_timestamps=self.predict_timestamps
                 )
 
-        if self.task is not None:
-            if self.task not in TASK_IDS:
-                raise ValueError(f"Unsupported task: {self.task}. Task should be in: {TASK_IDS}")
-
-        bos_sequence = [bos_token_id]
-        if self.language is not None:
-            bos_sequence.append(bos_token_id + 1 + langs.index(language_id))
-        if self.task is not None:
-            bos_sequence.append(transcribe_token_id if self.task == "transcribe" else translate_token_id)
-        if not self.predict_timestamps:
-            bos_sequence.append(notimestamps_token_id)
-        return bos_sequence
-
-    # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
-        """Build model inputs from a sequence by appending eos_token_id."""
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
-
-    # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.get_special_tokens_mask
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        prefix_ones = [1] * len(self.prefix_tokens)
-        suffix_ones = [1]
-        if token_ids_1 is None:
-            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize with GPT2 -> Whisper
-    def _tokenize(self, text):
-        """Tokenize a string."""
-        bpe_tokens = []
-        for token in re.findall(self.pat, text):
-            token = "".join(
-                self.byte_encoder[b] for b in token.encode("utf-8")
-            )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
-            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
-        return bpe_tokens
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id with GPT2 -> Whisper
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
-
-    def _convert_id_to_token(self, index):
-        """
-        Converts an index (integer) in a token (str) using the vocab. Whisper's base tokenizer always decodes OOV
-        tokens as "", thus we do not use the `unk_token` here.
-        """
-        return self.decoder.get(index, "")
-
-    def normalize(self, text):
-        """
-        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
-        english text.
-        """
-        normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
-        return normalizer(text)
-
-    @staticmethod
-    def basic_normalize(text, remove_diacritics=False):
-        """
-        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
-        multilingual text.
-        """
-        normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
-        return normalizer(text)
-
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
     def _decode_with_timestamps(
         self, token_ids, skip_special_tokens=False, time_precision=0.02, segment_size=1500
     ) -> str:
@@ -552,11 +327,18 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [
-            s if isinstance(s, str) else self.decode(s, skip_special_tokens=skip_special_tokens) for s in outputs
-        ]
-        return "".join(outputs)
+        # Decode token sequences outside list comprehension to avoid super() resolution issues
+        decoded_outputs = []
+        for s in outputs:
+            if isinstance(s, str):
+                decoded_outputs.append(s)
+            elif s:
+                decoded_outputs.append(super().decode(s, skip_special_tokens=skip_special_tokens))
+            else:
+                decoded_outputs.append("")
+        return "".join(decoded_outputs)
 
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
     def _compute_offsets(self, token_ids, time_precision=0.02, segment_size=1500):
         """
         Compute offsets for a given tokenized input
@@ -626,6 +408,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return offsets
 
     @lru_cache
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.timestamp_ids
     def timestamp_ids(self, time_precision=0.02):
         """
         Compute the timestamp token ids for a given precision and save to least-recently used (LRU) cache.
@@ -636,6 +419,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         return self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
 
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._preprocess_token_ids
     def _preprocess_token_ids(self, token_ids, skip_special_tokens: bool = False):
         """
         Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
@@ -654,9 +438,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return token_ids
 
-    def _filter_timestamp_ids(self, token_ids):
-        return re.sub(self.timestamp_pat, "", token_ids)
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._filter_timestamp_ids
+    def _filter_timestamp_ids(self, text):
+        return re.sub(self.timestamp_pat, "", text)
 
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.decode
     def decode(
         self,
         token_ids,
@@ -727,7 +513,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 filtered_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
             )
         else:
-            text = self._filter_timestamp_ids(text)
+            # Handle both single string and batch (list of strings) outputs
+            if isinstance(text, list):
+                text = [self._filter_timestamp_ids(t) for t in text]
+            else:
+                text = self._filter_timestamp_ids(text)
 
         # retrieve offsets
         if output_offsets:
@@ -736,57 +526,59 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return text
 
     def _decode(
-        self,
-        token_ids: Union[int, list[int]],
-        skip_special_tokens: bool = False,
-        normalize: bool = False,
-        basic_normalize: bool = False,
-        remove_diacritics: bool = False,
-        **kwargs,
+        self, *args, normalize: bool = False, basic_normalize: bool = False, remove_diacritics: bool = False, **kwargs
     ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-
-        # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separately for added tokens and byte-level tokens
-        # cf. https://github.com/huggingface/transformers/issues/1133
-        sub_texts = []
-        current_sub_text = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            if token in self.added_tokens_encoder:
-                if current_sub_text:
-                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-                    current_sub_text = []
-                sub_texts.append(token)
-            else:
-                current_sub_text.append(token)
-        if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        text = "".join(sub_texts)
+        text = super()._decode(*args, **kwargs)
 
         if normalize:
-            clean_text = self.normalize(text)
+            clean_text = self._normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string with GPT2 -> Whisper
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
-        return text
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
+    def _normalize(self, text):
+        warnings.warn(
+            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
+        )
+        return self.normalize(text)
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
+    def _basic_normalize(self, text, remove_diacritics=False):
+        warnings.warn(
+            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
+        )
+        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
+    def normalize(self, text):
+        """
+        Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
+        english text.
+        """
+        normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
+        return normalizer(text)
+
+    @staticmethod
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.basic_normalize
+    def basic_normalize(text, remove_diacritics=False):
+        """
+        Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
+        multilingual text.
+        """
+        normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
+        return normalizer(text)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
+
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
@@ -798,20 +590,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(json.dumps(self._vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-        index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning(
-                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!"
-                    )
-                    index = token_index
-                writer.write(" ".join(bpe_tokens) + "\n")
-                index += 1
+            writer.writelines(" ".join(merge_pair) + "\n" for merge_pair in self._merges)
 
         if self.english_spelling_normalizer is not None:
             with open(normalizer_file, "w", encoding="utf-8") as f:
@@ -819,15 +602,123 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     json.dumps(self.english_spelling_normalizer, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                 )
 
-        return vocab_file, merge_file, normalizer_file
+        return (vocab_file, merge_file, normalizer_file)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.prepare_for_tokenization with GPT2 -> Whisper
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_split_into_words or add_prefix_space:
-            text = " " + text
-        return (text, kwargs)
+    def set_prefix_tokens(
+        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
+    ):
+        """
+        Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
+        update the prefix tokens as required when fine-tuning. Example:
 
+        ```python
+        >>> # instantiate the tokenizer and set the prefix token to Spanish
+        >>> tokenizer = WhisperTokenizerFast.from_pretrained("openai/whisper-tiny", language="spanish")
+        >>> # now switch the prefix token from Spanish to French
+        >>> tokenizer.set_prefix_tokens(language="french")
+        ```
+
+        Args:
+            language (`str`, *optional*, defaults to `None`):
+                The language of the transcription text.
+            task (`str`, *optional*, defaults to `None`):
+                Task identifier to append at the start of sequence (if any).
+            predict_timestamps (`bool`, *optional*, defaults to `None`):
+                Whether to omit the `<|notimestamps|>` token at the start of the sequence.
+        """
+        self.language = language if language is not None else self.language
+        self.task = task if task is not None else self.task
+        self.predict_timestamps = predict_timestamps if predict_timestamps is not None else self.predict_timestamps
+
+        prefix_token_ids = self.prefix_tokens
+        prefixes = self.convert_ids_to_tokens(prefix_token_ids)
+        eos = self.eos_token
+        eos_token_id = self.eos_token_id
+        prefix_template = " ".join([f"{token}:0" for token in prefixes])
+        self.backend_tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{prefix_template} $A:0 {eos}:0",
+            pair=f"{prefix_template} $A:0 $B:1 {eos}:1",
+            special_tokens=[
+                (eos, eos_token_id),
+                *zip(prefixes, prefix_token_ids),
+            ],
+        )
+
+    @property
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.prefix_tokens
+    def prefix_tokens(self) -> list[int]:
+        bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+        translate_token_id = self.convert_tokens_to_ids("<|translate|>")
+        transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
+        notimestamps_token_id = self.convert_tokens_to_ids("<|notimestamps|>")
+        langs = tuple(LANGUAGES.keys())
+
+        if self.language is not None:
+            self.language = self.language.lower()
+            if self.language in TO_LANGUAGE_CODE:
+                language_id = TO_LANGUAGE_CODE[self.language]
+            elif self.language in TO_LANGUAGE_CODE.values():
+                language_id = self.language
+            else:
+                is_language_code = len(self.language) == 2
+                raise ValueError(
+                    f"Unsupported language: {self.language}. Language should be one of:"
+                    f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
+                )
+
+        if self.task is not None:
+            if self.task not in TASK_IDS:
+                raise ValueError(f"Unsupported task: {self.task}. Task should be in: {TASK_IDS}")
+
+        bos_sequence = [bos_token_id]
+        if self.language is not None:
+            bos_sequence.append(bos_token_id + 1 + langs.index(language_id))
+        if self.task is not None:
+            bos_sequence.append(transcribe_token_id if self.task == "transcribe" else translate_token_id)
+        if not self.predict_timestamps:
+            bos_sequence.append(notimestamps_token_id)
+        return bos_sequence
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.build_inputs_with_special_tokens
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
+        """Build model inputs from a sequence by appending eos_token_id."""
+        if token_ids_1 is None:
+            return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_special_tokens_mask
+    def get_special_tokens_mask(
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` method.
+
+        Args:
+            token_ids_0 (`list[int]`):
+                List of IDs.
+            token_ids_1 (`list[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+
+        prefix_ones = [1] * len(self.prefix_tokens)
+        suffix_ones = [1]
+        if token_ids_1 is None:
+            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
+        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_decoder_prompt_ids
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
         # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
@@ -847,6 +738,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             time_precision=time_precision,
         )
 
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_prompt_ids
     def get_prompt_ids(self, text: str, return_tensors="np"):
         """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
         batch_encoding = self("<|startofprev|>", " " + text.strip(), add_special_tokens=False)
@@ -861,6 +753,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         batch_encoding.convert_to_tensors(tensor_type=return_tensors)
         return batch_encoding["input_ids"]
 
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._strip_prompt
     def _strip_prompt(self, token_ids: list[int], prompt_token_id: int, decoder_start_token_id: int):
         if not isinstance(token_ids, list):
             token_ids = self._convert_to_list(token_ids)
@@ -880,6 +773,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return token_ids
 
     @staticmethod
+    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._convert_to_list
     def _convert_to_list(token_ids):
         # convert type to ndarray if necessary
         if hasattr(token_ids, "numpy"):
@@ -888,6 +782,152 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
+
+
+def _combine_tokens_into_words(
+    tokenizer,
+    tokens: list[int],
+    language: Optional[str] = None,
+    prepend_punctuations: str = "\"'“¡¿([{-",
+    append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
+):
+    """
+    Groups tokens by word. Returns a tuple containing a list of strings with the words, and a list of `token_id`
+    sequences with the tokens making up each word.
+    """
+    if language is None:
+        language = tokenizer.language
+    if language is None:
+        language = "english"
+
+    if language in {"chinese", "japanese", "thai", "lao", "myanmar", "cantonese"}:
+        # These languages don't typically use spaces.
+        words, word_tokens, token_indices = _split_tokens_on_unicode(tokenizer, tokens)
+    else:
+        words, word_tokens, token_indices = _split_tokens_on_spaces(tokenizer, tokens)
+
+    _merge_punctuations(words, word_tokens, token_indices, prepend_punctuations, append_punctuations)
+    return words, word_tokens, token_indices
+
+
+def _find_longest_common_sequence(sequences, token_timestamp_sequences=None):
+    # It would be much harder to do O(n) because of fault tolerance.
+    # We actually have a really good property which is that the total sequence
+    # MUST be those subsequences in order.
+    # If token_timestamp_sequences is provided, will split those sequences in
+    # exactly the same way.
+
+    left_sequence = sequences[0]
+    left_length = len(left_sequence)
+    total_sequence = []
+
+    if token_timestamp_sequences:
+        left_token_timestamp_sequence = token_timestamp_sequences[0]
+        total_token_timestamp_sequence = []
+
+    for seq_idx, right_sequence in enumerate(sequences[1:]):
+        # index = 0
+        max_ = 0.0
+        max_indices = (left_length, left_length, 0, 0)
+        # Here we're sliding matches
+        # [a, b, c, d]
+        #          [c, d, f]
+        # =        [c] == [d]
+        #
+        # [a, b, c, d]
+        #       [c, d, f]
+        # =     [c, d] == [c, d]
+        #
+        #
+        # [a, b, c, d]
+        #    [c, d, f]
+        #
+        # =  [b, c, d] == [c, d, f]
+        #
+        # [a, b, c, d]
+        # [c, d, f]
+        #
+        # [a, b, c] == [c, d, f]
+        #
+        # [a, b, c, d]
+        # [d, f]
+        #
+        # [a, b] == [d, f]
+        #
+        # [a, b, c, d]
+        # [f]
+        #
+        # [a] == [f]
+        right_length = len(right_sequence)
+        for i in range(1, left_length + right_length):
+            # epsilon to favor long perfect matches
+            eps = i / 10000.0
+
+            # Slightly convoluted because we don't want out of bound indices
+            # This will be necessary for a small conflict resolution optimization
+            # later
+            left_start = max(0, left_length - i)
+            left_stop = min(left_length, left_length + right_length - i)
+            left = np.array(left_sequence[left_start:left_stop])
+
+            right_start = max(0, i - left_length)
+            right_stop = min(right_length, i)
+            right = np.array(right_sequence[right_start:right_stop])
+
+            # We can only match subsequences of the same size.
+            if len(left) != len(right):
+                raise RuntimeError(
+                    "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
+                )
+
+            if token_timestamp_sequences:
+                # Get length of longest subsequence of tokens that match
+                # and have timestamps that are in order
+                matches = sum(
+                    1
+                    for idx, elem in enumerate(left)
+                    if (
+                        elem == right[idx]
+                        and left_token_timestamp_sequence[left_start + idx]
+                        <= token_timestamp_sequences[seq_idx + 1][right_start + idx]
+                    )
+                )
+
+            else:
+                matches = np.sum(left == right)
+
+            matching = matches / i + eps
+            if matches > 1 and matching > max_:
+                max_ = matching
+                max_indices = (left_start, left_stop, right_start, right_stop)
+
+        (left_start, left_stop, right_start, right_stop) = max_indices
+
+        # This is a small conflict optimization since those sequences overlap
+        # in audio.
+        # We're going to give more confidence to the left sequence
+        # for the left of the overlap,
+        # and to the right of the sequence, for the right of the overlap
+        left_mid = (left_stop + left_start) // 2
+        right_mid = (right_stop + right_start) // 2
+        total_sequence.extend(left_sequence[:left_mid])
+        left_sequence = right_sequence[right_mid:]
+        left_length = len(left_sequence)
+
+        if token_timestamp_sequences:
+            total_token_timestamp_sequence.extend(left_token_timestamp_sequence[:left_mid])
+            left_token_timestamp_sequence = token_timestamp_sequences[seq_idx + 1][right_mid:]
+
+    total_sequence.extend(left_sequence)
+
+    if token_timestamp_sequences is None:
+        return total_sequence
+
+    if len(token_timestamp_sequences) > 0:
+        total_token_timestamp_sequence.extend(left_token_timestamp_sequence)
+        return total_sequence, total_token_timestamp_sequence
+    else:
+        return total_sequence, []
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision, segment_size=1500):

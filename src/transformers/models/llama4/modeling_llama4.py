@@ -463,7 +463,7 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
     config: Llama4Config
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -493,7 +493,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
-    input_modalities = "text"
+    input_modalities = ("text",)
     config: Llama4TextConfig
     _can_record_outputs = {
         "attentions": Llama4TextAttention,
@@ -518,7 +518,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1030,7 +1030,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["Llama4VisionEncoderLayer"]
     config: Llama4VisionConfig
 
@@ -1072,6 +1072,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
         r"""
 
@@ -1166,7 +1167,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}
-    base_model_prefix = ""
+    base_model_prefix = "model"
     config: Llama4Config
 
     def __init__(self, config: Llama4Config):

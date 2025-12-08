@@ -17,7 +17,7 @@
 from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Emu3VQVAEConfig(PreTrainedConfig):
@@ -159,7 +159,7 @@ class Emu3TextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         mlp_bias (`bool`, *optional*, defaults to `False`):
@@ -188,6 +188,7 @@ class Emu3TextConfig(PreTrainedConfig):
     model_type = "emu3_text_model"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     def __init__(
         self,
@@ -226,14 +227,7 @@ class Emu3TextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             pad_token_id=pad_token_id,

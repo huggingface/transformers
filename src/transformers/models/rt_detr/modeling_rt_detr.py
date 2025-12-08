@@ -1007,7 +1007,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     config: RTDetrConfig
     base_model_prefix = "rt_detr"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
 
     @torch.no_grad()
@@ -1311,6 +1311,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1543,9 +1544,6 @@ class RTDetrModel(RTDetrPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad_(False)
@@ -1595,6 +1593,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], RTDetrModelOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):

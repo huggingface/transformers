@@ -65,7 +65,7 @@ class EvollaProcessor(ProcessorMixin):
             sa_sequence = "".join([s.upper() + f.lower() for s, f in zip(aa_seq, foldseek)])
             sa_sequences.append(sa_sequence)
 
-        sa_tokens = self.protein_tokenizer.batch_encode_plus(
+        sa_tokens = self.protein_tokenizer(
             sa_sequences, return_tensors="pt", truncation=True, max_length=protein_max_length, padding=True
         )
         return sa_tokens

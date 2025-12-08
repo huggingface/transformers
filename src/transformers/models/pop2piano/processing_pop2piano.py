@@ -21,7 +21,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import BatchEncoding, PaddingStrategy, TruncationStrategy
+from ...tokenization_python import BatchEncoding, PaddingStrategy, TruncationStrategy
 from ...utils import TensorType
 from ...utils.import_utils import requires
 
