@@ -69,11 +69,11 @@ _import_structure = {
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
         "LayerRepository",
-        "use_kernelized_func",
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
         "use_kernel_func_from_hub",
+        "use_kernelized_func",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -211,11 +211,11 @@ if TYPE_CHECKING:
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
-        use_kernelized_func,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
+        use_kernelized_func,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
