@@ -110,10 +110,11 @@ class XLMRobertaTokenizer(TokenizersBackend):
         )
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=["$A", "</s>"],
-            pair=["$A", "</s>", "$B", "</s>"],
+            single=[str(bos_token), "$A", str(eos_token)],
+            pair=[str(bos_token), "$A", str(eos_token), "$B", str(eos_token)],
             special_tokens=[
-                ("</s>", self.eos_token_id),
+                (str(bos_token), self.bos_token_id),
+                (str(eos_token), self.eos_token_id),
             ],
         )
 
