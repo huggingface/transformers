@@ -232,7 +232,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         add_prefix_space = kwargs.get("add_prefix_space", False)
         vocab_file = kwargs.get("vocab_file")
 
-
         fast_tokenizer = None
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
