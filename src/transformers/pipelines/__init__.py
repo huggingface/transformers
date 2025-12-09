@@ -18,7 +18,7 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import model_info
+from huggingface_hub import is_offline_mode, model_info
 
 from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -38,7 +38,6 @@ from ..utils import (
     extract_commit_hash,
     find_adapter_config_file,
     is_kenlm_available,
-    is_offline_mode,
     is_peft_available,
     is_pyctcdecode_available,
     is_torch_available,

@@ -63,6 +63,8 @@ def get_keys_to_not_convert(model):
     }
     modules_to_not_convert = tied_keys | last_module_key | output_emb_keys
 
+    modules_to_not_convert = list({k.removesuffix(".weight") for k in modules_to_not_convert})
+
     return list(modules_to_not_convert)
 
 

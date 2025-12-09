@@ -28,7 +28,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -54,7 +54,6 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
-    is_offline_mode,
     is_torch_available,
     list_repo_templates,
     logging,
@@ -1506,8 +1505,24 @@ class ProcessorMixin(PushToHubMixin):
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
+            if "FuyuProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
+                from .tokenization_utils_tokenizers import TokenizersBackend
 
-            if is_primary:
+                tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                if "token_type_ids" in tokenizer.model_input_names:
+                    tokenizer.model_input_names.remove("token_type_ids")
+                args.append(tokenizer)
+            elif "PixtralProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
+                from tokenizers import pre_tokenizers
+
+                from .models.llama import LlamaTokenizer
+
+                tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+                    [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
+                )
+                args.append(tokenizer)
+            elif is_primary:
                 # Primary non-tokenizer sub-processor: load via Auto class
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
                 sub_processor = auto_processor_class.from_pretrained(
