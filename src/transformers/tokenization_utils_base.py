@@ -1797,9 +1797,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             init_kwargs = init_configuration
 
-        init_kwargs.pop("add_bos_token", None)
-        init_kwargs.pop("add_eos_token", None)
-
         # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
         chat_templates = {}
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
