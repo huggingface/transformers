@@ -123,10 +123,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CLVP tokenizer detect beginning of words by the preceding space).
-        add_bos_token (`bool`, *optional*, defaults to `False`):
-            Whether to add `bos_token` in front of the sequence when add_special_tokens=True.
-        add_eos_token (`bool`, *optional*, defaults to `False`):
-            Whether to add `eos_token` in end of the sequence when add_special_tokens=True.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

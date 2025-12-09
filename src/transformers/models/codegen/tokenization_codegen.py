@@ -83,8 +83,6 @@ class CodeGenTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
-        add_bos_token (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial beginning of sentence token to the input.
         return_token_type_ids (`bool`, *optional*, defaults to `False`):
             Whether to return token type IDs.
     """
