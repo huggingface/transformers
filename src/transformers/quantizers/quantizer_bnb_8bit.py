@@ -154,7 +154,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
 
     @property
