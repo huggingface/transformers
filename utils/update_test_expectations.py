@@ -946,35 +946,38 @@ def update_expected_value_in_file(
 
     # Format the new value appropriately
     if value_type == 'torch_tensor':
-        # The captured_info.txt provides tensor with RELATIVE indentation like:
+        # ==================================================================================
+        # INDENTATION STRATEGY FOR TENSORS AND LISTS
+        # ==================================================================================
+        # The captured_info.txt provides values with RELATIVE indentation like:
         # [
         #     [4.2325, 4.3882, -6.6678],
         #     [4.5372, 1.8933, -6.7354],
         # ]
-        # where the opening [ has 0 indent, and content has 4 spaces
-
-        # Find the base indentation to add (from the second line of original)
-        if len(lines) > start_line + 1:
-            second_line = lines[start_line + 1]
-            content_indent_match = re.match(r'^(\s*)', second_line)
-            if content_indent_match:
-                content_base_indent = content_indent_match.group(1)
-            else:
-                content_base_indent = base_indent + '    '
-        else:
-            content_base_indent = base_indent + '    '
-
-        # Apply indentation while preserving the relative structure from captured_info
-        tensor_lines = new_value.split('\n')
-        indented_tensor_lines = []
-        for line in tensor_lines:
-            stripped = line.lstrip()
-            if not stripped:
-                continue
-            # Get the relative indentation from captured_info
-            relative_indent = len(line) - len(stripped)
-            # Add base indentation + relative indentation
-            indented_tensor_lines.append(content_base_indent + ' ' * relative_indent + stripped)
+        # where the opening [ has 0 indent, and content has 4 spaces relative indentation.
+        #
+        # We need to add the BASE indentation from the test file, which depends on:
+        # 1. For torch.tensor(): Use the indentation from the original file's structure
+        # 2. For plain lists: Use base_indent + 4 spaces (standard Python list indentation)
+        #
+        # CRITICAL: The difference between torch.tensor() and plain list assignments:
+        #
+        # torch.tensor() format:
+        #         expected = torch.tensor(
+        #             [                         <- content_base_indent (12 spaces)
+        #                 [-0.46, ...],         <- content_base_indent + 4
+        #             ],
+        #         )
+        #
+        # Plain list format:
+        #         EXPECTED = [                  <- base_indent (8 spaces) + "EXPECTED = "
+        #             [1, 2, 3],                <- base_indent + 4 (12 spaces total)
+        #         ]
+        #
+        # The key insight: For torch.tensor(), we preserve the original file's indentation
+        # because it has a complex multi-line structure. For plain lists, we IGNORE the
+        # original file's indentation and use a standard pattern.
+        # ==================================================================================
 
         # Check if this is a single-line tensor (no newlines in original captured value)
         # IMPORTANT: This was added to fix the convnext model issue where single-line
@@ -986,6 +989,35 @@ def update_expected_value_in_file(
 
         # Check if original was torch.tensor(...) or just [...]
         if 'torch.tensor' in original_text:
+            # ==================================================================================
+            # CASE 1: torch.tensor() - USE ORIGINAL FILE'S INDENTATION STRUCTURE
+            # ==================================================================================
+            # For torch.tensor(), we need to preserve the indentation from the original file
+            # because the structure can vary (parameters, method chains, etc.)
+
+            # Find the base indentation for content (from the second line of original)
+            if len(lines) > start_line + 1:
+                second_line = lines[start_line + 1]
+                content_indent_match = re.match(r'^(\s*)', second_line)
+                if content_indent_match:
+                    content_base_indent = content_indent_match.group(1)
+                else:
+                    content_base_indent = base_indent + '    '
+            else:
+                content_base_indent = base_indent + '    '
+
+            # Apply indentation while preserving the relative structure from captured_info
+            tensor_lines = new_value.split('\n')
+            indented_tensor_lines = []
+            for line in tensor_lines:
+                stripped = line.lstrip()
+                if not stripped:
+                    continue
+                # Get the relative indentation from captured_info
+                relative_indent = len(line) - len(stripped)
+                # Add base indentation + relative indentation
+                indented_tensor_lines.append(content_base_indent + ' ' * relative_indent + stripped)
+
             if is_single_line:
                 # Single-line format: torch.tensor([...], device=...).to(...)
                 formatted_value = f"{base_indent}{assignment_prefix}torch.tensor({new_value.strip()}{tensor_params}){method_chain_suffix}"
@@ -1027,18 +1059,161 @@ def update_expected_value_in_file(
                     formatted_value += '\n'
                 formatted_value += f"{base_indent}){method_chain_suffix}"
         else:
-            # Just update the tensor values directly
+            # ==================================================================================
+            # CASE 2: Plain list assignment - USE STANDARD PYTHON LIST INDENTATION
+            # ==================================================================================
+            # For plain list assignments like:
+            #     EXPECTED_VALUES = [
+            #         [1, 2, 3],
+            #         [4, 5, 6],
+            #     ]
+            #
+            # The indentation should be:
+            # - Opening [ on same line as assignment (base_indent + "EXPECTED_VALUES = ")
+            # - Content indented by base_indent + 4 spaces
+            # - Closing ] at base_indent + 4 spaces
+            #
+            # CRITICAL FIX (florence2 issue):
+            # Previously, we were using content_base_indent from the ORIGINAL file, which
+            # was 12 spaces. Then we added relative_indent (4 spaces) from captured_info.txt,
+            # resulting in 16 spaces total - WRONG!
+            #
+            # Now we use base_indent (8 spaces) + relative_indent (4 spaces) = 12 spaces - CORRECT!
+            # ==================================================================================
+
             if is_single_line:
+                # Single-line list: EXPECTED = [1, 2, 3]
                 formatted_value = f"{base_indent}{assignment_prefix}{new_value.strip()}"
             else:
+                # Multi-line list: Need to properly indent each line
+                # The captured_info.txt provides relative indentation (e.g., 4 spaces for list content)
+                # We need to add base_indent to each line
+
+                tensor_lines = new_value.split('\n')
+                indented_tensor_lines = []
+
+                for idx, line in enumerate(tensor_lines):
+                    stripped = line.lstrip()
+                    if not stripped:
+                        continue
+
+                    # Get the relative indentation from captured_info.txt
+                    # Example: "    [1, 2, 3]," has relative_indent = 4
+                    #          "[" has relative_indent = 0
+                    relative_indent = len(line) - len(stripped)
+
+                    # SPECIAL CASE: First line with opening bracket
+                    # The opening bracket should be on the same line as the assignment
+                    # Example captured format:
+                    #   [
+                    #       [1, 2, 3],
+                    #   ]
+                    # Should become:
+                    #   EXPECTED = [
+                    #       [1, 2, 3],
+                    #   ]
+                    if idx == 0 and stripped.startswith('[') and len(stripped) == 1:
+                        # This is just the opening bracket - skip it, we'll add it to assignment_prefix
+                        continue
+
+                    # IMPORTANT: For plain lists, use base_indent + relative_indent
+                    # NOT content_base_indent (which was from the original file)
+                    #
+                    # Example calculation:
+                    # - base_indent = "        " (8 spaces, from "def test...")
+                    # - relative_indent = 4 (from captured_info.txt)
+                    # - Result: 8 + 4 = 12 spaces total
+                    #
+                    # This matches the expected format:
+                    #         EXPECTED = [
+                    #             [1, 2, 3],    <- 12 spaces
+                    #         ]
+                    indented_tensor_lines.append(base_indent + ' ' * relative_indent + stripped)
+
+                # Build the formatted value with opening bracket on assignment line
                 formatted_tensor = '\n'.join(indented_tensor_lines)
-                formatted_value = f"{base_indent}{assignment_prefix}{formatted_tensor}"
+                formatted_value = f"{base_indent}{assignment_prefix}[\n{formatted_tensor}"
     elif value_type == 'string':
+        # Single string value - keep as-is with base indentation
         formatted_value = f"{base_indent}{assignment_prefix}{new_value}"
     elif value_type == 'list_of_strings':
-        formatted_value = f"{base_indent}{assignment_prefix}{new_value}"
+        # ==================================================================================
+        # LIST OF STRINGS - SAME INDENTATION LOGIC AS PLAIN LISTS
+        # ==================================================================================
+        # Lists of strings like:
+        #     EXPECTED_TEXTS = [
+        #         "string1",
+        #         "string2",
+        #     ]
+        # Follow the same indentation pattern as plain lists.
+        # ==================================================================================
+        is_single_line = '\n' not in new_value.strip()
+
+        if is_single_line:
+            # Single-line list: EXPECTED = ["str1", "str2"]
+            formatted_value = f"{base_indent}{assignment_prefix}{new_value.strip()}"
+        else:
+            # Multi-line list of strings - use base_indent + relative_indent
+            string_lines = new_value.split('\n')
+            indented_string_lines = []
+
+            for idx, line in enumerate(string_lines):
+                stripped = line.lstrip()
+                if not stripped:
+                    continue
+
+                # Get relative indentation from captured_info.txt
+                relative_indent = len(line) - len(stripped)
+
+                # Skip opening bracket - it goes on the assignment line
+                if idx == 0 and stripped.startswith('[') and len(stripped) == 1:
+                    continue
+
+                # Use base_indent + relative_indent (same as plain lists)
+                indented_string_lines.append(base_indent + ' ' * relative_indent + stripped)
+
+            formatted_strings = '\n'.join(indented_string_lines)
+            formatted_value = f"{base_indent}{assignment_prefix}[\n{formatted_strings}"
     else:
-        formatted_value = f"{base_indent}{assignment_prefix}{new_value}"
+        # ==================================================================================
+        # OTHER TYPES (dict, generic lists, etc.)
+        # ==================================================================================
+        # Dicts and other structured data follow the same pattern:
+        #     EXPECTED = {
+        #         "key": "value",
+        #     }
+        # Use base_indent + relative_indent for multi-line structures.
+        # ==================================================================================
+        is_single_line = '\n' not in new_value.strip()
+
+        if is_single_line:
+            # Single-line value
+            formatted_value = f"{base_indent}{assignment_prefix}{new_value.strip()}"
+        else:
+            # Multi-line value - apply proper indentation
+            value_lines = new_value.split('\n')
+            indented_value_lines = []
+
+            for idx, line in enumerate(value_lines):
+                stripped = line.lstrip()
+                if not stripped:
+                    continue
+
+                # Get relative indentation from captured_info.txt
+                relative_indent = len(line) - len(stripped)
+
+                # Skip opening brace/bracket if it's alone on the first line
+                # This applies to dicts { and lists [
+                if idx == 0 and len(stripped) == 1 and stripped in ('{', '['):
+                    continue
+
+                # Use base_indent + relative_indent
+                indented_value_lines.append(base_indent + ' ' * relative_indent + stripped)
+
+            formatted_values = '\n'.join(indented_value_lines)
+            # Determine opening character from the first non-empty line of original
+            opening_char = new_value.strip()[0]  # Should be { or [
+            formatted_value = f"{base_indent}{assignment_prefix}{opening_char}\n{formatted_values}"
 
     # Replace the lines
     new_lines = lines[:start_line] + [formatted_value + '\n'] + lines[end_line + 1:]
