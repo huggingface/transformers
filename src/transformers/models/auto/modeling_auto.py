@@ -1439,6 +1439,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForTokenClassification"),
         ("deberta-v2", "DebertaV2ForTokenClassification"),
         ("deepseek_v3", "DeepseekV3ForTokenClassification"),
+        ("deepseek_v32", "DeepseekV32ForTokenClassification"),
         ("diffllama", "DiffLlamaForTokenClassification"),
         ("distilbert", "DistilBertForTokenClassification"),
         ("electra", "ElectraForTokenClassification"),
