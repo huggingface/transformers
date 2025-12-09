@@ -80,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    force_serialization_as_bin_files,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -113,7 +114,6 @@ from transformers.utils import (
 )
 
 from .generation.test_utils import GenerationTesterMixin
-from .utils.test_modeling_utils import force_serialization_as_bin_files
 
 
 if is_torch_available():
