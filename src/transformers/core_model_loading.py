@@ -321,7 +321,9 @@ class ModulelistSplitAndFuse(ConversionOps):
         split_and_fused = defaultdict(list)
         for key in source_patterns:
             if key not in valid_keys:
-                raise ValueError(f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}")
+                raise ValueError(
+                    f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}"
+                )
 
             tensors = input_dict.get(key, [])
             split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(target_patterns))
@@ -378,7 +380,9 @@ class ModulelistSplitAndDecouple(ConversionOps):
         split_tensors = []
         for key in source_patterns:
             if key not in valid_keys:
-                raise ValueError(f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}")
+                raise ValueError(
+                    f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}"
+                )
 
             # Assuming that we get single sized lists here to index with 0
             split_tensors.append(input_dict[key][0].chunk(fused_modules, dim=self.concat_dim))
