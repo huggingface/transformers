@@ -893,11 +893,11 @@ class ModelUtilsTest(TestCasePlus):
             with force_serialization_as_bin_files():
                 model.save_pretrained(tmp_dir, max_shard_size="50kB")
 
-            weights_index_file = os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)
+            weights_index_file = os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)
             self.assertTrue(os.path.isfile(weights_index_file))
 
             for i in range(1, 5):
-                weights_name = SAFE_WEIGHTS_NAME.split(".")[0].split("_")[0] + f"_model-0000{i}-of-00005" + ".bin"
+                weights_name = WEIGHTS_NAME.split(".")[0].split("_")[0] + f"_model-0000{i}-of-00005" + ".bin"
                 weights_name_file = os.path.join(tmp_dir, weights_name)
                 self.assertTrue(os.path.isfile(weights_name_file))
 

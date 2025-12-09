@@ -2801,11 +2801,7 @@ class Trainer:
                 )
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
-                if self.args.save_safetensors and os.path.isfile(safe_weights_file):
-                    state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
-                else:
-                    check_torch_load_is_safe()
-                    state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
+                state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -2842,7 +2838,7 @@ class Trainer:
         else:
             # We load the sharded checkpoint
             load_result = load_sharded_checkpoint(
-                model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled(), prefer_safe=self.args.save_safetensors
+                model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled(), prefer_safe=True
             )
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
@@ -2926,7 +2922,7 @@ class Trainer:
                         has_been_loaded = False
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
-                    if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
+                    if os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
                         check_torch_load_is_safe()
@@ -4123,12 +4119,9 @@ class Trainer:
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                if self.args.save_safetensors:
-                    safetensors.torch.save_file(
-                        state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
-                    )
-                else:
-                    torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                safetensors.torch.save_file(
+                    state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
+                )
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
 
