@@ -1616,7 +1616,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         vocab_files = {}
         init_configuration = {}
 
-        is_local = os.path.isdir(pretrained_model_name_or_path)
+        is_local = os.path.isdir(pretrained_model_name_or_path) or local_files_only
         single_file_id = None
         if os.path.isfile(pretrained_model_name_or_path):
             # For legacy support: allow single-file loading if:
