@@ -330,11 +330,10 @@ def update_expected_value_in_file(
     # Get the original text to extract the full pattern
     original_text = ''.join(lines[start_line:end_line + 1])
 
-    # Get the indentation of the original definition
+    # Get the indentation of the original definition (the line with "expected_slice = ")
     original_line = lines[start_line]
     indent_match = re.match(r'^(\s*)', original_line)
-    indent = indent_match.group(1) if indent_match else ''
-    indent_level = len(indent) // 4
+    base_indent = indent_match.group(1) if indent_match else ''
 
     # Extract the variable assignment part (e.g., "expected_slice = ")
     assignment_match = re.match(r'^(\s*)(\w+\s*=\s*)', original_line)
@@ -346,30 +345,59 @@ def update_expected_value_in_file(
     method_chain_suffix = ''
     if value_type == 'torch_tensor':
         # Look for patterns like ).to(...) or ).cuda() etc.
-        chain_match = re.search(r'(\)\s*\.\s*\w+\([^)]*\))', original_text)
+        chain_match = re.search(r'\)\s*(\.\s*\w+\([^)]*\))', original_text)
         if chain_match:
             method_chain_suffix = chain_match.group(1)
 
     # Format the new value appropriately
     if value_type == 'torch_tensor':
-        # Parse the new value to reformat it properly
-        formatted_tensor = format_torch_tensor_for_code(new_value, indent_level + 1)
+        # The captured_info.txt provides tensor with RELATIVE indentation like:
+        # [
+        #     [4.2325, 4.3882, -6.6678],
+        #     [4.5372, 1.8933, -6.7354],
+        # ]
+        # where the opening [ has 0 indent, and content has 4 spaces
+
+        # Find the base indentation to add (from the second line of original)
+        if len(lines) > start_line + 1:
+            second_line = lines[start_line + 1]
+            content_indent_match = re.match(r'^(\s*)', second_line)
+            if content_indent_match:
+                content_base_indent = content_indent_match.group(1)
+            else:
+                content_base_indent = base_indent + '    '
+        else:
+            content_base_indent = base_indent + '    '
+
+        # Apply indentation while preserving the relative structure from captured_info
+        tensor_lines = new_value.split('\n')
+        indented_tensor_lines = []
+        for line in tensor_lines:
+            stripped = line.lstrip()
+            if not stripped:
+                continue
+            # Get the relative indentation from captured_info
+            relative_indent = len(line) - len(stripped)
+            # Add base indentation + relative indentation
+            indented_tensor_lines.append(content_base_indent + ' ' * relative_indent + stripped)
+
+        formatted_tensor = '\n'.join(indented_tensor_lines)
 
         # Check if original was torch.tensor(...) or just [...]
         if 'torch.tensor' in original_text:
             # Build the full replacement with proper structure
-            formatted_value = f"{indent}{assignment_prefix}torch.tensor(\n"
-            formatted_value += f"{formatted_tensor}\n"
-            formatted_value += f"{indent}){method_chain_suffix}"
+            formatted_value = f"{base_indent}{assignment_prefix}torch.tensor(\n"
+            formatted_value += formatted_tensor + '\n'
+            formatted_value += f"{base_indent}){method_chain_suffix}"
         else:
             # Just update the tensor values directly
-            formatted_value = f"{indent}{assignment_prefix}{formatted_tensor}"
+            formatted_value = f"{base_indent}{assignment_prefix}{formatted_tensor}"
     elif value_type == 'string':
-        formatted_value = f"{indent}{assignment_prefix}{new_value}"
+        formatted_value = f"{base_indent}{assignment_prefix}{new_value}"
     elif value_type == 'list_of_strings':
-        formatted_value = f"{indent}{assignment_prefix}{new_value}"
+        formatted_value = f"{base_indent}{assignment_prefix}{new_value}"
     else:
-        formatted_value = f"{indent}{assignment_prefix}{new_value}"
+        formatted_value = f"{base_indent}{assignment_prefix}{new_value}"
 
     # Replace the lines
     new_lines = lines[:start_line] + [formatted_value + '\n'] + lines[end_line + 1:]
