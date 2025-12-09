@@ -3008,7 +3008,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         save_directory: Union[str, os.PathLike],
         is_main_process: bool = True,
         state_dict: Optional[dict] = None,
-        save_function: Callable = torch.save,
         push_to_hub: bool = False,
         max_shard_size: Union[int, str] = "50GB",
         variant: Optional[str] = None,
@@ -3032,9 +3031,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to only
                 save parts of the model or if special precautions need to be taken when recovering the state dictionary
                 of a model (like when using model parallelism).
-            save_function (`Callable`):
-                The function to use to save the state dictionary. Useful on distributed training like TPUs when one
-                need to replace `torch.save` by another method.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
@@ -3348,8 +3344,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 del shard_state_dict
                 gc.collect()
 
-            # At some point we will need to deal better with save_function (used for TPU and other distributed
-            # joyfulness), but for now this enough. # TODO: we should def parallelize this we are otherwise just waiting
+            # TODO: we should def parallelize this we are otherwise just waiting
             # too much before scheduling the next write when its in a different file
             safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
 
