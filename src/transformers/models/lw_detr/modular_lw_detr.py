@@ -1116,7 +1116,6 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         self.post_init()
 
     @check_model_inputs()
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,

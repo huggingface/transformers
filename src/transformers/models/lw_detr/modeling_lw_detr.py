@@ -21,14 +21,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_timm_available,
-    requires_backends,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_timm_available, requires_backends
 from ...utils.backbone_utils import load_backbone
 from ...utils.generic import check_model_inputs
 from .configuration_lw_detr import LwDetrConfig
@@ -1326,7 +1319,6 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         self.post_init()
 
     @check_model_inputs()
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
