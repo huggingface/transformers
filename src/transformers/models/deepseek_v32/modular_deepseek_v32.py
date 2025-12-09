@@ -116,8 +116,21 @@ from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_hadamard_available
+
+
+# Custom argument documentation for the indexer-specific parameters
+DEEPSEEK_V32_INDEXER_ARGS = r"""
+        output_indexer_scores (`bool`, *optional*):
+            Whether to return raw indexer scores I_{t,s} from each layer. These are used
+            for computing the KL divergence loss during indexer training. Auto-enabled
+            when `config.indexer_kl_coef > 0`.
+        output_indexer_kl_target (`bool`, *optional*):
+            Whether to return KL target distributions p_{t,:} from each layer. These are
+            the L1-normalized attention distributions used as targets for KL loss.
+            Auto-enabled when `config.indexer_kl_coef > 0`.
+"""
 
 
 @dataclass
@@ -1095,6 +1108,7 @@ class DeepseekV32Model(DeepseekV3Model):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring(custom_args=DEEPSEEK_V32_INDEXER_ARGS)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1110,38 +1124,6 @@ class DeepseekV32Model(DeepseekV3Model):
         output_indexer_kl_target: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithIndexer:
-        r"""
-        Forward pass with optional indexer output accumulation.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Input token IDs.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Attention mask to avoid attending to padding tokens.
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Position IDs for RoPE.
-            past_key_values (`Cache`, *optional*):
-                KV cache for generation.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optional input embeddings (alternative to input_ids).
-            cache_position (`torch.LongTensor`, *optional*):
-                Cache position indices.
-            use_cache (`bool`, *optional*):
-                Whether to return KV cache.
-            output_attentions (`bool`, *optional*):
-                Whether to return attention weights.
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states.
-            output_indexer_scores (`bool`, *optional*):
-                Whether to return raw indexer scores I_{t,s} from each layer. These are used
-                for computing the KL divergence loss during indexer training.
-            output_indexer_kl_target (`bool`, *optional*):
-                Whether to return KL target distributions p_{t,:} from each layer. These are
-                the L1-normalized attention distributions used as targets for KL loss.
-
-        Returns:
-            [`BaseModelOutputWithIndexer`]: Model outputs with accumulated indexer scores and targets.
-        """
         from ...cache_utils import DynamicCache
         from ...masking_utils import create_causal_mask
 
@@ -1248,6 +1230,7 @@ class DeepseekV32ForCausalLM(DeepseekV3ForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring(custom_args=DEEPSEEK_V32_INDEXER_ARGS)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1265,51 +1248,6 @@ class DeepseekV32ForCausalLM(DeepseekV3ForCausalLM):
         output_indexer_kl_target: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> CausalLMOutputWithIndexer:
-        r"""
-        Forward pass with indexer KL loss computation.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Input token IDs.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Attention mask to avoid attending to padding tokens.
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Position IDs for RoPE.
-            past_key_values (`Cache`, *optional*):
-                KV cache for generation.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optional input embeddings.
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for language modeling loss.
-            use_cache (`bool`, *optional*):
-                Whether to return KV cache.
-            cache_position (`torch.LongTensor`, *optional*):
-                Cache position indices.
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                Number of logits to keep (for memory efficiency).
-            output_attentions (`bool`, *optional*):
-                Whether to return attention weights.
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states.
-            output_indexer_scores (`bool`, *optional*):
-                Whether to return raw indexer scores I_{t,s} from each layer. These are used
-                for computing the KL divergence loss during indexer training. Auto-enabled
-                when `config.indexer_kl_coef > 0`.
-            output_indexer_kl_target (`bool`, *optional*):
-                Whether to return KL target distributions p_{t,:} from each layer. These are
-                the L1-normalized attention distributions used as targets for KL loss.
-                Auto-enabled when `config.indexer_kl_coef > 0`.
-
-        Returns:
-            [`CausalLMOutputWithIndexer`]: Model outputs containing:
-                - `loss`: Combined loss (lm_loss + indexer_kl_coef * indexer_kl_loss) if labels provided
-                - `lm_loss`: Pure language modeling loss
-                - `indexer_kl_loss`: KL divergence loss for indexer training
-                - `logits`: Prediction logits
-                - `past_key_values`: KV cache
-                - `hidden_states`: Hidden states (optional)
-                - `attentions`: Attention weights (optional)
-        """
         # Auto-enable indexer outputs if KL loss is configured
         compute_kl_loss = self.config.indexer_kl_coef > 0
         if output_indexer_scores is None:
