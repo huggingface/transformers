@@ -29,7 +29,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...integrations import use_kernel_func_from_hub
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -155,7 +155,7 @@ class ParakeetEncoderConvolutionModule(nn.Module):
 
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, time)`): Attention mask.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
 
         Returns:
             `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
@@ -171,7 +171,10 @@ class ParakeetEncoderConvolutionModule(nn.Module):
 
         # Apply padding mask before convolution
         if attention_mask is not None:
-            all_masked_rows = torch.all(~attention_mask, dim=-1)
+            if attention_mask.dtype == torch.bool:
+                all_masked_rows = torch.all(~attention_mask, dim=2)
+            else:
+                all_masked_rows = torch.all(~(attention_mask == 0.0), dim=2)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
         # 1D Depthwise Conv
@@ -256,6 +259,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class ParakeetEncoderAttention(nn.Module):
     """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
 
@@ -281,7 +285,6 @@ class ParakeetEncoderAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_fn = apply_rotary_pos_emb
         # W_{k,R} projection
         self.relative_k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         # global content bias
