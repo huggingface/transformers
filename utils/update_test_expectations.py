@@ -252,15 +252,20 @@ def format_torch_tensor_for_code(value_str: str, indent_level: int = 0) -> str:
     # Remove any extra whitespace and normalize
     value_str = value_str.strip()
 
-    # Check if it's already a multi-line format
+    # Check if it's already a multi-line format (from captured_info)
     is_multiline = '\n' in value_str
 
     if is_multiline:
-        # Already formatted nicely, just ensure proper indentation
+        # The value is already formatted by _format_tensor() from testing_utils
+        # It looks like:
+        # [
+        #     [-0.1552, 0.0314, -0.3233],
+        #     [0.2886, 0.1141, -0.5706],
+        # ]
+        # We need to apply proper indentation
         lines = value_str.split('\n')
         indented_lines = []
         for line in lines:
-            # Preserve relative indentation
             stripped = line.lstrip()
             if stripped:
                 indented_lines.append(' ' * (indent_level * 4) + stripped)
@@ -268,23 +273,42 @@ def format_torch_tensor_for_code(value_str: str, indent_level: int = 0) -> str:
                 indented_lines.append('')
         return '\n'.join(indented_lines)
     else:
-        # Single line tensor - format based on length
+        # Single line tensor - convert to multi-line if it's 2D
         indent = ' ' * (indent_level * 4)
 
-        # Check if it's a simple 1D tensor
-        if value_str.count('[') == 1:
-            return f"{indent}{value_str}"
-
-        # For 2D tensors, format nicely
-        # Parse and reformat
+        # Try to parse as nested list and reformat
         try:
-            # Try to make it more readable for 2D tensors
-            value_str = value_str.replace('[', '[\n' + indent + '    ')
-            value_str = value_str.replace('],', '],\n' + indent + '    ')
-            value_str = value_str.replace(']]', '],\n' + indent + ']')
-            return value_str
+            # For 2D tensors like [[1,2,3], [4,5,6]], make it multi-line
+            if value_str.startswith('[[') and value_str.endswith(']]'):
+                # Extract inner lists
+                inner = value_str[1:-1].strip()  # Remove outer []
+                # Split by '], [' pattern
+                rows = []
+                depth = 0
+                current_row = ''
+                for char in inner:
+                    if char == '[':
+                        depth += 1
+                    elif char == ']':
+                        depth -= 1
+                        if depth == 0:
+                            rows.append('[' + current_row + ']')
+                            current_row = ''
+                            continue
+                    if depth > 0:
+                        current_row += char
+
+                # Format as multi-line
+                formatted = indent + '[\n'
+                for row in rows:
+                    formatted += indent + '    ' + row + ',\n'
+                formatted += indent + ']'
+                return formatted
+            else:
+                # 1D tensor, keep as single line
+                return f"{indent}{value_str}"
         except:
-            # If anything goes wrong, return as-is
+            # Fallback: return as-is with indentation
             return f"{indent}{value_str}"
 
 
@@ -303,29 +327,49 @@ def update_expected_value_in_file(
     with open(file_path, 'r') as f:
         lines = f.readlines()
 
+    # Get the original text to extract the full pattern
+    original_text = ''.join(lines[start_line:end_line + 1])
+
     # Get the indentation of the original definition
     original_line = lines[start_line]
     indent_match = re.match(r'^(\s*)', original_line)
     indent = indent_match.group(1) if indent_match else ''
     indent_level = len(indent) // 4
 
+    # Extract the variable assignment part (e.g., "expected_slice = ")
+    assignment_match = re.match(r'^(\s*)(\w+\s*=\s*)', original_line)
+    assignment_prefix = ''
+    if assignment_match:
+        assignment_prefix = assignment_match.group(2)
+
+    # Extract any method chaining at the end (e.g., ".to(torch_device)")
+    method_chain_suffix = ''
+    if value_type == 'torch_tensor':
+        # Look for patterns like ).to(...) or ).cuda() etc.
+        chain_match = re.search(r'(\)\s*\.\s*\w+\([^)]*\))', original_text)
+        if chain_match:
+            method_chain_suffix = chain_match.group(1)
+
     # Format the new value appropriately
     if value_type == 'torch_tensor':
+        # Parse the new value to reformat it properly
+        formatted_tensor = format_torch_tensor_for_code(new_value, indent_level + 1)
+
         # Check if original was torch.tensor(...) or just [...]
-        if 'torch.tensor' in original_line:
-            formatted_value = format_torch_tensor_for_code(new_value, indent_level)
-            # Ensure it's wrapped in torch.tensor()
-            if not formatted_value.strip().startswith('torch.tensor'):
-                formatted_value = f"{indent}torch.tensor(\n{formatted_value}\n{indent})"
+        if 'torch.tensor' in original_text:
+            # Build the full replacement with proper structure
+            formatted_value = f"{indent}{assignment_prefix}torch.tensor(\n"
+            formatted_value += f"{formatted_tensor}\n"
+            formatted_value += f"{indent}){method_chain_suffix}"
         else:
             # Just update the tensor values directly
-            formatted_value = format_torch_tensor_for_code(new_value, indent_level)
+            formatted_value = f"{indent}{assignment_prefix}{formatted_tensor}"
     elif value_type == 'string':
-        formatted_value = f"{indent}{new_value}"
+        formatted_value = f"{indent}{assignment_prefix}{new_value}"
     elif value_type == 'list_of_strings':
-        formatted_value = f"{indent}{new_value}"
+        formatted_value = f"{indent}{assignment_prefix}{new_value}"
     else:
-        formatted_value = f"{indent}{new_value}"
+        formatted_value = f"{indent}{assignment_prefix}{new_value}"
 
     # Replace the lines
     new_lines = lines[:start_line] + [formatted_value + '\n'] + lines[end_line + 1:]
