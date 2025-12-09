@@ -354,7 +354,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 fix_mistral_regex=kwargs.get("fix_mistral_regex"),
                 **kwargs,
             )
-        self.update_post_processor()
+
+        if "add_bos_token" in kwargs or "add_eos_token" in kwargs:
+            self.update_post_processor()
 
     @property
     def is_fast(self) -> bool:
