@@ -19,7 +19,13 @@ import pytest
 from packaging import version
 
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -261,7 +267,7 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
     @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):

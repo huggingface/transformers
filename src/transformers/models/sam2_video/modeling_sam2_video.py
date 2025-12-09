@@ -1700,6 +1700,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
         run_mem_encoder: bool = True,
+        **kwargs,
     ) -> Sam2VideoSegmentationOutput:
         r"""
         inference_session (`Sam2VideoInferenceSession`):

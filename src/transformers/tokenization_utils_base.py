@@ -19,6 +19,8 @@ fronting encoding methods) Special token mixing (host the special tokens logic) 
 of output with special method for the Fast tokenizers)
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import os
@@ -31,7 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
 
 import numpy as np
-from huggingface_hub import create_repo, list_repo_files
+from huggingface_hub import create_repo, is_offline_mode, list_repo_files
 from packaging import version
 
 from . import __version__
@@ -49,7 +51,6 @@ from .utils import (
     extract_commit_hash,
     is_mlx_available,
     is_numpy_array,
-    is_offline_mode,
     is_protobuf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -60,6 +61,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -756,7 +758,7 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"], *, non_blocking: bool = False) -> "BatchEncoding":
+    def to(self, device: Union[str, torch.device], *, non_blocking: bool = False) -> BatchEncoding:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
@@ -3045,7 +3047,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        token_ids: Union[int, list[int], list[list[int]], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         **kwargs,
     ) -> Union[str, list[str]]:
@@ -3093,7 +3095,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], np.ndarray, torch.Tensor],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -3192,7 +3194,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
+        return_dict: bool = True,
         return_assistant_tokens_mask: bool = False,
         tokenizer_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
@@ -3265,14 +3267,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             set, will return a dict of tokenizer outputs instead.
         """
 
-        if return_dict and not tokenize:
-            raise ValueError(
-                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
-                "of tokenizer outputs to return."
-            )
+        if not tokenize:
+            return_dict = False  # dicts are only returned by the tokenizer anyway
 
-        if return_assistant_tokens_mask and not return_dict:
-            raise ValueError("`return_assistant_tokens_mask=True` is incompatible with `return_dict=False`")
+        if return_assistant_tokens_mask and not (return_dict and tokenize):
+            raise ValueError("`return_assistant_tokens_mask=True` requires `return_dict=True` and `tokenize=True`")
 
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
@@ -3387,13 +3386,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             )
 
         if conversation_history is None or len(conversation_history) == 0:
-            return self.apply_chat_template([message], add_generation_prompt=False, tokenize=True, **kwargs)
+            return self.apply_chat_template(
+                [message], add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
+            )
 
         conversation = conversation_history + [message]
-        tokens = self.apply_chat_template(conversation, add_generation_prompt=False, tokenize=True, **kwargs)
+        tokens = self.apply_chat_template(
+            conversation, add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
+        )
 
         prefix_tokens = self.apply_chat_template(
-            conversation_history, add_generation_prompt=False, tokenize=True, **kwargs
+            conversation_history, add_generation_prompt=False, tokenize=True, return_dict=False, **kwargs
         )
         # It's possible that the prefix tokens are not a prefix of the full list of tokens.
         # For example, if the prefix is `<s>User: Hi` and the full conversation is `<s>User: Hi</s><s>Assistant: Hello`.
@@ -3518,6 +3521,45 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # Legacy format for single templates: Just make them a key in tokenizer_config.json
             tokenizer_config["chat_template"] = self.chat_template
         return tokenizer_config, saved_raw_chat_template_files
+
+    def parse_response(
+        self,
+        response: str | list[str | int | list[int]] | np.ndarray | torch.Tensor,
+        schema: list | dict | None = None,
+    ):
+        """
+        Converts an output string created by generating text from a model into a parsed message dictionary.
+        This method is intended for use with chat models, and will read the tokenizer's `response_schema` attribute to
+        control parsing, although this can be overridden by passing a `response_schema` argument directly.
+
+        This method is currently **highly experimental** and the schema specification is likely to change in future!
+        We recommend not building production code on top of it just yet.
+
+        Args:
+            response (`str`):
+                The output string generated by the model. This can be either a decoded string or list of strings,
+                or token IDs as a list/array.
+            schema (`Union[list, dict]`, *optional*):
+                A response schema that indicates the expected output format and how parsing should be performed.
+                If not provided, the tokenizer's `response_schema` attribute will be used.
+        """
+        batched = (
+            (isinstance(response, list) and not isinstance(response[0], int))
+            or getattr(response, "ndim", 0) > 1  # For torch/numpy tensors
+        )
+
+        if schema is None:
+            if getattr(self, "response_schema", None) is None:
+                raise AttributeError("This tokenizer does not have a `response_schema` for parsing chat responses!")
+            schema = self.response_schema
+        if batched:
+            if not (isinstance(response, list) and isinstance(response[0], str)):
+                response = self.batch_decode(response)
+            return [recursive_parse(single_response, schema) for single_response in response]
+        else:
+            if not isinstance(response, str):
+                response = self.decode(response)
+            return recursive_parse(response, schema)
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:

@@ -22,7 +22,7 @@ from functools import partial
 from typing import Any, Optional, Union
 
 import numpy as np
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
@@ -44,7 +44,6 @@ from .utils import (
     TensorType,
     add_start_docstrings,
     copy_func,
-    is_offline_mode,
     is_torch_available,
     is_torchcodec_available,
     is_torchvision_v2_available,

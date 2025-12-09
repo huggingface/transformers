@@ -97,24 +97,27 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.num_experts = 3
-        config.expert_interval = 2
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
         model = Ernie4_5_MoeForCausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
-        self.assertEqual(result.router_logits[0].shape, (91, config.num_experts))
+        bs, seqlen = input_ids.shape
+        self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
         torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
+        # (This length is selected from experiments)
         pad_length = input_ids.shape[1] * 4
-        # Add padding tokens (assume that pad_token_id=1) to input_ids
-        padding_block = torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(torch_device)
+        # Add padding tokens to input_ids
+        padding_block = config.pad_token_id * torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(
+            torch_device
+        )
         padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
-        padded_attention_mask = padded_input_ids.ne(1).to(torch_device)
+        padded_attention_mask = padded_input_ids.ne(config.pad_token_id).to(torch_device)
 
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
         torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)

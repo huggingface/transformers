@@ -16,6 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-12-01 and added to Hugging Face Transformers on 2025-12-01.*
 
 
 # Ministral3
@@ -48,7 +49,7 @@ model_id = "mistralai/Ministral-3-3B-Instruct-2512"
 
 tokenizer = MistralCommonBackend.from_pretrained(model_id)
 model = Mistral3ForConditionalGeneration.from_pretrained(
-    model_id, torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, device_map="auto"
 )
 
 image_url = "https://static.wikia.nocookie.net/essentialsdocs/images/7/70/Battle.png/revision/latest?cb=20220523172438"
