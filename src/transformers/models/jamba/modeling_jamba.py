@@ -295,15 +295,18 @@ class JambaAttention(nn.Module):
 
 
 causal_conv1d = lazy_load_kernel("causal-conv1d")
-causal_conv1d_update = causal_conv1d.causal_conv1d_update if causal_conv1d is not None else None
-causal_conv1d_fn = causal_conv1d.causal_conv1d_fn if causal_conv1d is not None else None
+causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
 
 mamba_ssm = lazy_load_kernel("mamba-ssm")
-selective_state_update = (
-    mamba_ssm.ops.triton.selective_state_update.selective_state_update if mamba_ssm is not None else None
+mamba_ssm_ops = getattr(mamba_ssm, "ops", None)
+mamba_ssm_triton = getattr(mamba_ssm_ops, "triton", None)
+selective_state_update = getattr(
+    getattr(mamba_ssm_triton, "selective_state_update", None), "selective_state_update", None
 )
-mamba_inner_fn = mamba_ssm.ops.selective_scan_interface.mamba_inner_fn if mamba_ssm is not None else None
-selective_scan_fn = mamba_ssm.ops.selective_scan_interface.selective_scan_fn if mamba_ssm is not None else None
+selective_scan_interface = getattr(mamba_ssm_ops, "selective_scan_interface", None)
+mamba_inner_fn = getattr(selective_scan_interface, "mamba_inner_fn", None)
+selective_scan_fn = getattr(selective_scan_interface, "selective_scan_fn", None)
 
 
 is_fast_path_available = all(
