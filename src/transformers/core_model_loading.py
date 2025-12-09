@@ -317,10 +317,13 @@ class ModulelistSplitAndFuse(ConversionOps):
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
+        valid_keys = input_dict.keys()
         split_and_fused = defaultdict(list)
-        for key in input_dict.keys():
-            tensors = input_dict.get(key, [])
+        for key in source_patterns:
+            if key not in valid_keys:
+                raise ValueError(f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}")
 
+            tensors = input_dict.get(key, [])
             split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(target_patterns))
             stacked_tensors = (torch.stack(tensor_group, dim=self.stack_dim) for tensor_group in split_tensor_lists)
             for idx, tensor_group in enumerate(stacked_tensors):
@@ -371,8 +374,14 @@ class ModulelistSplitAndDecouple(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         fused_modules = len(target_patterns)
-        # Assuming that we get single sized lists here to index with 0
-        split_tensors = [input_dict[key][0].chunk(fused_modules, dim=self.concat_dim) for key in input_dict.keys()]
+        valid_keys = input_dict.keys()
+        split_tensors = []
+        for key in source_patterns:
+            if key not in valid_keys:
+                raise ValueError(f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}")
+
+            # Assuming that we get single sized lists here to index with 0
+            split_tensors.append(input_dict[key][0].chunk(fused_modules, dim=self.concat_dim))
 
         decoupled = {}
         for idx, key in enumerate(target_patterns):
