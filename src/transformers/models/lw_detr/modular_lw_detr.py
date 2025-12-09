@@ -11,11 +11,11 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from ..auto.configuration_auto import AutoConfig
 from ..convnext.modeling_convnext import ConvNextLayerNorm
@@ -1501,12 +1501,12 @@ class LwDetrViTEncoder(ViTEncoder):
         self,
         hidden_states: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> list[torch.Tensor]:
         list_hidden_states = [hidden_states]
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states, **kwargs)
             list_hidden_states.append(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=tuple(list_hidden_states))
+        return list_hidden_states
 
 
 class LwDetrViTEmbeddings(VitDetEmbeddings):
@@ -1524,7 +1524,7 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": ["LwDetrViTLayer", "LwDetrViTEncoder"],
+        "hidden_states": LwDetrViTLayer,
         "attentions": LwDetrViTSelfAttention,
     }
 
@@ -1546,9 +1546,9 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
 
 @auto_docstring()
 class LwDetrViTBackbone(VitDetBackbone):
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor = None, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 
@@ -1590,8 +1590,7 @@ class LwDetrViTBackbone(VitDetBackbone):
             .reshape(batch_size * 16, window_height * window_width, channels)
         )
 
-        encoder_outputs = self.encoder(hidden_states, **kwargs)
-        hidden_states = encoder_outputs.hidden_states
+        hidden_states = self.encoder(hidden_states, **kwargs)
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -1610,12 +1609,7 @@ class LwDetrViTBackbone(VitDetBackbone):
                 )
                 feature_maps += (hidden_state,)
 
-        output_hidden_states = self.config.output_hidden_states or kwargs.get("output_hidden_states", False)
-        return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
-            attentions=encoder_outputs.attentions,
-        )
+        return BackboneOutput(feature_maps=feature_maps)
 
 
 __all__ = [
