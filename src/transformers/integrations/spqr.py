@@ -13,110 +13,64 @@
 # limitations under the License.
 "SpQR (Sparse-Quantized Representation) integration file"
 
-from ..utils import is_accelerate_available, is_spqr_available, is_torch_available
+from ..quantizers.quantizers_utils import should_convert_module
+from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
 
+
+if is_accelerate_available():
+    from accelerate import init_empty_weights
 
 if is_torch_available():
     import torch.nn as nn
 
+logger = logging.get_logger(__name__)
 
-def replace_with_spqr_linear(
-    model,
-    quantization_config=None,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    has_been_replaced=False,
-):
+
+def replace_with_spqr_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
-    Public method that recursively replaces the Linear layers of the given model with SpQR quantized layers.
-    `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successful or not.
+    Public method that replaces the Linear layers of the given model with SPQR quantized layers.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
-        quantization_config (`SpQRConfig`):
-            The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`list[str]`, *optional*):
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
             A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
             converted.
-        current_key_name (`list`, *optional*):
-            A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, *optional*):
-            A boolean that indicates if the conversion has been successful or not. This is used for recursion and
-            should not be passed by the user.
+        quantization_config (`SpQRConfig`):
+            The quantization config object that contains the quantization parameters.
     """
-    if modules_to_not_convert is None:
-        modules_to_not_convert = []
-
-    if is_accelerate_available():
-        from accelerate import init_empty_weights
     if is_spqr_available():
         from spqr_quant import QuantizedLinear
 
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
+    has_been_replaced = False
+    # we need this to correctly materialize the weights during quantization
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        with init_empty_weights():
+            if isinstance(module, nn.Linear):
+                shapes = quantization_config.shapes
 
-        if isinstance(module, nn.Linear):
-            # Check if the current key is not in the `modules_to_not_convert`
-            if ".".join(current_key_name) + ".weight" not in modules_to_not_convert:
-                with init_empty_weights():
-                    tensor_name = ".".join(current_key_name)
+                new_module = QuantizedLinear.create_placehodler(
+                    rows=module.out_features,
+                    cols=module.in_features,
+                    bits=quantization_config.bits,
+                    beta1=quantization_config.beta1,
+                    beta2=quantization_config.beta2,
+                    dense_weights_shape=shapes[f"{module_name}.dense_weights.shape"],
+                    row_offsets_shape=shapes[f"{module_name}.row_offsets.shape"],
+                    col_vals_shape=shapes[f"{module_name}.col_vals.shape"],
+                    in_perm_shape=shapes[f"{module_name}.in_perm.shape"],
+                )
+                # Force requires grad to False to avoid unexpected errors
+                model._modules[module_name].requires_grad_(False)
+                model.set_submodule(module_name, new_module)
+                has_been_replaced = True
+    if not has_been_replaced:
+        logger.warning(
+            "You are loading your model using eetq but no linear modules were found in your model."
+            " Please double check your model architecture, or submit an issue on github if you think this is"
+            " a bug."
+        )
 
-                    shapes = quantization_config.shapes
-                    shapes_keys = shapes.keys()
-
-                    shapes_valid = (
-                        f"{tensor_name}.dense_weights.shape" in shapes_keys
-                        and f"{tensor_name}.row_offsets.shape" in shapes_keys
-                        and f"{tensor_name}.col_vals.shape" in shapes_keys
-                        and f"{tensor_name}.in_perm.shape" in shapes_keys
-                    )
-
-                    if not shapes_valid:
-                        raise ValueError(
-                            f"The SpQR quantization config does not contain the shape "
-                            f"configuration for {tensor_name}. This indicates that the "
-                            f"configuration is either invalid or corrupted."
-                        )
-
-                    dense_weights_shape = shapes[f"{tensor_name}.dense_weights.shape"]
-                    row_offsets_shape = shapes[f"{tensor_name}.row_offsets.shape"]
-                    col_vals_shape = shapes[f"{tensor_name}.col_vals.shape"]
-                    in_perm_shape = shapes[f"{tensor_name}.in_perm.shape"]
-
-                    in_features = module.in_features
-                    out_features = module.out_features
-
-                    model._modules[name] = QuantizedLinear.create_placehodler(
-                        rows=out_features,
-                        cols=in_features,
-                        bits=quantization_config.bits,
-                        beta1=quantization_config.beta1,
-                        beta2=quantization_config.beta2,
-                        dense_weights_shape=dense_weights_shape,
-                        row_offsets_shape=row_offsets_shape,
-                        col_vals_shape=col_vals_shape,
-                        in_perm_shape=in_perm_shape,
-                    )
-                    has_been_replaced = True
-
-                    # Store the module class in case we need to transpose the weight later
-                    model._modules[name].source_cls = type(module)
-                    # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
-            else:
-                pass
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = replace_with_spqr_linear(
-                module,
-                quantization_config=quantization_config,
-                modules_to_not_convert=modules_to_not_convert,
-                current_key_name=current_key_name,
-                has_been_replaced=has_been_replaced,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
+    return model

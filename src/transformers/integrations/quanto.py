@@ -58,7 +58,7 @@ class QuantoQuantize(ConversionOps):
 def replace_with_quanto_layers(
     model,
     quantization_config=None,
-    modules_to_not_convert=None,
+    modules_to_not_convert: list[str] | None = None,
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with Quanto quantized layers.

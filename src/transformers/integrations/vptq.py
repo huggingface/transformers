@@ -13,64 +13,49 @@
 # limitations under the License.
 "VPTQ (Vector Post-Training Quantization) integration file"
 
-import torch.nn as nn
-from accelerate import init_empty_weights
-from vptq import VQuantLinear
+from ..quantizers.quantizers_utils import should_convert_module
+from ..utils import is_accelerate_available, is_torch_available, logging
 
 
-def replace_with_vptq_linear(
-    model,
-    quantization_config=None,
-    modules_to_not_convert=None,
-    current_key_name=None,
-    has_been_replaced=False,
-):
+if is_accelerate_available():
+    from accelerate import init_empty_weights
+
+if is_torch_available():
+    import torch.nn as nn
+
+logger = logging.get_logger(__name__)
+
+
+def replace_with_vptq_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
-    Public method that recursively replaces the Linear layers of the given model with VPTQ quantized layers.
-    `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successful or not.
+    Public method that replaces the Linear layers of the given model with SPQR quantized layers.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
+            A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
+            converted.
         quantization_config (`VptqConfig`):
             The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
-            Names of the modules to not convert in `VQuantLinear`. In practice we keep the `lm_head` in full precision
-            for numerical stability reasons.
-        current_key_name (`list`, *optional*):
-            A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, *optional*):
-            A boolean that indicates if the conversion has been successful or not. This is used for recursion and
-            should not be passed by the user.
     """
+    from vptq import VQuantLinear
 
-    modules_to_not_convert = modules_to_not_convert if modules_to_not_convert else ["lm_head"]
+    has_been_replaced = False
+    shared_layer_config = quantization_config.shared_layer_config
+    config_for_layers = quantization_config.config_for_layers
 
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
-        layer_name = ".".join(current_key_name)
-        shared_layer_config = quantization_config.shared_layer_config
-        config_for_layers = quantization_config.config_for_layers
-
-        if (
-            isinstance(module, nn.Linear)
-            and layer_name not in modules_to_not_convert
-            and ((layer_name in config_for_layers) or (current_key_name[-1] in shared_layer_config))
-        ):
-            layer_params = config_for_layers.get(layer_name, None) or shared_layer_config.get(
-                current_key_name[-1], None
-            )
-
-            with init_empty_weights():
-                in_features = module.in_features
-                out_features = module.out_features
-
-                model._modules[name] = VQuantLinear(
-                    in_features,
-                    out_features,
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        with init_empty_weights():
+            if isinstance(module, nn.Linear):
+                layer_params = config_for_layers.get(module_name, None) or shared_layer_config.get(
+                    module_name.rsplit(".")[1], None
+                )
+                new_module = VQuantLinear(
+                    module.in_features,
+                    module.out_features,
                     vector_lens=layer_params["vector_lens"],
                     num_centroids=layer_params["num_centroids"],
                     num_res_centroids=layer_params["num_res_centroids"],
@@ -84,18 +69,16 @@ def replace_with_vptq_linear(
                     enable_proxy_error=False,
                     bias=module.bias is not None,
                 )
+                # Force requires grad to False to avoid unexpected errors
+                model._modules[module_name].requires_grad_(False)
+                model.set_submodule(module_name, new_module)
                 has_been_replaced = True
 
-                # Force requires grad to False to avoid unexpected errors
-                model._modules[name].requires_grad_(False)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = replace_with_vptq_linear(
-                module,
-                quantization_config=quantization_config,
-                modules_to_not_convert=modules_to_not_convert,
-                current_key_name=current_key_name,
-                has_been_replaced=has_been_replaced,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
+    if not has_been_replaced:
+        logger.warning(
+            "You are loading your model using eetq but no linear modules were found in your model."
+            " Please double check your model architecture, or submit an issue on github if you think this is"
+            " a bug."
+        )
+
+    return model

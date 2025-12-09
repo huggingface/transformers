@@ -1,8 +1,7 @@
 import inspect
-from inspect import signature
 
 from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import get_module_from_name
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import (
     get_available_devices,
     is_accelerate_available,
@@ -156,136 +155,77 @@ class Bnb8bitDeserialize(ConversionOps):
         return {key_weight: new_value}
 
 
-def _replace_with_bnb_linear(
-    model,
-    modules_to_not_convert=None,
-    current_key_name=None,
+def replace_with_bnb_linear(
+    model: torch.nn.Module,
+    modules_to_not_convert: list[str] | None = None,
     quantization_config=None,
-    has_been_replaced=False,
     pre_quantized=False,
 ):
     """
-    Private method that wraps the recursion for module replacement.
+    A helper function to replace all `torch.nn.Linear` modules by bnb modules from the `bitsandbytes` library.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
-    """
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
-
-        if (isinstance(module, (nn.Linear, Conv1D))) and name not in modules_to_not_convert:
-            # Check if the current key is not in the `modules_to_not_convert`
-            current_key_name_str = ".".join(current_key_name)
-            if not any(
-                (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
-            ):
-                with init_empty_weights():
-                    if isinstance(module, Conv1D):
-                        in_features, out_features = module.weight.shape
-                    else:
-                        in_features = module.in_features
-                        out_features = module.out_features
-
-                    if quantization_config.quantization_method() == "llm_int8":
-                        new_module = bnb.nn.Linear8bitLt(
-                            in_features,
-                            out_features,
-                            module.bias is not None,
-                            has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
-                            threshold=quantization_config.llm_int8_threshold,
-                        )
-                        if pre_quantized:
-                            new_module.weight.data = new_module.weight.data.to(dtype=torch.int8)
-                        model._modules[name] = new_module
-                        has_been_replaced = True
-                    else:
-                        if (
-                            quantization_config.llm_int8_skip_modules is not None
-                            and name in quantization_config.llm_int8_skip_modules
-                        ):
-                            pass
-                        else:
-                            extra_kwargs = (
-                                {"quant_storage": quantization_config.bnb_4bit_quant_storage}
-                                if "quant_storage" in list(signature(bnb.nn.Linear4bit).parameters)
-                                else {}
-                            )
-                            new_module = bnb.nn.Linear4bit(
-                                in_features,
-                                out_features,
-                                module.bias is not None,
-                                quantization_config.bnb_4bit_compute_dtype,
-                                compress_statistics=quantization_config.bnb_4bit_use_double_quant,
-                                quant_type=quantization_config.bnb_4bit_quant_type,
-                                **extra_kwargs,
-                            )
-                            if pre_quantized:
-                                # this is kind of an edge case when supporting both loading and quantization ...
-                                # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
-                                new_module.weight.data = new_module.weight.data.to(
-                                    dtype=quantization_config.bnb_4bit_quant_storage
-                                )
-                            model._modules[name] = new_module
-                            has_been_replaced = True
-                    # Store the module class in case we need to transpose the weight later
-                    model._modules[name].source_cls = type(module)
-                    # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _replace_with_bnb_linear(
-                module,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-                pre_quantized=pre_quantized,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
-
-
-def replace_with_bnb_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False
-):
-    """
-    A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
-    library. This will enable running your models using mixed int8 precision as described by the paper `LLM.int8():
-    8-bit Matrix Multiplication for Transformers at Scale`. Make sure `bitsandbytes` compiled with the correct CUDA
-    version of your hardware is installed before running this function. `pip install -i https://test.pypi.org/simple/
-    bitsandbytes`
-
-    The function will be run recursively and replace all `torch.nn.Linear` modules except for the `lm_head` that should
-    be kept as a `torch.nn.Linear` module. The replacement is done under `init_empty_weights` context manager so no
-    CPU/GPU memory is required to run this function. Int8 mixed-precision matrix decomposition works by separating a
-    matrix multiplication into two streams: (1) and systematic feature outlier stream matrix multiplied in fp16
-    (0.01%), (2) a regular stream of int8 matrix multiplication (99.9%). With this method, int8 inference with no
-    predictive degradation is possible for very large models (>=176B parameters).
-
-    Parameters:
+    Args:
         model (`torch.nn.Module`):
-            Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
-            Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
-            for numerical stability reasons.
-        current_key_name (`list[`str`]`, *optional*):
-            An array to track the current key of the recursion. This is used to check whether the current key (part of
-            it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
-            `disk`).
-        quantization_config ('transformers.utils.quantization_config.BitsAndBytesConfig'):
-            To configure and manage settings related to quantization, a technique used to compress neural network models
-            by reducing the precision of the weights and activations, thus making models more efficient in terms of both
-            storage and computation.
+            The model to convert, can be any `torch.nn.Module` instance.
+        modules_to_not_convert (`list[str]`, defaults to `None`):
+            A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
+            converted.
+        quantization_config (`BitsAndBytesConfig`):
+            The quantization config object that contains the quantization parameters.
+        pre_quantized (`book`, defaults to `False`):
+            Whether the model is pre-quantized or not
     """
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
-    model, has_been_replaced = _replace_with_bnb_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized
-    )
+    has_been_replaced = False
+    # we need this to correctly materialize the weights during quantization
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        new_module = None
+        with init_empty_weights():
+            if isinstance(module, (nn.Linear, Conv1D)):
+                if isinstance(module, Conv1D):
+                    in_features, out_features = module.weight.shape
+                else:
+                    in_features = module.in_features
+                    out_features = module.out_features
+                if quantization_config.quantization_method() == "llm_int8":
+                    new_module = bnb.nn.Linear8bitLt(
+                        in_features,
+                        out_features,
+                        module.bias is not None,
+                        has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
+                        threshold=quantization_config.llm_int8_threshold,
+                    )
+                    if pre_quantized:
+                        # this is kind of an edge case when supporting both loading and quantization ...
+                        # we need to set the right dtype as we cast the checkpoint with the dtype of the meta model
+                        new_module.weight.data = new_module.weight.data.to(dtype=torch.int8)
+                else:
+                    new_module = bnb.nn.Linear4bit(
+                        in_features,
+                        out_features,
+                        module.bias is not None,
+                        quantization_config.bnb_4bit_compute_dtype,
+                        compress_statistics=quantization_config.bnb_4bit_use_double_quant,
+                        quant_type=quantization_config.bnb_4bit_quant_type,
+                        quant_storage=quantization_config.bnb_4bit_quant_storage,
+                    )
+                    if pre_quantized:
+                        # same here
+                        new_module.weight.data = new_module.weight.data.to(
+                            dtype=quantization_config.bnb_4bit_quant_storage
+                        )
+                if new_module is not None:
+                    # Store the module class in case we need to transpose the weight later
+                    new_module.source_cls = type(module)
+                    # Force requires grad to False to avoid unexpected errors
+                    new_module.requires_grad_(False)
+                    model.set_submodule(module_name, new_module)
+                    has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(
-            "You are loading your model in 8bit or 4bit but no linear modules were found in your model."
+            "You are loading your model using eetq but no linear modules were found in your model."
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
@@ -343,95 +283,43 @@ def _create_accelerate_new_hook(old_hook):
     return new_hook
 
 
-def _dequantize_and_replace(
+def dequantize_and_replace(
     model,
-    dtype,
-    modules_to_not_convert=None,
-    current_key_name=None,
     quantization_config=None,
-    has_been_replaced=False,
 ):
     """
     Converts a quantized model into its dequantized original version. The newly converted model will have
     some performance drop compared to the original model before quantization - use it only for specific usecases
     such as QLoRA adapters merging.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
+    Returns the converted model.
     """
     quant_method = quantization_config.quantization_method()
 
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
 
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
-
-        if isinstance(module, target_cls) and name not in modules_to_not_convert:
-            # Check if the current key is not in the `modules_to_not_convert`
-            current_key_name_str = ".".join(current_key_name)
-
-            if not any(
-                (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
-            ):
+    for module_name, module in model.named_modules():
+        if isinstance(module, target_cls):
+            with init_empty_weights():
                 bias = getattr(module, "bias", None)
-
-                device = module.weight.device
-                with init_empty_weights():
-                    new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)
-
-                if quant_method == "llm_int8":
-                    state = module.state
-                else:
-                    state = None
-
-                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, dtype, state))
-
-                if bias is not None:
-                    new_module.bias = bias
-
-                # Create a new hook and attach it in case we use accelerate
-                if hasattr(module, "_hf_hook"):
-                    old_hook = module._hf_hook
-                    new_hook = _create_accelerate_new_hook(old_hook)
-
-                    remove_hook_from_module(module)
-                    add_hook_to_module(new_module, new_hook)
-
-                new_module.to(device)
-                model._modules[name] = new_module
-                has_been_replaced = True
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = _dequantize_and_replace(
-                module,
-                dtype,
-                modules_to_not_convert,
-                current_key_name,
-                quantization_config,
-                has_been_replaced=has_been_replaced,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
-
-
-def dequantize_and_replace(
-    model,
-    modules_to_not_convert=None,
-    quantization_config=None,
-):
-    model, has_been_replaced = _dequantize_and_replace(
-        model,
-        model.dtype,
-        modules_to_not_convert=modules_to_not_convert,
-        quantization_config=quantization_config,
-    )
+                new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)
+            state = module.state if quant_method == "llm_int8" else None
+            new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, model.dtype, state))
+            if bias is not None:
+                new_module.bias = bias
+            if hasattr(module, "_hf_hook"):
+                old_hook = module._hf_hook
+                new_hook = _create_accelerate_new_hook(old_hook)
+                remove_hook_from_module(module)
+                add_hook_to_module(new_module, new_hook)
+            new_module.to(module.weight.device)
+            model.set_submodule(module_name, new_module)
+            has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(
             "For some reason the model has not been properly dequantized. You might see unexpected behavior."
         )
-
     return model
 
 
@@ -439,8 +327,6 @@ def validate_bnb_backend_availability(raise_exception=False):
     """
     Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
     """
-    import bitsandbytes as bnb
-
     bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
     available_devices = set(get_available_devices())
 

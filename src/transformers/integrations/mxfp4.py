@@ -594,7 +594,19 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
     )
 
 
-def replace_with_mxfp4_linear(model, modules_to_not_convert=None, quantization_config=None):
+def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_convert: list[str] | None = None):
+    """
+    Public method that replaces the expert layers of the given model with mxfp4 quantized layers.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model to convert, can be any `torch.nn.Module` instance.
+        quantization_config (`Mxfp4Config`, defaults to `None`):
+            The quantization config object that contains the quantization parameters.
+        modules_to_not_convert (`list`, *optional*, defaults to `None`):
+            A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
+            converted.
+    """
     if quantization_config.dequantize:
         return model
 
