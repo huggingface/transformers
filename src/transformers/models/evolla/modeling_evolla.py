@@ -1091,7 +1091,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class EvollaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

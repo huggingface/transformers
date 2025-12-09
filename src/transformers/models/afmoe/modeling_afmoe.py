@@ -338,7 +338,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class AfmoeAttention(nn.Module):
     """
     Multi-headed attention module with optional sliding window and gating.

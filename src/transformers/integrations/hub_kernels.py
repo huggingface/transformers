@@ -369,7 +369,17 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def use_kernelized_func(module_names: list[Callable]):
+def use_kernelized_func(module_names: list[Callable] | Callable):
+    """
+    This decorator attaches the target function as an attribute of the module.
+    The function must already be decorated with @use_kernel_func_from_hub; 
+    this decorator then wraps it as an nn.Module internally.
+    When kernelize is later applied to the full model, the function can be accessed as a regular module attribute and kernelized just like any other layer.
+    The kernelization is performed in place, modifying the module directly.
+    """
+    if isinstance(module_names, Callable):
+        module_names = [module_names]
+
     def decorator(cls):
         orig_init = cls.__init__
 

@@ -259,7 +259,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class ParakeetEncoderAttention(nn.Module):
     """Multi-head attention with relative positional encoding. See section 3.3 of https://huggingface.co/papers/1901.02860."""
 

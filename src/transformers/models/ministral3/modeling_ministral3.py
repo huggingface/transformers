@@ -110,7 +110,7 @@ def _get_llama_4_attn_scale(positions_ids: torch.Tensor, beta: float, max_positi
     return scaling.unsqueeze(-1)
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class Ministral3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

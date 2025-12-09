@@ -253,7 +253,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class T5Gemma2SelfAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -335,7 +335,7 @@ class T5Gemma2SelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class T5Gemma2MergedAttention(nn.Module):
     """Merged self-attention and cross-attention for decoder."""
 

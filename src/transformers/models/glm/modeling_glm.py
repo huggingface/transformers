@@ -216,7 +216,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class GlmAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

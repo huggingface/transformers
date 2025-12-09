@@ -194,7 +194,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func([apply_rotary_pos_emb])
+@use_kernelized_func(apply_rotary_pos_emb)
 class PhimoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
