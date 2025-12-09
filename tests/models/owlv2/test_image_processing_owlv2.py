@@ -151,7 +151,9 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**inputs)
 
-            results = processor.post_process_object_detection(outputs, threshold=0.2, target_sizes=[target_size])[0]
+            results = processor.image_processor.post_process_object_detection(
+                outputs, threshold=0.2, target_sizes=[target_size]
+            )[0]
 
             boxes = results["boxes"]
             torch.testing.assert_close(boxes, expected_boxes, atol=1e-1, rtol=1e-1)
@@ -160,7 +162,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             inputs = processor(text=[text, text], images=[image, image], return_tensors="pt")
             with torch.no_grad():
                 outputs = model(**inputs)
-            results = processor.post_process_object_detection(
+            results = processor.image_processor.post_process_object_detection(
                 outputs, threshold=0.2, target_sizes=[target_size, target_size]
             )
 
