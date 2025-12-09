@@ -68,7 +68,7 @@ def replace_with_quanto_layers(
             The model to convert, can be any `torch.nn.Module` instance.
         quantization_config (`QuantoConfig`, defaults to `None`):
             The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`list`, defaults to `None`):
+        modules_to_not_convert (`list`, *optional*, defaults to `None`):
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
             converted.
     """

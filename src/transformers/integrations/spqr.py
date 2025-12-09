@@ -28,12 +28,12 @@ logger = logging.get_logger(__name__)
 
 def replace_with_spqr_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
-    Public method that recursively replaces the Linear layers of the given model with SPQR quantized layers.
+    Public method that replaces the Linear layers of the given model with SPQR quantized layers.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
-        modules_to_not_convert (`list[str]`, defaults to `None`):
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
             A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
             converted.
         quantization_config (`SpQRConfig`):

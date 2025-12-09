@@ -317,12 +317,12 @@ class AutoBitLinear(nn.Linear):
 
 def replace_with_bitnet_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
-    Public method that recursively replaces the kinear layers of the given model with bitnet quantized layers.
+    Public method that replaces the linear layers of the given model with bitnet quantized layers.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
-        modules_not_to_quantize (`list[str]`, defaults to `None`):
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
             A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
             converted.
         quantization_config (`BitNetConfig`):

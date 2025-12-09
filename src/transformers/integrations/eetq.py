@@ -93,7 +93,7 @@ def replace_with_eetq_linear(model, modules_to_not_convert: list[str] | None = N
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`list[`str`]`, defaults to `None`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
             Names of the modules to not convert in `EetqLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
     """
