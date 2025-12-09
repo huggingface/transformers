@@ -17,7 +17,6 @@ from typing import Optional
 
 import torch.nn as nn
 
-from ...activations import ACT2FN
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, can_return_tuple
 from ..llama.configuration_llama import LlamaConfig
@@ -30,6 +29,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
 )
+from ..nemotron.modeling_nemotron import NemotronMLP
 
 
 class Jais2Config(LlamaConfig):
@@ -165,18 +165,8 @@ class Jais2Config(LlamaConfig):
 __all__ = ["Jais2Config"]
 
 
-class Jais2MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
+class Jais2MLP(NemotronMLP):
+    pass
 
 
 class Jais2DecoderLayer(LlamaDecoderLayer):
