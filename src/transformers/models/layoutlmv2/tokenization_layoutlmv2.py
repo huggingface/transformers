@@ -181,11 +181,9 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
     ):
         self.do_lower_case = do_lower_case
 
-        # Build vocab for WordPiece
         if vocab is not None:
             self._vocab = vocab
         else:
-            # Initialize with at least the special tokens for WordPiece
             self._vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
@@ -194,10 +192,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
                 str(mask_token): 4,
             }
 
-        # Initialize WordPiece tokenizer
         self._tokenizer = Tokenizer(models.WordPiece(vocab=self._vocab, unk_token=str(unk_token)))
-
-        # Set normalizer
         self._tokenizer.normalizer = normalizers.BertNormalizer(
             clean_text=True,
             handle_chinese_chars=tokenize_chinese_chars,
@@ -205,23 +200,8 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             lowercase=do_lower_case,
         )
 
-        # Set pre_tokenizer
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
-
-        # Set decoder
         self._tokenizer.decoder = decoders.WordPiece(prefix="##")
-
-        # Set post_processor (will be set after super().__init__ when we have token IDs)
-        # Temporarily set to None, will be configured after parent init
-        self._tokenizer.post_processor = None
-
-        # additional properties
-        self.cls_token_box = cls_token_box
-        self.sep_token_box = sep_token_box
-        self.pad_token_box = pad_token_box
-        self.pad_token_label = pad_token_label
-        self.only_label_first_subword = only_label_first_subword
-
         super().__init__(
             do_lower_case=do_lower_case,
             unk_token=unk_token,
@@ -253,13 +233,6 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
                 (sep, sep_token_id),
             ],
         )
-
-        # additional properties
-        self.cls_token_box = cls_token_box
-        self.sep_token_box = sep_token_box
-        self.pad_token_box = pad_token_box
-        self.pad_token_label = pad_token_label
-        self.only_label_first_subword = only_label_first_subword
 
     @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(

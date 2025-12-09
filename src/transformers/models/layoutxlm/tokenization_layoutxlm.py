@@ -228,7 +228,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
         self.add_prefix_space = add_prefix_space
 
         if vocab is not None:
@@ -243,10 +242,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
             if mask_token not in [v[0] for v in self._vocab]:
                 self._vocab.append((str(mask_token), 0.0))
 
-        # Create the Unigram tokenizer
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
-
-        # Set up normalizer (strip right, replace multiple spaces)
         self._tokenizer.normalizer = normalizers.Sequence(
             [
                 normalizers.Strip(left=False, right=True),
@@ -254,28 +250,11 @@ class LayoutXLMTokenizer(TokenizersBackend):
             ]
         )
 
-        # Set up pre_tokenizer (Metaspace)
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
-        # Set up decoder
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
-        # Set up post_processor for XLM-RoBERTa style
-        # Get token IDs
-        cls_token_id = self._get_token_id(str(cls_token))
-        sep_token_id = self._get_token_id(str(sep_token))
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single="<s> $A </s>",
-            pair="<s> $A </s> </s> $B </s>",
-            special_tokens=[
-                ("<s>", cls_token_id),
-                ("</s>", sep_token_id),
-            ],
-        )
-
-        # additional properties
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
         self.pad_token_box = pad_token_box
