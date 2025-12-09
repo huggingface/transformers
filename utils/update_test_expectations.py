@@ -1020,7 +1020,9 @@ def update_expected_value_in_file(
 
             if is_single_line:
                 # Single-line format: torch.tensor([...], device=...).to(...)
-                formatted_value = f"{base_indent}{assignment_prefix}torch.tensor({new_value.strip()}{tensor_params}){method_chain_suffix}"
+                # For single-line, replace ',\n' with ', ' in tensor_params to keep everything on one line
+                single_line_params = tensor_params.replace(',\n', ', ') if tensor_params else ''
+                formatted_value = f"{base_indent}{assignment_prefix}torch.tensor({new_value.strip()}{single_line_params}){method_chain_suffix}"
             else:
                 # MULTI-LINE FORMAT WITH PROPER INDENTATION
                 # =========================================
