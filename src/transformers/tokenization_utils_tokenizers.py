@@ -113,6 +113,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
+            processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -133,6 +134,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
+
+            if processor is not None:
+                local_kwargs["post_processor"] = processor
             return local_kwargs
 
         vocab_file = local_kwargs.get("vocab_file")
@@ -287,6 +291,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             kwargs["backend"] = "tokenizers"
         self._add_bos_token = kwargs.get("add_bos_token", False)
         self._add_eos_token = kwargs.get("add_eos_token", False)
+        if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
+            self._tokenizer.post_processor = post_processor
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 

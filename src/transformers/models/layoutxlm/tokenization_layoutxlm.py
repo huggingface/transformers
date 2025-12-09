@@ -224,8 +224,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
         pad_token_label=-100,
         only_label_first_subword=True,
         add_prefix_space=True,
-        add_bos_token=True,
-        add_eos_token=True,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -299,8 +297,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             **kwargs,
         )
 
