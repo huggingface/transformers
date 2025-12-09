@@ -23,8 +23,6 @@
       title: Legacy model contribution
     - local: auto_docstring
       title: Documenting a model
-    - local: attention_interface
-      title: Customizing attention function
     title: Models
   - sections:
     - local: fast_tokenizers
@@ -61,11 +59,29 @@
     - local: llm_tutorial
       title: Text generation
     - local: generation_strategies
-      title: Generation strategies
+      title: Decoding methods
     - local: generation_features
       title: Generation features
     - local: tasks/prompting
       title: Prompt engineering
+    - local: perplexity
+      title: Perplexity of fixed-length models
+    title: Generate API
+  - sections:
+    - local: attention_interface
+      title: Attention backends
+    - local: continuous_batching
+      title: Continuous batching
+    - local: kernel_doc/overview
+      title: Kernels in transformers
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_one
+      title: GPU
+    - local: perf_infer_gpu_multi
+      title: Distributed inference
+    - local: perf_infer_cpu
+      title: CPU
     - local: llm_optims
       title: Optimizing inference
     - local: cache_explanation
@@ -74,9 +90,7 @@
       title: KV cache strategies
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
-    - local: perplexity
-      title: Perplexity of fixed-length models
-    title: LLMs
+    title: Optimization
   - sections:
     - local: conversations
       title: Chat basics
@@ -101,24 +115,12 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
-  - sections:
-    - local: perf_torch_compile
-      title: torch.compile
-    - local: perf_infer_gpu_one
-      title: GPU
-    - local: perf_infer_gpu_multi
-      title: Distributed inference
-    - local: perf_infer_cpu
-      title: CPU
-    title: Optimization
   - local: agents
     title: Agents
   - local: tools
     title: Tools
   - local: transformers_as_backend
     title: Transformers as modeling backend
-  - local: continuous_batching
-    title: Continuous Batching
   title: Inference
 - isExpanded: false
   sections:
@@ -218,11 +220,6 @@
   - local: quantization/contribute
     title: Contribute
   title: Quantization
-- isExpanded: false
-  sections:
-  - local: kernel_doc/overview
-    title: Kernels in transformers
-  title: Kernels
 - isExpanded: false
   sections:
   - local: serialization
@@ -904,6 +901,8 @@
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
         title: Kyutai Speech-To-Text
+      - local: model_doc/lasr
+        title: LASR
       - local: model_doc/mimi
         title: Mimi
       - local: model_doc/mms

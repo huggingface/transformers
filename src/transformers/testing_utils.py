@@ -222,10 +222,12 @@ if is_torch_available():
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
     IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
+    IS_NPU_SYSTEM = getattr(torch, "npu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
     IS_XPU_SYSTEM = False
+    IS_NPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -265,6 +267,7 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
+_run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -313,6 +316,22 @@ def is_agent_test(test_case):
             return test_case
         else:
             return pytest.mark.is_agent_test()(test_case)
+
+
+def is_training_test(test_case):
+    """
+    Decorator marking a test as a training test. If RUN_TRAINING_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_training_tests:
+        return unittest.skip(reason="test is training test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_training_test()(test_case)
 
 
 def slow(test_case):
@@ -636,6 +655,9 @@ def require_read_token(test_case):
                 if getattr(attr, "__require_read_token__", False):
                     continue
                 wrapped = require_read_token(attr)
+                if isinstance(inspect.getattr_static(test_case, attr_name), staticmethod):
+                    # Don't accidentally bind staticmethods to `self`
+                    wrapped = staticmethod(wrapped)
                 setattr(test_case, attr_name, wrapped)
         return test_case
     else:
@@ -648,10 +670,6 @@ def require_read_token(test_case):
                 with patch("huggingface_hub.utils._headers.get_token", return_value=token):
                     return test_case(*args, **kwargs)
             else:  # Allow running locally with the default token env variable
-                # dealing with static/class methods and called by `self.xxx`
-                if "staticmethod" in inspect.getsource(test_case).strip():
-                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
-                        return test_case(*args[1:], **kwargs)
                 return test_case(*args, **kwargs)
 
         wrapper.__require_read_token__ = True
@@ -3174,6 +3192,8 @@ def get_device_properties() -> DeviceProperties:
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
         return ("xpu", gen, None)
+    elif IS_NPU_SYSTEM:
+        return ("npu", None, None)
     else:
         return (torch_device, None, None)
 
@@ -4074,3 +4094,222 @@ def write_file(file, content):
 def read_json_file(file):
     with open(file, "r") as fh:
         return json.load(fh)
+
+
+# =============================================================================
+# Training CI Utilities - Logging and Memory Monitoring
+# =============================================================================
+
+
+# ANSI color codes for terminal output
+class Colors:
+    """ANSI color codes for terminal output formatting."""
+
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+
+    # Foreground colors
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+
+    # Bright variants
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_BLUE = "\033[94m"
+    BRIGHT_CYAN = "\033[96m"
+
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter that adds colors based on log level."""
+
+    LEVEL_COLORS = {
+        logging.DEBUG: Colors.DIM + Colors.CYAN,
+        logging.INFO: Colors.WHITE,
+        logging.WARNING: Colors.BRIGHT_YELLOW,
+        logging.ERROR: Colors.BRIGHT_RED,
+        logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
+    }
+
+    # Loggers that should be dimmed (less important/verbose)
+    DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
+
+    def __init__(self, fmt: str | None = None, datefmt: str | None = None):
+        super().__init__(fmt, datefmt)
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Check if this logger should be dimmed
+        is_dimmed = record.name in self.DIMMED_LOGGERS
+
+        if is_dimmed:
+            # Dim the entire log line for httpx and similar
+            timestamp = self.formatTime(record, self.datefmt)
+            message = record.getMessage()
+            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {message}{Colors.RESET}"
+
+        # Get color for this level
+        color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
+
+        # Color the level name
+        levelname = record.levelname
+        colored_levelname = f"{color}{levelname:8}{Colors.RESET}"
+
+        # Color the timestamp
+        colored_time = f"{Colors.DIM}{self.formatTime(record, self.datefmt)}{Colors.RESET}"
+
+        # Color the logger name
+        colored_name = f"{Colors.BLUE}{record.name}{Colors.RESET}"
+
+        # Get message
+        message = record.getMessage()
+
+        return f"{colored_time} - {colored_name} - {colored_levelname} - {message}"
+
+
+_warn_once_logged: set[str] = set()
+
+
+def init_test_logger() -> logging.Logger:
+    """Initialize a test-specific logger with colored stderr handler and INFO level for tests.
+
+    Uses a named logger instead of root logger to avoid conflicts with pytest-xdist parallel execution.
+    Uses stderr instead of stdout to avoid deadlocks with pytest-xdist output capture.
+    """
+    logger = logging.getLogger("transformers.training_test")
+    logger.setLevel(logging.INFO)
+
+    # Only add handler if not already present (avoid duplicate handlers on repeated calls)
+    if not logger.handlers:
+        # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
+        ch = logging.StreamHandler(sys.stderr)
+        ch.setLevel(logging.INFO)
+
+        # Use colored formatter if terminal supports it, plain otherwise
+        if sys.stderr.isatty():
+            formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            )
+
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+
+    logger.propagate = False  # Don't propagate to root logger to avoid duplicate output
+    return logger
+
+
+def warn_once(logger_instance: logging.Logger, msg: str) -> None:
+    """Log a warning message only once per unique message.
+
+    Uses a global set to track messages that have already been logged
+    to prevent duplicate warning messages from cluttering the output.
+
+    Args:
+        logger_instance: The logger instance to use for warning.
+        msg: The warning message to log.
+    """
+    if msg not in _warn_once_logged:
+        logger_instance.warning(msg)
+        _warn_once_logged.add(msg)
+
+
+# Named tuple for passing memory stats for logging
+MemoryStats = collections.namedtuple(
+    "MemoryStats",
+    [
+        "rss_gib",  # Resident Set Size in GiB
+        "rss_pct",  # RSS as percentage of total memory
+        "vms_gib",  # Virtual Memory Size in GiB
+        "peak_rss_gib",  # Peak RSS in GiB
+        "peak_rss_pct",  # Peak RSS as percentage of total memory
+        "available_gib",  # Available system memory in GiB
+        "total_gib",  # Total system memory in GiB
+    ],
+)
+
+
+class CPUMemoryMonitor:
+    """Monitor CPU memory usage for the current process."""
+
+    def __init__(self):
+        self.device_name = "CPU"
+        self._peak_rss = 0
+        self._process = None
+        self.total_memory = 0
+        self.total_memory_gib = 0
+
+        if is_psutil_available():
+            import psutil
+
+            self._process = psutil.Process(os.getpid())
+            mem_info = psutil.virtual_memory()
+            self.total_memory = mem_info.total
+            self.total_memory_gib = self._to_gib(self.total_memory)
+
+    def _to_gib(self, memory_in_bytes: int) -> float:
+        """Convert bytes to GiB."""
+        return memory_in_bytes / (1024 * 1024 * 1024)
+
+    def _to_pct(self, memory_in_bytes: int) -> float:
+        """Convert bytes to percentage of total memory."""
+        if self.total_memory == 0:
+            return 0.0
+        return 100.0 * memory_in_bytes / self.total_memory
+
+    def _update_peak(self) -> None:
+        """Update peak memory tracking."""
+        if self._process is not None:
+            current_rss = self._process.memory_info().rss
+            self._peak_rss = max(self._peak_rss, current_rss)
+
+    def get_stats(self) -> MemoryStats:
+        """Get current memory statistics."""
+        if not is_psutil_available():
+            return MemoryStats(0, 0, 0, 0, 0, 0, 0)
+
+        import psutil
+
+        self._update_peak()
+
+        mem_info = self._process.memory_info()
+        sys_mem = psutil.virtual_memory()
+
+        return MemoryStats(
+            rss_gib=self._to_gib(mem_info.rss),
+            rss_pct=self._to_pct(mem_info.rss),
+            vms_gib=self._to_gib(mem_info.vms),
+            peak_rss_gib=self._to_gib(self._peak_rss),
+            peak_rss_pct=self._to_pct(self._peak_rss),
+            available_gib=self._to_gib(sys_mem.available),
+            total_gib=self._to_gib(sys_mem.total),
+        )
+
+    def reset_peak_stats(self) -> None:
+        """Reset peak memory tracking."""
+        if self._process is not None:
+            self._peak_rss = self._process.memory_info().rss
+
+
+def build_cpu_memory_monitor(logger_instance: logging.Logger | None = None) -> CPUMemoryMonitor:
+    """Build and initialize a CPU memory monitor.
+
+    Args:
+        logger_instance: Optional logger to log initialization info. If None, no logging is done.
+
+    Returns:
+        CPUMemoryMonitor instance.
+    """
+    monitor = CPUMemoryMonitor()
+    if logger_instance is not None:
+        if is_psutil_available():
+            logger_instance.info(f"CPU memory monitor initialized: {monitor.total_memory_gib:.2f} GiB total")
+        else:
+            logger_instance.warning("psutil not available, memory monitoring disabled")
+    return monitor
