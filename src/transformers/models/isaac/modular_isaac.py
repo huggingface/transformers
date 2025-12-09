@@ -1995,6 +1995,16 @@ class IsaacModel(Qwen3PreTrainedModel):
         Forward pass with MRoPE position embeddings.
 
         Computes position embeddings once and passes them through all layers.
+
+        Args:
+            tensor_stream (`TensorStream`, *optional*):
+                Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
+                `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
+                if they are not supplied.
+            modality_tensor (`torch.LongTensor`, *optional*):
+                Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
+                values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
+                omitted.
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

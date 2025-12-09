@@ -106,7 +106,7 @@ from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
-from ...utils.generic import TransformersKwargs, can_return_tuple
+from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
 from ...utils.import_utils import (
     is_perceptron_available,
     is_torch_available,
@@ -1360,6 +1360,8 @@ class IsaacModel(PreTrainedModel):
         h = embedded_ts.compact()  # (B, T, D)
         return h
 
+    @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1375,10 +1377,15 @@ class IsaacModel(PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
-        """
-        Forward pass with MRoPE position embeddings.
-
-        Computes position embeddings once and passes them through all layers.
+        r"""
+        tensor_stream (`TensorStream`, *optional*):
+            Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
+            `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
+            if they are not supplied.
+        modality_tensor (`torch.LongTensor`, *optional*):
+            Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
+            values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
+            omitted.
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
