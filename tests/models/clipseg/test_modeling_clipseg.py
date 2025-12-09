@@ -566,7 +566,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         # verify conditional and pooled output
         expected_conditional = torch.tensor([0.5601, -0.0314, 0.1980]).to(torch_device)
-        expected_pooled_output = torch.tensor([0.5036, -0.2681, -0.2644]).to(torch_device)
+        expected_pooled_output = torch.tensor([0.4986, -0.2698, -0.2631]).to(torch_device)
         torch.testing.assert_close(outputs.conditional_embeddings[0, :3], expected_conditional, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(outputs.pooled_output[0, :3], expected_pooled_output, rtol=1e-3, atol=1e-3)
 

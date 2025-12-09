@@ -49,6 +49,14 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
+# These image processors use Lanczos interpolation, which is not supported by fast image processors.
+# To avoid important differences in outputs, we default to using the slow image processors for these processors.
+DEFAULT_TO_SLOW_IMAGE_PROCESSORS = [
+    "ChameleonImageProcessor",
+    "FlavaImageProcessor",
+    "Idefics3ImageProcessor",
+    "SmolVLMImageProcessor",
+]
 
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
@@ -526,12 +534,15 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
-        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
         if image_processor_type is not None:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
                 use_fast = image_processor_type.endswith("Fast")
-                if not use_fast and is_torchvision_available():
+                if (
+                    not use_fast
+                    and is_torchvision_available()
+                    and image_processor_type not in DEFAULT_TO_SLOW_IMAGE_PROCESSORS
+                ):
                     logger.warning_once(
                         f"The image processor of type `{image_processor_type}` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. "
                         "This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. "
