@@ -137,7 +137,9 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
 
 def convert_config(original_config: dict, max_position_embeddings: int = 262144, is_vision: bool = True):
     original_vision_config = original_config.pop("vision_encoder", None)
-    assert is_vision == original_vision_config, f"is_vision={is_vision} but original_vision_config={original_vision_config}"
+    assert is_vision == original_vision_config, (
+        f"is_vision={is_vision} but original_vision_config={original_vision_config}"
+    )
     original_text_config = original_config
 
     # Text config
@@ -189,7 +191,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144,
                 "quant_method": "fp8",
                 "weight_block_size": None,
             }
-            kwargs['quantization_config'] = AutoQuantizationConfig.from_dict(quantization_config)
+            kwargs["quantization_config"] = AutoQuantizationConfig.from_dict(quantization_config)
         return kwargs
 
     # No vision
@@ -216,7 +218,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144,
         image_token_id=image_token_id,
         spatial_merge_size=spatial_merge_size,
         vision_feature_layer=-1,
-        **get_maybe_quant_config()
+        **get_maybe_quant_config(),
     )
     return new_config
 
