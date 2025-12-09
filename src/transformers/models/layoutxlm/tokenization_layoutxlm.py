@@ -16,7 +16,7 @@
 
 from typing import Optional, Union
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
@@ -277,6 +277,15 @@ class LayoutXLMTokenizer(TokenizersBackend):
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
             **kwargs,
+        )
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0",
+            pair=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0 {str(self.sep_token)}:0 $B:0 {str(self.sep_token)}:0",
+            special_tokens=[
+                (str(self.cls_token), self.cls_token_id),
+                (str(self.sep_token), self.sep_token_id),
+            ],
         )
 
     def _get_token_id(self, token: str) -> int:
