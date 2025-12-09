@@ -1806,8 +1806,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1980,8 +1978,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
 
         Examples:
 

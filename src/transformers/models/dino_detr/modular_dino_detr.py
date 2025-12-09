@@ -62,11 +62,9 @@ class DinoDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAt
     custom_intro="Base class for outputs of the DinoDetrEncoder. This class adds attributes specific to the encoder output."
 )
 class DinoDetrEncoderOutput(ModelOutput):
-    """
-
-    Args:
-        output (`torch.FloatTensor`):
-            Final output tensor of the encoder.
+    r"""
+    output (`torch.FloatTensor`):
+        Final output tensor of the encoder.
     """
 
     output: torch.FloatTensor
@@ -77,13 +75,11 @@ class DinoDetrEncoderOutput(ModelOutput):
     custom_intro="Base class for outputs of the DinoDetrDecoder. This class adds two attributes specific to the decoder output."
 )
 class DinoDetrDecoderOutput(ModelOutput):
-    """
-
-    Args:
-        intermediate (`List[torch.FloatTensor]`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        ref_points (`Optional[List[torch.FloatTensor]]`, *optional*):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
+    r"""
+    intermediate (`List[torch.FloatTensor]`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    ref_points (`Optional[List[torch.FloatTensor]]`, *optional*):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
     """
 
     intermediate: list[torch.FloatTensor]
@@ -95,17 +91,15 @@ class DinoDetrDecoderOutput(ModelOutput):
     custom_intro="Base class for outputs of the DinoDetrEncoderDecoder. This class adds attributes specific to the encoder-decoder output."
 )
 class DinoDetrEncoderDecoderOutput(ModelOutput):
-    """
-
-    Args:
-        hidden_states (`torch.FloatTensor`):
-            Final hidden states of the decoder.
-        reference_points (`Optional[torch.FloatTensor]`, *optional*):
-            Final reference points of the decoder.
-        hidden_states_encoder (`Optional[torch.FloatTensor]`, *optional*):
-            Final hidden states of the encoder.
-        reference_points_encoder (`Optional[torch.FloatTensor]`, *optional*):
-            Final reference points of the encoder.
+    r"""
+    hidden_states (`torch.FloatTensor`):
+        Final hidden states of the decoder.
+    reference_points (`Optional[torch.FloatTensor]`, *optional*):
+        Final reference points of the decoder.
+    hidden_states_encoder (`Optional[torch.FloatTensor]`, *optional*):
+        Final hidden states of the encoder.
+    reference_points_encoder (`Optional[torch.FloatTensor]`, *optional*):
+        Final reference points of the encoder.
     """
 
     hidden_states: torch.FloatTensor
@@ -117,25 +111,23 @@ class DinoDetrEncoderDecoderOutput(ModelOutput):
 @dataclass
 @auto_docstring(custom_intro="Base class for outputs of the Dino DETR encoder-decoder model.")
 class DinoDetrModelOutput(ModelOutput):
-    """
-
-    Args:
-        last_hidden_state (`torch.FloatTensor`):
-            Sequence of hidden states at the output of the last layer of the decoder of the model.
-        hidden_states_model (`Optional[list[torch.FloatTensor]]`, *optional*):
-            List of hidden states at the output of each decoder layer.
-        references (`Optional[list[torch.FloatTensor]]`, *optional*):
-            List of reference points at the output of each decoder layer.
-        encoder_last_hidden_state (`Optional[torch.FloatTensor]`, *optional*):
-            Sequence of hidden states at the output of the last layer of the encoder of the model.
-        encoder_reference (`Optional[torch.FloatTensor]`, *optional*):
-            Reference points at the output of the encoder.
-        denoising_meta (`Optional[dict]`, *optional*):
-            Metadata related to denoising tasks.
-        encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of hidden states of the encoder at the output of each layer.
-        decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of hidden states of the decoder at the output of each layer.
+    r"""
+    last_hidden_state (`torch.FloatTensor`):
+        Sequence of hidden states at the output of the last layer of the decoder of the model.
+    hidden_states_model (`Optional[list[torch.FloatTensor]]`, *optional*):
+        List of hidden states at the output of each decoder layer.
+    references (`Optional[list[torch.FloatTensor]]`, *optional*):
+        List of reference points at the output of each decoder layer.
+    encoder_last_hidden_state (`Optional[torch.FloatTensor]`, *optional*):
+        Sequence of hidden states at the output of the last layer of the encoder of the model.
+    encoder_reference (`Optional[torch.FloatTensor]`, *optional*):
+        Reference points at the output of the encoder.
+    denoising_meta (`Optional[dict]`, *optional*):
+        Metadata related to denoising tasks.
+    encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+        Tuple of hidden states of the encoder at the output of each layer.
+    decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+        Tuple of hidden states of the decoder at the output of each layer.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -151,39 +143,37 @@ class DinoDetrModelOutput(ModelOutput):
 @dataclass
 @auto_docstring(custom_intro="Output class for `DinoDetrForObjectDetection`")
 class DinoDetrObjectDetectionOutput(ModelOutput):
-    """
-
-    Args:
-        last_hidden_state (`torch.FloatTensor`):
-            Sequence of hidden states at the output of the last layer of the decoder of the model.
-        reference (`Optional[torch.FloatTensor]`, *optional*):
-            Final reference points of the decoder.
-        encoder_last_hidden_state (`Optional[torch.FloatTensor]`, *optional*):
-            Sequence of hidden states at the output of the last layer of the encoder of the model.
-        encoder_reference (`Optional[torch.FloatTensor]`, *optional*):
-            Final reference points of the encoder.
-        loss (`Optional[torch.FloatTensor]`, *optional*):
-            Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
-            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
-            scale-invariant IoU loss.
-        loss_dict (`Optional[Dict]`, *optional*):
-            A dictionary containing the individual losses. Useful for logging.
-        logits (`Optional[torch.FloatTensor]`, *optional*):
-            Classification logits (including no-object) for all queries.
-        pred_boxes (`Optional[torch.FloatTensor]`, *optional*):
-            Normalized box coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding).
-        auxiliary_outputs (`Optional[List[Dict]]`, *optional*):
-            Optional, only returned when auxiliary losses are activated (i.e., `config.auxiliary_loss` is set to `True`)
-            and labels are provided. It is a list of dictionaries containing the keys `logits` and `pred_boxes` for
-            each decoder layer.
-        denoising_meta (`Optional[dict]`, *optional*):
-            Metadata related to denoising tasks.
-        encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of hidden states of the encoder at the output of each layer.
-        decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
-            Tuple of hidden states of the decoder at the output of each layer.
+    r"""
+    last_hidden_state (`torch.FloatTensor`):
+        Sequence of hidden states at the output of the last layer of the decoder of the model.
+    reference (`Optional[torch.FloatTensor]`, *optional*):
+        Final reference points of the decoder.
+    encoder_last_hidden_state (`Optional[torch.FloatTensor]`, *optional*):
+        Sequence of hidden states at the output of the last layer of the encoder of the model.
+    encoder_reference (`Optional[torch.FloatTensor]`, *optional*):
+        Final reference points of the encoder.
+    loss (`Optional[torch.FloatTensor]`, *optional*):
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Optional[Dict]`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`Optional[torch.FloatTensor]`, *optional*):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`Optional[torch.FloatTensor]`, *optional*):
+        Normalized box coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding).
+    auxiliary_outputs (`Optional[List[Dict]]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e., `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the keys `logits` and `pred_boxes` for
+        each decoder layer.
+    denoising_meta (`Optional[dict]`, *optional*):
+        Metadata related to denoising tasks.
+    encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+        Tuple of hidden states of the encoder at the output of each layer.
+    decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`, *optional*):
+        Tuple of hidden states of the decoder at the output of each layer.
     """
 
     last_hidden_state: torch.FloatTensor
@@ -1322,9 +1312,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         labels: Optional[list[dict]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python
@@ -1450,8 +1438,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
 
         Examples:
 
