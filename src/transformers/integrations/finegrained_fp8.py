@@ -589,12 +589,22 @@ class FP8Expert(nn.Module):
 
 
 def replace_with_fp8_linear(
-    model,
-    modules_to_not_convert=None,
-    quantization_config=None,
-    pre_quantized=False,
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
-    """Helper function to replace model layers with FP8 versions."""
+    """
+    A helper function to replace all `torch.nn.Linear` modules by `FP8Linear` modules.
+
+    Parameters:
+        model (`torch.nn.Module`):
+            Input model or `torch.nn.Module` as the function is run recursively.
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
+            Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
+        quantization_config (`FbgemmFp8Config`):
+            The quantization config object that contains the quantization parameters.
+        pre_quantized (`book`, defaults to `False`):
+            Whether the model is pre-quantized or not
+    """
+
     if quantization_config.dequantize:
         return model
 

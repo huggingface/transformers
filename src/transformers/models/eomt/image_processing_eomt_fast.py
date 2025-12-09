@@ -239,7 +239,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-                resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[shape] = stacked_images
         images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for batched resizing, Needed in case do_resize is False.

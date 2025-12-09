@@ -154,7 +154,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
 
     @property
@@ -164,9 +164,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def _dequantize(self, model):
         from ..integrations import dequantize_and_replace
 
-        model = dequantize_and_replace(
-            model, self.modules_to_not_convert, quantization_config=self.quantization_config
-        )
+        model = dequantize_and_replace(model, quantization_config=self.quantization_config)
         return model
 
     def get_quantize_ops(self):
