@@ -1325,7 +1325,7 @@ class LwDetrViTSelfAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
+        self.dropout_prob = config.dropout_prob
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
 

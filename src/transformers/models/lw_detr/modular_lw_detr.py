@@ -1313,10 +1313,6 @@ class LwDetrViTConfig(VitDetConfig):
     ```"""
 
     model_type = "lw_detr_vit"
-    attribute_map = {
-        "attention_probs_dropout_prob": "dropout_prob",
-        "decoder_self_attention_heads": "num_attention_heads",
-    }
 
     def __init__(
         self,
@@ -1385,6 +1381,7 @@ class LwDetrViTSelfAttention(ViTSelfAttention):
         del self.key
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
         self.num_key_value_groups = 1
+        self.dropout_prob = config.dropout_prob
 
     def forward(
         self,

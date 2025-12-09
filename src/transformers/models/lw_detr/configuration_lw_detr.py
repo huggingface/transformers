@@ -326,10 +326,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr_vit"
-    attribute_map = {
-        "attention_probs_dropout_prob": "dropout_prob",
-        "decoder_self_attention_heads": "num_attention_heads",
-    }
 
     def __init__(
         self,
