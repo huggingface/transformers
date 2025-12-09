@@ -186,7 +186,9 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_tokenizers
     @slow
     def test_custom_tokenizer_from_hub(self):
-        tokenizer = AutoTokenizer.from_pretrained("openbmb/MiniCPM-Llama3-V-2_5", trust_remote_code=True, revision="fd7f352fac0e06d0d818b23f98e3ec8c64267a57")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "openbmb/MiniCPM-Llama3-V-2_5", trust_remote_code=True, revision="fd7f352fac0e06d0d818b23f98e3ec8c64267a57"
+        )
         self.assertTrue(tokenizer.__class__.__module__.startswith("transformers_modules."))
 
     @require_tokenizers

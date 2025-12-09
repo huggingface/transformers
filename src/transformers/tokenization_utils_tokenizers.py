@@ -290,7 +290,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
-
         if vocab_file is not None:
             self.vocab_file = vocab_file
         # Ensure add_prefix_space is set correctly after parent init
@@ -349,6 +348,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 fix_mistral_regex=kwargs.get("fix_mistral_regex"),
                 **kwargs,
             )
+        self.update_post_processor()
 
     @property
     def is_fast(self) -> bool:

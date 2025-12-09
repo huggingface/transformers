@@ -144,5 +144,4 @@ class GPTNeoXTokenizer(TokenizersBackend):
         )
 
 
-
 __all__ = ["GPTNeoXTokenizer"]
