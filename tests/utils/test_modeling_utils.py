@@ -958,7 +958,10 @@ class ModelUtilsTest(TestCasePlus):
     def test_checkpoint_variant_save_load(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2"
+                "hf-internal-testing/tiny-random-bert-variant",
+                cache_dir=tmp_dir,
+                variant="v2",
+                use_safetensors=False,
             )
             weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
 
