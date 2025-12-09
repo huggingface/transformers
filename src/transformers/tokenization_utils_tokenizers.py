@@ -110,8 +110,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             and (cls is TokenizersBackend or "__init__" not in cls.__dict__ or trust_remote_code)
         ):
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
-            local_kwargs.pop("add_bos_token", None)
-            local_kwargs.pop("add_eos_token", None)
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
@@ -139,8 +137,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
             if processor is not None:
                 local_kwargs["post_processor"] = processor
-            local_kwargs.pop("add_bos_token", None)
-            local_kwargs.pop("add_eos_token", None)
             return local_kwargs
 
         vocab_file = local_kwargs.get("vocab_file")
