@@ -128,11 +128,11 @@ class Jais2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_model_logits_bf16(self):
-        """Test model logits in bfloat16 precision."""
+        """Test model logits in float16 precision."""
         model = Jais2ForCausalLM.from_pretrained(
             self.checkpoint,
             device_map="auto",
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
         )
 
         input_text = "The capital of France is"
