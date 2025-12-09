@@ -20,19 +20,19 @@ import os
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
+from huggingface_hub import create_repo
 from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
     cached_file,
     copy_func,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
 
 
-class PreTrainedConfig(PushToHubMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -262,6 +262,13 @@ class PreTrainedConfig(PushToHubMixin):
 
             dtype = getattr(torch, dtype)
 
+        # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
+        if hasattr(self, "rope_parameters"):
+            ignore_keys_at_rope_validation = kwargs.pop("ignore_keys_at_rope_validation", None)
+            kwargs = self.convert_rope_params_to_dict(
+                ignore_keys_at_rope_validation=ignore_keys_at_rope_validation, **kwargs
+            )
+
         # Attributes common for all models
         self.return_dict = return_dict
         self.output_hidden_states = output_hidden_states
@@ -456,7 +463,7 @@ class PreTrainedConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
@@ -659,9 +666,6 @@ class PreTrainedConfig(PushToHubMixin):
             # Special case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            configuration_file = pretrained_model_name_or_path if gguf_file is None else gguf_file
-            resolved_config_file = download_url(pretrained_model_name_or_path)
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
 

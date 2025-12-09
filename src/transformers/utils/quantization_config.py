@@ -1981,6 +1981,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             The scheme used for activation, the defaults and only support scheme for now is "dynamic".
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
     """
@@ -1989,6 +1991,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self,
         activation_scheme: str = "dynamic",
         weight_block_size: tuple[int, int] = (128, 128),
+        dequantize: bool = False,
         modules_to_not_convert: list | None = None,
         **kwargs,
     ):
@@ -1996,6 +1999,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
+        self.dequantize = dequantize
         self.post_init()
 
     def post_init(self):
@@ -2003,12 +2007,15 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         self.activation_scheme = self.activation_scheme.lower()
-        if self.activation_scheme != "dynamic":
+        if self.activation_scheme not in ["dynamic", "static"]:
             raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
-        if len(self.weight_block_size) != 2:
+        if self.weight_block_size is not None and len(self.weight_block_size) != 2:
             raise ValueError("weight_block_size must be a tuple of two integers")
-        if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
+        if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize}
 
 
 class QuarkConfig(QuantizationConfigMixin):

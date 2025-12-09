@@ -665,12 +665,12 @@ class ProgressCallback(TrainerCallback):
                         f"[String too long to display, length: {len(v)} > {self.max_str_len}. "
                         "Consider increasing `max_str_len` if needed.]"
                     )
+                if isinstance(v, float):
+                    # Format floats for better readability
+                    shallow_logs[k] = f"{v:.4g}"
                 else:
                     shallow_logs[k] = v
             _ = shallow_logs.pop("total_flos", None)
-            # round numbers so that it looks better in console
-            if "epoch" in shallow_logs:
-                shallow_logs["epoch"] = round(shallow_logs["epoch"], 2)
             self.training_bar.write(str(shallow_logs))
 
     def on_train_end(self, args, state, control, **kwargs):
@@ -687,6 +687,8 @@ class PrinterCallback(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
         _ = logs.pop("total_flos", None)
         if state.is_local_process_zero:
+            if logs is not None:
+                logs = {k: (f"{v:.4g}" if isinstance(v, float) else v) for k, v in logs.items()}
             print(logs)
 
 

@@ -437,7 +437,7 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
     config: DINOv3ViTConfig
     base_model_prefix = "dinov3_vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["DINOv3ViTLayer"]
     _supports_sdpa = True
@@ -532,7 +532,7 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs()
+    @check_model_inputs
     @can_return_tuple
     def forward(
         self,

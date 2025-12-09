@@ -35,7 +35,7 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
     PushToHubMixin,
@@ -51,6 +51,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from ..utils.chat_template_utils import Chat, is_valid_message
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
@@ -60,6 +61,7 @@ if is_torch_available() or TYPE_CHECKING:
     from torch.utils.data import DataLoader, Dataset
 
     from ..modeling_utils import PreTrainedModel
+    from .pt_utils import KeyDataset
 else:
     Dataset = None
 
@@ -937,6 +939,17 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
+    def __repr__(self):
+        pipe_information = {
+            "model": self.model.__class__.__name__,
+            "dtype": str(self.dtype).split(".")[-1],
+            "device": self.device.type,
+            "input_modalities": self.model.input_modalities,
+        }
+        if self.model.can_generate():
+            pipe_information["output_modalities"] = self.model.output_modalities
+        return f"{self.__class__.__name__}: {pipe_information}"
+
     def save_pretrained(
         self,
         save_directory: str | os.PathLike,
@@ -1201,6 +1214,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     def __call__(self, inputs, *args, num_workers=None, batch_size=None, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
+
+        # Detect if inputs are a chat-style input(s) and cast as `Chat` or list of `Chat`
+        container_types = (list, tuple, types.GeneratorType)
+        if is_torch_available():
+            container_types = (*container_types, KeyDataset)
+        if isinstance(inputs, container_types):
+            if isinstance(inputs, types.GeneratorType):
+                inputs = list(inputs)
+            if is_valid_message(inputs[0]):
+                inputs = Chat(inputs)
+            elif isinstance(inputs[0], (list, tuple)) and all(chat and is_valid_message(chat[0]) for chat in inputs):
+                inputs = [Chat(chat) for chat in inputs]
 
         if num_workers is None:
             if self._num_workers is None:

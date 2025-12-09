@@ -22,10 +22,10 @@ from transformers.generation.continuous_batching.cache import group_layers_by_at
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_kernels,
     require_read_token,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -138,6 +138,7 @@ class ContinuousBatchingTest(unittest.TestCase):
                 f"Actual mask:\n{str_mask}"
             )
 
+    @require_deterministic_for_xpu
     def _continuous_batching_parity(
         self, model_id: str, attn_implementation: str, expected_outputs: dict[str, str]
     ) -> None:
@@ -315,36 +316,47 @@ class ContinuousBatchingTest(unittest.TestCase):
     # GPT-OSS is not compatible with SDPA because it has an attention sink. TODO: is this fixable?
 
     # Flash attention test
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_kernels
     @slow
     def test_continuous_batching_parity_llama_flash(self) -> None:
         expected_outputs = Expectations({
             ("cuda", (9, 0)): {
                 "req_1": " 3 bolts of blue fiber and 1.5 bolts of white fiber. The total number of bolts is 4.5 bolts. The total number of bolts is 4.5 bolts.",
-            }
+            },
+            ("xpu", None): {
+                "req_1": " 3 bolts of blue fiber and 1.5 bolts of white fiber. The total number of bolts is 4.5 bolts. The total number of bolts is 4.5 bolts.",
+            },
         }).get_expectation()  # fmt: skip
         self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "paged|flash_attention_2", expected_outputs)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_kernels
     @slow
     def test_continuous_batching_parity_gemma_flash(self) -> None:
         expected_outputs = Expectations({
             ("cuda", (9, 0)): {
                 "req_1": " \n \n 2 + 1 = 3 bolts \n \n \n \n \n \n \n \n \n \n \n \n \n ",
-            }
+            },
+            ("xpu", None): {
+                "req_0": "\n\n**$128**\n\n**Here's how to solve it:**\n\n* **Eggs eaten:** 3\n* **Eggs left:** 16 - 3 = 1",
+                "req_1":  "\n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 =",
+            },
         }).get_expectation()  # fmt: skip
         self._continuous_batching_parity("google/gemma-2-2b-it", "paged|flash_attention_2", expected_outputs)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_kernels
     @slow
     def test_continuous_batching_parity_qwen_flash(self) -> None:
-        expected_outputs = {}
+        expected_outputs = Expectations({
+            ("xpu", None): {
+                "req_1":  " 3.5 bolts.\n\nLet's break it down step by step:\n\n- Blue fiber: 2 bolts\n- White fiber: half of 2 bolts = 1 bolt\n\nTotal = ",
+            },
+        }).get_expectation()  # fmt: skip
         self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|flash_attention_2", expected_outputs)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_kernels
     @slow
     def test_continuous_batching_parity_gpt_oss_flash(self) -> None:

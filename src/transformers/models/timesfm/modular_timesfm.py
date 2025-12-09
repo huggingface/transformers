@@ -260,7 +260,7 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesfm"
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     _supports_sdpa = True
 
     @torch.no_grad()
@@ -317,6 +317,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> TimesFmOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -624,6 +625,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         truncate_negative: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> TimesFmOutputForPrediction:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

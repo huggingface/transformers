@@ -44,7 +44,7 @@ from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
 from ..pytorch_utils import isin_mps_friendly
-from ..tokenization_utils import ExtensionsTrie
+from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,
@@ -367,7 +367,7 @@ class GenerationMixin(ContinuousMixin):
     """
 
     # Should be overwritten by models that can generate non-text output
-    output_modalities = "text"
+    output_modalities = ("text",)
 
     def adjust_generation_fn(
         self,
@@ -2734,7 +2734,7 @@ class GenerationMixin(ContinuousMixin):
 
         # assumption: leading/trailing whitespace is not meaningful, so the prompts are
         # stripped before re-tokenizing to desensitize generation to whitespace artefacts
-        prompts = [p.strip() for p in tokenizer.batch_decode(input_ids, skip_special_tokens=True)]
+        prompts = [p.strip() for p in tokenizer.decode(input_ids, skip_special_tokens=True)]
         input_ids = tokenizer(
             prompts,
             return_tensors="pt",

@@ -16,7 +16,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -90,8 +90,6 @@ class PixtralVisionConfig(PreTrainedConfig):
         initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
@@ -103,14 +101,9 @@ class PixtralVisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.head_dim = hidden_size // num_attention_heads
         self.initializer_range = initializer_range
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        super().__init__(**kwargs)
 
 
 __all__ = ["PixtralVisionConfig"]

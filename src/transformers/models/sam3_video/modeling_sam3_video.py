@@ -1697,6 +1697,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         frame_idx: Optional[int] = None,
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
+        **kwargs,
     ):
         r"""
         inference_session (`Sam3VideoInferenceSession`):

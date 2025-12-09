@@ -36,7 +36,7 @@ from typing import Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import split_torch_state_dict_into_shards
+from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
@@ -46,7 +46,7 @@ from torch.utils.checkpoint import checkpoint
 
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
-from .conversion_mapping import get_checkpoint_conversion_mapping
+from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
@@ -70,7 +70,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
+from .integrations.hub_kernels import is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -85,7 +85,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .modeling_flash_attention_utils import lazy_import_flash_attention
+from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
@@ -105,14 +105,11 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
-    download_url,
     has_file,
     is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_kernels_available,
-    is_offline_mode,
-    is_remote_url,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -186,31 +183,6 @@ TORCH_INIT_FUNCTIONS = {
     "kaiming_normal": nn.init.kaiming_normal,
     "orthogonal_": nn.init.orthogonal_,
 }
-
-# DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = [
-    "aria",
-    "ayavision",
-    "colpali",
-    "emu3",
-    "fuyu",
-    "gotocr2",
-    "gemma3",
-    "internvl",
-    "llava",  # all llava prefixed models fall under this check
-    "mistral3",
-    "mllama",
-    "paligemma",
-    "shieldgemma2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "videollava",
-    "vipllava",
-    "sam3_video",
-    "sam3",
-    "sam3_tracker",
-    "sam3_tracker_video",
-]
 
 
 @contextmanager
@@ -531,9 +503,6 @@ def _get_resolved_checkpoint_files(
         elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
             archive_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            filename = pretrained_model_name_or_path
-            resolved_archive_file = download_url(pretrained_model_name_or_path)
         else:
             # set correct filename
             if transformers_explicit_filename is not None:
@@ -1794,10 +1763,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         applicable_attn_implementation = attn_implementation
 
+        is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
+
         # If FA not installed, do not fail but use kernels instead
+        requested_original_flash_attn = attn_implementation is not None and (
+            attn_implementation.removeprefix("paged|") == "flash_attention_2"
+            or attn_implementation.removeprefix("paged|") == "flash_attention_3"
+        )
         if (
-            attn_implementation is not None
-            and "flash" in attn_implementation
+            requested_original_flash_attn
             and self._supports_flash_attn
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
@@ -1806,23 +1780,32 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if attn_implementation.endswith("2"):
                 applicable_attn_implementation = "kernels-community/flash-attn2"
                 if is_torch_xpu_available():
-                    # On XPU, kernels library is the native implementation. Rename variable to avoid "fallback" warning and irrelevant checks.
-                    attn_implementation = "kernels-community/flash-attn2"
+                    # On XPU, kernels library is the native implementation
+                    # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
+                    requested_original_flash_attn = False
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
+            if is_paged:
+                applicable_attn_implementation = f"paged|{applicable_attn_implementation}"
+
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_attn_kernel(applicable_attn_implementation)
+                # preload flash attention here to allow compile with fullgraph
+                if is_paged:
+                    lazy_import_paged_flash_attention(applicable_attn_implementation)
+                else:
+                    lazy_import_flash_attention(applicable_attn_implementation)
+
                 # log that we used kernel fallback if successful
-                if "flash_" in attn_implementation:
+                if requested_original_flash_attn:
                     logger.warning_once(
                         f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
                         "from the `kernels` library instead!"
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
-                if attn_implementation.startswith("flash_"):
+                if requested_original_flash_attn:
                     if attn_implementation.endswith("2"):
                         self._flash_attn_2_can_dispatch()
                     else:
@@ -1834,9 +1817,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             applicable_attn_implementation = self.get_correct_attn_implementation(
                 applicable_attn_implementation, is_init_check
             )
+
             # preload flash attention here to allow compile with fullgraph
-            if applicable_attn_implementation.startswith("flash_"):
-                lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
+            if "flash" in applicable_attn_implementation:
+                lazy_import_flash_attention(applicable_attn_implementation)
+
         return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
@@ -1999,13 +1984,44 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         def make_inputs_require_grads(module, input, output):
             output.requires_grad_(True)
 
-        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+        hooks = []
+        seen_modules = set()
+
+        for module in self.modules():
+            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+                continue
+
+            input_embeddings = module.get_input_embeddings()
+
+            if input_embeddings is None:
+                continue
+
+            embedding_id = id(input_embeddings)
+            if embedding_id in seen_modules:
+                continue
+
+            seen_modules.add(embedding_id)
+            hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+
+        self._require_grads_hooks = hooks
+        if hooks:
+            # for BC
+            self._require_grads_hook = hooks[0]
 
     def disable_input_require_grads(self):
         """
         Removes the `_require_grads_hook`.
         """
-        self._require_grads_hook.remove()
+        hooks = getattr(self, "_require_grads_hooks", None)
+        if not hooks:
+            return
+
+        for hook in hooks:
+            hook.remove()
+
+        self._require_grads_hooks = []
+        if hasattr(self, "_require_grads_hook"):
+            del self._require_grads_hook
 
     def get_encoder(self, modality: Optional[str] = None):
         """
@@ -2030,7 +2046,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return getattr(self, name)
 
         if self.base_model is not self and hasattr(self.base_model, "get_encoder"):
-            return self.base_model.get_encoder(modality=modality)
+            base_encoder = self.base_model.get_encoder(modality=modality)
+            # Base model will always have attr `get_encoder` if inherited from `PreTrainedModel`
+            # But it doesn't mean that the model has an encoder module, and we need to return `self`
+            if base_encoder != self.base_model:
+                return base_encoder
 
         # If this is a base transformer model (no encoder/model attributes), return self
         return self
@@ -2092,7 +2112,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         possible_module_names = ["language_model", "text_model", "decoder"]
         for name in possible_module_names:
             if hasattr(self, name):
-                print(name)
                 setattr(self, name, decoder)
                 return
 
@@ -2302,6 +2321,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         If `recompute_mapping=True`, it will re-check all internal submodels and their config to determine the params
         that need to be tied. This is the default when `model.tie_weights()` is called on its own, outside of
         `__init__`, and `from_pretrained`, in case the config values were changed somewhere.
+
+        Note that during `from_pretrained`, tying is *symmetric*: if the mapping says "tie target -> source" but
+        `source` is missing in the checkpoint while `target` exists, we *swap* source and target so we can still
+        tie everything to the parameter that actually exists.
         """
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
         if not recompute_mapping:
@@ -2309,30 +2332,72 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
-        for target_param_name, source_param_name in tied_keys.items():
-            source_param = self.get_parameter_or_buffer(source_param_name)
-            if "." in target_param_name:
-                parent_name, name = target_param_name.rsplit(".", 1)
-                parent = self.get_submodule(parent_name)
-            else:
-                name = target_param_name
-                parent = self
-            setattr(parent, name, source_param)
-            self._adjust_bias(parent, source_param)
+        tied_keys = list(tied_keys.items())
+        for i, (target_param_name, source_param_name) in enumerate(tied_keys):
+            # Usually we tie a single target to a single source, but when both are missing we may later tie
+            # both the source and target to a third "backup" parameter that is present in the checkpoint, so we use
+            # a list here
+            target_param_names = [target_param_name]
+
+            # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
+                remove_from_missing = True
                 source_is_there = source_param_name not in missing_keys
                 target_is_there = target_param_name not in missing_keys
-                # If we tied correctly, remove the target from the missing keys
-                if source_is_there:
-                    missing_keys.discard(target_param_name)
-                # If the source is not present, but the target is, the checkpoint is corrupted
-                # TODO: maybe we could simply tie in the opposite direction here instead of error?
-                elif target_is_there:
-                    raise ValueError(
-                        f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
-                        f"{source_param_name} (which should be present and is not), to {target_param_name} (which is "
-                        f"present)."
+                # Both are already present -> it means the config is wrong and do not reflect the actual
+                # checkpoint -> let's raise a warning and do nothing
+                if source_is_there and target_is_there:
+                    logger.warning(
+                        f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
+                        f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
+                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
                     )
+                    # Skip to next iteration
+                    continue
+                # We're missing the source but we have the target -> we swap them, tying the parameter that exists
+                elif not source_is_there and target_is_there:
+                    target_param_name, source_param_name = source_param_name, target_param_name
+                    target_param_names = [target_param_name]
+                # Both are missing -> check other keys in case more than 2 keys are tied to the same weight
+                elif not source_is_there and not target_is_there:
+                    for target_backup, source_backup in tied_keys[i + 1 :]:
+                        # In case of more than 2 keys tied to the same weight, they are guaranteed to all have
+                        # the same source thanks to `get_expanded_tied_weights_keys` so this check is enough
+                        if source_backup == source_param_name:
+                            target_backup_is_there = target_backup not in missing_keys
+                            # If the target is present, we found the correct weight to tie into (we know the source is missing)
+                            if target_backup_is_there:
+                                source_param_name = target_backup
+                                # Append the source as well, since both are missing we'll tie both
+                                target_param_names.append(source_param_name)
+                                break
+                    # If we did not break from the loop, it was impossible to find a source key -> let's raise
+                    else:
+                        # TODO Cyril: here ideally we want to raise instead of warning, but will break our CI as we have
+                        # tests loading model from empty dicts to perform init checks - since we don't raise, add a flag
+                        # to NOT remove from missing keys as it's actually still missing
+                        remove_from_missing = False
+                        logger.warning(
+                            f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
+                            f"{source_param_name} to {target_param_name}, but both are absent from the checkpoint, "
+                            "and we could not find another related tied weight for those keys"
+                        )
+
+            # Perform the actual tying
+            source_param = self.get_parameter_or_buffer(source_param_name)
+            for target_param_name in target_param_names:
+                if "." in target_param_name:
+                    parent_name, name = target_param_name.rsplit(".", 1)
+                    parent = self.get_submodule(parent_name)
+                else:
+                    name = target_param_name
+                    parent = self
+                # Tie the weights
+                setattr(parent, name, source_param)
+                self._adjust_bias(parent, source_param)
+                # Remove from missing if necesary
+                if missing_keys is not None and remove_from_missing:
+                    missing_keys.discard(target_param_name)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
@@ -2951,7 +3016,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
-        save_original_format: bool = False,  # TODO next PR will make it go to True
+        save_original_format: bool = True,
         **kwargs,
     ):
         """
@@ -3007,8 +3072,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        ignore_metadata_errors = kwargs.pop("ignore_metadata_errors", False)
-
         if token is not None:
             kwargs["token"] = token
 
@@ -3049,7 +3112,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         metadata = {}
@@ -3141,9 +3204,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
-        # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
-        # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
-        state_dict = self._fix_state_dict_keys_on_save(state_dict)
         # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
         # therefore we replace them with DTensors that are equivalently sharded
         if self._tp_size is not None:
@@ -3219,17 +3279,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
                 )
 
-        if (
-            any(
-                allowed_name in class_name.__name__.lower()
-                for class_name in self.__class__.__mro__[:-1]
-                for allowed_name in VLMS
-            )
-            or save_original_format
-        ):
-            # MEGA BIG TODO HERE: self._conversion_ops needs to be used to save the final ckpt
-            # using what was loaded. Actually self._conversion_ops wont work because we need it
-            # even if the files are not legacy -> thus no conversion happened
+        # Revert all renaming and/or weight operations
+        if save_original_format:
             state_dict = revert_weight_conversion(self, state_dict)
 
         # Shard the model if it is too big.
@@ -3334,9 +3385,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if push_to_hub:
             # Eventually create an empty model card
-            model_card = create_and_tag_model_card(
-                repo_id, self.model_tags, token=token, ignore_metadata_errors=ignore_metadata_errors
-            )
+            model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
 
             # Update model card if needed:
             model_card.save(os.path.join(save_directory, "README.md"))
@@ -3781,13 +3830,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
-
         key_mapping = kwargs.pop("key_mapping", None)
-        # Load models with key mapping
-        if key_mapping is None and any(
-            allowed_name in class_name.__name__.lower() for class_name in cls.__mro__[:-1] for allowed_name in VLMS
-        ):
-            key_mapping = copy.copy(cls._checkpoint_conversion_mapping)
 
         if distributed_config is not None and tp_plan is None:
             tp_plan = "auto"
@@ -3879,19 +3922,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
 
-        weight_conversions: Optional[list[WeightConverter | WeightRenaming]] = None
-        model_type = getattr(config, "model_type", None)
-        if model_type is not None:
-            weight_conversions = get_checkpoint_conversion_mapping(model_type)
-            if weight_conversions is None:
-                weight_conversions = get_checkpoint_conversion_mapping("legacy")
-            if key_mapping is not None:
-                weight_conversions.extend(
-                    [WeightRenaming(source_keys=k, target_keys=v) for k, v in key_mapping.items()]
-                )
-            if hf_quantizer is not None:
-                weight_conversions.extend(hf_quantizer.get_weight_conversions())
-
         if gguf_file:
             if hf_quantizer is not None:
                 raise ValueError(
@@ -3946,6 +3976,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
+
+        # Obtain the weight conversion mapping for this model if any are registered
+        weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
@@ -4013,7 +4046,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = weight_conversions  # TODO: Dynamic weight loader for adapters
+            adapter_kwargs["key_mapping"] = key_mapping
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
@@ -4030,21 +4063,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             }
             return model, loading_info
         return model
-
-    @staticmethod
-    def _fix_state_dict_key_on_save(key) -> tuple[str, bool]:
-        """
-        Similar to `_fix_state_dict_key_on_load` allows to define hook for state dict key renaming on model save.
-        Do nothing by default, but can be overridden in particular models.
-        """
-        return key, False
-
-    def _fix_state_dict_keys_on_save(self, state_dict):
-        """
-        Similar to `_fix_state_dict_keys_on_load` allows to define hook for state dict key renaming on model save.
-        Apply `_fix_state_dict_key_on_save` to all keys in `state_dict`.
-        """
-        return {self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items()}
 
     @classmethod
     def _load_pretrained_model(
@@ -4079,10 +4097,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
             disk_offload_index = accelerate_disk_offload(
+                model,
                 disk_offload_folder,
                 checkpoint_files,
                 device_map,
-                expected_keys,
                 sharded_metadata,
                 dtype,
                 weight_mapping,
@@ -4169,7 +4187,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():  # TODO to avaoid this buffer could be added to the ckpt
+            for buffer in model.buffers():  # TODO to avoid this buffer could be added to the ckpt
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
 
@@ -4654,6 +4672,7 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "paged|flash_attention_3": paged_attention_forward,
         "paged|flash_attention_2": paged_attention_forward,
         "paged|sdpa": sdpa_attention_paged_forward,
         "paged|eager": eager_paged_attention_forward,

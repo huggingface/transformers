@@ -63,10 +63,6 @@ See also:
 [[autodoc]] BloomConfig
     - all
 
-## BloomTokenizerFast
-
-[[autodoc]] BloomTokenizerFast
-    - all
 
 ## BloomModel
 

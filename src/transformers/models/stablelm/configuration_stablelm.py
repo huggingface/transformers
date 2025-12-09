@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -86,8 +86,6 @@ class StableLmConfig(PreTrainedConfig):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.25):
-            Percentage of the query and keys which will have rotary embedding.
         bos_token_id (int, *optional*, defaults to 0):
             The id of the `BOS` token in the vocabulary.
         eos_token_id (int, *optional*, defaults to 0):
@@ -125,7 +123,6 @@ class StableLmConfig(PreTrainedConfig):
         use_parallel_residual: Optional[bool] = False,
         hidden_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,
-        partial_rotary_factor: Optional[float] = 0.25,
         bos_token_id: Optional[int] = 0,
         eos_token_id: Optional[int] = 0,
         **kwargs,
@@ -148,15 +145,8 @@ class StableLmConfig(PreTrainedConfig):
         self.use_parallel_residual = use_parallel_residual
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-        self.partial_rotary_factor = partial_rotary_factor
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
 
         super().__init__(
             bos_token_id=bos_token_id,
