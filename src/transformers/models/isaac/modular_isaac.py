@@ -436,16 +436,12 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 .repeat(batch_size, 1)
             )
 
-            if pixel_shuffle_scale > 1:
-                if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
-                    raise ValueError(
-                        "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
-                    )
-                virtual_height = height_tokens // pixel_shuffle_scale
-                virtual_width = width_tokens // pixel_shuffle_scale
-            else:
-                virtual_height = height_tokens
-                virtual_width = width_tokens
+            if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
+                raise ValueError(
+                    "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
+                )
+            virtual_height = height_tokens // pixel_shuffle_scale
+            virtual_width = width_tokens // pixel_shuffle_scale
 
             virtual_dim = (
                 torch.tensor(
@@ -1178,12 +1174,11 @@ class IsaacVisionTransformer(nn.Module):
         # Apply final layer normalization
         hidden_states = self.post_layernorm(hidden_states)
 
-        if self.pixel_shuffle_scale_factor > 1:
-            hidden_states = pixel_shuffle_varlen(
-                x=hidden_states,
-                token_grids=token_grids,
-                scale_factor=self.pixel_shuffle_scale_factor,
-            )
+        hidden_states = pixel_shuffle_varlen(
+            x=hidden_states,
+            token_grids=token_grids,
+            scale_factor=self.pixel_shuffle_scale_factor,
+        )
         # Remove the pseudo batch dimension we added earlier
         hidden_states = hidden_states.squeeze(0)
 

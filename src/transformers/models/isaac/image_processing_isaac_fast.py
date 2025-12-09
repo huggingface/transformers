@@ -433,16 +433,12 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 .repeat(batch_size, 1)
             )
 
-            if pixel_shuffle_scale > 1:
-                if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
-                    raise ValueError(
-                        "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
-                    )
-                virtual_height = height_tokens // pixel_shuffle_scale
-                virtual_width = width_tokens // pixel_shuffle_scale
-            else:
-                virtual_height = height_tokens
-                virtual_width = width_tokens
+            if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
+                raise ValueError(
+                    "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
+                )
+            virtual_height = height_tokens // pixel_shuffle_scale
+            virtual_width = width_tokens // pixel_shuffle_scale
 
             virtual_dim = (
                 torch.tensor(
