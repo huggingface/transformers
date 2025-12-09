@@ -92,10 +92,6 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any, Optional
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation.utils import GenerationMixin
@@ -111,9 +107,19 @@ from ...models.qwen3.modeling_qwen3 import Qwen3PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, can_return_tuple
-from ...utils.import_utils import is_perceptron_available, is_torchdynamo_compiling
+from ...utils.import_utils import (
+    is_perceptron_available,
+    is_torch_available,
+    is_torchdynamo_compiling,
+)
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 if is_perceptron_available():

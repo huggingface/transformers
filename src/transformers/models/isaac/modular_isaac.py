@@ -89,15 +89,24 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from ...utils.import_utils import (
+    is_perceptron_available,
+    is_torch_available,
+    is_torchdynamo_compiling,
+    is_vision_available,
+)
 
-from ...utils.import_utils import is_perceptron_available, is_torchdynamo_compiling, is_vision_available
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 if is_vision_available():
-    import PIL.Image
+    from PIL.Image import Image
+else:
+    Image = None
 
 
 if is_perceptron_available():
@@ -1604,7 +1613,7 @@ class IsaacProcessor(ProcessorMixin):
     def build_event_stream_simple(
         self,
         text: str,
-        images: Optional[list[PIL.Image.Image]] = None,
+        images: Optional[list[Image]] = None,
     ) -> Stream:
         events = []
         # Process text and images
@@ -1650,7 +1659,7 @@ class IsaacProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[str, list[str]],
-        images: Optional[Union[PIL.Image.Image, list[PIL.Image.Image]]] = None,
+        images: Optional[Union[Image, list[Image]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
@@ -1689,7 +1698,7 @@ class IsaacProcessor(ProcessorMixin):
             texts = text
 
         if images is not None:
-            if isinstance(images, PIL.Image.Image):
+            if isinstance(images, Image):
                 images_list = [images]
             else:
                 images_list = images

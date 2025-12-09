@@ -90,9 +90,6 @@ import math
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-import torch
-import torch.nn.functional as F
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, PILImageResampling
@@ -102,7 +99,13 @@ from ...utils import TensorType, auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
+from ...utils.import_utils import is_torch_available
 from .image_processing_isaac import IsaacImageProcessorKwargs
+
+
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
 
 
 def get_scaled_image_size(
