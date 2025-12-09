@@ -86,8 +86,8 @@ class GptOssExperts(nn.Module):
 
         Args:
             hidden_states (torch.Tensor): (batch_size, seq_len, hidden_size)
-            selected_experts (torch.Tensor): (batch_size * token_num, top_k)
-            routing_weights (torch.Tensor): (batch_size * token_num, num_experts)
+            selected_experts (torch.Tensor): (batch_size * seq_len, top_k)
+            routing_weights (torch.Tensor): (batch_size * seq_len, top_k)
         Returns:
             torch.Tensor
         """
@@ -157,8 +157,8 @@ class GptOssTopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight, self.bias)  # (seq_len, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_logits = F.linear(hidden_states, self.weight, self.bias)  # (num_tokens, num_experts)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
         router_scores = router_top_value
         return router_logits, router_scores, router_indices
