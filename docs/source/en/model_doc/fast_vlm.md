@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2025-05-06 and added to Hugging Face Transformers on 2025-12-04.*
+*This model was released on 2025-05-06 and added to Hugging Face Transformers on 2025-12-02.*
 
 # FastVLM
 
@@ -57,14 +57,14 @@ Setting it for the entire model, e.g.
 
 will result in an error.
 
-### Formatting Prompts with Chat Templates  
+### Formatting Prompts with Chat Templates
 
-Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
+Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.
 
-**Important:**  
-- You must construct a conversation history — passing a plain string won't work.  
-- Each message should be a dictionary with `"role"` and `"content"` keys.  
-- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
+**Important:**
+- You must construct a conversation history — passing a plain string won't work.
+- Each message should be a dictionary with `"role"` and `"content"` keys.
+- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.
 
 ## Usage examples
 
