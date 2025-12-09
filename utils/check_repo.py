@@ -1035,6 +1035,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
+    "RoFormerTokenizerFast",  # An alias
 ]
 
 

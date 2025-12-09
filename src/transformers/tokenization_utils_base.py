@@ -27,7 +27,7 @@ import os
 import re
 import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import Callable, Mapping, Sequence, Sized
+from collections.abc import Callable, Collection, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
@@ -1631,11 +1631,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
                 )
-            # Use first vocab file that's not tokenizer_file
-            file_id = list(cls.vocab_files_names.keys())[0]
-            if file_id == "tokenizer_file" and vocab_files_count > 1:
-                file_id = [k for k in cls.vocab_files_names.keys() if k != "tokenizer_file"][0]
-
+            file_id = "vocab_file"
+            if pretrained_model_name_or_path.endswith("tokenizer.json"):
+                file_id = "tokenizer_file"
             vocab_files[file_id] = pretrained_model_name_or_path
             single_file_id = file_id
         else:
@@ -1653,10 +1651,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 }
 
             vocab_files = {**cls.vocab_files_names, **additional_files_names}
-            if "tokenizer_file" in vocab_files:
-                # Try to get the tokenizer config to see if there are versioned tokenizer files.
-                fast_tokenizer_file = FULL_TOKENIZER_FILE
 
+            # Check for versioned tokenizer files
+            if "tokenizer_file" in vocab_files:
+                fast_tokenizer_file = FULL_TOKENIZER_FILE
                 try:
                     resolved_config_file = cached_file(
                         pretrained_model_name_or_path,
@@ -1672,43 +1670,33 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         _raise_exceptions_for_missing_entries=False,
                         _commit_hash=commit_hash,
                     )
-                except OSError:
-                    # Re-raise any error raised by cached_file in order to get a helpful error message
-                    raise
+                    if resolved_config_file is not None:
+                        with open(resolved_config_file, encoding="utf-8") as reader:
+                            tokenizer_config = json.load(reader)
+                            if "fast_tokenizer_files" in tokenizer_config:
+                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                        commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                 except Exception:
-                    # For any other exception, we throw a generic error.
-                    raise OSError(
-                        f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                        "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                        f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                        f"containing all relevant files for a {cls.__name__} tokenizer."
-                    )
-
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                if resolved_config_file is not None:
-                    with open(resolved_config_file, encoding="utf-8") as reader:
-                        tokenizer_config = json.load(reader)
-                        if "fast_tokenizer_files" in tokenizer_config:
-                            fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                    pass
                 vocab_files["tokenizer_file"] = fast_tokenizer_file
 
-                # This block looks for any extra chat template files
-                if is_local:
-                    template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
-                    if template_dir.is_dir():
-                        for template_file in template_dir.glob("*.jinja"):
-                            template_name = template_file.name.removesuffix(".jinja")
-                            vocab_files[f"chat_template_{template_name}"] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
-                else:
-                    for template in list_repo_templates(
-                        pretrained_model_name_or_path,
-                        local_files_only=local_files_only,
-                        revision=revision,
-                        cache_dir=cache_dir,
-                        token=token,
-                    ):
-                        template = template.removesuffix(".jinja")
-                        vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
+            # This block looks for any extra chat template files
+            if is_local:
+                template_dir = Path(pretrained_model_name_or_path, CHAT_TEMPLATE_DIR)
+                if template_dir.is_dir():
+                    for template_file in template_dir.glob("*.jinja"):
+                        template_name = template_file.name.removesuffix(".jinja")
+                        vocab_files[f"chat_template_{template_name}"] = f"{CHAT_TEMPLATE_DIR}/{template_file.name}"
+            else:
+                for template in list_repo_templates(
+                    pretrained_model_name_or_path,
+                    local_files_only=local_files_only,
+                    revision=revision,
+                    cache_dir=cache_dir,
+                    token=token,
+                ):
+                    template = template.removesuffix(".jinja")
+                    vocab_files[f"chat_template_{template}"] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
 
         remote_files = []
         if not is_local and not local_files_only:
@@ -1766,11 +1754,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if file_id not in resolved_vocab_files:
                 continue
 
-            if is_local:
-                logger.info(f"loading file {file_path}")
-            else:
-                logger.info(f"loading file {file_path} from cache at {resolved_vocab_files[file_id]}")
-
         return cls._from_pretrained(
             resolved_vocab_files,
             pretrained_model_name_or_path,
@@ -1800,29 +1783,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         trust_remote_code=False,
         **kwargs,
     ):
-        # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
-        # file or if `from_slow` is set to True.
-        from_slow = kwargs.get("from_slow", False)
-        gguf_file = kwargs.get("gguf_file")
-        has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
-
-        # If one passes a GGUF file path to `gguf_file` there is no need for this check as the tokenizer will be
-        # loaded directly from the GGUF file.
-        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None and not gguf_file:
-            slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
-                copy.deepcopy(resolved_vocab_files),
-                pretrained_model_name_or_path,
-                copy.deepcopy(init_configuration),
-                *init_inputs,
-                token=token,
-                cache_dir=cache_dir,
-                local_files_only=local_files_only,
-                _commit_hash=_commit_hash,
-                **(copy.deepcopy(kwargs)),
-            )
-        else:
-            slow_tokenizer = None
-
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
@@ -1831,13 +1791,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 init_kwargs = json.load(tokenizer_config_handle)
             # used in the past to check if the tokenizer class matches the class in the repo
             init_kwargs.pop("tokenizer_class", None)
-            if not has_tokenizer_file:
-                init_kwargs.get("tokenizer_file", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
         else:
             init_kwargs = init_configuration
+
+        if resolved_vocab_files.get("tokenizer_file", None) is not None:
+            init_kwargs.pop("add_bos_token", None)
+            init_kwargs.pop("add_eos_token", None)
 
         # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
         chat_templates = {}
@@ -1919,8 +1881,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 init_kwargs[args_name] = file_path
         tokenizer_file = resolved_vocab_files.get("tokenizer_file", None)
 
-        if slow_tokenizer is not None:
-            init_kwargs["__slow_tokenizer"] = slow_tokenizer
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
         init_kwargs["is_local"] = _is_local
 
@@ -2039,28 +1999,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if key in init_kwargs and added_tokens_map != {} and init_kwargs[key] is not None:
                 init_kwargs[key] = added_tokens_map.get(str(init_kwargs[key]), init_kwargs[key])
 
-        # Track which files were loaded (if not already set by AutoTokenizer)
-        if "files_loaded" not in init_kwargs:
-            files_loaded = []
-            # Check which files this tokenizer class actually uses based on vocab_files_names
-            tokenizer_needs_files = set(cls.vocab_files_names.keys()) if hasattr(cls, "vocab_files_names") else set()
+        # From pretrained with the legacy fixes
+        # for `tokenizers` based tokenizer, we actually want to have vocab and merges pre-extracted from whatever inputs
+        # for `none` (PythonBackend) based tokenizer, we also want the vocab file / merge files not extracted.
+        # for `sentencepiece` based tokenizer, we pass the sentencepiece model file directly.
+        init_kwargs = cls.convert_to_native_format(**init_kwargs)
 
-            # If tokenizer_file is in the class's vocab_files_names and exists, prioritize it (TokenizersBackend)
-            if "tokenizer_file" in tokenizer_needs_files and resolved_vocab_files.get("tokenizer_file"):
-                files_loaded.append(os.path.basename(resolved_vocab_files["tokenizer_file"]))
-            else:
-                # Otherwise, add the actual vocab files that were used by this tokenizer class
-                for file_key, file_path in resolved_vocab_files.items():
-                    if (
-                        file_path
-                        and file_key not in ["tokenizer_config_file", "special_tokens_map_file", "added_tokens_file"]
-                        and file_key in tokenizer_needs_files
-                    ):
-                        # Extract just the filename from the path
-                        files_loaded.append(os.path.basename(file_path))
-            init_kwargs["files_loaded"] = files_loaded
-
-        # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
         except import_protobuf_decode_error():
@@ -2081,117 +2025,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-
-        # If tokenizer_file exists and tokenizer has a TokenizersBackend, replace the blank tokenizer with tokenizer.json
-        if tokenizer_file is not None and hasattr(tokenizer, "_tokenizer"):
-            from tokenizers import Tokenizer as TokenizerFast
-
-            tokenizer._tokenizer = TokenizerFast.from_file(tokenizer_file)
-            # Re-run post-initialization if the tokenizer has it
-            if hasattr(tokenizer, "_post_init"):
-                tokenizer._post_init()
-            # If only SPM exists, try to get vocab and merges and init to load a tokenizers-backend
-        else:
-            spm_filename = find_sentencepiece_model_file(
-                pretrained_model_name_or_path,
-                revision=kwargs.get("revision"),
-                token=kwargs.get("token"),
-                cache_dir=kwargs.get("cache_dir"),
-                local_files_only=kwargs.get("local_files_only", False),
-                subfolder=kwargs.get("subfolder", ""),
-            )
-            if spm_filename is not None:
-                try:
-                    resolved_spm = cached_file(
-                        pretrained_model_name_or_path,
-                        spm_filename,
-                        cache_dir=kwargs.get("cache_dir"),
-                        force_download=kwargs.get("force_download", False),
-                        proxies=kwargs.get("proxies"),
-                        token=kwargs.get("token"),
-                        revision=kwargs.get("revision"),
-                        local_files_only=kwargs.get("local_files_only", False),
-                        subfolder=kwargs.get("subfolder", ""),
-                    )
-                except Exception:
-                    resolved_spm = None
-                if resolved_spm is not None:
-                    try:
-                        # Mirror AutoTokenizer fallback: extract vocab/merges from SentencePiece
-                        import inspect as _inspect
-
-                        from .tokenization_utils_sentencepiece import SentencePieceExtractor
-
-                        class_sig = _inspect.signature(getattr(cls, "__init__", cls))
-                        vocab_ids, vocab_scores, merges = SentencePieceExtractor(resolved_spm).extract()
-                        files_loaded = [spm_filename]
-                        init_kwargs["backend"] = "tokenizers"
-                        init_kwargs["files_loaded"] = files_loaded
-                        # If tokenizer needs merges too (BPE), pass both; unigram models only need vocab
-                        if "merges" in class_sig.parameters:
-                            return cls.from_pretrained(
-                                pretrained_model_name_or_path,
-                                *init_inputs,
-                                vocab=vocab_scores,
-                                merges=merges,
-                                **init_kwargs,
-                            )
-                        elif "vocab" in class_sig.parameters:
-                            return cls.from_pretrained(
-                                pretrained_model_name_or_path,
-                                *init_inputs,
-                                vocab=vocab_scores,
-                                **init_kwargs,
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            f"Could not extract vocab/merges from the SentencePiece model to initialize a Tokenizers backend: {e}. We are falling back so we are falling back to the standard loading method."
-                        )
-                        pass
-            # Fallback to vocab.json + merges.txt (BPE) or just vocab.json (WordLevel/WordPiece)
-            vocab, merges, files_loaded = load_vocab_and_merges(
-                pretrained_model_name_or_path,
-                cache_dir=kwargs.get("cache_dir"),
-                force_download=kwargs.get("force_download", False),
-                proxies=kwargs.get("proxies"),
-                token=kwargs.get("token"),
-                revision=kwargs.get("revision"),
-                local_files_only=kwargs.get("local_files_only", False),
-                subfolder=kwargs.get("subfolder", ""),
-            )
-
-            if vocab is not None:
-                try:
-                    import inspect as _inspect
-
-                    class_sig = _inspect.signature(getattr(cls, "__init__", cls))
-                    init_kwargs["backend"] = "tokenizers"
-                    init_kwargs["files_loaded"] = files_loaded
-
-                    if merges is not None and "merges" in class_sig.parameters:
-                        return cls.from_pretrained(
-                            pretrained_model_name_or_path,
-                            *init_inputs,
-                            vocab=vocab,
-                            merges=merges,
-                            **init_kwargs,
-                        )
-                    elif "vocab" in class_sig.parameters:
-                        return cls.from_pretrained(
-                            pretrained_model_name_or_path,
-                            *init_inputs,
-                            vocab=vocab,
-                            **init_kwargs,
-                        )
-                except Exception:
-                    pass
-        if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
-            logger.info(
-                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
-                " fine-tuned or trained."
-            )
-
         return tokenizer
+
+    @classmethod
+    def convert_to_native_format(cls, **kwargs):
+        return kwargs
 
     @classmethod
     def convert_added_tokens(cls, obj: Union[AddedToken, Any], save=False, add_type_field=True):
@@ -2273,9 +2111,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
+        tokenizer_config.pop("add_bos_token", None)
+        tokenizer_config.pop("add_eos_token", None)
 
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
+        target_keys.discard("add_bos_token")
+        target_keys.discard("add_eos_token")
         # Let's save the special tokens map (only the strings)
         target_keys.update(["model_max_length"])
 
@@ -3770,15 +3612,22 @@ def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     return prepend_scheme
 
 
-def generate_merges(vocab, vocab_scores: Optional[dict[str, float]] = None):
+def generate_merges(
+    vocab, vocab_scores: Optional[dict[str, float]] = None, skip_tokens: Optional[Collection[str]] = None
+):
+    skip_tokens = set(skip_tokens) if skip_tokens is not None else set()
     reverse = vocab_scores is not None
     vocab_scores = dict(vocab_scores) if reverse else vocab
 
     merges = []
     for merge, piece_score in vocab_scores.items():
+        if merge in skip_tokens:
+            continue
         local = []
         for index in range(1, len(merge)):
             piece_l, piece_r = merge[:index], merge[index:]
+            if piece_l in skip_tokens or piece_r in skip_tokens:
+                continue
             if piece_l in vocab and piece_r in vocab:
                 local.append((piece_l, piece_r, piece_score))
         local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
