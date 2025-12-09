@@ -794,31 +794,7 @@ class DinoDetrDecoderLayer(nn.Module):
 
         self.key_aware_proj = None
 
-    # Fully connected
-    def forward_ffn(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
-        transformed_values = self.linear2(self.dropout3(self.activation(self.linear1(pixel_values))))
-        output = pixel_values + self.dropout4(transformed_values)
-        output = self.norm3(output)
-        return output
-
-    # Self attention
-    def forward_sa(
-        self,
-        queries: torch.FloatTensor,
-        query_position_embeddings: torch.FloatTensor,
-        self_attn_mask: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        attn_weights = None
-        q = k = queries if query_position_embeddings is None else queries + query_position_embeddings
-        transformed_queries, attn_weights = self.self_attn(q, k, queries, attn_mask=self_attn_mask)
-        queries = queries + self.dropout2(transformed_queries)
-        queries = self.norm2(queries)
-
-        return queries, attn_weights
-
-    # Cross Attention
-    def forward_ca(
+    def forward(
         self,
         queries: torch.FloatTensor,
         query_position_embeddings: torch.FloatTensor,
@@ -828,8 +804,17 @@ class DinoDetrDecoderLayer(nn.Module):
         memory_level_start_index: torch.FloatTensor,
         memory_spatial_shapes: torch.FloatTensor,
         memory_spatial_shapes_list: list[torch.FloatTensor],
+        self_attn_mask: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        # Self Attention
+        attn_weights = None
+        q = k = queries if query_position_embeddings is None else queries + query_position_embeddings
+        transformed_queries, attn_weights = self.self_attn(q, k, queries, attn_mask=self_attn_mask)
+        queries = queries + self.dropout2(transformed_queries)
+        queries = self.norm2(queries)
+
+        # Deformable Cross Attention
         transformed_queries, attn_weights = self.cross_attn(
             hidden_states=(
                 queries if query_position_embeddings is None else queries + query_position_embeddings
@@ -845,44 +830,10 @@ class DinoDetrDecoderLayer(nn.Module):
         queries = queries + self.dropout1(transformed_queries)
         queries = self.norm1(queries)
 
-        return queries, attn_weights
-
-    def forward(
-        self,
-        queries: torch.FloatTensor,
-        query_position_embeddings: torch.FloatTensor,
-        query_reference_points: torch.FloatTensor,
-        memory: torch.FloatTensor,
-        memory_key_padding_mask: torch.LongTensor,
-        memory_level_start_index: torch.FloatTensor,
-        memory_spatial_shapes: torch.FloatTensor,
-        memory_spatial_shapes_list: list[torch.FloatTensor],
-        self_attn_mask: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # Self Attention
-        queries, attn_weights = self.forward_sa(
-            queries=queries,
-            query_position_embeddings=query_position_embeddings,
-            self_attn_mask=self_attn_mask,
-            **kwargs,
-        )
-
-        # Deformable Cross Attention
-        queries, attn_weights = self.forward_ca(
-            queries=queries,
-            query_position_embeddings=query_position_embeddings,
-            query_reference_points=query_reference_points,
-            memory=memory,
-            memory_key_padding_mask=memory_key_padding_mask,
-            memory_level_start_index=memory_level_start_index,
-            memory_spatial_shapes=memory_spatial_shapes,
-            memory_spatial_shapes_list=memory_spatial_shapes_list,
-            **kwargs,
-        )
-
         # Fully Connected Layer
-        queries = self.forward_ffn(queries, **kwargs)
+        transformed_values = self.linear2(self.dropout3(self.activation(self.linear1(queries))))
+        queries = queries + self.dropout4(transformed_values)
+        queries = self.norm3(queries)
 
         outputs = (queries,)
 
