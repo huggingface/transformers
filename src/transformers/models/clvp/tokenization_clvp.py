@@ -15,9 +15,7 @@
 """Tokenization class for CLVP."""
 
 import json
-import os
 from functools import lru_cache
-from typing import Optional
 
 import regex as re
 
@@ -231,7 +229,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -272,5 +269,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
         text = text.replace(self.unk_token, "").replace("   ", " ").replace("  ", " ")
         return text
+
 
 __all__ = ["ClvpTokenizer"]
