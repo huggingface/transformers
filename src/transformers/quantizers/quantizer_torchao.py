@@ -289,8 +289,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         _is_torchao_serializable = TORCHAO_VERSION >= version.parse("0.15.0")
         if not TORCHAO_VERSION >= version.parse("0.15.0"):
             logger.warning(
-                f"torchao quantized model only supports safe serialization for torchao version >= 0.15.0, please set `safe_serialization` to False for \
-                {type(self.quantization_config.quant_type)} and {TORCHAO_VERSION}."
+                "torchao quantized model only supports serialization for torchao version >= 0.15.0, please upgrade "
+                "your version to save the model"
             )
         return _is_torchao_serializable
 

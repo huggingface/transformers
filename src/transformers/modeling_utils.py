@@ -550,8 +550,7 @@ def _get_resolved_checkpoint_files(
                             raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(SAFE_WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} "
-                                "and thus cannot be loaded with `safetensors`. Please make sure that the model has "
-                                "been saved with `safe_serialization=True` or do not set `use_safetensors=True`."
+                                "and thus cannot be loaded with `safetensors`. Please do not set `use_safetensors=True`."
                             )
                     else:
                         # This repo has no safetensors file of any kind, we switch to PyTorch.
@@ -3197,9 +3196,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if self._tp_size is not None:
             state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
-        # TODO: fix safe_serialization for tied weights
-        # Safetensors does not allow tensor aliasing.
-        # We're going to remove aliases before saving
+        # Safetensors does not allow tensor aliasing - we're going to remove aliases before saving
         ptrs = collections.defaultdict(list)
         for name, tensor in state_dict.items():
             if not isinstance(tensor, torch.Tensor):

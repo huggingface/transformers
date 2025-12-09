@@ -4080,12 +4080,7 @@ class Trainer:
                 model = model.module.module
                 unwrapped_model = self.accelerator.unwrap_model(model)
                 if isinstance(unwrapped_model, supported_classes):
-                    unwrapped_model.save_pretrained(
-                        output_dir,
-                        state_dict=full_state_dict,
-                        save_function=xm.save,
-                        safe_serialization=self.args.save_safetensors,
-                    )
+                    unwrapped_model.save_pretrained(output_dir, state_dict=full_state_dict)
                 else:
                     logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                     xm.save(full_state_dict, os.path.join(output_dir, WEIGHTS_NAME))
@@ -4095,8 +4090,6 @@ class Trainer:
                     output_dir,
                     is_main_process=self.args.should_save,
                     state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
-                    save_function=xm.save,
-                    safe_serialization=self.args.save_safetensors,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
@@ -4106,8 +4099,6 @@ class Trainer:
             model.save_pretrained(
                 output_dir,
                 is_main_process=self.args.should_save,
-                save_function=xm.save,
-                safe_serialization=self.args.save_safetensors,
                 state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
             )
         if self.processing_class is not None and self.args.should_save:
@@ -4128,7 +4119,7 @@ class Trainer:
 
             if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
                 self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
+                    output_dir, state_dict=state_dict
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
@@ -4139,9 +4130,7 @@ class Trainer:
                 else:
                     torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(
-                output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
-            )
+            self.model.save_pretrained(output_dir, state_dict=state_dict)
 
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
