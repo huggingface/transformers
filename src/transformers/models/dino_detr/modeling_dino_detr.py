@@ -11,35 +11,33 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
 
-from torch import Tensor
+import torch
+import torch.nn.functional as F
+from torch import Tensor, nn
 from torch.nn import MultiheadAttention
-
-from transformers.modeling_outputs import ModelOutput
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...image_transforms import center_to_corners_format, corners_to_center_format
+from ...image_transforms import corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...models.detr.image_processing_detr import center_to_corners_format
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     is_timm_available,
-    is_torch_available,
+    replace_return_docstrings,
     requires_backends,
     torch_int,
 )
 from ...utils.backbone_utils import load_backbone
 from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from .configuration_dino_detr import DinoDetrConfig
-
-
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
-    from torch import nn
 
 
 if is_timm_available():
@@ -763,8 +761,8 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
 
         if isinstance(module, DinoDetrLearnedPositionEmbedding):
-            init.uniform_(module.row_embeddings.weight)
-            init.uniform_(module.column_embeddings.weight)
+            init.uniform_(module.row_embed.weight)
+            init.uniform_(module.col_embed.weight)
         elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -786,19 +784,32 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.value_proj.bias, 0.0)
             init.xavier_uniform_(module.output_proj.weight)
             init.constant_(module.output_proj.bias, 0.0)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
+        elif isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, nn.Conv2d):
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            if module.bias is not None:
+                fan_in, _ = _calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in)
+                init.uniform_(module.bias, -bound, bound)
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
+        elif hasattr(module, "in_proj_weight"):  # Fix for self_attn.in_proj_weight
+            init.xavier_uniform_(module.in_proj_weight)
+        elif hasattr(module, "weight") and module.weight is not None:  # Generic weight initialization
+            init.normal_(module.weight, mean=0.0, std=std)
+            if hasattr(module, "bias") and module.bias is not None:
+                init.zeros_(module.bias)
+
         if hasattr(module, "level_embed"):
-            init.normal_(module.level_embed)
+            init.normal_(module.level_embed, mean=0.0, std=std)
 
 
 class DinoDetrDecoderLayer(nn.Module):
@@ -1882,10 +1893,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         "decoder_cross_attentions": OutputRecorder(
             DinoDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1
         ),
-        # "encoder_hidden_states": OutputRecorder(DinoDetrEncoder, layer_name="encoder", index=3),
-        # "decoder_hidden_states": OutputRecorder(DinoDetrDecoder, layer_name="decoder", index=0),
-        # "hidden_states": OutputRecorder(DinoDetrDecoderLayer, index=0),
-        # "hidden_states": OutputRecorder(DinoDetrDecoder, layer_name="decoder", index=0),
         "encoder_hidden_states": DinoDetrEncoderLayer,
         "decoder_hidden_states": DinoDetrDecoderLayer,
     }
@@ -2138,7 +2145,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         "decoder_cross_attentions": OutputRecorder(
             DinoDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1
         ),
-        # "hidden_states": DinoDetrDecoderLayer,
         "encoder_hidden_states": DinoDetrEncoderLayer,
         "decoder_hidden_states": DinoDetrDecoderLayer,
     }

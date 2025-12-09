@@ -9,11 +9,12 @@ from collections.abc import Iterable
 from typing import Any, Optional, Union
 
 import numpy as np
+import torch
+from torch import nn
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     PaddingMode,
-    center_to_corners_format,
     corners_to_center_format,
     get_size_with_aspect_ratio,
     pad,
@@ -40,20 +41,15 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...models.detr.image_processing_detr import center_to_corners_format
 from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
-    is_torch_available,
     is_torch_tensor,
     is_vision_available,
     logging,
 )
 from ...utils.import_utils import requires
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 if is_vision_available():

@@ -18,7 +18,6 @@ import torch.nn as nn
 
 from ..utils import (
     is_accelerate_available,
-    is_scipy_available,
     is_vision_available,
 )
 
@@ -26,9 +25,6 @@ from ..utils import (
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
-
-if is_scipy_available():
-    pass
 
 
 if is_vision_available():
