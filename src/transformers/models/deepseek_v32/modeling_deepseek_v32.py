@@ -47,7 +47,15 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
+from ...utils.import_utils import is_hadamard_available
 from .configuration_deepseek_v32 import DeepseekV32Config
+
+
+# Import fast_hadamard_transform if available, otherwise use fallback
+if is_hadamard_available():
+    from fast_hadamard_transform import hadamard_transform
+else:
+    hadamard_transform = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -317,7 +325,7 @@ def rotate_activation(x: torch.Tensor) -> torch.Tensor:
     hidden_size = x.size(-1)
     scale = hidden_size**-0.5
 
-    if HAS_FAST_HADAMARD:
+    if is_hadamard_available():
         # fast-hadamard-transform requires contiguous bfloat16 input
         return hadamard_transform(x.contiguous(), scale=scale)
     else:

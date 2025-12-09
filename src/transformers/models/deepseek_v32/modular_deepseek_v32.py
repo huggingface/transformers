@@ -40,6 +40,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.import_utils import is_hadamard_available
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
@@ -61,17 +62,11 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 
 logger = logging.get_logger(__name__)
 
-# Try to import fast_hadamard_transform, fall back to pure PyTorch if not available
-try:
+# Import fast_hadamard_transform if available, otherwise use fallback
+if is_hadamard_available():
     from fast_hadamard_transform import hadamard_transform
-
-    HAS_FAST_HADAMARD = True
-except ImportError:
-    HAS_FAST_HADAMARD = False
-    logger.warning_once(
-        "fast-hadamard-transform not installed. Using slower PyTorch fallback. "
-        "For better performance, install with: pip install fast-hadamard-transform"
-    )
+else:
+    hadamard_transform = None
 
 
 def hadamard_transform_fallback(x: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
@@ -129,7 +124,7 @@ def rotate_activation(x: torch.Tensor) -> torch.Tensor:
     hidden_size = x.size(-1)
     scale = hidden_size**-0.5
 
-    if HAS_FAST_HADAMARD:
+    if is_hadamard_available():
         # fast-hadamard-transform requires contiguous bfloat16 input
         return hadamard_transform(x.contiguous(), scale=scale)
     else:

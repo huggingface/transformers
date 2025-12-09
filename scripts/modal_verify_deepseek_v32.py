@@ -32,12 +32,12 @@ models_volume = modal.Volume.from_name("models", environment_name="training2")
 datasets_volume = modal.Volume.from_name("datasets", environment_name="training2")
 
 # Create image with all dependencies
-# Image version: 5 (use GPU + torch for fast-hadamard-transform build)
+# Image version: 10 (git clone + pip install with gpu=H100 for fast-hadamard-transform)
 verify_image = (
-    modal.Image.from_registry("nvidia/cuda:12.8.0-devel-ubuntu22.04", add_python="3.12")
+    modal.Image.from_registry("nvidia/cuda:12.4.0-devel-ubuntu22.04", add_python="3.12")
     .apt_install("git", "build-essential", "clang")
     .pip_install(
-        "torch>=2.4.0",
+        "torch==2.4.0",  # Pin to 2.4.0 for CUDA 12.4 compatibility
         "accelerate",
         "safetensors",
         "sentencepiece",
@@ -49,15 +49,15 @@ verify_image = (
         "setuptools",
         "packaging",
     )
-    # Install fast-hadamard-transform with GPU available for CUDA compilation
-    # Requires torch to be installed first (done above)
+    # Install fast-hadamard-transform from git (source tarball is incomplete)
+    # Need to git clone to get all source files, then pip install with GPU
     .run_commands(
-        "pip install fast-hadamard-transform",
+        "git clone https://github.com/Dao-AILab/fast-hadamard-transform.git /tmp/fht && cd /tmp/fht && pip install .",
         gpu="H100",
     )
-    .run_commands(
+    .pip_install(
         # Force fresh install with no cache to get the latest commit
-        "pip install --no-cache-dir git+https://github.com/lyfegame/transformers.git@shuyingl/deepseek-v3.2-test"
+        "git+https://github.com/lyfegame/transformers.git@shuyingl/deepseek-v3.2-test"
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
 )
@@ -610,10 +610,11 @@ def verify_all(
     ]
 
     # Define LoRA targets for indexer
+    # Correct names from modular_deepseek_v32.py: wq_b, wk, weights_proj, k_norm
     indexer_lora_targets = [
-        "indexer.q_b_proj",
-        "indexer.k_proj",
-        "indexer.weight_proj",
+        "indexer.wq_b",
+        "indexer.wk",
+        "indexer.weights_proj",
     ]
 
     print(f"\n  LLM LoRA targets: {llm_lora_targets}")
