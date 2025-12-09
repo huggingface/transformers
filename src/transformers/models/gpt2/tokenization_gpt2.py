@@ -104,8 +104,6 @@ class GPT2Tokenizer(TokenizersBackend):
         eos_token: Union[AddedToken, str] = "<|endoftext|>",
         pad_token: Optional[Union[AddedToken, str]] = None,
         add_prefix_space=False,
-        add_bos_token=False,
-        add_eos_token=False,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -130,8 +128,6 @@ class GPT2Tokenizer(TokenizersBackend):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             **kwargs,
         )
 
