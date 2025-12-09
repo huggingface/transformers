@@ -763,15 +763,9 @@ class ContinuousBatchingManager:
             num_kv_padding_intervals: (optional) Number of intervals used to pad the keys/values dimension
             allow_prefix_sharing: (optional) Whether to allow prefix sharing if the model has only full attention layers
         """
+        # Reloade paged version if necessary
         if "paged|" not in model.config._attn_implementation:
-            attn_implementation = f"paged|{model.config._attn_implementation}"
-            model.config._attn_implementation = attn_implementation
-
-            # lazy loading flash attention including kernel variations
-            if "flash" in attn_implementation:
-                from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
-
-                lazy_import_paged_flash_attention(attn_implementation)
+            model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
 
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
