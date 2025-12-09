@@ -2119,7 +2119,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
         initialization scheme, it should be overridden by the derived `PreTrainedModel` class. In case a model adds an explicit
         `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
+        Dtype-safe initialization: only initialize floating-point or complex tensors; skip non-floating dtypes
+        (e.g., int8 quantized weights).
         """
+        def _can_init(tensor):
+            return tensor is not None and (torch.is_floating_point(tensor) or torch.is_complex(tensor))
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range or 0.02
         elif hasattr(self.config, "init_std"):
@@ -2131,12 +2135,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
-            if getattr(module, "weight", None) is not None:
+            if _can_init(getattr(module, "weight", None)):
                 init.normal_(module.weight, mean=0.0, std=std)
-            if getattr(module, "bias", None) is not None:
+            if _can_init(getattr(module, "bias", None)):
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            if getattr(module, "weight", None) is not None:
+            if _can_init(getattr(module, "weight", None)):
                 init.normal_(module.weight, mean=0.0, std=std)
                 # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
                 if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
@@ -2152,9 +2156,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             or "RMSNorm" in module.__class__.__name__
         ):
             # Norms can exist without weights (in which case they are None from torch primitives)
-            if hasattr(module, "weight") and module.weight is not None:
+            if hasattr(module, "weight") and _can_init(module.weight):
                 init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
+            if hasattr(module, "bias") and _can_init(module.bias):
                 init.zeros_(module.bias)
 
     def _initialize_weights(self, module):
