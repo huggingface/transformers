@@ -13,8 +13,6 @@
 # limitations under the License.
 import importlib
 import re
-import types
-from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from packaging import version
@@ -37,15 +35,12 @@ if is_torch_available():
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
 
 if is_torchao_available():
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.15.0"):
         from torchao.prototype.safetensors.safetensors_support import (
             flatten_tensor_state_dict,
-            unflatten_tensor_state_dict,
         )
-        from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
 
 
 logger = logging.get_logger(__name__)
@@ -94,9 +89,7 @@ class TorchAoHfQuantizer(HfQuantizer):
     Quantizer for torchao: https://github.com/pytorch/ao/
     """
 
-    requires_parameters_quantization = True
     requires_calibration = False
-    required_packages = ["torchao"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -230,9 +223,6 @@ class TorchAoHfQuantizer(HfQuantizer):
             ]
         return
 
-    def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
-        return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.full_ao_keys)]
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if self.pre_quantized:
             return False
@@ -266,148 +256,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                     return True
 
         return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
-
-    def create_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        target_device: "torch.device",
-        **kwargs,
-    ):
-        """
-        Each nn.Linear layer that needs to be quantized is processed here.
-        First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
-        """
-        from torchao.quantization import quantize_
-
-        full_name = param_name
-        # Those are the pre quantized weights
-        if ":" in param_name:
-            param_name = param_name.rsplit(":", 1)[0]
-        module, tensor_name = get_module_from_name(model, param_name)
-
-        if self.pre_quantized:
-            # If it's a bias, no need to do anything special (except removing the ":_data" part of the key, but was
-            # already done) - if it's unsafe-serialized (i.e. not safetensors), not need for anything either
-            is_unsafe_serialization = ":" not in full_name
-            if tensor_name == "bias" or is_unsafe_serialization:
-                module._parameters[tensor_name] = torch.nn.Parameter(
-                    param_value.to(target_device), requires_grad=param_value.requires_grad
-                )
-                return
-            # Sanity check for the new serialization format
-            elif not (TORCHAO_VERSION >= version.parse("0.15.0") and is_metadata_torchao(self.metadata)):
-                raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.15.0` installed")
-
-            # Save the states for later quantization when they are all gathered
-            if not hasattr(self, "ao_params"):
-                self.ao_params = defaultdict(dict)
-            self.ao_params[param_name].update({full_name: param_value})
-
-            # We are ready for quantization in this case (we retrieved all the needed keys)
-            if len(self.ao_params[param_name]) == len(self.weight_ao_keys):
-                new_param = unflatten_tensor_state_dict(self.ao_params[param_name], self.metadata)[param_name]
-                # Set it
-                module._parameters[tensor_name] = torch.nn.Parameter(
-                    new_param.to(target_device), requires_grad=new_param.requires_grad
-                )
-
-                # Free memory
-                del self.ao_params[param_name]
-
-            # Add repr to the module
-            if isinstance(module, nn.Linear):
-                module.extra_repr = types.MethodType(_linear_extra_repr, module)
-        else:
-            module._parameters[tensor_name] = torch.nn.Parameter(
-                param_value, requires_grad=param_value.requires_grad
-            ).to(target_device)
-            # if we are quantizing tied parameters, to avoid tying the quantized weights
-            # the correct order to do it is
-            # 1. load the weight to model
-            # 2. run tie_weights to populate the weights
-            # 3. quantize
-            input_embed = model.get_input_embeddings()
-            if self.quantization_config.untie_embedding_weights and id(module) == id(input_embed):
-                model.tie_weights()
-                setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
-
-            # handle FqnToConfig, introduced in torchao 0.15.0+
-            if self.quantization_config._get_ao_version() >= version.Version("0.15.0"):
-                from torchao.quantization import FqnToConfig
-
-                config = self.quantization_config.get_apply_tensor_subclass()
-                if isinstance(config, FqnToConfig):
-                    module_fqn, top_level_param_name = param_name.rsplit(".", 1)
-                    c = None
-                    if param_name in config.fqn_to_config:
-                        assert not module_fqn.startswith("re:"), (
-                            "param fqn should not start with`re:`, which is used for specifying regex"
-                        )
-                        c = config.module_fqn_to_config[param_name]
-                    elif module_fqn in config.fqn_to_config:
-                        assert not module_fqn.startswith("re:"), (
-                            "module fqn should not start with`re:`, which is used for specifying regex"
-                        )
-                        c = config.module_fqn_to_config[module_fqn]
-                    # regex match module and param
-                    else:
-                        for maybe_module_fqn_pattern in config.fqn_to_config:
-                            # if key doesn't start with re, it is an exact fqn key, so we don't regex match
-                            if not maybe_module_fqn_pattern.startswith("re:"):
-                                continue
-                            # see if param matches first
-                            elif re.fullmatch(maybe_module_fqn_pattern[3:], param_name):
-                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
-                                break
-                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
-                                # we'll apply the config for first fully matched pattern
-                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
-                                break
-                        else:
-                            c = config.module_fqn_to_config.get("_default", None)
-
-                    if c is not None:
-                        if top_level_param_name == "weight":
-                            # we can apply the module config directly
-                            quantize_(module, c, (lambda x, fqn: True))
-                        else:
-                            # need to apply to custom param name
-                            custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
-                            quantize_(module, custom_param_fqn_config, filter_fn=None)
-                    return
-
-            # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
-            # TODO deprecate this when we deprecate ModuleFqnToConfig
-            elif self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
-                from torchao.quantization import ModuleFqnToConfig
-
-                config = self.quantization_config.get_apply_tensor_subclass()
-                if isinstance(config, ModuleFqnToConfig):
-                    module_fqn, _ = param_name.rsplit(".", 1)
-                    c = None
-                    if module_fqn in config.module_fqn_to_config:
-                        assert not module_fqn.startswith("re:"), (
-                            "module fqn should not start with`re:`, which is used for specifying regex"
-                        )
-                        c = config.module_fqn_to_config[module_fqn]
-                    else:
-                        for maybe_module_fqn_pattern in config.module_fqn_to_config:
-                            if not maybe_module_fqn_pattern.startswith("re:"):
-                                continue
-                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
-                                # we'll apply the config for first fully matched pattern
-                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
-                                break
-                        else:
-                            c = config.module_fqn_to_config.get("_default", None)
-                    if c is not None:
-                        # filter_fn: not filtering out any modules
-                        quantize_(module, c, filter_fn=lambda x, fqn: True)
-                    return
-
-            quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
     def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
         """
@@ -451,18 +299,13 @@ class TorchAoHfQuantizer(HfQuantizer):
                 )
             return _is_torchao_serializable
 
-        _is_torchao_serializable = version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(
-            "0.25.0"
-        )
-        if not _is_torchao_serializable:
-            logger.warning("torchao quantized model is only serializable after huggingface_hub >= 0.25.0 ")
         if self.offload and self.quantization_config.modules_to_not_convert is None:
             logger.warning(
                 "The model contains offloaded modules and these modules are not quantized. We don't recommend saving the model as we won't be able to reload them."
                 "If you want to specify modules to not quantize, please specify modules_to_not_convert in the quantization_config."
             )
             return False
-        return _is_torchao_serializable
+        return True
 
     def get_accelerator_warm_up_factor(self):
         """
