@@ -1313,11 +1313,6 @@ class IsaacModel(PreTrainedModel):
     def norm(self) -> nn.Module:
         return self.text_model.norm
 
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func=None):
-        self.text_model._set_gradient_checkpointing(
-            enable=enable, gradient_checkpointing_func=gradient_checkpointing_func
-        )
-
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Embed text tokens, squeezing singleton dimensions."""
         # Text events are shaped as (..., 1); squeeze the singleton index dim

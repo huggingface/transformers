@@ -142,9 +142,6 @@ class IsaacVisionConfig(PreTrainedConfig):
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
-        if self._attn_implementation is None:
-            self._attn_implementation = "flash_attention_2"
-
         # Keep legacy and new attention implementation fields in sync
         existing_attn_impl = getattr(self, "attn_implementation", None)
         if existing_attn_impl is None:
