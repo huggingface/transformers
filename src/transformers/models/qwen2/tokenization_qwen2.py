@@ -63,7 +63,10 @@ class Qwen2Tokenizer(TokenizersBackend):
             self._vocab = {
                 "<|endoftext|>": 0,
             }
-        self._merges = merges if merges is not None else generate_merges(self._vocab)
+        if merges is not None:
+            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
+        else:
+            self._merges = generate_merges(self._vocab)
 
         self._tokenizer = Tokenizer(
             BPE(
