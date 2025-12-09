@@ -1791,7 +1791,6 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
-        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
     ]
 )
 
