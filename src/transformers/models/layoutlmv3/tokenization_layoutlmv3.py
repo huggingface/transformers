@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization class for LayoutLMv3. Same as LayoutLMv2, but RoBERTa-like BPE tokenization instead of WordPiece."""
 
-import json
 from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, processors
