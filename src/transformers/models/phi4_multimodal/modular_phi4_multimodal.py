@@ -37,7 +37,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.generic import TransformersKwargs, check_model_inputs, maybe_autocast
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
@@ -844,7 +844,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
         # Temporarily disable autocast to avoid issue on bf16 tensors
         # Ref: https://github.com/pytorch/pytorch/issues/132715
-        with torch.autocast(device_type=inputs_embeds.device.type, enabled=False):
+        with maybe_autocast(device_type=inputs_embeds.device.type, enabled=False):
             image_embeds = inputs_embeds.index_put(
                 indices=positions_tuple, values=merged_img_set_tensor, accumulate=False
             )
@@ -1358,7 +1358,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         merged_audio_embeds = merged_audio_embeds.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         # Temporarily disable autocast to avoid issue on bf16 tensors
         # Ref: https://github.com/pytorch/pytorch/issues/132715
-        with torch.autocast(device_type=inputs_embeds.device.type, enabled=False):
+        with maybe_autocast(device_type=inputs_embeds.device.type, enabled=False):
             audio_embeds = inputs_embeds.index_put(
                 indices=positions_tuple, values=merged_audio_embeds, accumulate=False
             )

@@ -26,7 +26,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from transformers.utils.generic import check_model_inputs
+from transformers.utils.generic import check_model_inputs, maybe_autocast
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -123,7 +123,7 @@ class Phi3RotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
