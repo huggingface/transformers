@@ -17,6 +17,86 @@ from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VibeVoiceSemanticTokenizerModel`]. It is used to
+    instantiate a VibeVoice semantic tokenizer model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    semantic tokenizer of [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B).
+
+    Args:
+        channels (`int`, *optional*, defaults to 1):
+            Number of input channels.
+        hidden_size (`int`, *optional*, defaults to 128):
+            Dimensionality of latent representations.
+        kernel_size (`int`, *optional*, defaults to 7):
+            Kernel size for convolutional layers.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            Epsilon value for RMSNorm layers.
+        bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in convolution and feed-forward layers.
+        layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
+            Initial value for layer scaling.
+        weight_init_value (`float`, *optional*, defaults to 0.01):
+            Standard deviation for weight initialization.
+        n_filters (`int`, *optional*, defaults to 32):
+            Number of filters in initial convolutional layer, and doubles after each downsampling.
+        downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 2, 4, 5, 5, 8]`):
+            Downsampling ratios for each layer.
+        depths (`List[int]`, *optional*, defaults to `[3, 3, 3, 3, 3, 3, 8]`):
+            Number of ConvNeXt blocks at each stage.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            Activation function to use.
+        ffn_expansion (`int`, *optional*, defaults to 4):
+            Expansion factor for feed-forward networks.
+    Example:
+
+    ```python
+    >>> from transformers import VibeVoiceSemanticTokenizerModel, VibeVoiceSemanticTokenizerConfig
+
+    >>> # Initializing a VibeVoice Semantic Tokenizer configuration
+    >>> configuration = VibeVoiceSemanticTokenizerConfig()
+
+    >>> # Initializing a model (with random weights)
+    >>> model = VibeVoiceSemanticTokenizerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "vibevoice_semantic_tokenizer"
+
+    def __init__(
+        self,
+        channels=1,
+        hidden_size=128,
+        kernel_size=7,
+        rms_norm_eps=1e-5,
+        bias=True,
+        layer_scale_init_value=1e-6,
+        weight_init_value=1e-2,
+        n_filters=32,
+        downsampling_ratios=[2, 2, 4, 5, 5, 8],
+        depths=[3, 3, 3, 3, 3, 3, 8],
+        hidden_act="gelu",
+        ffn_expansion=4,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.channels = channels
+        self.hidden_size = hidden_size
+        self.hidden_act = hidden_act
+        self.kernel_size = kernel_size
+        self.rms_norm_eps = rms_norm_eps
+        self.bias = bias
+        self.layer_scale_init_value = layer_scale_init_value
+        self.ffn_expansion = ffn_expansion
+        self.weight_init_value = weight_init_value
+        self.n_filters = n_filters
+        self.downsampling_ratios = downsampling_ratios
+        self.depths = depths
+
+
 class VibeVoiceConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VibeVoiceForConditionalGeneration`]. It is used to instantiate an
@@ -157,6 +237,14 @@ class VibeVoiceConfig(PretrainedConfig):
         )
 
     @property
+    def weight_init_value(self) -> float:
+        return self.semantic_tokenizer_config.weight_init_value
+
+    @property
+    def layer_scale_init_value(self) -> float:
+        return self.semantic_tokenizer_config.layer_scale_init_value
+
+    @property
     def intermediate_size(self) -> int:
         return self.hidden_size * self.head_ffn_ratio
 
@@ -173,4 +261,4 @@ class VibeVoiceConfig(PretrainedConfig):
         return self.semantic_tokenizer_config.hidden_size
 
 
-__all__ = ["VibeVoiceConfig"]
+__all__ = ["VibeVoiceConfig", "VibeVoiceSemanticTokenizerConfig"]

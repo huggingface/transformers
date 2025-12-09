@@ -511,10 +511,6 @@ TODO
 
 [[autodoc]] VibeVoiceConfig
 
-## VibeVoiceDiffusionHeadConfig
-
-[[autodoc]] VibeVoiceDiffusionHeadConfig
-
 ## VibeVoiceFeatureExtractor
 
 [[autodoc]] VibeVoiceFeatureExtractor
@@ -535,7 +531,13 @@ TODO
 
 [[autodoc]] VibeVoiceModel
 
-## VibeVoiceDiffusionHead
 
-[[autodoc]] VibeVoiceDiffusionHead
+## VibeVoiceSemanticTokenizerConfig
+
+[[autodoc]] VibeVoiceSemanticTokenizerConfig
+
+
+## VibeVoiceSemanticTokenizerModel
+
+[[autodoc]] VibeVoiceSemanticTokenizerModel
 

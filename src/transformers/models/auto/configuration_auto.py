@@ -991,6 +991,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
+        ("vibevoice_semantic_tokenizer", "vibevoice"),
     ]
 )
 
