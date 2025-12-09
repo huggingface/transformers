@@ -21,6 +21,52 @@ STEP 2: Run this script to update test files
     - Preserves variable assignments, indentation, and method chaining
 
 ============================================
+KNOWN LIMITATIONS AND FUTURE IMPROVEMENTS
+============================================
+
+CURRENT APPROACH: Regex-based parsing with character-by-character bracket counting
+    - Works well for common test patterns
+    - Can be fragile with complex or unusual code structures
+    - Requires careful handling of edge cases (strings, nested brackets, etc.)
+
+ISSUES ENCOUNTERED AND FIXED:
+    1. Single-line vs multi-line tensors (convnext model)
+       - Problem: Script was formatting all tensors as multi-line
+       - Fix: Check if captured value contains newlines, preserve format from captured_info.txt
+       - See: Lines ~880-920 in update_expected_value_in_file()
+
+    2. Parameters inside torch.tensor() (dinov2_with_registers model)
+       - Problem: device=torch_device parameter was being lost
+       - Fix: Proper bracket counting to find tensor end, extract parameters after
+       - See: Lines ~790-860 for parameter extraction logic
+       - Challenge: Nested brackets on single line: [[-0.4, ...], [-1.4, ...], [0.07, ...]]
+       - Can't use simple regex - needed character-by-character parsing
+
+FUTURE IMPROVEMENTS:
+    1. Use Python AST (Abstract Syntax Tree) module
+       - More robust than regex parsing
+       - Handles complex Python syntax correctly
+       - Can properly identify expression boundaries
+       - Example: ast.parse() and ast.NodeVisitor
+
+    2. Runtime introspection during test execution
+       - Access actual Python objects at runtime
+       - Get complete type information and structure
+       - Avoid parsing source code entirely
+       - Could capture exact formatting from runtime
+
+    3. Better handling of complex patterns
+       - Class-level constants and module-level variables
+       - Imported expected values from other files
+       - Dynamically generated expected values
+       - Complex expressions with multiple assignments
+
+RECOMMENDATION: If this script becomes too complex or fragile, consider:
+    - Refactoring to use AST-based parsing
+    - Adding runtime hooks during test execution
+    - Creating a more structured test output format
+
+============================================
 KEY COMPONENTS AND THEIR RESPONSIBILITIES
 ============================================
 
@@ -285,6 +331,8 @@ def parse_captured_info(captured_info_content: str) -> List[Dict[str, Any]]:
         # The patched methods can have different argument names depending on the assertion:
         # - torch.testing.assert_close uses 'actual'
         # - unittest.TestCase.assertEqual uses 'first'
+        # - unittest.TestCase.assertListEqual uses 'list1'
+        # - unittest.TestCase.assertDictEqual uses 'd1'
         # - Some tests use 'output_text'
         # We need to match any of these patterns
         #
@@ -296,7 +344,7 @@ def parse_captured_info(captured_info_content: str) -> List[Dict[str, Any]]:
         # - A line of 80 dashes (separator before next argument)
         # - End of string (\Z)
         actual_match = re.search(
-            r'argument name: `(?:actual|first|output_text)`\s*\nargument expression: `([^`]+)`\s*\n\s*argument value:\s*\n\s*(.*?)(?=\n\s*-{80}|\Z)',
+            r'argument name: `(?:actual|first|output_text|list1|d1)`\s*\nargument expression: `([^`]+)`\s*\n\s*argument value:\s*\n\s*(.*?)(?=\n\s*-{80}|\Z)',
             block,
             re.DOTALL  # Allow . to match newlines so we can capture multi-line values
         )
@@ -305,7 +353,12 @@ def parse_captured_info(captured_info_content: str) -> List[Dict[str, Any]]:
             failure_info['actual_value'] = actual_match.group(2).strip()
 
         # Extract the EXPECTED value (what the test was expecting)
-        # Similar to actual value extraction, but looking for 'expected', 'second', or 'EXPECTED_TEXT'
+        # The patched methods have different argument names:
+        # - torch.testing.assert_close uses 'expected'
+        # - unittest.TestCase.assertEqual uses 'second'
+        # - unittest.TestCase.assertListEqual uses 'list2'
+        # - unittest.TestCase.assertDictEqual uses 'd2'
+        # - Some tests use 'EXPECTED_TEXT'
         #
         # This value is what we will use to UPDATE the test file - it contains the actual
         # output that should become the new expected value.
@@ -315,7 +368,7 @@ def parse_captured_info(captured_info_content: str) -> List[Dict[str, Any]]:
         # pasted into source code. It has RELATIVE indentation (e.g., 0 spaces for outer brackets,
         # 4 spaces for content).
         expected_match = re.search(
-            r'argument name: `(?:expected|second|EXPECTED_TEXT)`\s*\nargument expression: `([^`]+)`\s*\n\s*argument value:\s*\n\s*(.*?)(?=\n\s*={120}|\Z)',
+            r'argument name: `(?:expected|second|EXPECTED_TEXT|list2|d2)`\s*\nargument expression: `([^`]+)`\s*\n\s*argument value:\s*\n\s*(.*?)(?=\n\s*={120}|\Z)',
             block,
             re.DOTALL
         )
@@ -793,8 +846,28 @@ def update_expected_value_in_file(
         if chain_match:
             method_chain_suffix = chain_match.group(1)
 
-        # Extract parameters inside torch.tensor() like device=, dtype=, requires_grad=
-        # We need to properly count brackets to find where the tensor array ends
+        # EXTRACT PARAMETERS INSIDE torch.tensor()
+        # ==========================================
+        # Problem: Some test files have parameters inside torch.tensor() like:
+        #   torch.tensor([...], device=torch_device, dtype=torch.float32)
+        # These parameters must be preserved when updating the tensor values.
+        #
+        # Challenge: We can't use simple regex because the tensor array might contain
+        # nested brackets on a single line:
+        #   [[-0.4636, ...], [-1.4738, ...], [0.0714, ...]]
+        # A naive regex would match the first ]] instead of the last one.
+        #
+        # Solution: Properly count brackets character-by-character to find where
+        # the tensor array ends, then extract any parameters that follow.
+        #
+        # This was discovered when testing dinov2_with_registers model which has:
+        #   expected_slice = torch.tensor(
+        #       [[-0.4636, ...], [-1.4738, ...], [0.0714, ...]],
+        #       device=torch_device,
+        #   )
+        #
+        # NOTE: A more robust solution would use AST parsing or runtime introspection
+        # to avoid fragile regex-based parsing, but this works for common test patterns.
         if 'torch.tensor(' in original_text:
             tensor_start = original_text.find('torch.tensor(')
             if tensor_start >= 0:
@@ -806,11 +879,21 @@ def update_expected_value_in_file(
                 in_string = False
                 string_char = None
 
-                # Find where the tensor values end (when brackets go back to 0)
+                # ALGORITHM: Count brackets to find where tensor array ends
+                # =========================================================
+                # We parse character by character, tracking bracket depth.
+                # When bracket_count returns to 0, we've found the closing ] of the array.
+                # Example:
+                #   torch.tensor([[-0.4636, ...], [...]])
+                #                ^                      ^
+                #                bracket_count=1        bracket_count=0 (found it!)
+                #
+                # We also handle strings to avoid counting brackets inside quotes.
                 tensor_end = -1
                 for i in range(pos, len(original_text)):
                     char = original_text[i]
 
+                    # Track string state (single or double quotes)
                     if char in ('"', "'") and not in_string:
                         in_string = True
                         string_char = char
@@ -818,12 +901,13 @@ def update_expected_value_in_file(
                         in_string = False
                         string_char = None
                     elif not in_string:
+                        # Count brackets only when not inside a string
                         if char == '[':
                             bracket_count += 1
                         elif char == ']':
                             bracket_count -= 1
                             if bracket_count == 0:
-                                # Found the end of the tensor array
+                                # Found the end of the tensor array!
                                 tensor_end = i
                                 break
                         elif char == '(':
@@ -832,17 +916,31 @@ def update_expected_value_in_file(
                             paren_count -= 1
 
                 if tensor_end > 0:
-                    # Now check if there's anything between tensor_end and the closing )
-                    # Remove the method chain part first if it exists
+                    # EXTRACT PARAMETERS AFTER TENSOR ARRAY
+                    # ======================================
+                    # Now we have: torch.tensor([...ARRAY...]{HERE}, ...)
+                    #                                        ^
+                    #                                    tensor_end
+                    #
+                    # Check if there are parameters between tensor_end and closing )
+                    # Example: ], device=torch_device, dtype=torch.float32)
+                    #
+                    # We need to be careful not to include the method chain suffix
+                    # if it exists (e.g., ).to(device))
                     text_to_check = original_text[tensor_end + 1:]
                     if method_chain_suffix:
-                        # Remove method chain from the end
+                        # Remove method chain from the end to avoid confusion
+                        # E.g., ]).to(device) -> we want to stop at the first )
                         text_to_check = text_to_check[:text_to_check.rfind(')' + method_chain_suffix)]
 
-                    # Find parameters: should be comma followed by params, then closing )
+                    # Find parameters: comma followed by params, then closing )
+                    # Pattern: ], device=torch_device, dtype=torch.float)
+                    #            ^                                      ^
+                    #            comma                            closing paren
                     params_match = re.search(r'\s*,\s*(.+?)\s*\)$', text_to_check, re.DOTALL)
                     if params_match:
                         params = params_match.group(1).strip()
+                        # Only keep if it contains '=' (actual parameters, not just values)
                         if '=' in params:
                             tensor_params = ',\n' + params
 
@@ -879,6 +977,11 @@ def update_expected_value_in_file(
             indented_tensor_lines.append(content_base_indent + ' ' * relative_indent + stripped)
 
         # Check if this is a single-line tensor (no newlines in original captured value)
+        # IMPORTANT: This was added to fix the convnext model issue where single-line
+        # tensors like [0.9996, 0.1966, -0.4386] were being incorrectly formatted
+        # as multi-line. We respect the format from captured_info.txt:
+        # - If captured value has no newlines -> keep it single-line
+        # - If captured value has newlines -> format as multi-line with proper indentation
         is_single_line = '\n' not in new_value.strip()
 
         # Check if original was torch.tensor(...) or just [...]
@@ -887,14 +990,26 @@ def update_expected_value_in_file(
                 # Single-line format: torch.tensor([...], device=...).to(...)
                 formatted_value = f"{base_indent}{assignment_prefix}torch.tensor({new_value.strip()}{tensor_params}){method_chain_suffix}"
             else:
-                # Multi-line format with proper indentation
+                # MULTI-LINE FORMAT WITH PROPER INDENTATION
+                # =========================================
+                # Format the tensor with proper indentation and include parameters if present
+                # Example output:
+                #   expected_slice = torch.tensor(
+                #       [
+                #           [-0.4638, -1.4563, -0.0289],
+                #           [-1.4736, -0.8866, 0.3005],
+                #       ],
+                #       device=torch_device,
+                #   ).to(device)
                 formatted_tensor = '\n'.join(indented_tensor_lines)
                 formatted_value = f"{base_indent}{assignment_prefix}torch.tensor(\n"
                 formatted_value += formatted_tensor
                 # Add tensor_params with proper indentation if present
                 if tensor_params:
                     # tensor_params starts with ',\n' so we need to add indentation after the newline
-                    # Split on newline, indent each non-empty line, then rejoin
+                    # We need to match the original indentation style
+                    # Example tensor_params: ',\ndevice=torch_device,'
+                    # Should become: ',\n            device=torch_device,'
                     params_lines = tensor_params.split('\n')
                     indented_params = []
                     for i, line in enumerate(params_lines):
@@ -902,7 +1017,8 @@ def update_expected_value_in_file(
                             # First part is just the comma
                             indented_params.append(line)
                         elif line.strip():
-                            # Add base indentation + content indentation (match original style)
+                            # Add base indentation + content indentation
+                            # Use content_base_indent to match the tensor content indentation
                             indented_params.append(content_base_indent + line.lstrip())
                         else:
                             indented_params.append(line)
