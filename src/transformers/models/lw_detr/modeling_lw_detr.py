@@ -1616,7 +1616,7 @@ class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
 
     @check_model_inputs
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor = None, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 
