@@ -36,7 +36,7 @@ from typing import Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import create_repo, split_torch_state_dict_into_shards
+from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
@@ -85,7 +85,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .modeling_flash_attention_utils import lazy_import_flash_attention
+from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
@@ -110,7 +110,6 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_kernels_available,
-    is_offline_mode,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -1764,9 +1763,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         applicable_attn_implementation = attn_implementation
 
+        is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
+
         # If FA not installed, do not fail but use kernels instead
         requested_original_flash_attn = attn_implementation is not None and (
-            attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"
+            attn_implementation.removeprefix("paged|") == "flash_attention_2"
+            or attn_implementation.removeprefix("paged|") == "flash_attention_3"
         )
         if (
             requested_original_flash_attn
@@ -1784,10 +1786,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
+            if is_paged:
+                applicable_attn_implementation = f"paged|{applicable_attn_implementation}"
+
         if is_kernel(applicable_attn_implementation):
             try:
                 # preload flash attention here to allow compile with fullgraph
-                lazy_import_flash_attention(applicable_attn_implementation)
+                if is_paged:
+                    lazy_import_paged_flash_attention(applicable_attn_implementation)
+                else:
+                    lazy_import_flash_attention(applicable_attn_implementation)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -4038,7 +4046,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = weight_conversions  # TODO: Dynamic weight loader for adapters
+            adapter_kwargs["key_mapping"] = key_mapping
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,

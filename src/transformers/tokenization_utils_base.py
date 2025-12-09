@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
 
 import numpy as np
-from huggingface_hub import create_repo, list_repo_files
+from huggingface_hub import create_repo, is_offline_mode, list_repo_files
 from packaging import version
 
 from . import __version__
@@ -51,7 +51,6 @@ from .utils import (
     extract_commit_hash,
     is_mlx_available,
     is_numpy_array,
-    is_offline_mode,
     is_protobuf_available,
     is_tokenizers_available,
     is_torch_available,
