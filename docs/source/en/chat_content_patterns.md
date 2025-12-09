@@ -16,15 +16,15 @@ rendered properly in your Markdown viewer.
 
 # Chat content patterns
 
-Chat models expect conversations as a list of dictionaries, each with `role` and `content` keys. The `content` holds the user message that is passed to the model. Large language models accept text in `content` while multimodal models can combine text with images, videos, and audio.
+Chat models expect conversations as a list of dictionaries. Each dictionary uses `role` and `content` keys. The `content` key holds the user message passed to the model. Large language models accept text and multimodal models combine text with images, videos, and audio.
 
 Transformers uses a unified format where each modality type is specified explicitly, making it straightforward to mix and match inputs in a single message.
 
-This guide covers the `content` formatting patterns for each modality, batch inference, and multi-turn conversations.
+This guide covers `content` formatting patterns for each modality, batch inference, and multi-turn conversations.
 
 ## Text
 
-Text is the most basic content type, used in all chat models, making it the foundation for all other patterns. Using the explicit `"type": "text"` format keeps your code consistent when you later add images, videos, or audio.
+Text is the most basic content type. It's the foundation for all other patterns. Use the explicit `"type": "text"` format to keep your code consistent when you add images, videos, or audio later.
 
 Pass your message to the `"text"` key.
 
@@ -141,7 +141,7 @@ messages = [
 
 ## Multi-turn
 
-Conversations span multiple exchanges, alternating between `"user"` and `"assistant"` roles. Each turn adds a new message to the list, giving the model access to the entire conversation. This allows the model to generate more relevant responses.
+Conversations span multiple exchanges, alternating between `"user"` and `"assistant"` roles. Each turn adds a new message to the list, giving the model access to the full conversation history. This context helps the model generate more appropriate responses.
 
 ```py
 message = [
