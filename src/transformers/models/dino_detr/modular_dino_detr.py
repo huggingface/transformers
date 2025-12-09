@@ -19,10 +19,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from ..deformable_detr.modeling_deformable_detr import (
@@ -59,34 +57,27 @@ class DinoDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAt
     pass
 
 
-_CONFIG_FOR_DOC = "DinoDetrConfig"
-_CHECKPOINT_FOR_DOC = "kostaspitas/dino_detr"
-
-
 @dataclass
+@auto_docstring(
+    custom_intro="Base class for outputs of the DinoDetrEncoder. This class adds attributes specific to the encoder output."
+)
 class DinoDetrEncoderOutput(ModelOutput):
     """
-    Base class for outputs of the DinoDetrEncoder. This class adds attributes specific to the encoder output.
 
     Args:
         output (`torch.FloatTensor`):
             Final output tensor of the encoder.
-        intermediate_output (`torch.FloatTensor`, *optional*):
-            Stacked intermediate hidden states (output of each layer of the encoder).
-        intermediate_ref (`torch.FloatTensor`, *optional*):
-            Stacked intermediate reference points (reference points of each layer of the encoder).
     """
 
     output: torch.FloatTensor
-    intermediate_output: Optional[torch.FloatTensor] = None
-    intermediate_ref: Optional[torch.FloatTensor] = None
-    encoder_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="Base class for outputs of the DinoDetrDecoder. This class adds two attributes specific to the decoder output."
+)
 class DinoDetrDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the DinoDetrDecoder. This class adds two attributes specific to the decoder output.
 
     Args:
         intermediate (`List[torch.FloatTensor]`):
@@ -100,9 +91,11 @@ class DinoDetrDecoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="Base class for outputs of the DinoDetrEncoderDecoder. This class adds attributes specific to the encoder-decoder output."
+)
 class DinoDetrEncoderDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the DinoDetrEncoderDecoder. This class adds attributes specific to the encoder-decoder output.
 
     Args:
         hidden_states (`torch.FloatTensor`):
@@ -122,14 +115,14 @@ class DinoDetrEncoderDecoderOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(custom_intro="Base class for outputs of the Dino DETR encoder-decoder model.")
 class DinoDetrModelOutput(ModelOutput):
     """
-    Base class for outputs of the Dino DETR encoder-decoder model.
 
     Args:
         last_hidden_state (`torch.FloatTensor`):
             Sequence of hidden states at the output of the last layer of the decoder of the model.
-        hidden_states (`Optional[list[torch.FloatTensor]]`, *optional*):
+        hidden_states_model (`Optional[list[torch.FloatTensor]]`, *optional*):
             List of hidden states at the output of each decoder layer.
         references (`Optional[list[torch.FloatTensor]]`, *optional*):
             List of reference points at the output of each decoder layer.
@@ -156,9 +149,9 @@ class DinoDetrModelOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(custom_intro="Output class for `DinoDetrForObjectDetection`")
 class DinoDetrObjectDetectionOutput(ModelOutput):
     """
-    Output class for `DinoDetrForObjectDetection`.
 
     Args:
         last_hidden_state (`torch.FloatTensor`):
@@ -715,6 +708,7 @@ class DinoDetrDecoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring(custom_intro="DINO DETR base pretrained class.")
 class DinoDetrPreTrainedModel(PreTrainedModel):
     config_class = DinoDetrConfig
     base_model_prefix = "model"
@@ -824,8 +818,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
     Returns:
         `DinoDetrEncoderOutput`:
             - `output` (`torch.FloatTensor`): The final output of the encoder.
-            - `intermediate_output` (`Optional[torch.FloatTensor]`): Stacked intermediate hidden states.
-            - `intermediate_ref` (`Optional[torch.FloatTensor]`): Stacked intermediate reference points.
 
     """
 
@@ -910,8 +902,6 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         if self.num_encoder_layers > 0:
             reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=input_embeddings.device)
 
-        intermediate_output = []
-        intermediate_ref = []
         encoder_states = ()
 
         for layer_id, layer in enumerate(self.layers):
@@ -933,13 +923,8 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
         if self.norm is not None:
             output = self.norm(output)
 
-        intermediate_output = intermediate_ref = None
-
         return DinoDetrEncoderOutput(
             output=output,
-            intermediate_output=intermediate_output,
-            intermediate_ref=intermediate_ref,
-            encoder_states=encoder_states,
         )
 
 
@@ -1348,60 +1333,7 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         )
 
 
-DINO_DETR_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`DinoDetrConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DINO_DETR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it.
-
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DinoDetrImageProcessor.__call__`]
-            for details.
-
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
-            Not used by default. Can be used to mask object queries.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
-"""
-
-
-@add_start_docstrings(
-    """
-    The bare Dino DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
-    hidden-states without any specific head on top.
-    """,
-    DINO_DETR_START_DOCSTRING,
-)
+@auto_docstring(custom_intro="DINO DETR model class for feature extraction.")
 class DinoDetrModel(DinoDetrPreTrainedModel):
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
@@ -1478,9 +1410,8 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DinoDetrModelOutput, config_class=_CONFIG_FOR_DOC)
     @check_model_inputs()
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1589,13 +1520,7 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Dino DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
-    top, for tasks such as COCO detection.
-    """,
-    DINO_DETR_START_DOCSTRING,
-)
+@auto_docstring(custom_intro="DINO DETR model class for model_detection.")
 class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
     def __init__(self, config: DinoDetrConfig):
         super().__init__(config)
@@ -1607,9 +1532,8 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(DINO_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DinoDetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     @check_model_inputs()
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1756,7 +1680,6 @@ class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
         )
         return dict_outputs
 
-    @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
