@@ -26,6 +26,7 @@ import re
 import shutil
 import sys
 import tempfile
+import warnings
 from dataclasses import fields
 from enum import Enum
 from pathlib import Path
@@ -1455,6 +1456,10 @@ class NeptuneMissingConfiguration(Exception):
 class NeptuneCallback(TrainerCallback):
     """TrainerCallback that sends the logs to [Neptune](https://app.neptune.ai).
 
+    > [!WARNING]
+    > Neptune integration is deprecated and will be removed in a future version of Transformers. We recommend using
+    > other supported experiment tracking integrations.
+
     Args:
         api_token (`str`, *optional*): Neptune API token obtained upon registration.
             You can leave this argument out if you have saved your token to the `NEPTUNE_API_TOKEN` environment
@@ -1500,6 +1505,11 @@ class NeptuneCallback(TrainerCallback):
         log_checkpoints: str | None = None,
         **neptune_run_kwargs,
     ):
+        warnings.warn(
+            "The NeptuneCallback is deprecated and will be removed in a future version of Transformers. We recommend "
+            "using other supported experiment tracking integrations.",
+            FutureWarning,
+        )
         if not is_neptune_available():
             raise ValueError(
                 "NeptuneCallback requires the Neptune client library to be installed. "

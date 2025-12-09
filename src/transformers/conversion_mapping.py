@@ -228,7 +228,7 @@ def get_model_conversion_mapping(
     """
     weight_conversions = []
 
-    # Load models with key mapping
+    # Load models with explicit, user-provided key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
     elif any(
