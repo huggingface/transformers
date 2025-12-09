@@ -73,13 +73,19 @@ class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
     )
 
 
-JAIS2_8B_CHECKPOINT = "inceptionai/jais-2-8b"
+JAIS2_8B_CHECKPOINT = "inceptionai/Jais-2-8B-Chat"
 
 
 @require_torch
 class Jais2IntegrationTest(unittest.TestCase):
-    # Update this path to your local checkpoint
     checkpoint = JAIS2_8B_CHECKPOINT
+
+    def setUp(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        if self.tokenizer.chat_template is None:
+            self.tokenizer.chat_template = (
+                "{% for message in messages %}{{ message['role'] + ': ' + message['content'] + '\n' }}{% endfor %}"
+            )
 
     def tearDown(self):
         backend_empty_cache(torch_device)
@@ -94,10 +100,9 @@ class Jais2IntegrationTest(unittest.TestCase):
             device_map="auto",
             torch_dtype=torch.float16,
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         input_text = "The capital of France is"
-        input_ids = tokenizer.encode(input_text, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(model.device)
 
         with torch.no_grad():
             outputs = model(input_ids)
@@ -129,10 +134,9 @@ class Jais2IntegrationTest(unittest.TestCase):
             device_map="auto",
             torch_dtype=torch.bfloat16,
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         input_text = "The capital of France is"
-        input_ids = tokenizer.encode(input_text, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(model.device)
 
         with torch.no_grad():
             outputs = model(input_ids)
@@ -160,10 +164,9 @@ class Jais2IntegrationTest(unittest.TestCase):
             device_map="auto",
             torch_dtype=torch.float16,
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         prompt = "The capital of France is"
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # Greedy generation
         generated_ids = model.generate(
@@ -172,7 +175,7 @@ class Jais2IntegrationTest(unittest.TestCase):
             do_sample=False,
         )
 
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         print(f"Generated text: {generated_text}")
 
         # Check that generation produced new tokens
@@ -195,10 +198,9 @@ class Jais2IntegrationTest(unittest.TestCase):
             torch_dtype=torch.float16,
             attn_implementation="sdpa",
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         prompt = "Artificial intelligence is"
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(
             input_ids,
@@ -206,7 +208,7 @@ class Jais2IntegrationTest(unittest.TestCase):
             do_sample=False,
         )
 
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         print(f"SDPA Generated text: {generated_text}")
 
         self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
@@ -228,10 +230,9 @@ class Jais2IntegrationTest(unittest.TestCase):
             torch_dtype=torch.float16,
             attn_implementation="flash_attention_2",
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         prompt = "Machine learning models are"
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(
             input_ids,
@@ -239,7 +240,7 @@ class Jais2IntegrationTest(unittest.TestCase):
             do_sample=False,
         )
 
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         print(f"Flash Attention Generated text: {generated_text}")
 
         self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
@@ -279,9 +280,8 @@ class Jais2IntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_attention_implementations_consistency(self):
         """Test that different attention implementations produce similar outputs."""
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
         prompt = "Hello, how are you?"
-        input_ids = tokenizer.encode(prompt, return_tensors="pt")
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
 
         # Test with eager attention
         model_eager = Jais2ForCausalLM.from_pretrained(
@@ -328,10 +328,9 @@ class Jais2IntegrationTest(unittest.TestCase):
             device_map="auto",
             torch_dtype=torch.float16,
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         prompt = "The future of AI is"
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # Generate with static cache
         generated_ids = model.generate(
@@ -341,7 +340,7 @@ class Jais2IntegrationTest(unittest.TestCase):
             cache_implementation="static",
         )
 
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         print(f"Static cache generated text: {generated_text}")
 
         self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
@@ -360,10 +359,9 @@ class Jais2IntegrationTest(unittest.TestCase):
             device_map="auto",
             torch_dtype=torch.float16,
         )
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
 
         prompt = "Deep learning is"
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # First verify regular generation works
         generated_ids = model.generate(
@@ -372,7 +370,7 @@ class Jais2IntegrationTest(unittest.TestCase):
             do_sample=False,
         )
 
-        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         print(f"Export test generated text: {generated_text}")
 
         self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
