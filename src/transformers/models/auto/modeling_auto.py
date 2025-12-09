@@ -403,7 +403,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vaultgemma", "VaultGemmaModel"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
-        ("vibevoice_diffusion_head", "VibeVoiceDiffusionHead"),
         ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerModel"),
         ("video_llama_3", "VideoLlama3Model"),
         ("video_llama_3_vision", "VideoLlama3VisionModel"),

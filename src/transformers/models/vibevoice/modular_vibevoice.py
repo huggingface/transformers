@@ -23,12 +23,11 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
-from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceDiffusionHeadConfig
+from .configuration_vibevoice import VibeVoiceConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
 
 
@@ -147,44 +146,18 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
         return hidden_states
 
 
-@auto_docstring
-class VibeVoicePreTrainedModel(PreTrainedModel):
-    config: VibeVoiceConfig
-    base_model_prefix = "model"
-    input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
-
-
-@auto_docstring(
-    custom_intro="""
-    Diffusion head for VibeVoice model, for predicting acoustic tokens.
-    """
-)
-class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
-    config: VibeVoiceDiffusionHeadConfig
-    main_input_name = ["noisy_images", "timesteps", "condition"]
-
+class VibeVoiceDiffusionHead(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
-
-        self.noisy_images_proj = nn.Linear(config.latent_size, config.hidden_size, bias=False)
+        super().__init__()
+        self.noisy_images_proj = nn.Linear(config.acoustic_hidden_size, config.hidden_size, bias=False)
         self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.timestep_embedder = VibeVoiceDiffusionHeadTimestepEmbedder(config)
         self.layers = nn.ModuleList(
             [VibeVoiceDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
         )
-        self.final_layer = VibeVoiceDiffusionHeadFinalLayer(config, output_size=config.latent_size)
+        self.final_layer = VibeVoiceDiffusionHeadFinalLayer(config, output_size=config.acoustic_hidden_size)
 
-        self.post_init()
-
-    def forward(self, noisy_images, timesteps, condition, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, noisy_images, timesteps, condition):
         """
         Forward pass of the prediction head.
 
@@ -200,7 +173,6 @@ class VibeVoiceDiffusionHead(VibeVoicePreTrainedModel):
         embedded_timesteps = self.timestep_embedder(timesteps)
         condition = self.cond_proj(condition)
         condition = condition + embedded_timesteps
-
         for layer in self.layers:
             hidden_states = layer(hidden_states, condition)
 
@@ -222,6 +194,21 @@ class VibeVoiceMultiModelProjector(nn.Module):
         return x
 
 
+@auto_docstring
+class VibeVoicePreTrainedModel(PreTrainedModel):
+    config: VibeVoiceConfig
+    base_model_prefix = "model"
+    input_modalities = ("audio", "text")
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
+
+
 @auto_docstring(
     custom_intro="""
     The VibeVoice model which consists of audio tokenizers and an LLM backbone, without a language modeling head.
@@ -239,7 +226,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self.semantic_connector = VibeVoiceMultiModelProjector(
             config.semantic_hidden_size, config.text_config.hidden_size
         )
-        self.diffusion_head = AutoModel.from_config(config.diffusion_head_config)
+        self.diffusion_head = VibeVoiceDiffusionHead(config)
         self.post_init()
 
     def get_input_embeddings(self):

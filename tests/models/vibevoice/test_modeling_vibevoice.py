@@ -83,6 +83,7 @@ class VibeVoiceModelTester:
         seq_length=3,
         is_training=True,
         use_cache=True,
+        num_head_layers=2,
         text_config={
             "model_type": "qwen2",
             "intermediate_size": 36,
@@ -116,12 +117,6 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        diffusion_head_config={
-            "model_type": "vibevoice_diffusion_head",
-            "hidden_size": 32,
-            "num_head_layers": 2,
-            "latent_size": 16,  # should match acoustic_tokenizer_config["hidden_size"]
-        },
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -131,7 +126,7 @@ class VibeVoiceModelTester:
         self.text_config = text_config
         self.acoustic_tokenizer_config = acoustic_tokenizer_config
         self.semantic_tokenizer_config = semantic_tokenizer_config
-        self.diffusion_head_config = diffusion_head_config
+        self.num_head_layers = num_head_layers
 
         # Extract common attributes for testing
         self.vocab_size = text_config["vocab_size"]
@@ -145,7 +140,7 @@ class VibeVoiceModelTester:
             text_config=self.text_config,
             acoustic_tokenizer_config=self.acoustic_tokenizer_config,
             semantic_tokenizer_config=self.semantic_tokenizer_config,
-            diffusion_head_config=self.diffusion_head_config,
+            num_head_layers=self.num_head_layers,
             use_cache=self.use_cache,
             pad_token_id=self.text_config["pad_token_id"],
             eos_token_id=self.text_config["eos_token_id"],

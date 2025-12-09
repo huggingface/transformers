@@ -253,6 +253,12 @@ def convert_checkpoint(
         del model_config["diffusion_head_config"]["diffusion_type"]
     if "ddpm_batch_mul" in model_config["diffusion_head_config"]:
         del model_config["diffusion_head_config"]["ddpm_batch_mul"]
+    if "latent_size" in model_config["diffusion_head_config"]:
+        # should be same as acoustic tokenizer hidden size
+        del model_config["diffusion_head_config"]["latent_size"]
+    if "hidden_size" in model_config["diffusion_head_config"]:
+        # should be same as text model hidden size
+        del model_config["diffusion_head_config"]["hidden_size"]
 
     # clean up language model config
     model_config["text_config"] = model_config.pop("decoder_config")
@@ -384,6 +390,11 @@ def convert_checkpoint(
     print("\n=== Creating full model ===")
     model_config["acoustic_tokenizer_config"] = acoustic_config.to_dict()
     model_config["semantic_tokenizer_config"] = semantic_config.to_dict()
+    # -- flatten diffusion head config
+    for k, v in model_config["diffusion_head_config"].items():
+        model_config[k] = v
+    del model_config["diffusion_head_config"]
+
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
     # -- print dtypes of key components for verification

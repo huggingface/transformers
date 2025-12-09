@@ -358,6 +358,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         monitor_progress = getattr(generation_config, "monitor_progress", None)
         cfg_scale = generation_config.cfg_scale
         n_diffusion_steps = generation_config.n_diffusion_steps
+        diffusion_head_device = next(self.diffusion_head.parameters()).device
 
         # State tracking
         acoustic_cache = None
@@ -644,7 +645,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 negative_condition = negative_outputs.last_hidden_state[diffusion_indices, -1, :]
 
                 noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
-                condition = torch.cat([positive_condition, negative_condition], dim=0).to(self.diffusion_head.device)
+                condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
 
                 # # TODO (ebezzam) something like below to use `do_sample`? only problem is original would differ and would break integration tests
