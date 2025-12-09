@@ -432,7 +432,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
     ) -> MoeModelOutputWithPast:
         r"""
         mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -739,6 +739,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        mm_token_type_ids: Optional[torch.IntTensor] = None,
     ):
         """
         Calculating the 3D position ids with a custom mechanism / caching
@@ -768,6 +769,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 image_grid_thw,
                 video_grid_thw,
                 attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
         # then use the prev pre-calculated rope-deltas to get the correct position ids
@@ -789,6 +791,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        mm_token_type_ids: Optional[torch.IntTensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
@@ -836,6 +839,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
 
         Returns:
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
@@ -864,23 +869,27 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
             image_index, video_index = 0, 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
-                input_ids = input_ids[attention_mask[i] == 1]
-                input_tokens = input_ids.tolist()
+                # Use `mm_token_type_ids` if available to avoid looping over all inputs
+                if mm_token_type_ids is not None:
+                    input_token_type = mm_token_type_ids[i, attention_mask[i] == 1].tolist()
+                else:
+                    input_ids = input_ids[attention_mask[i] == 1]
+                    input_tokens = input_ids.tolist()
 
-                input_token_type = []
-                video_check_flg = False
-                for token in input_tokens:
-                    if token == video_start_token_id:
-                        video_check_flg = True
-                    elif token == video_end_token_id:
-                        video_check_flg = False
+                    input_token_type = []
+                    video_check_flg = False
+                    for token in input_tokens:
+                        if token == video_start_token_id:
+                            video_check_flg = True
+                        elif token == video_end_token_id:
+                            video_check_flg = False
 
-                    if token == image_token_id and not video_check_flg:
-                        input_token_type.append("image")
-                    elif token == video_token_id and video_check_flg:
-                        input_token_type.append("video")
-                    else:
-                        input_token_type.append("text")
+                        if token == image_token_id and not video_check_flg:
+                            input_token_type.append(1)  # image
+                        elif token == video_token_id and video_check_flg:
+                            input_token_type.append(2)  # video
+                        else:
+                            input_token_type.append(0)  # text
 
                 input_type_group = []
                 for key, group in itertools.groupby(enumerate(input_token_type), lambda x: x[1]):
@@ -893,14 +902,16 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 for modality_type, start_idx, end_idx in input_type_group:
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
 
-                    if modality_type == "text":
+                    # text == 0
+                    if modality_type == 0:
                         text_len = end_idx - start_idx
                         llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
+                    # image == 1, video == 2
                     else:
-                        grid_thw = image_grid_thw if modality_type == "image" else video_grid_thw
-                        mm_index = image_index if modality_type == "image" else video_index
-                        t_merge_size = 1 if modality_type == "image" else temporal_merge_size
+                        grid_thw = image_grid_thw if modality_type == 1 else video_grid_thw
+                        mm_index = image_index if modality_type == 1 else video_index
+                        t_merge_size = 1 if modality_type == 1 else temporal_merge_size
 
                         t, h, w = (
                             grid_thw[mm_index][0],
@@ -919,7 +930,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                             w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
                             llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
-                        if modality_type == "image":
+                        if modality_type == 1:
                             image_index += 1
                         else:
                             video_index += 1
@@ -949,6 +960,36 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 )
 
             return position_ids, mrope_position_deltas
+
+    def get_moe_mm_token_type_ids(self, original_mm_token_type_ids: Optional[torch.IntTensor]):
+        r"""
+        Turns left and right neighbours of a value other than 0 to its value. Since start/end tokens are always used together,
+        there will never be an ambiguous value, i.e. we always have at least `00` between each modality. This is needed as the vision
+        experts considers these tokens (start/end token which are mandatory) as vision tokens.
+
+        Args:
+            original_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+
+        Example:
+            Given `original_mm_token_type_ids = [01110022200000]`, it will turn into `[11111222220000]`.
+        """
+        if original_mm_token_type_ids is not None:
+            moe_mm_token_type_ids = original_mm_token_type_ids.clone()
+            left  = original_mm_token_type_ids[:, :-1]  # left shifted
+            right = original_mm_token_type_ids[:, 1:]   # right shifted
+
+            # consider the token to the left that is zero to a non-zero token to the right (left boundary)
+            mask_left_zero = (left == 0) & (right != 0)
+            # consider the token to the right that is zero to a non-zero token to the left (right boundary)
+            mask_right_zero = (left != 0) & (right == 0)
+
+            # replace those zeros with their non-zero neighbor
+            moe_mm_token_type_ids[:, :-1][mask_left_zero]      = right[mask_left_zero]
+            moe_mm_token_type_ids[:, 1:][mask_right_zero]      = left[mask_right_zero]
+
+            return moe_mm_token_type_ids
+        return original_mm_token_type_ids
 
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
@@ -1009,7 +1050,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
     ) -> Union[tuple, MoeModelOutputWithPast]:
         r"""
         mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1045,12 +1086,15 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 image_grid_thw=image_grid_thw,
                 video_grid_thw=video_grid_thw,
                 cache_position=cache_position,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
+        # Moe's vision experts consider the additional start and end tokens as vision tokens themself
+        moe_mm_token_type_ids = self.get_moe_mm_token_type_ids(original_mm_token_type_ids=mm_token_type_ids)
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
-            mm_token_type_ids=mm_token_type_ids,
+            mm_token_type_ids=moe_mm_token_type_ids,
             attention_mask=attention_mask,
             use_cache=use_cache,
             past_key_values=past_key_values,
@@ -1112,6 +1156,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
             image_grid_thw=model_inputs.get("image_grid_thw"),
             video_grid_thw=model_inputs.get("video_grid_thw"),
             cache_position=model_inputs.get("cache_position"),
+            mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
         )
 
         if model_inputs["cache_position"][0] != 0:
@@ -1145,7 +1190,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
     ) -> Union[tuple, MoeCausalLMOutputWithPast]:
         r"""
         mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
