@@ -4344,7 +4344,7 @@ def convert_all_safetensors_to_bins(folder: str):
                     new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
             index["weight_map"] = new_weight_map
             with open(new_path, "w") as f:
-                f.write(json.dumps(index))
+                f.write(json.dumps(index, indent=4))
 
 
 @contextmanager
