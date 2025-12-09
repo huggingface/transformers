@@ -39,20 +39,17 @@ logger = logging.get_logger(__name__)
 
 
 causal_conv1d = lazy_load_kernel("causal-conv1d")
-causal_conv1d_update, causal_conv1d_fn = (
-    (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn) if causal_conv1d is not None else (None, None)
-)
+causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
 
 mamba_ssm = lazy_load_kernel("mamba-ssm")
-selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined = (
-    (
-        mamba_ssm.ops.triton.selective_state_update.selective_state_update,
-        mamba_ssm.ops.triton.ssd_combined.mamba_chunk_scan_combined,
-        mamba_ssm.ops.triton.ssd_combined.mamba_split_conv1d_scan_combined,
-    )
-    if mamba_ssm is not None
-    else (None, None, None)
+mamba_ssm_triton = getattr(getattr(mamba_ssm, "ops", None), "triton", None)
+selective_state_update = getattr(
+    getattr(mamba_ssm_triton, "selective_state_update", None), "selective_state_update", None
 )
+ssd_combined = getattr(mamba_ssm_triton, "ssd_combined", None)
+mamba_chunk_scan_combined = getattr(ssd_combined, "mamba_chunk_scan_combined", None)
+mamba_split_conv1d_scan_combined = getattr(ssd_combined, "mamba_split_conv1d_scan_combined", None)
 
 is_fast_path_available = all(
     (
