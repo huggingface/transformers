@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_lw_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+import collections.abc
 import math
 import warnings
 from collections.abc import Callable
@@ -18,17 +19,14 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_timm_available, requires_backends
-from ...utils.backbone_utils import load_backbone
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
-from .configuration_lw_detr import LwDetrConfig
-
-
-if is_timm_available():
-    from timm import create_model
+from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
 
 @dataclass
@@ -322,133 +320,15 @@ class LwDetrMultiScaleProjector(nn.Module):
         return output_hidden_states
 
 
-class LwDetrFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `LwDetrFrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = LwDetrFrozenBatchNorm2d(module.num_features)
-
-            if module.weight.device != torch.device("meta"):
-                new_module.weight.copy_(module.weight)
-                new_module.bias.copy_(module.bias)
-                new_module.running_mean.copy_(module.running_mean)
-                new_module.running_var.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
 class LwDetrConvEncoder(nn.Module):
-    """
-    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
-
-    nn.BatchNorm2d layers are replaced by LwDetrFrozenBatchNorm2d as defined above.
-
-    """
-
-    def __init__(self, config):
+    def __init__(self, config: LwDetrConfig):
         super().__init__()
-
-        self.config = config
-
-        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
-        if config.use_timm_backbone:
-            # We default to values which were previously hard-coded. This enables configurability from the config
-            # using backbone arguments, while keeping the default behavior the same.
-            requires_backends(self, ["timm"])
-            kwargs = getattr(config, "backbone_kwargs", {})
-            kwargs = {} if kwargs is None else kwargs.copy()
-            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
-            num_channels = kwargs.pop("in_chans", config.num_channels)
-            if config.dilation:
-                kwargs["output_stride"] = kwargs.get("output_stride", 16)
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=out_indices,
-                in_chans=num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
-
-        # replace batch norm by frozen batch norm
-        with torch.no_grad():
-            replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
-
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
-        if "resnet" in backbone_model_type:
-            for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
-        self.projector = LwDetrMultiScaleProjector(config, self.intermediate_channel_sizes)
+        self.backbone = LwDetrViTBackbone(config.backbone_config)
+        self.projector = LwDetrMultiScaleProjector(config, self.backbone.channels)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
+        features = self.backbone(pixel_values).feature_maps
         features = self.projector(features)
         out = []
         for feature_map in features:
@@ -1432,4 +1312,384 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         )
 
 
-__all__ = ["LwDetrPreTrainedModel", "LwDetrModel", "LwDetrForObjectDetection"]
+class LwDetrViTSelfAttention(nn.Module):
+    def __init__(self, config: LwDetrViTConfig):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
+
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        self.num_key_value_groups = 1
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            None,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
+        )
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        return context_layer, attention_probs
+
+
+class LwDetrViTAttention(nn.Module):
+    def __init__(self, config: LwDetrViTConfig):
+        """
+        Args:
+            config (`LwDetrViTConfig`):
+                Model configuration.
+        """
+        super().__init__()
+        self.attention = LwDetrViTSelfAttention(config)
+        self.output = nn.Linear(config.hidden_size, config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
+        output = self.output(self_attn_output)
+        return output
+
+
+class LwDetrViTMlp(nn.Module):
+    def __init__(self, config, in_features: int, hidden_features: int) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(hidden_features, in_features)
+        self.drop = nn.Dropout(config.dropout_prob)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
+
+        return x
+
+
+class LwDetrViTLayer(GradientCheckpointingLayer):
+    def __init__(
+        self,
+        config: LwDetrViTConfig,
+        layer_idx,
+    ) -> None:
+        super().__init__()
+
+        dim = config.hidden_size
+        self.attention = LwDetrViTAttention(config)
+        self.intermediate = LwDetrViTMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+        self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+
+        self.window = layer_idx in config.window_block_indices
+        self.num_windows = config.num_windows
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        batch_size, seq_len, channels = hidden_states.shape
+        hidden_states_norm = self.layernorm_before(hidden_states)
+
+        if not self.window:
+            hidden_states_norm = hidden_states_norm.reshape(
+                batch_size // self.num_windows, self.num_windows * seq_len, channels
+            )
+
+        attention_output = self.attention(hidden_states_norm, **kwargs)
+        attention_output = attention_output * self.gamma_1
+
+        if not self.window:
+            attention_output = attention_output.reshape(batch_size, seq_len, channels)
+
+        hidden_states = hidden_states + attention_output
+
+        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.intermediate(layer_output)
+        layer_output = layer_output * self.gamma_2
+
+        hidden_states = hidden_states + layer_output
+
+        return hidden_states
+
+
+class LwDetrViTEncoder(nn.Module):
+    def __init__(self, config: LwDetrViTConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([LwDetrViTLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        list_hidden_states = [hidden_states]
+        for i, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(hidden_states, **kwargs)
+            list_hidden_states.append(hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=tuple(list_hidden_states))
+
+
+class LwDetrViTEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) to be consumed by a Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.pretrain_image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        if config.use_absolute_position_embeddings:
+            # Initialize absolute positional embedding with pretrain image size.
+            num_positions = num_patches + 1
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
+        else:
+            self.position_embeddings = None
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def get_absolute_positions(self, abs_pos_embeddings, has_cls_token, height, width):
+        """
+        Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token dimension for the
+        original embeddings.
+
+        Args:
+            abs_pos_embeddings (`torch.Tensor`):
+                Absolute positional embeddings with (1, num_position, num_channels).
+            has_cls_token (`bool`):
+                If true, has 1 embedding in abs_pos_embeddings for cls token.
+            height (`int`):
+                Height of input image tokens.
+            width (`int`):
+                Width of input image tokens.
+
+        Returns:
+            Absolute positional embeddings after processing with shape (1, height, width, num_channels)
+        """
+        if has_cls_token:
+            abs_pos_embeddings = abs_pos_embeddings[:, 1:]
+        num_position = abs_pos_embeddings.shape[1]
+        size = int(math.sqrt(num_position))  # This is a constant and can be recorded as such in the ONNX export.
+        if size * size != num_position:
+            raise ValueError("Absolute position embeddings must be a square number.")
+
+        if torch.jit.is_tracing() or (size != height or size != width):
+            # nn.functional.interpolate is a noop in case size == height and size == width - we need to always capture this path with jit.trace.
+            new_abs_pos_embeddings = nn.functional.interpolate(
+                abs_pos_embeddings.reshape(1, size, size, -1).permute(0, 3, 1, 2),
+                size=(height, width),
+                mode="bicubic",
+                align_corners=False,
+            )
+
+            return new_abs_pos_embeddings.permute(0, 2, 3, 1)
+        else:
+            return abs_pos_embeddings.reshape(1, height, width, -1)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
+            )
+        embeddings = self.projection(pixel_values)
+
+        if self.position_embeddings is not None:
+            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+            embeddings = embeddings.permute(0, 2, 3, 1)
+            # add position embeddings
+            embeddings = embeddings + self.get_absolute_positions(
+                self.position_embeddings, True, embeddings.shape[1], embeddings.shape[2]
+            )
+            # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
+            embeddings = embeddings.permute(0, 3, 1, 2)
+
+        return embeddings
+
+
+@auto_docstring
+class LwDetrViTPreTrainedModel(PreTrainedModel):
+    config: LwDetrViTConfig
+    base_model_prefix = "lw_detr_vit"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": ["LwDetrViTLayer", "LwDetrViTEncoder"],
+        "attentions": LwDetrViTSelfAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module) -> None:
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, LwDetrViTEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, LwDetrViTLayer):
+            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
+            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+
+
+@auto_docstring()
+class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.embeddings = LwDetrViTEmbeddings(config)
+        self.encoder = LwDetrViTEncoder(config)
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> LwDetrViTEmbeddings:
+        return self.embeddings.projection
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(self, pixel_values: torch.Tensor = None, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import LwDetrViTConfig, LwDetrViTBackbone
+        >>> import torch
+
+        >>> config = LwDetrViTConfig()
+        >>> model = LwDetrViTBackbone(config)
+
+        >>> pixel_values = torch.randn(1, 3, 224, 224)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(pixel_values)
+
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 14, 14]
+        ```"""
+        embedding_output = self.embeddings(pixel_values)
+
+        batch_size, channels, height, width = embedding_output.shape
+        # (batch_size, channels, height, width) -> (batch_size, height, width, channels)
+        hidden_states = embedding_output.permute(0, 2, 3, 1)
+
+        window_height = height // self.config.num_windows_side
+        window_width = width // self.config.num_windows_side
+        # (batch_size, height, width, channels) -> (batch_size*16, window_height*window_width, channels)
+        hidden_states = (
+            hidden_states.reshape(
+                batch_size,
+                self.config.num_windows_side,
+                window_height,
+                self.config.num_windows_side,
+                window_width,
+                channels,
+            )
+            .permute(0, 1, 3, 2, 4, 5)
+            .reshape(batch_size * 16, window_height * window_width, channels)
+        )
+
+        encoder_outputs = self.encoder(hidden_states, **kwargs)
+        hidden_states = encoder_outputs.hidden_states
+
+        feature_maps = ()
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                hidden_state = (
+                    hidden_state.reshape(
+                        batch_size,
+                        self.config.num_windows_side,
+                        self.config.num_windows_side,
+                        window_height,
+                        window_width,
+                        channels,
+                    )
+                    .permute(0, 5, 1, 3, 2, 4)
+                    .reshape(batch_size, channels, height, width)
+                )
+                feature_maps += (hidden_state,)
+
+        output_hidden_states = self.config.output_hidden_states or kwargs.get("output_hidden_states", False)
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+__all__ = [
+    "LwDetrPreTrainedModel",
+    "LwDetrModel",
+    "LwDetrForObjectDetection",
+    "LwDetrViTPreTrainedModel",
+    "LwDetrViTBackbone",
+]

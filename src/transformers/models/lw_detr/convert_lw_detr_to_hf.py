@@ -147,15 +147,15 @@ MODEL_CONFIGS = {
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # backbone encoder
-    r"backbone.0.encoder.pos_embed":                            r"backbone.model.embeddings.position_embeddings",
-    r"backbone.0.encoder.patch_embed.proj":                     r"backbone.model.embeddings.projection",
-    r"backbone.0.encoder.blocks.(\d+).gamma_1":                 r"backbone.model.encoder.layer.\1.gamma_1",
-    r"backbone.0.encoder.blocks.(\d+).gamma_2":                 r"backbone.model.encoder.layer.\1.gamma_2",
-    r"backbone.0.encoder.blocks.(\d+).norm1.(weight|bias)":     r"backbone.model.encoder.layer.\1.layernorm_before.\2",
-    r"backbone.0.encoder.blocks.(\d+).attn.proj.(weight|bias)": r"backbone.model.encoder.layer.\1.attention.output.\2",
-    r"backbone.0.encoder.blocks.(\d+).norm2.(weight|bias)":     r"backbone.model.encoder.layer.\1.layernorm_after.\2",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc1.(weight|bias)":   r"backbone.model.encoder.layer.\1.intermediate.fc1.\2",
-    r"backbone.0.encoder.blocks.(\d+).mlp.fc2.(weight|bias)":   r"backbone.model.encoder.layer.\1.intermediate.fc2.\2",
+    r"backbone.0.encoder.pos_embed":                            r"backbone.backbone.embeddings.position_embeddings",
+    r"backbone.0.encoder.patch_embed.proj":                     r"backbone.backbone.embeddings.projection",
+    r"backbone.0.encoder.blocks.(\d+).gamma_1":                 r"backbone.backbone.encoder.layer.\1.gamma_1",
+    r"backbone.0.encoder.blocks.(\d+).gamma_2":                 r"backbone.backbone.encoder.layer.\1.gamma_2",
+    r"backbone.0.encoder.blocks.(\d+).norm1.(weight|bias)":     r"backbone.backbone.encoder.layer.\1.layernorm_before.\2",
+    r"backbone.0.encoder.blocks.(\d+).attn.proj.(weight|bias)": r"backbone.backbone.encoder.layer.\1.attention.output.\2",
+    r"backbone.0.encoder.blocks.(\d+).norm2.(weight|bias)":     r"backbone.backbone.encoder.layer.\1.layernorm_after.\2",
+    r"backbone.0.encoder.blocks.(\d+).mlp.fc1.(weight|bias)":   r"backbone.backbone.encoder.layer.\1.intermediate.fc1.\2",
+    r"backbone.0.encoder.blocks.(\d+).mlp.fc2.(weight|bias)":   r"backbone.backbone.encoder.layer.\1.intermediate.fc2.\2",
 
     # backbone projector scaling layers, sampling layers are dealt with seperately depending on the config
     r"backbone.0.projector.stages.(\d+).0.cv1.conv.(weight|bias)":                                                      r"backbone.projector.scale_layers.\1.projector_layer.conv1.conv.\2",
@@ -226,11 +226,11 @@ def backbone_read_in_q_k_v(state_dict, config):
         ])
 
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
     return state_dict
 
 def read_in_q_k_v(state_dict, config):

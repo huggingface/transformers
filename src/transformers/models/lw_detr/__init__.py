@@ -19,9 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_lw_detr import *
-    from .configuration_lw_detr_vit import *
     from .modeling_lw_detr import *
-    from .modeling_lw_detr_vit import *
 else:
     import sys
 
