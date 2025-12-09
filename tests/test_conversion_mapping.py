@@ -13,7 +13,7 @@
 # limitations under the License.
 import unittest
 
-from transformers.conversion_mapping import register_checkpoint_conversion_mapping, get_checkpoint_conversion_mapping
+from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from transformers.core_model_loading import WeightRenaming
 
 
