@@ -287,3 +287,123 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 3 * image_processing.encoder_patch_size**2,
             ),
         )
+
+    def test_small_image_no_tiling_no_thumbnail(self):
+        """Small image with tiling disabled should use smart resize, no thumbnail."""
+        image_processing = self.fast_image_processing_class(
+            do_image_splitting=False,
+            use_thumbnail=True,  # even if enabled, should not be used for small/non-tiled images
+        )
+        # Create a small image (256x256)
+        small_image = Image.new("RGB", (256, 256), color="red")
+        result = image_processing([[small_image]], return_tensors="pt", return_row_col_info=True)
+
+        # With tiling disabled, should be 1 tile (no thumbnail)
+        self.assertEqual(result.image_rows[0].item(), 1)
+        self.assertEqual(result.image_cols[0].item(), 1)
+        # Should have exactly 1 image in batch (no thumbnail)
+        self.assertEqual(result.pixel_values.shape[0], 1)
+
+    def test_small_image_tiling_enabled_no_thumbnail(self):
+        """Small image with tiling enabled should not be tiled (too small), no thumbnail."""
+        image_processing = self.fast_image_processing_class(
+            do_image_splitting=True,
+            use_thumbnail=True,
+            min_tiles=2,
+            max_tiles=10,
+        )
+        # Create a small image that won't exceed the max_image_tokens threshold
+        small_image = Image.new("RGB", (256, 256), color="blue")
+        result = image_processing([[small_image]], return_tensors="pt", return_row_col_info=True)
+
+        # Small image should not be tiled (1x1 grid), no thumbnail added
+        self.assertEqual(result.image_rows[0].item(), 1)
+        self.assertEqual(result.image_cols[0].item(), 1)
+        # Should have exactly 1 image in batch (no thumbnail)
+        self.assertEqual(result.pixel_values.shape[0], 1)
+
+    def test_large_image_no_tiling_smart_resize(self):
+        """Large image with tiling disabled should use smart resize, no thumbnail."""
+        image_processing = self.fast_image_processing_class(
+            do_image_splitting=False,
+            use_thumbnail=True,  # even if enabled, should not be used
+        )
+        # Create a large image (2048x2048)
+        large_image = Image.new("RGB", (2048, 2048), color="green")
+        result = image_processing([[large_image]], return_tensors="pt", return_row_col_info=True)
+
+        # With tiling disabled, should be 1 tile even for large images
+        self.assertEqual(result.image_rows[0].item(), 1)
+        self.assertEqual(result.image_cols[0].item(), 1)
+        # Should have exactly 1 image in batch (no thumbnail, smart resize only)
+        self.assertEqual(result.pixel_values.shape[0], 1)
+
+    def test_large_image_tiling_enabled_thumbnail_disabled(self):
+        """Large image with tiling enabled but thumbnail disabled should tile without thumbnail."""
+        image_processing = self.fast_image_processing_class(
+            do_image_splitting=True,
+            use_thumbnail=False,
+            min_tiles=2,
+            max_tiles=10,
+            tile_size=512,
+        )
+        # Create a large image that will require tiling
+        large_image = Image.new("RGB", (2048, 2048), color="yellow")
+        result = image_processing([[large_image]], return_tensors="pt", return_row_col_info=True)
+
+        # Large image should be tiled into multiple tiles
+        num_rows = result.image_rows[0].item()
+        num_cols = result.image_cols[0].item()
+        num_tiles = num_rows * num_cols
+        self.assertGreater(num_tiles, 1, "Large image should be tiled into multiple tiles")
+
+        # Count actual patches - with thumbnail disabled, should equal number of tiles
+        num_images_in_batch = result.pixel_values.shape[0]
+        self.assertEqual(
+            num_images_in_batch, num_tiles, "Number of patches should equal number of tiles (no thumbnail)"
+        )
+
+    def test_large_image_tiling_enabled_thumbnail_enabled(self):
+        """Large image with tiling and thumbnail enabled should tile AND add thumbnail."""
+        image_processing = self.fast_image_processing_class(
+            do_image_splitting=True,
+            use_thumbnail=True,
+            min_tiles=2,
+            max_tiles=10,
+            tile_size=512,
+        )
+        # Create a large image that will require tiling
+        large_image = Image.new("RGB", (2048, 2048), color="purple")
+        result = image_processing([[large_image]], return_tensors="pt", return_row_col_info=True)
+
+        # Large image should be tiled into multiple tiles
+        num_rows = result.image_rows[0].item()
+        num_cols = result.image_cols[0].item()
+        num_tiles = num_rows * num_cols
+        self.assertGreater(num_tiles, 1, "Large image should be tiled into multiple tiles")
+
+        # With thumbnail enabled, we should have tiles + 1 thumbnail
+        num_images_in_batch = result.pixel_values.shape[0]
+        self.assertEqual(num_images_in_batch, num_tiles + 1, "Number of patches should equal tiles + 1 (thumbnail)")
+
+    def test_thumbnail_not_added_for_single_tile(self):
+        """When image results in single tile, no thumbnail should be added even if enabled."""
+        image_processing = self.fast_image_processing_class(
+            do_image_splitting=True,
+            use_thumbnail=True,
+            min_tiles=1,  # Allow single tile
+            max_tiles=10,
+            tile_size=512,
+        )
+        # Create image that results in exactly 1 tile
+        single_tile_image = Image.new("RGB", (512, 512), color="cyan")
+        result = image_processing([[single_tile_image]], return_tensors="pt", return_row_col_info=True)
+
+        # Should be single tile, no thumbnail (grid_width * grid_height == 1)
+        num_rows = result.image_rows[0].item()
+        num_cols = result.image_cols[0].item()
+        num_tiles = num_rows * num_cols
+        num_images_in_batch = result.pixel_values.shape[0]
+
+        # Even with use_thumbnail=True, single tile should not get a thumbnail
+        self.assertEqual(num_images_in_batch, num_tiles, "Single tile should not have thumbnail added")
