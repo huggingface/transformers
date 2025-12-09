@@ -289,10 +289,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Set backend to "tokenizers" if not already set
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
+        explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         self._add_bos_token = kwargs.get("add_bos_token", False)
         self._add_eos_token = kwargs.get("add_eos_token", False)
         if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
             self._tokenizer.post_processor = post_processor
+        self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
@@ -355,7 +357,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 **kwargs,
             )
 
-        if "add_bos_token" in kwargs or "add_eos_token" in kwargs:
+        self._should_update_post_processor = (
+            self._should_update_post_processor or self._tokenizer.post_processor is None
+        )
+        if self._should_update_post_processor:
             self.update_post_processor()
 
     @property
@@ -465,7 +470,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # Ensure special tokens are added as such to the backend
             self.add_tokens(tokens_to_add, special_tokens=True)
 
-        self.update_post_processor()
+        if getattr(self, "_should_update_post_processor", True) or self._tokenizer.post_processor is None:
+            self.update_post_processor()
 
     @property
     def vocab_size(self) -> int:

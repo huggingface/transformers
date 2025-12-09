@@ -22,6 +22,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 class DistilBertTokenizer(BertTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
+
     def __init__(self, *args, do_lower_case: bool = True, **kwargs):
         """
         Construct a DistilBERT tokenizer (backed by HuggingFace's tokenizers library). Based on WordPiece.
