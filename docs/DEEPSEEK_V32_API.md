@@ -1,0 +1,479 @@
+# DeepSeek V3.2 API Reference
+
+This document describes the **capabilities and API** exposed by the DeepSeek V3.2 HuggingFace implementation. Training recipes and configs are managed separately in research-infra.
+
+## Installation
+
+```bash
+pip install git+https://github.com/lyfegame/transformers.git@shuyingl/deepseek-v3.2-test
+pip install fast-hadamard-transform  # Optional but recommended for performance
+```
+
+---
+
+## Model Classes
+
+### DeepseekV32ForCausalLM
+
+Main class for causal language modeling.
+
+```python
+from transformers import DeepseekV32ForCausalLM, DeepseekV32Config
+
+model = DeepseekV32ForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+# or
+model = DeepseekV32ForCausalLM(config)
+```
+
+### Output Classes
+
+```python
+from transformers.models.deepseek_v32.modeling_deepseek_v32 import (
+    BaseModelOutputWithIndexer,      # For DeepseekV32Model
+    CausalLMOutputWithIndexer,       # For DeepseekV32ForCausalLM
+)
+```
+
+---
+
+## Configuration Options
+
+### Official Model Configuration
+
+The official DeepSeek V3.2 model uses this configuration (from HuggingFace):
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| `hidden_size` | 7168 | Model hidden dimension |
+| `num_hidden_layers` | 61 | Number of transformer layers |
+| `num_attention_heads` | 128 | Number of attention heads |
+| `num_key_value_heads` | 128 | Same as attention heads (no GQA) |
+| `index_n_heads` | 64 | Indexer attention heads |
+| `index_head_dim` | 128 | Indexer head dimension |
+| `index_topk` | 2048 | Tokens selected per query |
+| `q_lora_rank` | 1536 | Query LoRA rank |
+| `kv_lora_rank` | 512 | KV LoRA rank |
+| `qk_rope_head_dim` | 64 | RoPE head dimension |
+| `qk_nope_head_dim` | 128 | Non-RoPE head dimension |
+| `v_head_dim` | 128 | Value head dimension |
+| `n_routed_experts` | 256 | Number of routed MoE experts |
+| `n_shared_experts` | 1 | Number of shared experts |
+| `num_experts_per_tok` | 8 | Experts activated per token |
+| `first_k_dense_replace` | 3 | First 3 layers use dense MLP |
+| `max_position_embeddings` | 163840 | Maximum context length |
+| `vocab_size` | 129280 | Vocabulary size |
+
+### Sparse Attention Control
+
+| Config Parameter | Type | Default | Description |
+|-----------------|------|---------|-------------|
+| `use_sparse_attention` | bool | True | Enable/disable Lightning Indexer sparse attention |
+| `index_n_heads` | int | 64 | Number of indexer attention heads |
+| `index_head_dim` | int | 128 | Dimension per indexer head |
+| `index_topk` | int | 2048 | Number of tokens selected per query |
+| `indexer_kl_coef` | float | 0.0 | Coefficient for automatic KL loss in combined loss |
+
+```python
+# Enable sparse attention (default)
+config.use_sparse_attention = True
+
+# Disable sparse attention (dense mode)
+config.use_sparse_attention = False
+
+# Enable automatic KL loss computation (added to combined loss)
+config.indexer_kl_coef = 0.1  # outputs.loss = lm_loss + 0.1 * indexer_kl_loss
+```
+
+---
+
+## Forward Pass API
+
+### Standard Forward
+
+```python
+outputs = model(
+    input_ids=input_ids,
+    attention_mask=attention_mask,
+    labels=labels,  # Optional, for computing loss
+)
+
+# Returns CausalLMOutputWithIndexer:
+outputs.loss             # Combined loss: lm_loss + indexer_kl_coef * indexer_kl_loss
+outputs.lm_loss          # Pure language modeling loss (if labels provided)
+outputs.indexer_kl_loss  # KL divergence loss (if indexer outputs requested)
+outputs.logits           # [batch, seq, vocab_size]
+```
+
+### Indexer Training Outputs
+
+Two additional forward pass parameters expose indexer internals for training:
+
+```python
+outputs = model(
+    input_ids=input_ids,
+    output_indexer_scores=True,      # Return raw indexer scores
+    output_indexer_kl_target=True,   # Return KL divergence target
+)
+
+# Additional outputs:
+outputs.indexer_scores     # Tuple of [batch, seq, seq] per layer
+outputs.indexer_kl_targets # Tuple of [batch, seq, seq] per layer
+```
+
+| Parameter | Type | Output Shape | Description |
+|-----------|------|--------------|-------------|
+| `output_indexer_scores` | bool | `[batch, seq, seq]` per layer | Raw indexer `I_{t,s}` scores before top-k selection |
+| `output_indexer_kl_target` | bool | `[batch, seq, seq]` per layer | KL target `p_{t,:}` (L1-normalized attention, detached) |
+
+**Memory Note**: `output_indexer_kl_target` computes the target efficiently inside the forward pass. It sums attention across heads and L1-normalizes, returning only `[batch, seq, seq]` instead of the full `[batch, heads, seq, seq]`.
+
+---
+
+## Parameter Freezing Utilities
+
+### Freeze Indexer
+
+```python
+for name, param in model.named_parameters():
+    if "indexer" in name:
+        param.requires_grad = False
+```
+
+### Freeze Everything Except Indexer
+
+```python
+for name, param in model.named_parameters():
+    if "indexer" not in name:
+        param.requires_grad = False
+```
+
+### Get Parameter Counts
+
+```python
+total = sum(p.numel() for p in model.parameters())
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+indexer = sum(p.numel() for n, p in model.named_parameters() if "indexer" in n)
+
+print(f"Total: {total:,}")
+print(f"Trainable: {trainable:,}")
+print(f"Indexer: {indexer:,}")
+```
+
+---
+
+## Indexer Parameter Names
+
+These names match the official DeepSeek V3.2 checkpoint (verified against `model.safetensors.index.json`):
+
+```python
+# Indexer projection layers (use these for LoRA target_modules)
+"indexer.wq_b"         # Query projection (from compressed rep)
+"indexer.wk"           # Key projection
+"indexer.weights_proj" # Per-head weight projection
+"indexer.k_norm"       # Key LayerNorm (weight + bias, not typically for LoRA)
+```
+
+**Full parameter paths** (matches official checkpoint):
+```
+model.layers.{i}.self_attn.indexer.wq_b.weight
+model.layers.{i}.self_attn.indexer.wk.weight
+model.layers.{i}.self_attn.indexer.weights_proj.weight
+model.layers.{i}.self_attn.indexer.k_norm.weight
+model.layers.{i}.self_attn.indexer.k_norm.bias
+```
+
+---
+
+## Usage Examples
+
+### Example 1: Standard Inference
+
+```python
+from transformers import DeepseekV32ForCausalLM, AutoTokenizer
+
+model = DeepseekV32ForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+
+inputs = tokenizer("Hello, world!", return_tensors="pt")
+outputs = model.generate(**inputs, max_new_tokens=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+### Example 2: Get Indexer Scores for Analysis
+
+```python
+outputs = model(
+    input_ids,
+    output_indexer_scores=True,
+)
+
+# Analyze which tokens the indexer selects
+for layer_idx, scores in enumerate(outputs.indexer_scores):
+    topk_indices = scores.topk(k=64, dim=-1).indices
+    print(f"Layer {layer_idx}: top tokens = {topk_indices[0, 0, :10]}")
+```
+
+### Example 3: Indexer Training with KL Loss
+
+```python
+# Freeze non-indexer params
+for name, param in model.named_parameters():
+    if "indexer" not in name:
+        param.requires_grad = False
+
+optimizer = torch.optim.AdamW(
+    [p for p in model.parameters() if p.requires_grad],
+    lr=1e-3
+)
+
+# Training step - KL loss is computed automatically
+outputs = model(
+    input_ids,
+    output_indexer_scores=True,
+    output_indexer_kl_target=True,
+)
+kl_loss = outputs.indexer_kl_loss  # Use the automatically computed KL loss
+
+kl_loss.backward()
+optimizer.step()
+optimizer.zero_grad()
+```
+
+### Example 4: Dense Mode (disable sparse attention)
+
+```python
+from transformers import DeepseekV32Config, DeepseekV32ForCausalLM
+
+config = DeepseekV32Config.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+config.use_sparse_attention = False  # Use dense attention
+
+model = DeepseekV32ForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V3.2-Exp",
+    config=config,
+)
+```
+
+### Example 5: Dual LoRA Training (LLM LoRA + Indexer LoRA)
+
+Two separate gradient paths for training main model and indexer independently:
+
+```python
+from peft import LoraConfig, get_peft_model
+import torch
+
+# Define LoRA targets
+llm_lora_targets = [
+    "q_a_proj", "q_b_proj",
+    "kv_a_proj_with_mqa", "kv_b_proj",
+    "o_proj",
+    "gate_proj", "up_proj", "down_proj",
+]
+indexer_lora_targets = [
+    "indexer.wq_b",         # Query projection
+    "indexer.wk",           # Key projection
+    "indexer.weights_proj", # Per-head weight projection
+]
+
+# Apply LoRA to both
+lora_config = LoraConfig(
+    r=8,
+    lora_alpha=16,
+    target_modules=llm_lora_targets + indexer_lora_targets,
+    lora_dropout=0.05,
+    bias="none",
+    task_type="CAUSAL_LM",
+)
+model_with_lora = get_peft_model(model, lora_config)
+
+# Enable KL loss computation
+model_with_lora.base_model.model.config.indexer_kl_coef = 1.0
+
+# Create separate optimizers for dual gradient paths
+llm_lora_params = [p for n, p in model_with_lora.named_parameters()
+                   if p.requires_grad and "indexer" not in n]
+indexer_lora_params = [p for n, p in model_with_lora.named_parameters()
+                       if p.requires_grad and "indexer" in n]
+
+llm_optimizer = torch.optim.AdamW(llm_lora_params, lr=1e-4)
+indexer_optimizer = torch.optim.AdamW(indexer_lora_params, lr=1e-3)
+
+# Training step with dual gradient paths
+outputs = model_with_lora(
+    input_ids, labels=labels,
+    output_indexer_scores=True,
+    output_indexer_kl_target=True,
+)
+
+# Get separate losses from output
+lm_loss = outputs.lm_loss
+indexer_kl_loss = outputs.indexer_kl_loss  # Real KL loss, not placeholder!
+
+# Path 1: LM loss -> LLM LoRA
+llm_optimizer.zero_grad()
+lm_loss.backward(retain_graph=True)
+llm_optimizer.step()
+
+# Path 2: KL loss -> Indexer LoRA
+indexer_optimizer.zero_grad()
+indexer_kl_loss.backward()
+indexer_optimizer.step()
+```
+
+---
+
+## Technical Notes
+
+### KL Loss Formula (from Tech Report)
+
+The indexer KL loss matches **Equation 3** from the DeepSeek V3.2 technical report (arXiv 2512.02556):
+
+```
+ℒ_I = Σ_t D_KL(p_{t,:} ∥ Softmax(I_{t,:}))
+```
+
+Where:
+- `I_{t,s}` = raw indexer output scores (returned by `output_indexer_scores=True`)
+- `p_{t,:}` = target distribution (returned by `output_indexer_kl_target=True`)
+
+The target distribution `p_{t,:}` is computed per the tech report:
+> "for the t-th query token, we first aggregate the main attention scores by **summing across all attention heads**. This sum is then **L1-normalized** along the sequence dimension to produce a target distribution p_{t,:} ∈ ℝ^t"
+
+### Two Exposed Losses for LoRA Integration
+
+The implementation exposes **separate losses** for flexible training:
+
+| Loss | Source | Use Case |
+|------|--------|----------|
+| **Combined Loss** | `outputs.loss` | `lm_loss + indexer_kl_coef * indexer_kl_loss` |
+| **LM Loss** | `outputs.lm_loss` | Pure language modeling loss |
+| **Indexer KL Loss** | `outputs.indexer_kl_loss` | KL divergence loss for indexer |
+
+**Training scenarios:**
+
+1. **Main model LoRA only** (frozen indexer, `indexer_kl_coef=0`):
+   ```python
+   loss = outputs.loss  # Same as outputs.lm_loss when indexer_kl_coef=0
+   ```
+
+2. **Indexer training only** (per tech report warm-up):
+   ```python
+   outputs = model(input_ids, output_indexer_scores=True, output_indexer_kl_target=True)
+   kl_loss = outputs.indexer_kl_loss
+   ```
+
+3. **Joint training** (main model + indexer LoRA):
+   ```python
+   # Option A: Use combined loss with config
+   config.indexer_kl_coef = 0.1
+   loss = outputs.loss  # lm_loss + 0.1 * indexer_kl_loss
+
+   # Option B: Manual combination
+   loss = outputs.lm_loss + alpha * outputs.indexer_kl_loss
+   ```
+
+4. **Dual LoRA with separate backward passes**:
+   ```python
+   outputs.lm_loss.backward(retain_graph=True)  # -> LLM LoRA
+   outputs.indexer_kl_loss.backward()            # -> Indexer LoRA
+   ```
+
+### Non-Interleaved RoPE
+
+The indexer uses **non-interleaved** RoPE (different from MLA which uses interleaved). This is handled internally - no user action required.
+
+### Causal Masking
+
+Both `indexer_scores` and `indexer_kl_targets` are causally masked - position `t` can only attend to positions `s <= t`.
+
+### Gradient Flow
+
+- `indexer_scores`: Gradients flow back to indexer parameters
+- `indexer_kl_targets`: **Detached** - serves as target, no gradient flow
+- When `output_indexer_kl_target=True`, full attention is computed for the target but not stored (memory efficient)
+
+### Memory Efficiency
+
+| Output | Memory per Layer |
+|--------|-----------------|
+| `indexer_scores` | `[B, S, S]` = `B × S² × 4 bytes` |
+| `indexer_kl_targets` | `[B, S, S]` = `B × S² × 4 bytes` |
+| Full attention (NOT returned) | `[B, H, S, S]` = `B × H × S² × 4 bytes` |
+
+For 128K context with 128 heads, returning full attention would require ~8TB per layer. The API returns only the aggregated target.
+
+---
+
+## Files Reference
+
+| Location | File | Description |
+|----------|------|-------------|
+| `src/transformers/models/deepseek_v32/` | `modular_deepseek_v32.py` | Source of truth for model implementation |
+| `src/transformers/models/deepseek_v32/` | `modeling_deepseek_v32.py` | Auto-generated model file |
+| `src/transformers/models/deepseek_v32/` | `configuration_deepseek_v32.py` | Configuration class |
+
+**Key exports from `modeling_deepseek_v32.py`:**
+- `DeepseekV32ForCausalLM` - Main model class
+- `DeepseekV32Model` - Base transformer model
+- `DeepseekV32Config` - Configuration class
+- `BaseModelOutputWithIndexer` - Output dataclass for DeepseekV32Model
+- `CausalLMOutputWithIndexer` - Output dataclass for DeepseekV32ForCausalLM
+
+---
+
+## Compatibility
+
+- **PyTorch**: >= 2.4.0
+- **CUDA**: Tested on H100/H200
+- **PEFT**: Compatible (target indexer modules for LoRA)
+- **DeepSpeed ZeRO**: Compatible
+
+### Attention Backend Support
+
+DeepSeek V3.2 supports different attention backends depending on the mode:
+
+| Mode | Condition | Attention Backend | Notes |
+|------|-----------|-------------------|-------|
+| **Sparse Prefill** | `use_sparse_attention=True` AND `seq_len > 1` | Eager (PyTorch) | Matches official DeepSeek code |
+| **Decode** | `seq_len == 1` (autoregressive) | Flash/SDPA/Eager | Delegates to V3 parent |
+| **Dense Mode** | `use_sparse_attention=False` | Flash/SDPA/Eager | Delegates to V3 parent |
+
+**Why sparse attention uses eager computation:**
+- The official DeepSeek V3.2 code uses eager attention with dynamic sparse masks
+- Flash Attention requires **block-sparse** patterns known at compile time
+- The Lightning Indexer produces **dynamic** sparse patterns that vary per input
+- Custom block-sparse kernels would be needed for flash attention + DSA
+
+**Practical implications:**
+```python
+# Sparse attention (prefill) - eager attention
+config.use_sparse_attention = True
+outputs = model(input_ids)  # Uses eager attention during prefill
+
+# Dense mode - flash attention supported
+config.use_sparse_attention = False
+model = DeepseekV32ForCausalLM.from_pretrained(
+    "...",
+    config=config,
+    attn_implementation="flash_attention_2"  # Works in dense mode
+)
+
+# Generation (decode phase) - flash attention supported
+# Even with use_sparse_attention=True, decode uses V3's attention
+# which supports flash attention
+outputs = model.generate(input_ids, max_new_tokens=100)
+```
+
+### Flash Attention vs DeepSeek Sparse Attention (DSA)
+
+**Important**: Flash Attention and DSA are **different mechanisms**:
+
+| Mechanism | What it does | Complexity |
+|-----------|--------------|------------|
+| **Flash Attention** | Optimized CUDA kernel for dense attention (memory efficient via tiling) | O(N²) compute, O(N) memory |
+| **DeepSeek Sparse Attention (DSA)** | Sparse attention via Lightning Indexer, selects top-k tokens | O(N×k) compute |
+
+**Summary:**
+- **Prefill with sparse attention**: Eager attention (matches official code)
+- **Decode**: Flash attention supported (delegates to V3)
+- **Dense mode**: Flash attention supported (delegates to V3)
+

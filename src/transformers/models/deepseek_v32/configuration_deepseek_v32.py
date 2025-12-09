@@ -5,7 +5,10 @@
 #                          modular_deepseek_v32.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2025 DeepSeek AI and The HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on the DeepSeek-V3.2-Exp implementation from DeepSeek AI.
+# Reference: https://github.com/deepseek-ai/DeepSeek-V3.2-Exp
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,28 +23,18 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...configuration_utils import PreTrainedConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-# =============================================================================
-# Configuration
-# =============================================================================
-
-
-class DeepseekV32Config(PretrainedConfig):
+class DeepseekV32Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekV32Model`]. It is used to instantiate a
-    DeepSeek V3.2 model according to the specified arguments, defining the model architecture.
+    Configuration class for DeepSeek V3.2 model.
 
-    DeepSeek V3.2 introduces DeepSeek Sparse Attention (DSA) which reduces attention complexity from O(L²) to O(Lk)
-    using a Lightning Indexer that selects top-k tokens.
+    DeepSeek V3.2 extends DeepSeek V3 with DeepSeek Sparse Attention (DSA), which uses a Lightning Indexer
+    to select top-k tokens for sparse attention, reducing complexity from O(L^2) to O(L*k).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    This config inherits all parameters from [`DeepseekV3Config`] and adds V3.2-specific parameters
+    for the Lightning Indexer.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 129280):
@@ -49,85 +42,84 @@ class DeepseekV32Config(PretrainedConfig):
         hidden_size (`int`, *optional*, defaults to 7168):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 18432):
-            Dimension of the MLP intermediate layer (for dense layers).
+            Dimension of the MLP representations.
         moe_intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the MLP intermediate layer for MoE experts.
+            Dimension of the MoE representations.
         num_hidden_layers (`int`, *optional*, defaults to 61):
-            Number of decoder layers.
+            Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 128):
             Number of attention heads for each attention layer.
         num_key_value_heads (`int`, *optional*, defaults to 128):
-            Number of key-value heads (same as attention heads for MLA).
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 163840):
-            Maximum sequence length the model can handle.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation for weight initialization.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
-            Epsilon for RMS normalization.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use KV cache for faster generation.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie input/output embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            Base for rotary position embeddings.
-        rope_scaling (`Dict`, *optional*):
-            YaRN scaling configuration with keys: `type` ("yarn"), `factor`, `original_max_position_embeddings`,
-            `mscale`, `mscale_all_dim`, `beta_fast`, `beta_slow`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in attention projections.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in MLP layers.
-        q_lora_rank (`int`, *optional*, defaults to 1536):
-            LoRA rank for query compression in MLA.
-        kv_lora_rank (`int`, *optional*, defaults to 512):
-            LoRA rank for key-value compression in MLA.
-        qk_nope_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of query/key heads without position embedding.
-        qk_rope_head_dim (`int`, *optional*, defaults to 64):
-            Dimension of query/key heads with rotary position embedding.
-        v_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of value heads.
-        n_routed_experts (`int`, *optional*, defaults to 256):
-            Total number of routed experts.
+            Number of key_value heads for Grouped Query Attention.
         n_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts (always active).
+        n_routed_experts (`int`, *optional*, defaults to 256):
+            Number of routed experts.
+        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+            Scaling factor for routed experts.
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+            Rank of the LoRA matrices for key and value projections.
+        q_lora_rank (`int`, *optional*, defaults to 1536):
+            Rank of the LoRA matrices for query projections.
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            Dimension of query/key heads that use rotary position embeddings.
+        v_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of the value heads.
+        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of query/key heads without rotary position embeddings.
+        n_group (`int`, *optional*, defaults to 8):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 4):
+            Number of groups selected per token for expert routing.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of experts activated per token.
-        n_group (`int`, *optional*, defaults to 8):
-            Number of expert groups for routing.
-        topk_group (`int`, *optional*, defaults to 4):
-            Number of groups to select in routing.
-        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
-            Scaling factor for routed expert outputs.
-        scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-            Scoring function for expert routing ("softmax" or "sigmoid").
-        topk_method (`str`, *optional*, defaults to `"noaux_tc"`):
-            Top-k selection method for routing.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize top-k probabilities.
         first_k_dense_replace (`int`, *optional*, defaults to 3):
-            Number of initial layers that use dense MLP instead of MoE.
+            Number of dense layers before switching to MoE layers.
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the weights of the routed experts.
+        scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+            Scoring function for expert routing. The official V3.2 config uses "sigmoid".
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether to return the last key/values attentions.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings.
+        rope_interleave (`bool`, *optional*, defaults to `True`):
+            Whether to interleave the rotary position embeddings (for MLA).
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in attention layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         index_n_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for the sparse attention indexer.
+            Number of heads in the Lightning Indexer.
         index_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each indexer attention head.
+            Dimension of each indexer head.
         index_topk (`int`, *optional*, defaults to 2048):
-            Number of top-k tokens to select for sparse attention.
-        use_fp8_indexer (`bool`, *optional*, defaults to `False`):
-            Whether to use FP8 quantization in the indexer.
-        use_distributed_moe (`bool`, *optional*, defaults to `False`):
-            Whether to enable distributed all-reduce for MoE experts. This mirrors the reference implementation's behavior.
+            Number of tokens to select for sparse attention.
+        use_sparse_attention (`bool`, *optional*, defaults to `True`):
+            Whether to use sparse attention. Set to `False` for dense attention
+            (useful for the dense warm-up training stage).
+        detach_indexer_input (`bool`, *optional*, defaults to `False`):
+            Whether to detach the indexer input from the computational graph.
+            Used in Stage 2 training for separate optimization of indexer.
+        indexer_kl_coef (`float`, *optional*, defaults to 0.0):
+            Coefficient for the indexer KL loss. When > 0, the KL loss is computed
+            and added to the total loss: loss = lm_loss + indexer_kl_coef * indexer_kl_loss.
+            Set to 0.0 for Stage 1 (SFT) training, and > 0 for Stage 2 (indexer training).
 
     Example:
 
     ```python
     >>> from transformers import DeepseekV32Model, DeepseekV32Config
 
-    >>> # Initializing a DeepSeek V3.2 style configuration
+    >>> # Initializing a DeepSeek V3.2 configuration
     >>> configuration = DeepseekV32Config()
 
     >>> # Initializing a model from the configuration
@@ -136,138 +128,119 @@ class DeepseekV32Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
+
+    Reference:
+        - Technical Report: https://api-docs.deepseek.com/news/news251201
+        - Official Code: https://github.com/deepseek-ai/DeepSeek-V3.2-Exp
     """
 
     model_type = "deepseek_v32"
     keys_to_ignore_at_inference = ["past_key_values"]
-
-    # Tensor parallelism plan
     base_model_tp_plan = {
-        "layers.*.self_attn.q_a_proj": "colwise",
-        "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_a_proj_with_mqa": "colwise",
-        "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     def __init__(
         self,
+        # Inherited from DeepseekV3Config
         vocab_size: int = 129280,
         hidden_size: int = 7168,
         intermediate_size: int = 18432,
         moe_intermediate_size: int = 2048,
         num_hidden_layers: int = 61,
         num_attention_heads: int = 128,
-        num_key_value_heads: Optional[int] = None,
+        num_key_value_heads: int = 128,
+        n_shared_experts: int = 1,
+        n_routed_experts: int = 256,
+        routed_scaling_factor: float = 2.5,
+        kv_lora_rank: int = 512,
+        q_lora_rank: int = 1536,
+        qk_rope_head_dim: int = 64,
+        v_head_dim: int = 128,
+        qk_nope_head_dim: int = 128,
+        n_group: int = 8,
+        topk_group: int = 4,
+        num_experts_per_tok: int = 8,
+        first_k_dense_replace: int = 3,
+        norm_topk_prob: bool = True,
         hidden_act: str = "silu",
-        max_position_embeddings: int = 163840,
+        max_position_embeddings: int = 4096,
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-6,
         use_cache: bool = True,
-        pad_token_id: Optional[int] = None,
+        pad_token_id: int = None,
         bos_token_id: int = 0,
         eos_token_id: int = 1,
+        pretraining_tp: int = 1,
         tie_word_embeddings: bool = False,
-        rope_theta: float = 10000.0,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters=None,
+        rope_interleave: bool = True,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
-        mlp_bias: bool = False,
-        # MLA parameters
-        q_lora_rank: int = 1536,
-        kv_lora_rank: int = 512,
-        qk_nope_head_dim: int = 128,
-        qk_rope_head_dim: int = 64,
-        v_head_dim: int = 128,
-        # MoE parameters
-        n_routed_experts: int = 256,
-        n_shared_experts: int = 1,
-        num_experts_per_tok: int = 8,
-        n_group: int = 8,
-        topk_group: int = 4,
-        routed_scaling_factor: float = 2.5,
-        scoring_func: str = "sigmoid",
-        topk_method: str = "noaux_tc",
-        norm_topk_prob: bool = True,
-        first_k_dense_replace: int = 3,
-        # Indexer (DSA) parameters
+        # V3.2 specific: Lightning Indexer parameters
         index_n_heads: int = 64,
         index_head_dim: int = 128,
         index_topk: int = 2048,
-        use_fp8_indexer: bool = False,
-        use_distributed_moe: bool = False,
+        use_sparse_attention: bool = True,
+        detach_indexer_input: bool = False,
+        indexer_kl_coef: float = 0.0,
+        # V3.2 uses sigmoid scoring (explicit in official config: score_func)
+        scoring_func: str = "sigmoid",
         **kwargs,
     ):
-        # Core dimensions
         self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.moe_intermediate_size = moe_intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        # For backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        # Ensure rope_scaling values are floats (config.json may have integers)
-        if rope_scaling is not None:
-            rope_scaling = dict(rope_scaling)  # Make a copy to avoid mutating input
-            for key in ("factor", "beta_fast", "beta_slow", "mscale", "mscale_all_dim"):
-                if key in rope_scaling and rope_scaling[key] is not None:
-                    rope_scaling[key] = float(rope_scaling[key])
-        self.rope_scaling = rope_scaling
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-
-        # MLA parameters
-        self.q_lora_rank = q_lora_rank
+        self.n_shared_experts = n_shared_experts
+        self.n_routed_experts = n_routed_experts
+        self.routed_scaling_factor = routed_scaling_factor
         self.kv_lora_rank = kv_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
+        self.q_lora_rank = q_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
-
-        # MoE parameters
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.num_experts_per_tok = num_experts_per_tok
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.head_dim = qk_rope_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
-        self.routed_scaling_factor = routed_scaling_factor
-        self.scoring_func = scoring_func
-        self.topk_method = topk_method
-        self.norm_topk_prob = norm_topk_prob
+        self.num_experts_per_tok = num_experts_per_tok
         self.first_k_dense_replace = first_k_dense_replace
+        self.norm_topk_prob = norm_topk_prob
+        self.rope_interleave = rope_interleave
 
-        # Indexer (DSA) parameters
-        self.index_n_heads = index_n_heads
-        self.index_head_dim = index_head_dim
-        self.index_topk = index_topk
-        self.use_fp8_indexer = use_fp8_indexer
-        self.use_distributed_moe = use_distributed_moe
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
 
-        # head_dim for RoPE compatibility
-        self.head_dim = qk_rope_head_dim
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.pretraining_tp = pretraining_tp
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -277,17 +250,31 @@ class DeepseekV32Config(PretrainedConfig):
             **kwargs,
         )
 
-        if use_fp8_indexer:
-            logger.warning_once(
-                "FP8 indexer is requested but not fully implemented in HuggingFace transformers. "
-                "The indexer will run without FP8 quantization. For optimal performance, use the "
-                "reference DeepSeek implementation with custom tilelang kernels."
-            )
+        # DeepSeek V3.2 specific: Lightning Indexer
+        self.index_n_heads = index_n_heads
+        self.index_head_dim = index_head_dim
+        self.index_topk = index_topk
+        self.use_sparse_attention = use_sparse_attention
+        self.detach_indexer_input = detach_indexer_input
+        self.indexer_kl_coef = indexer_kl_coef
+        # V3.2 official config has "score_func": "sigmoid"
+        self.scoring_func = scoring_func
 
-    @property
-    def num_local_experts(self):
-        """Alias for n_routed_experts for compatibility with quantizers (e.g., FP8)."""
-        return self.n_routed_experts
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+
+        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
+        for key in ["beta_fast", "beta_slow", "factor"]:
+            if key in self.rope_parameters:
+                self.rope_parameters[key] = float(self.rope_parameters[key])
+        return kwargs
 
 
 __all__ = ["DeepseekV32Config"]
