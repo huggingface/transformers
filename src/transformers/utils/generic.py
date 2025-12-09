@@ -156,11 +156,11 @@ def is_torch_dtype(x):
 
 
 def maybe_autocast(
-        device_type: str,
-        dtype: Optional["_dtype"] = None,
-        enabled: bool = True,
-        cache_enabled: Optional[bool] = None,
-    ):
+    device_type: str,
+    dtype: Optional["_dtype"] = None,
+    enabled: bool = True,
+    cache_enabled: Optional[bool] = None,
+):
     """
     Context manager that only autocasts if:
 
@@ -172,9 +172,7 @@ def maybe_autocast(
     requirement that partition IDs be monotonically increasing.
     """
     if torch.is_autocast_enabled(device_type) or enabled:
-        return torch.autocast(
-            device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled
-        )
+        return torch.autocast(device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled)
     else:
         return nullcontext()
 
