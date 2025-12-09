@@ -90,7 +90,6 @@ import math
 import re
 from typing import Optional, Union
 
-import PIL.Image
 import torch
 
 from ...feature_extraction_utils import BatchFeature
@@ -98,8 +97,12 @@ from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType
-from ...utils.import_utils import is_perceptron_available
+from ...utils.import_utils import is_perceptron_available, is_vision_available
 from .configuration_isaac import IsaacConfig
+
+
+if is_vision_available():
+    import PIL.Image
 
 
 if is_perceptron_available():

@@ -89,12 +89,15 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-import PIL.Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...utils.import_utils import is_perceptron_available, is_torchdynamo_compiling
+from ...utils.import_utils import is_perceptron_available, is_torchdynamo_compiling, is_vision_available
+
+
+if is_vision_available():
+    import PIL.Image
 
 
 if is_perceptron_available():
