@@ -847,10 +847,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
 
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-        video_start_token_id = self.config.video_start_token_id
-        video_end_token_id = self.config.video_end_token_id
         temporal_merge_size = self.config.vision_config.temporal_merge_size
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
@@ -869,27 +865,11 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
             image_index, video_index = 0, 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
-                # Use `mm_token_type_ids` if available to avoid looping over all inputs
-                if mm_token_type_ids is not None:
-                    input_token_type = mm_token_type_ids[i, attention_mask[i] == 1].tolist()
+                # If we don't have `mm_token_type_ids`, then we have text tokens only (== 0)
+                if mm_token_type_ids is None:
+                    input_token_type = torch.zeros_like(input_ids)[attention_mask[i] == 1].tolist()
                 else:
-                    input_ids = input_ids[attention_mask[i] == 1]
-                    input_tokens = input_ids.tolist()
-
-                    input_token_type = []
-                    video_check_flg = False
-                    for token in input_tokens:
-                        if token == video_start_token_id:
-                            video_check_flg = True
-                        elif token == video_end_token_id:
-                            video_check_flg = False
-
-                        if token == image_token_id and not video_check_flg:
-                            input_token_type.append(1)  # image
-                        elif token == video_token_id and video_check_flg:
-                            input_token_type.append(2)  # video
-                        else:
-                            input_token_type.append(0)  # text
+                    input_token_type = mm_token_type_ids[i, attention_mask[i] == 1].tolist()
 
                 input_type_group = []
                 for key, group in itertools.groupby(enumerate(input_token_type), lambda x: x[1]):
@@ -961,6 +941,28 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
+    def get_mm_token_type_ids(
+        self,
+        mm_token_type_ids: Optional[torch.IntTensor],
+        image_mask: Optional[torch.BoolTensor],
+        video_mask: Optional[torch.BoolTensor],
+    ):
+        """Construct `mm_token_type_ids` from the given modality masks (if needed)"""
+        if mm_token_type_ids is not None or (image_mask is None and video_mask is None):
+            return mm_token_type_ids
+
+        if image_mask is not None:
+            mm_token_type_ids = torch.zeros_like(image_mask[..., -1], dtype=torch.int32)
+        else:
+            mm_token_type_ids = torch.zeros_like(video_mask[..., -1], dtype=torch.int32)
+
+        if image_mask is not None:
+            mm_token_type_ids[image_mask[..., -1]] = 1
+        if video_mask is not None:
+            mm_token_type_ids[video_mask[..., -1]] = 2
+
+        return mm_token_type_ids
+
     def get_moe_mm_token_type_ids(self, original_mm_token_type_ids: Optional[torch.IntTensor]):
         r"""
         Turns left and right neighbours of a value other than 0 to its value. Since start/end tokens are always used together,
@@ -976,8 +978,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         """
         if original_mm_token_type_ids is not None:
             moe_mm_token_type_ids = original_mm_token_type_ids.clone()
-            left  = original_mm_token_type_ids[:, :-1]  # left shifted
-            right = original_mm_token_type_ids[:, 1:]   # right shifted
+            left = original_mm_token_type_ids[:, :-1]  # left shifted
+            right = original_mm_token_type_ids[:, 1:]  # right shifted
 
             # consider the token to the left that is zero to a non-zero token to the right (left boundary)
             mask_left_zero = (left == 0) & (right != 0)
@@ -985,8 +987,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
             mask_right_zero = (left != 0) & (right == 0)
 
             # replace those zeros with their non-zero neighbor
-            moe_mm_token_type_ids[:, :-1][mask_left_zero]      = right[mask_left_zero]
-            moe_mm_token_type_ids[:, 1:][mask_right_zero]      = left[mask_right_zero]
+            moe_mm_token_type_ids[:, :-1][mask_left_zero] = right[mask_left_zero]
+            moe_mm_token_type_ids[:, 1:][mask_right_zero] = left[mask_right_zero]
 
             return moe_mm_token_type_ids
         return original_mm_token_type_ids
@@ -1061,6 +1063,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        image_mask = None
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1069,6 +1072,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
+        video_mask = None
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1076,6 +1080,9 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        # Compose multimodal token type ids based on our masks
+        mm_token_type_ids = self.get_mm_token_type_ids(mm_token_type_ids, image_mask, video_mask)
 
         if position_ids is None:
             position_ids = self.get_position_ids(
@@ -1091,6 +1098,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
 
         # Moe's vision experts consider the additional start and end tokens as vision tokens themself
         moe_mm_token_type_ids = self.get_moe_mm_token_type_ids(original_mm_token_type_ids=mm_token_type_ids)
+
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
