@@ -19,7 +19,7 @@ import copy
 import math
 import re
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Optional, Union
 
 from ...utils.import_utils import (
@@ -87,7 +87,7 @@ from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
 )
-from ...masking_utils import create_masks_for_generate
+from ...masking_utils import create_masks_for_generate, eager_mask, packed_sequence_mask_function, sdpa_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -412,13 +412,12 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         )
 
 
-def build_document_attention_mask(
-    cu_seqlens: Optional[torch.Tensor],
-    total_tokens: int,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> Optional[torch.Tensor]:
-    """Creates an additive attention mask that blocks cross-document attention."""
+def document_mask_function_from_cu_seqlens(cu_seqlens: Optional[torch.Tensor]) -> Optional[Callable]:
+    """Return a mask function that blocks cross-document attention from packed ``cu_seqlens``.
+
+    The returned callable matches the signature expected by ``masking_utils`` mask factories and
+    yields ``True`` only when query/key positions belong to the same packed segment.
+    """
 
     if cu_seqlens is None:
         return None
@@ -430,14 +429,10 @@ def build_document_attention_mask(
     if seq_sizes.numel() == 0:
         return None
 
-    seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=device), seq_sizes)
-    block_mask = seg_ids[:, None] != seg_ids[None, :]
-    additive_mask = torch.zeros((total_tokens, total_tokens), dtype=dtype, device=device)
-
-    mask_value = torch.tensor(torch.finfo(dtype).min, device=device, dtype=dtype)
-    additive_mask.masked_fill_(block_mask, mask_value)
-
-    return additive_mask.view(1, 1, total_tokens, total_tokens)
+    total_tokens = int(seq_sizes.sum().item())
+    seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=cu_seqlens.device), seq_sizes)
+    packed_sequence_mask = seg_ids.view(1, total_tokens)
+    return packed_sequence_mask_function(packed_sequence_mask)
 
 
 def ensure_document_attention_mask(
@@ -446,16 +441,26 @@ def ensure_document_attention_mask(
     total_tokens: int,
     dtype: torch.dtype,
     device: torch.device,
-) -> Optional[torch.Tensor]:
-    if attention_mask is not None or cu_seqlens is None:
+    *,
+    return_mask_function: bool = False,
+) -> Optional[Union[torch.Tensor, Callable]]:
+    """Return the provided mask, a callable mask from ``cu_seqlens``, or ``None``.
+
+    ``return_mask_function=True`` yields a callable suitable for ``masking_utils``; otherwise
+    ``None`` is returned when no explicit ``attention_mask`` is provided. The legacy additive mask
+    has been removed in favor of the callable-based path.
+    """
+
+    if attention_mask is not None:
         return attention_mask
 
-    return build_document_attention_mask(
-        cu_seqlens=cu_seqlens,
-        total_tokens=total_tokens,
-        dtype=dtype,
-        device=device,
-    )
+    if cu_seqlens is None:
+        return None
+
+    if return_mask_function:
+        return document_mask_function_from_cu_seqlens(cu_seqlens)
+
+    return None
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -675,6 +680,7 @@ class IsaacVisionAttention(Siglip2Attention):
             L,
             q.dtype,
             q.device,
+            return_mask_function=True,
         )
 
         resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl, attn_impl)
@@ -795,19 +801,30 @@ class IsaacVisionAttention(Siglip2Attention):
         q_lhd: torch.Tensor,
         k_lhd: torch.Tensor,
         v_lhd: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: Optional[Union[torch.Tensor, Callable]],
         cu_seqlens: Optional[torch.Tensor],
         dropout: float,
     ) -> torch.Tensor:
         L = q_lhd.size(0)
         attn_mask = attention_mask
-        if attn_mask is None:
-            attn_mask = build_document_attention_mask(
-                cu_seqlens=cu_seqlens,
-                total_tokens=L,
-                dtype=q_lhd.dtype,
-                device=q_lhd.device,
+
+        if callable(attn_mask):
+            cache_position = torch.arange(L, device=q_lhd.device, dtype=torch.long)
+            attn_mask = sdpa_mask(
+                batch_size=1,
+                cache_position=cache_position,
+                kv_length=L,
+                kv_offset=0,
+                mask_function=attn_mask,
+                attention_mask=None,
+                allow_is_causal_skip=False,
+                allow_is_bidirectional_skip=False,
+                allow_torch_fix=False,
+                use_vmap=False,
             )
+            # sdpa_mask returns True for allowed positions; SDPA expects True to mean "mask out"
+            if attn_mask is not None and attn_mask.dtype == torch.bool:
+                attn_mask = ~attn_mask
 
         q = q_lhd.permute(1, 0, 2).unsqueeze(0)
         k = k_lhd.permute(1, 0, 2).unsqueeze(0)
@@ -833,15 +850,30 @@ class IsaacVisionAttention(Siglip2Attention):
         q_lhd: torch.Tensor,
         k_lhd: torch.Tensor,
         v_lhd: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: Optional[Union[torch.Tensor, Callable]],
         dropout: float,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        L = q_lhd.size(0)
+        attn_mask = attention_mask
+        if callable(attn_mask):
+            cache_position = torch.arange(L, device=q_lhd.device, dtype=torch.long)
+            attn_mask = eager_mask(
+                batch_size=1,
+                cache_position=cache_position,
+                kv_length=L,
+                kv_offset=0,
+                mask_function=attn_mask,
+                attention_mask=None,
+                allow_is_bidirectional_skip=False,
+                use_vmap=False,
+                dtype=q_lhd.dtype,
+            )
+        if attn_mask is not None and attn_mask.dim() == 4:
+            attn_mask = attn_mask.squeeze(0).squeeze(0)
+
         attn_weights = torch.matmul(q_lhd, k_lhd.transpose(1, 2)) * self.scale
-        if attention_mask is not None:
-            mask = attention_mask
-            if mask.dim() == 4:
-                mask = mask.squeeze(0).squeeze(0)
-            attn_weights = attn_weights + mask
+        if attn_mask is not None:
+            attn_weights = attn_weights + attn_mask
 
         attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q_lhd.dtype)
         if dropout and self.training:
