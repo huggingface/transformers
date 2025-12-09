@@ -4797,6 +4797,13 @@ class Trainer:
                     if tag not in tags:
                         tags.append(tag)
 
+        trackio_url = None
+        try:
+            import trackio
+            trackio_url = trackio.get_trackio_url(hub_model_id=self.hub_model_id)
+        except (ImportError, Exception):
+            pass
+
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,
@@ -4808,6 +4815,7 @@ class Trainer:
             dataset_tags=dataset_tags,
             dataset=dataset,
             dataset_args=dataset_args,
+            trackio_url=trackio_url,
         )
         model_card = training_summary.to_model_card()
         with open(model_card_filepath, "w") as f:

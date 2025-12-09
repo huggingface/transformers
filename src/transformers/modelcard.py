@@ -365,6 +365,7 @@ class TrainingSummary:
     eval_lines: Optional[list[str]] = None
     hyperparameters: Optional[dict[str, Any]] = None
     source: Optional[str] = "trainer"
+    trackio_url: Optional[str] = None
 
     def __post_init__(self):
         # Infer default license from the checkpoint used, if possible.
@@ -517,6 +518,10 @@ class TrainingSummary:
             model_card += make_markdown_table(self.eval_lines)
             model_card += "\n"
 
+        if self.trackio_url is not None:
+            model_card += "\n### Training tracking\n\n"
+            model_card += f"Training can be monitored at: [{self.trackio_url}]({self.trackio_url})\n"
+
         model_card += "\n### Framework versions\n\n"
         model_card += f"- Transformers {__version__}\n"
 
@@ -549,6 +554,7 @@ class TrainingSummary:
         dataset_metadata=None,
         dataset=None,
         dataset_args=None,
+        trackio_url=None,
     ):
         # Infer default from dataset
         one_dataset = trainer.eval_dataset if trainer.eval_dataset is not None else trainer.train_dataset
@@ -611,6 +617,7 @@ class TrainingSummary:
             eval_results=eval_results,
             eval_lines=eval_lines,
             hyperparameters=hyperparameters,
+            trackio_url=trackio_url,
         )
 
 
