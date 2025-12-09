@@ -554,67 +554,6 @@ def generate_initial_queries(
     return queries_init, query_reference_points_init
 
 
-class DinoDetrPreTrainedModel(PreTrainedModel):
-    config_class = DinoDetrConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    _no_split_modules = [r"DinoDetrConvEncoder", r"DinoDetrEncoderLayer", r"DinoDetrDecoderLayer"]
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-
-        if isinstance(module, DinoDetrLearnedPositionEmbedding):
-            init.uniform_(module.row_embed.weight)
-            init.uniform_(module.col_embed.weight)
-        elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
-            init.constant_(module.sampling_offsets.weight, 0.0)
-            default_dtype = torch.get_default_dtype()
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
-                2.0 * math.pi / module.n_heads
-            )
-            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-            grid_init = (
-                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.n_heads, 1, 1, 2)
-                .repeat(1, module.n_levels, module.n_points, 1)
-            )
-            for i in range(module.n_points):
-                grid_init[:, :, i, :] *= i + 1
-            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
-            init.constant_(module.attention_weights.weight, 0.0)
-            init.constant_(module.attention_weights.bias, 0.0)
-            init.xavier_uniform_(module.value_proj.weight)
-            init.constant_(module.value_proj.bias, 0.0)
-            init.xavier_uniform_(module.output_proj.weight)
-            init.constant_(module.output_proj.bias, 0.0)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Conv2d):
-            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
-            if module.bias is not None:
-                fan_in, _ = _calculate_fan_in_and_fan_out(module.weight)
-                bound = 1 / math.sqrt(fan_in)
-                init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif hasattr(module, "in_proj_weight"):  # Fix for self_attn.in_proj_weight
-            init.xavier_uniform_(module.in_proj_weight)
-        elif hasattr(module, "weight") and module.weight is not None:  # Generic weight initialization
-            init.normal_(module.weight, mean=0.0, std=std)
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
-
-        if hasattr(module, "level_embed"):
-            init.normal_(module.level_embed, mean=0.0, std=std)
-
-
 class DinoDetrDecoderLayer(nn.Module):
     """
     A single layer of the Dino DETR decoder.
@@ -774,6 +713,78 @@ class DinoDetrDecoderLayer(nn.Module):
         outputs = (queries,)
 
         return outputs
+
+
+class DinoDetrPreTrainedModel(PreTrainedModel):
+    config_class = DinoDetrConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+    _no_split_modules = [r"DinoDetrConvEncoder", r"DinoDetrEncoderLayer", r"DinoDetrDecoderLayer"]
+    _can_record_outputs = {
+        "encoder_self_attentions": OutputRecorder(
+            DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1
+        ),
+        "decoder_self_attentions": OutputRecorder(MultiheadAttention, layer_name="self_attn", index=1),
+        "decoder_cross_attentions": OutputRecorder(
+            DinoDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1
+        ),
+        "encoder_hidden_states": DinoDetrEncoderLayer,
+        "decoder_hidden_states": DinoDetrDecoderLayer,
+    }
+
+    def _init_weights(self, module):
+        std = self.config.init_std
+
+        if isinstance(module, DinoDetrLearnedPositionEmbedding):
+            init.uniform_(module.row_embed.weight)
+            init.uniform_(module.col_embed.weight)
+        elif isinstance(module, DinoDetrMultiscaleDeformableAttention):
+            init.constant_(module.sampling_offsets.weight, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
+        elif isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Conv2d):
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            if module.bias is not None:
+                fan_in, _ = _calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in)
+                init.uniform_(module.bias, -bound, bound)
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif hasattr(module, "in_proj_weight"):  # Fix for self_attn.in_proj_weight
+            init.xavier_uniform_(module.in_proj_weight)
+        elif hasattr(module, "weight") and module.weight is not None:  # Generic weight initialization
+            init.normal_(module.weight, mean=0.0, std=std)
+            if hasattr(module, "bias") and module.bias is not None:
+                init.zeros_(module.bias)
+
+        if hasattr(module, "level_embed"):
+            init.normal_(module.level_embed, mean=0.0, std=std)
 
 
 class DinoDetrEncoder(DinoDetrPreTrainedModel):
@@ -1392,18 +1403,6 @@ DINO_DETR_INPUTS_DOCSTRING = r"""
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrModel(DinoDetrPreTrainedModel):
-    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _can_record_outputs = {
-        "encoder_self_attentions": OutputRecorder(
-            DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1
-        ),
-        "decoder_self_attentions": OutputRecorder(MultiheadAttention, layer_name="self_attn", index=1),
-        "decoder_cross_attentions": OutputRecorder(
-            DinoDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1
-        ),
-        "encoder_hidden_states": DinoDetrEncoderLayer,
-        "decoder_hidden_states": DinoDetrDecoderLayer,
-    }
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
 
@@ -1598,18 +1597,6 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
     DINO_DETR_START_DOCSTRING,
 )
 class DinoDetrForObjectDetection(DinoDetrPreTrainedModel):
-    _can_record_outputs = {
-        "encoder_self_attentions": OutputRecorder(
-            DinoDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1
-        ),
-        "decoder_self_attentions": OutputRecorder(MultiheadAttention, layer_name="self_attn", index=1),
-        "decoder_cross_attentions": OutputRecorder(
-            DinoDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1
-        ),
-        "encoder_hidden_states": DinoDetrEncoderLayer,
-        "decoder_hidden_states": DinoDetrDecoderLayer,
-    }
-
     def __init__(self, config: DinoDetrConfig):
         super().__init__(config)
 
