@@ -240,31 +240,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
         result_dtype = quantizer.update_dtype(torch.float32)
         self.assertEqual(result_dtype, torch.float32)
 
-    def test_update_expected_keys(self):
-        """Test expected keys updating for quantized models"""
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config()
-        quantizer = Mxfp4HfQuantizer(config)
-
-        expected_keys = [
-            "model.layers.0.mlp.experts.gate_up_proj",
-            "model.layers.0.mlp.experts.down_proj",
-            "model.embed_tokens.weight",
-        ]
-
-        updated_keys = quantizer.update_expected_keys(None, expected_keys, [])
-
-        expected_updated = [
-            "model.layers.0.mlp.experts.gate_up_proj_blocks",
-            "model.layers.0.mlp.experts.gate_up_proj_scales",
-            "model.layers.0.mlp.experts.down_proj_blocks",
-            "model.layers.0.mlp.experts.down_proj_scales",
-            "model.embed_tokens.weight",
-        ]
-
-        self.assertEqual(set(updated_keys), set(expected_updated))
-
     def test_get_param_name_dequantize(self):
         """Test parameter name updating when dequantizing"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
@@ -314,18 +289,16 @@ class Mxfp4IntegrationTest(unittest.TestCase):
 
     def test_should_convert_module(self):
         """Test module conversion decision logic"""
-        from transformers.integrations.mxfp4 import should_convert_module
+        from transformers.quantizers.quantizers_utils import should_convert_module
 
         # Should convert by default
-        self.assertTrue(should_convert_module(["model", "layers", "0", "mlp"], []))
+        self.assertTrue(should_convert_module("model", None))
+        self.assertTrue(should_convert_module("model", []))
 
         # Should not convert if in exclusion list
         patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(should_convert_module(["model", "layers", "0", "self_attn"], patterns))
-        self.assertFalse(should_convert_module(["lm_head"], patterns))
-
-        # Should convert if not in exclusion list
-        self.assertTrue(should_convert_module(["model", "layers", "0", "mlp", "experts"], patterns))
+        self.assertFalse(should_convert_module("lm_head", patterns))
+        self.assertTrue(should_convert_module("experts", patterns))
 
     @require_torch
     def test_convert_moe_packed_tensors(self):

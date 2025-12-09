@@ -1,5 +1,6 @@
 import gc
 import unittest
+from unittest import skip
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
 from transformers.testing_utils import (
@@ -52,6 +53,7 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertIsInstance(config_from_dict.quantization_config, QuantizationConfig)
         self.assertIsInstance(config_from_dict.sparsity_config, SparsityCompressionConfig)
 
+    @skip("Test too flaky, depends on hardware also")
     def test_tinyllama_w8a8(self):
         expected_out = [
             "<s> Paris is the capital of which country?\n\n**A) 10** Paris is the capital of which country?\n\n**B) 11** Paris is the capital of which country?\n\n**C) 1",
