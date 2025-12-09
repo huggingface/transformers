@@ -153,7 +153,7 @@ class MiniMaxM2Config(PreTrainedConfig):
     attribute_map = {
         "num_experts": "num_local_experts",
     }
-    default_theta = 1000000.0
+    default_theta = 5000000.0
 
     def __init__(
         self,
