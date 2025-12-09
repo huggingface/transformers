@@ -458,7 +458,7 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
 
         tokenized = tokenizer("def hello_world():", return_tensors="pt", return_token_type_ids=True)
         input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
+        output_ids = model.generate(input_ids, do_sample=True, max_new_tokens=15)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
         token_type_ids = tokenized.token_type_ids.to(torch_device)
