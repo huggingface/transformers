@@ -708,11 +708,6 @@ class DinoDetrLearnedPositionEmbedding(nn.Module):
         super().__init__()
         self.row_embed = nn.Embedding(50, num_pos_feats)
         self.col_embed = nn.Embedding(50, num_pos_feats)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        init.uniform_(self.row_embed.weight)
-        init.uniform_(self.col_embed.weight)
 
     def forward(self, pixel_values: torch.FloatTensor, pixel_mask: torch.LongTensor):
         height, width = pixel_values.shape[-2:]
@@ -799,10 +794,6 @@ class DinoDetrDecoderLayer(nn.Module):
 
         self.key_aware_proj = None
 
-    @staticmethod
-    def with_pos_embed(tensor: torch.FloatTensor, pos: torch.FloatTensor):
-        return tensor if pos is None else tensor + pos
-
     # Fully connected
     def forward_ffn(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         transformed_values = self.linear2(self.dropout3(self.activation(self.linear1(pixel_values))))
@@ -819,7 +810,7 @@ class DinoDetrDecoderLayer(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ):
         attn_weights = None
-        q = k = self.with_pos_embed(queries, query_position_embeddings)
+        q = k = queries if query_position_embeddings is None else queries + query_position_embeddings
         transformed_queries, attn_weights = self.self_attn(q, k, queries, attn_mask=self_attn_mask)
         queries = queries + self.dropout2(transformed_queries)
         queries = self.norm2(queries)
@@ -840,7 +831,9 @@ class DinoDetrDecoderLayer(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ):
         transformed_queries, attn_weights = self.cross_attn(
-            hidden_states=self.with_pos_embed(queries, query_position_embeddings).transpose(0, 1),
+            hidden_states=(
+                queries if query_position_embeddings is None else queries + query_position_embeddings
+            ).transpose(0, 1),
             reference_points=query_reference_points.transpose(0, 1).contiguous(),
             encoder_hidden_states=memory.transpose(0, 1),
             spatial_shapes=memory_spatial_shapes,
@@ -1520,9 +1513,6 @@ class DinoDetrEncoderDecoder(DinoDetrPreTrainedModel):
         valid_ratio_w = valid_W.float() / width
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
         return valid_ratio
-
-    def init_ref_points(self, use_num_queries: int):
-        self.content_query_reference_points = nn.Embedding(use_num_queries, 4)
 
     @can_return_tuple
     def forward(
