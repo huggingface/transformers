@@ -73,6 +73,7 @@ _import_structure = {
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
         "use_kernel_func_from_hub",
+        "use_kernelized_func",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -214,6 +215,7 @@ if TYPE_CHECKING:
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
+        use_kernelized_func,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
