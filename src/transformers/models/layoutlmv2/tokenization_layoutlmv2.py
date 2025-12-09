@@ -219,10 +219,10 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self.cls_token_box=cls_token_box
-        self.sep_token_box=sep_token_box
-        self.pad_token_box=pad_token_box
-        self.pad_token_label=pad_token_label
+        self.cls_token_box = cls_token_box
+        self.sep_token_box = sep_token_box
+        self.pad_token_box = pad_token_box
+        self.pad_token_label = pad_token_label
 
         # Now set post_processor with actual token IDs
         cls = str(self.cls_token)
