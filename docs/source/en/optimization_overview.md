@@ -27,9 +27,9 @@ Use the table below to pick an optimization technique.
 |---|:---:|:---:|
 | [Compilation](#compilation) | ✅ | |
 | [Attention backends](#attention-backends) | ✅ | ✅ |
-| [Kernels](#kernels) | ✅ | |
+| [Kernels](#kernels) | ✅ | ✅ |
 | [Quantization](#quantization) | ✅ | ✅ |
-| [Caching](#caching) | ✅ | |
+| [Caching](#caching) | ✅ | ✅ |
 | [Parallelism](#parallelism) | ✅ | |
 | [Continuous batching](#continuous-batching) | ✅ | |
 
@@ -39,15 +39,22 @@ This guide gives you a quick start on optimization in Transformers.
 
 [torch.compile](./perf_torch_compile) reduces Python overhead, fuses operations, and creates kernels tuned for your shapes and hardware. The first run warms it up and subsequent runs use the faster compiled path.
 
-Call `torch.compile()` on a model to enable it.
+Pass a [fixed size cache](./kv_cache#fixed-size-cache) to [`~GenerationMixin.generate`] to trigger `torch.compile` automatically.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B")
-compiled_model = torch.compile(model)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype=torch.float16, device_map="auto")
+input = tokenizer("The French Bread Law states", return_tensors="pt").to(model.device)
+
+output = model.generate(**input, do_sample=False, max_new_tokens=20, cache_implementation="static")
+tokenizer.batch_decode(output, skip_special_tokens=True)[0]
 ```
+
+> [!WARNING]
+> Avoid calling `torch.compile(model)` outside of [`~GenerationMixin.generate`] to prevent the model from recompiling every step.
 
 ## Attention backends
 
@@ -63,7 +70,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", attn_implementat
 
 ## Kernels
 
-Kernels fuse operations to boost throughput. The [Kernels](https://huggingface.co/docs/kernels/en/index) library loads optimized compute kernels from the [Hub](https://huggingface.co/kernels-community) in a flexible and version-safe way.
+Kernels fuse operations to boost throughput and reduce memory usage. The [Kernels](https://huggingface.co/docs/kernels/en/index) library loads optimized compute kernels from the [Hub](https://huggingface.co/kernels-community) in a flexible and version-safe way.
 
 The example below loads an optimized FlashAttention-2 kernel without installing the package.
 
@@ -95,9 +102,8 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Caching
 
-[Caching](./kv_cache) increases speed by reusing past keys and values instead of recomputing them for every token. All Transformers models use a [`DynamicCache`] by default to allow the cache to grow proportionally with decoding.
-
-Pick a caching strategy that fits your use case. If you want maximum speed, consider a [`StaticCache`]. A [`StaticCache`] is a fixed-size cache compatible with [torch.compile](#compilation).
+[Caching](./kv_cache) speeds up generation by reusing past keys and values instead of recomputing them for every token. To offset and reduce the memory cost of storing past keys and values, Transformers 
+supports offloading the cache to the CPU. Only the current layer remains on the GPU.
 
 Use the `cache_implementation` argument in [`~GenerationMixin.generate`] to set a cache strategy.
 
@@ -110,7 +116,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B", attn_implementation="kernels-community/flash-attn2"
 )
 inputs = tokenizer("The Le Décret Pain states that a baguette must,", return_tensors="pt")
-outputs = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_implementation="static")
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_implementation="offloaded")
 ```
 
 ## Parallelism
