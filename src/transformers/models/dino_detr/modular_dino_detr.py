@@ -671,6 +671,8 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight[module.padding_idx])
         elif hasattr(module, "in_proj_weight"):  # Fix for self_attn.in_proj_weight
             init.xavier_uniform_(module.in_proj_weight)
+        elif hasattr(module, "in_proj_bias"):  # Fix for self_attn.in_proj_bias
+            init.xavier_uniform_(module.in_proj_bias)
         elif hasattr(module, "weight") and module.weight is not None:  # Generic weight initialization
             init.normal_(module.weight, mean=0.0, std=std)
             if hasattr(module, "bias") and module.bias is not None:
