@@ -1,8 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from accelerate import PartialState
-from accelerate.utils import reduce
 
 from ..utils import is_accelerate_available, is_scipy_available, is_vision_available
 from .loss_for_object_detection import (
@@ -22,6 +20,10 @@ if is_vision_available():
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 
 class LwDetrHungarianMatcher(HungarianMatcher):
