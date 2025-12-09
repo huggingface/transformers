@@ -169,7 +169,7 @@ from ...utils import TensorType, auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import TransformersKwargs, can_return_tuple
+from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -1974,6 +1974,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         h = embedded_ts.compact()  # (B, T, D)
         return h
 
+    @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
