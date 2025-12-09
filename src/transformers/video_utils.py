@@ -602,7 +602,7 @@ def read_video_torchcodec(
         seek_mode="exact",
         # Allow FFmpeg decide on the number of threads for efficiency
         num_ffmpeg_threads=0,
-        device=kwargs.get("device", "cpu"),
+        device=sample_indices_fn.keywords.get("torchcodec_device", "cpu"),
     )
     total_num_frames = decoder.metadata.num_frames
     video_fps = decoder.metadata.average_fps
