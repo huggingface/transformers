@@ -500,7 +500,10 @@ def build_document_attention_mask(
     seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=device), seq_sizes)
     block_mask = seg_ids[:, None] != seg_ids[None, :]
     additive_mask = torch.zeros((total_tokens, total_tokens), dtype=dtype, device=device)
-    additive_mask.masked_fill_(block_mask, float("-inf"))
+
+    mask_value = torch.tensor(torch.finfo(dtype).min, device=device, dtype=dtype)
+    additive_mask.masked_fill_(block_mask, mask_value)
+
     return additive_mask.view(1, 1, total_tokens, total_tokens)
 
 

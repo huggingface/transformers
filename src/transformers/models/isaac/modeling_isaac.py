@@ -309,7 +309,8 @@ def build_document_attention_mask(
     seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=device), seq_sizes)
     block_mask = seg_ids[:, None] != seg_ids[None, :]
     additive_mask = torch.zeros((total_tokens, total_tokens), dtype=dtype, device=device)
-    additive_mask.masked_fill_(block_mask, float("-inf"))
+    mask_value = torch.tensor(torch.finfo(dtype).min, device=device, dtype=dtype)
+    additive_mask.masked_fill_(block_mask, mask_value)
     return additive_mask.view(1, 1, total_tokens, total_tokens)
 
 
@@ -884,12 +885,11 @@ class IsaacVisionTransformer(nn.Module):
         # Apply final layer normalization
         hidden_states = self.post_layernorm(hidden_states)
 
-        if self.pixel_shuffle_scale_factor > 1:
-            hidden_states = pixel_shuffle_varlen(
-                x=hidden_states,
-                token_grids=token_grids,
-                scale_factor=self.pixel_shuffle_scale_factor,
-            )
+        hidden_states = pixel_shuffle_varlen(
+            x=hidden_states,
+            token_grids=token_grids,
+            scale_factor=self.pixel_shuffle_scale_factor,
+        )
         # Remove the pseudo batch dimension we added earlier
         hidden_states = hidden_states.squeeze(0)
 
