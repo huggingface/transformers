@@ -95,12 +95,6 @@ from typing import Any, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from perceptron.tensorstream.ops import (
-    compute_mrope_pos_tensor,
-    modality_mask,
-    reconstruct_tensor_stream_from_compact_dict,
-)
-from perceptron.tensorstream.tensorstream import TensorStream, TextType, VisionType, group_streams
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
@@ -117,9 +111,27 @@ from ...models.qwen3.modeling_qwen3 import Qwen3PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, can_return_tuple
-from ...utils.import_utils import is_torchdynamo_compiling
+from ...utils.import_utils import is_perceptron_available, is_torchdynamo_compiling
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
+
+
+if is_perceptron_available():
+    from perceptron.tensorstream.ops import (
+        compute_mrope_pos_tensor,
+        modality_mask,
+        reconstruct_tensor_stream_from_compact_dict,
+    )
+    from perceptron.tensorstream.tensorstream import TensorStream, TextType, VisionType, group_streams
+else:
+    ts_slice = None
+    Event = None
+    Stream = None
+    TensorStream = None
+    TextType = None
+    VisionType = None
+    create_stream = None
+    group_streams = None
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -268,13 +280,6 @@ class IsaacVisionEmbeddings(nn.Module):
             return embeddings.new_zeros((0, embeddings.size(-1)))
 
         return torch.cat(output_chunks, dim=0)
-
-
-def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
-    """Helper to compute max sequence length from cumulative sequence lengths."""
-    if cu is None or len(cu) < 2:
-        return fallback
-    return int((cu[1:] - cu[:-1]).max().item())
 
 
 def build_document_attention_mask(

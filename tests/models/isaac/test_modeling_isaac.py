@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import pytest
+from huggingface_hub import is_offline_mode
 
 from transformers import (
     AutoProcessor,
@@ -23,7 +24,8 @@ from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProc
 from transformers.models.isaac.modeling_isaac import IsaacVisionAttention
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import is_offline_mode, is_vision_available
+from transformers.utils import is_vision_available
+from transformers.utils.import_utils import is_perceptron_available
 
 
 if is_vision_available():
@@ -38,14 +40,14 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-try:
+if is_perceptron_available():
     from perceptron.tensorstream.ops import modality_mask, role_mask, tensor_stream_token_view
     from perceptron.tensorstream.tensorstream import TensorStream
-except Exception:
+else:
     TensorStream = None
 
 
-tensorstream_required = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
+require_tensorstream = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
 
 MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
 MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
@@ -479,6 +481,7 @@ class IsaacModelTest(unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @require_tensorstream
     def test_model_forward(self):
         config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
         model = IsaacModel(config)
@@ -492,6 +495,7 @@ class IsaacModelTest(unittest.TestCase):
             (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
         )
 
+    @require_tensorstream
     def test_for_conditional_generation(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
         model = IsaacForConditionalGeneration(config)
@@ -540,6 +544,7 @@ def test_isaac_config_migrates_legacy_rope_theta():
 
 
 @require_torch
+@require_tensorstream
 def test_isaac_for_conditional_generation_initialization(isaac_tiny_config):
     model = IsaacForConditionalGeneration(isaac_tiny_config)
     model.to(torch_device)
@@ -555,6 +560,7 @@ def test_isaac_for_conditional_generation_initialization(isaac_tiny_config):
 
 
 @require_torch
+@require_tensorstream
 def test_isaac_for_conditional_generation_loss_and_generate_flag(isaac_tiny_config):
     model = IsaacForConditionalGeneration(isaac_tiny_config).to(torch_device)
     assert model.can_generate()
@@ -571,7 +577,7 @@ def test_isaac_for_conditional_generation_loss_and_generate_flag(isaac_tiny_conf
 
 @require_torch
 @require_vision
-@tensorstream_required
+@require_tensorstream
 def test_isaac_processor_matches_config_defaults(isaac_processor, isaac_tiny_config):
     assert isaac_processor.vision_token == isaac_tiny_config.vision_token
     assert isaac_processor.max_sequence_length == isaac_tiny_config.max_sequence_length
@@ -582,7 +588,7 @@ def test_isaac_processor_matches_config_defaults(isaac_processor, isaac_tiny_con
 
 @require_torch
 @require_vision
-@tensorstream_required
+@require_tensorstream
 def test_isaac_processor_text_only_round_trip(isaac_processor):
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     prompt = isaac_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -595,7 +601,7 @@ def test_isaac_processor_text_only_round_trip(isaac_processor):
 
 
 @require_torch
-@tensorstream_required
+@require_tensorstream
 def test_isaac_processor_accepts_batchencoding_chat_template(isaac_processor):
     messages = [{"role": "user", "content": "Hello, how are you?"}]
     batch_encoding = isaac_processor.apply_chat_template(messages, add_generation_prompt=True)
@@ -610,7 +616,7 @@ def test_isaac_processor_accepts_batchencoding_chat_template(isaac_processor):
 
 @require_torch
 @require_vision
-@tensorstream_required
+@require_tensorstream
 def test_isaac_processor_with_single_image(isaac_processor):
     vision_token = isaac_processor.vision_token
     text = f"Look at this {vision_token} and describe it."
@@ -623,7 +629,7 @@ def test_isaac_processor_with_single_image(isaac_processor):
 
 @require_torch
 @require_vision
-@tensorstream_required
+@require_tensorstream
 def test_isaac_processor_with_multiple_images(isaac_processor):
     vision_token = isaac_processor.vision_token
     text = f"First {vision_token} then {vision_token}"
@@ -636,7 +642,7 @@ def test_isaac_processor_with_multiple_images(isaac_processor):
 
 @require_torch
 @require_vision
-@tensorstream_required
+@require_tensorstream
 def test_isaac_processor_error_on_image_mismatch(isaac_processor):
     vision_token = isaac_processor.vision_token
     text = f"{vision_token} {vision_token}"
@@ -648,7 +654,7 @@ def test_isaac_processor_error_on_image_mismatch(isaac_processor):
 
 @require_torch
 @require_vision
-@tensorstream_required
+@require_tensorstream
 def test_isaac_processor_consistent_tensor_stream_types(isaac_processor):
     text_only = "Simple question?"
     text_with_image = f"Describe this {isaac_processor.vision_token}"
@@ -664,7 +670,7 @@ def test_isaac_processor_consistent_tensor_stream_types(isaac_processor):
 
 @require_torch
 @require_vision
-@tensorstream_required
+@require_tensorstream
 def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config):
     model = IsaacForConditionalGeneration(isaac_tiny_config).to(torch_device)
     model.eval()
@@ -694,7 +700,7 @@ def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config)
 
 @require_torch
 @slow
-@tensorstream_required
+@require_tensorstream
 def test_isaac_checkpoint_hashes(isaac_reference_model):
     isaac_reference_model = isaac_reference_model.to("cpu")
     expected_hashes = _load_expected_hashes()
@@ -762,7 +768,7 @@ def create_isaac_processor(
 @require_torch
 @require_vision
 @slow
-@tensorstream_required
+@require_tensorstream
 def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_reference_processor):
     device = "cuda"
     dtype = torch.bfloat16

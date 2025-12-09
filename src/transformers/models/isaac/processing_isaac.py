@@ -92,16 +92,29 @@ from typing import Optional, Union
 
 import PIL.Image
 import torch
-from perceptron.tensorstream.ops import slice as ts_slice
-from perceptron.tensorstream.ops import tensor_stream_token_view
-from perceptron.tensorstream.tensorstream import Event, Stream, TensorStream, TextType, VisionType, create_stream
 
 from ...feature_extraction_utils import BatchFeature
 from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType
+from ...utils.import_utils import is_perceptron_available
 from .configuration_isaac import IsaacConfig
+
+
+if is_perceptron_available():
+    from perceptron.tensorstream.ops import slice as ts_slice
+    from perceptron.tensorstream.ops import tensor_stream_token_view
+    from perceptron.tensorstream.tensorstream import Event, Stream, TensorStream, TextType, VisionType, create_stream
+else:
+    ts_slice = None
+    Event = None
+    Stream = None
+    TensorStream = None
+    TextType = None
+    VisionType = None
+    create_stream = None
+    group_streams = None
 
 
 # ============================================================================

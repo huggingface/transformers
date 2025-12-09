@@ -93,24 +93,39 @@ import PIL.Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from perceptron.tensorstream.ops import (
-    compute_mrope_pos_tensor,
-    modality_mask,
-    reconstruct_tensor_stream_from_compact_dict,
-    tensor_stream_token_view,
-)
-from perceptron.tensorstream.ops import (
-    slice as ts_slice,
-)
-from perceptron.tensorstream.tensorstream import (
-    Event,
-    Stream,
-    TensorStream,
-    TextType,
-    VisionType,
-    create_stream,
-    group_streams,
-)
+
+from ...utils.import_utils import is_perceptron_available, is_torchdynamo_compiling
+
+
+if is_perceptron_available():
+    from perceptron.tensorstream.ops import (
+        compute_mrope_pos_tensor,
+        modality_mask,
+        reconstruct_tensor_stream_from_compact_dict,
+        tensor_stream_token_view,
+    )
+    from perceptron.tensorstream.ops import (
+        slice as ts_slice,
+    )
+    from perceptron.tensorstream.tensorstream import (
+        Event,
+        Stream,
+        TensorStream,
+        TextType,
+        VisionType,
+        create_stream,
+        group_streams,
+    )
+else:
+    ts_slice = None
+    Event = None
+    Stream = None
+    TensorStream = None
+    TextType = None
+    VisionType = None
+    create_stream = None
+    group_streams = None
+
 
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -143,7 +158,6 @@ from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
 from ...utils.generic import TransformersKwargs, can_return_tuple
-from ...utils.import_utils import is_torchdynamo_compiling
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -458,13 +472,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             },
             tensor_type=return_tensors,
         )
-
-
-def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
-    """Helper to compute max sequence length from cumulative sequence lengths."""
-    if cu is None or len(cu) < 2:
-        return fallback
-    return int((cu[1:] - cu[:-1]).max().item())
 
 
 def build_document_attention_mask(
