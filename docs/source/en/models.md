@@ -112,64 +112,31 @@ Transformers reduces some of these memory-related challenges with fast initializ
 
 ### Sharded checkpoints
 
-The [`~PreTrainedModel.save_pretrained`] method automatically shards checkpoints larger than 10GB.
+[`~PreTrainedModel.save_pretrained`] automatically shards checkpoints larger than 50GB. This keeps shard counts low for large models and simplifies file management without significantly slowing load times.
 
-Each shard is loaded sequentially after the previous shard is loaded, limiting memory usage to only the model size and the largest shard size.
+Shards load sequentially and memory usage is limited to the model size plus the largest shard. Set `max_shard_size` in [`~PreTrainedModel.save_pretrained`] to control the threshold.
 
-The `max_shard_size` parameter defaults to 5GB for each shard because it is easier to run on free-tier GPU instances without running out of memory.
-
-For example, create some shards checkpoints for [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B) in [`~PreTrainedModel.save_pretrained`].
-
-```py
-from transformers import AutoModel
-import tempfile
-import os
-
-model = AutoModel.from_pretrained("biomistral/biomistral-7b")
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
-    print(sorted(os.listdir(tmp_dir)))
-```
-
-Reload the sharded checkpoint with [`~PreTrainedModel.from_pretrained`].
-
-```py
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir)
-    new_model = AutoModel.from_pretrained(tmp_dir)
-```
-
-Sharded checkpoints can also be directly loaded with [`~transformers.trainer_utils.load_sharded_checkpoint`].
-
-```py
-from transformers.trainer_utils import load_sharded_checkpoint
-
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
-    load_sharded_checkpoint(model, tmp_dir)
-```
-
-The [`~PreTrainedModel.save_pretrained`] method creates an index file that maps parameter names to the files they're stored in. The index file has two keys, `metadata` and `weight_map`.
+[`~PreTrainedModel.save_pretrained`] also creates an index file mapping parameter names to their shard files. The index contains two keys, `metadata` and `weight_map`.
 
 ```py
 import json
 
 with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
+    model.save_pretrained(tmp_dir, max_shard_size="50GB")
     with open(os.path.join(tmp_dir, "model.safetensors.index.json"), "r") as f:
         index = json.load(f)
 
 print(index.keys())
 ```
 
-The `metadata` key provides the total model size.
+`metadata` stores the total model size.
 
 ```py
 index["metadata"]
 {'total_size': 28966928384}
 ```
 
-The `weight_map` key maps each parameter to the shard it's stored in.
+`weight_map` maps each parameter to its shard file.
 
 ```py
 index["weight_map"]
