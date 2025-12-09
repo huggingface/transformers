@@ -389,34 +389,6 @@ class DinoDetrLearnedPositionEmbedding(nn.Module):
         return position_embeddings
 
 
-def build_position_encoding(config):
-    """
-    Builds the positional encoding module for the Dino DETR model.
-
-    This function creates a positional encoding module based on the configuration provided. It supports both sine-based
-    and learned positional encodings.
-
-    Args:
-        config (`PretrainedConfig`):
-            The configuration object containing model parameters. Must include the following attributes:
-            - `d_model` (int): The hidden size of the model.
-            - `pe_temperature_H` (int, *optional*): The temperature parameter for the height dimension in sine-based embeddings.
-            - `pe_temperature_W` (int, *optional*): The temperature parameter for the width dimension in sine-based embeddings.
-
-    Returns:
-        `nn.Module`: A positional encoding module.
-    """
-    N_steps = config.d_model // 2
-    position_embeddings = DinoDetrPositionEmbeddingSineHW(
-        N_steps,
-        temperatureH=config.pe_temperature_H,
-        temperatureW=config.pe_temperature_W,
-        normalize=True,
-    )
-
-    return position_embeddings
-
-
 def gen_sine_position_embeddings(reference_points: torch.FloatTensor, d_model: int):
     """
     Generates sine-based positional embeddings for the given reference points.
@@ -1346,7 +1318,12 @@ class DinoDetrModel(DinoDetrPreTrainedModel):
 
         # Create backbone + positional encoding
         backbone = DinoDetrConvEncoder(config)
-        position_embeddings = build_position_encoding(config)
+        position_embeddings = DinoDetrPositionEmbeddingSineHW(
+            config.d_model // 2,
+            temperatureH=config.pe_temperature_H,
+            temperatureW=config.pe_temperature_W,
+            normalize=True,
+        )
         self.backbone = DinoDetrConvModel(backbone, position_embeddings)
         d_model = config.d_model
 
