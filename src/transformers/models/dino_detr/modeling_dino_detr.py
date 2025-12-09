@@ -913,13 +913,6 @@ class DinoDetrPreTrainedModel(PreTrainedModel):
             init.normal_(module.level_embed, mean=0.0, std=std)
 
 
-def _get_clones(module: torch.nn.Module, N: int, layer_share: bool = False):
-    if layer_share:
-        return nn.ModuleList([module for i in range(N)])
-    else:
-        return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
-
 class DinoDetrEncoder(DinoDetrPreTrainedModel):
     """
     The encoder module for the Dino DETR model.
@@ -968,11 +961,7 @@ class DinoDetrEncoder(DinoDetrPreTrainedModel):
     ):
         super().__init__(config)
         if config.num_encoder_layers > 0:
-            self.layers = _get_clones(
-                encoder_layer,
-                config.num_encoder_layers,
-                layer_share=False,
-            )
+            self.layers = nn.ModuleList([copy.deepcopy(encoder_layer) for _ in range(config.num_encoder_layers)])
         else:
             self.layers = []
             del encoder_layer
@@ -1177,11 +1166,7 @@ class DinoDetrDecoder(DinoDetrPreTrainedModel):
     ):
         super().__init__(config)
         if config.num_decoder_layers > 0:
-            self.layers = _get_clones(
-                decoder_layer,
-                config.num_decoder_layers,
-                layer_share=False,
-            )
+            self.layers = nn.ModuleList([copy.deepcopy(decoder_layer) for _ in range(config.num_decoder_layers)])
         else:
             self.layers = []
         self.num_decoder_layers = config.num_decoder_layers
