@@ -23,7 +23,7 @@ from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import IsaacVisionAttention
 from transformers.models.isaac.processing_isaac import IsaacProcessor
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import get_tests_dir, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_vision_available
 from transformers.utils.import_utils import is_perceptron_available
 
@@ -52,8 +52,9 @@ require_tensorstream = pytest.mark.skipif(TensorStream is None, reason="TensorSt
 MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
 MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
 LOCAL_CHECKPOINT = os.environ.get("ISAAC_TEST_MODEL_PATH")
-HASH_FILE = Path(__file__).with_name("isaac_checkpoint_hashes.json")
-GENERATION_GOLDEN_FILE = Path(__file__).with_name("isaac_generation_golden.json")
+FIXTURES_DIR = Path(get_tests_dir("fixtures/isaac"))
+HASH_FILE = FIXTURES_DIR / "isaac_checkpoint_hashes.json"
+GENERATION_GOLDEN_FILE = FIXTURES_DIR / "isaac_generation_golden.json"
 HASH_FILTERS = {
     "full_model": {"include": None, "exclude": None},
     "core_model": {"include": None, "exclude": {"vision_embedding", "audio_embedding", "inv_freq"}},
