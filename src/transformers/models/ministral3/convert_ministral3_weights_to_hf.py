@@ -137,6 +137,7 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
 
 def convert_config(original_config: dict, max_position_embeddings: int = 262144, is_vision: bool = True):
     original_vision_config = original_config.pop("vision_encoder", None)
+    assert is_vision == original_vision_config, f"is_vision={is_vision} but original_vision_config={original_vision_config}"
     original_text_config = original_config
 
     # Text config
@@ -224,7 +225,7 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     """Convert the model and save it (this implicitly save the config as well)."""
     params = read_json(os.path.join(input_dir, "params.json"))
 
-    is_vision = isinstance(config, Mistral3Config)
+    is_vision = params.pop("vision_encoder", None) is not None
     config = convert_config(params, max_position_embeddings, is_vision)
 
     full_state_dict = {}
