@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 from collections.abc import Callable
 from typing import Optional, Union
 
@@ -25,6 +26,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+import transformers
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -307,6 +309,78 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def sdpa_attention_forward(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | None = 0.,
+    **_
+):
+    """
+    Grouped query attention with sinks using `torch`-native scaled dot product attention. Let
+    - N be the batch size,
+    - H be total the number of attention heads,
+    - G be the number of groups, and
+    - E be the per-head embedding dimensionality.
+
+    Parameters
+    ----------
+    module: torch.nn.Module
+        Attention module with `sinks` `torch.Tensor` attribute of shape H
+    query: torch.Tensor
+        Query tensor of shape N x H x L x E
+    key: torch.Tensor
+        Key tensor of shape N x G x L x E
+    value: torch.Tensor
+        Value tensor of shape N x G x L x E
+    attention_mask: torch.Tensor | None
+        Attention mask of shape N x 1 x L x L
+    scaling: float
+        Scaling factor applied to query-key dot products, typically 1 / sqrt(E)
+    dropout: float | None = 0.
+        Dropout probability
+
+    Returns
+    -------
+    torch.Tensor
+        Attention output tensor of shape N x L x H x E
+    None
+        Unused attention weights
+    """
+    N, H, L, E = query.shape
+    _, G, *_ = key.shape
+    if attention_mask is None:
+        attention_mask = torch.zeros(N, 1, L, L, device=query.device, dtype=query.dtype)
+    attention = torch.nn.functional.scaled_dot_product_attention(
+        query,
+        *(
+            torch.cat(
+                [
+                    tensor.repeat_interleave(H // G, dim=1),
+                    torch.zeros(N, H, 1, E, device=tensor.device, dtype=tensor.dtype)
+                ],
+                dim=2
+            )
+            for tensor in (key, value)
+        ),
+        torch.cat(
+            [
+                attention_mask.expand(N, H, L, L).clone(),
+                module.sinks.reshape(1, H, 1, 1).expand(N, H, L, 1)
+            ],
+            dim=3
+        ),
+        dropout_p=dropout,
+        is_causal=attention_mask is None,
+        scale=scaling
+    )
+    return attention.transpose(1, 2).contiguous(), None
+
+
+
 class GptOssAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -360,8 +434,11 @@ class GptOssAttention(nn.Module):
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
+        if self.config._attn_implementation == 'eager':
+            attention_interface = eager_attention_forward
+        elif self.config._attn_implementation == 'sdpa':
+            attention_interface = sdpa_attention_forward
+        else:
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -435,7 +512,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GptOssDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_flex_attn = True
 
     _can_compile_fullgraph = True

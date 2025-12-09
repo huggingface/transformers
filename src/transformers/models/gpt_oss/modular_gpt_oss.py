@@ -49,6 +49,7 @@ from ..mixtral.modeling_mixtral import (
 )
 from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
+from transformers.models.gpt_oss.modeling_gpt_oss import sdpa_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -286,8 +287,11 @@ class GptOssAttention(Qwen2Attention):
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
+        if self.confi._attn_implementation == 'eager':
+            attention_interface = eager_attention_forward
+        elif self.config._attn_implementation == 'sdpa':
+            attention_interface = sdpa_attention_forward
+        else:
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -355,7 +359,7 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
 
 class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_flash_attention = False
     _supports_flex_attention = False
     _can_record_outputs = {
