@@ -17,7 +17,7 @@
 import copy
 import math
 from collections.abc import Callable
-from typing import Optional, Union, Tuple
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -163,9 +163,9 @@ class T5LayerFF(nn.Module):
 
 def eager_attention_forward(
     module: nn.Module,
-    query: torch.Tensor,   
-    key: torch.Tensor,     
-    value: torch.Tensor,   
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
@@ -178,8 +178,7 @@ def eager_attention_forward(
     relative_context_positions: Optional[torch.LongTensor] = None,  # shape (q_len, 1)
     output_attentions: Optional[bool] = False,
     **kwargs: Unpack[TransformersKwargs],
-) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-
+) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
     def _relative_position_bucket(
         relative_position: torch.Tensor,
         bidirectional: bool = True,
@@ -206,11 +205,8 @@ def eager_attention_forward(
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3))  # (bsz, heads, q_len, k_len)
-    attn_weights = attn_weights * scaling
 
     computed_position_bias = None
     if has_relative_attention_bias:
@@ -232,7 +228,9 @@ def eager_attention_forward(
             max_distance=relative_attention_max_distance,
         )
         values = relative_attention_bias(relative_position_bucket)  # (q_len, k_len, heads)
-        computed_position_bias = values.permute(2, 0, 1).unsqueeze(0).to(dtype=attn_weights.dtype)  # (1, heads, q_len, k_len)
+        computed_position_bias = (
+            values.permute(2, 0, 1).unsqueeze(0).to(dtype=attn_weights.dtype)
+        )  # (1, heads, q_len, k_len)
 
         if seq_length is not None and seq_length != q_len:
             computed_position_bias = computed_position_bias[:, :, -seq_length:, :]
@@ -276,7 +274,6 @@ class T5Attention(nn.Module):
                 "when creating this class."
             )
 
-        self.scaling = self.d_model**-0.5
 
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -288,13 +285,12 @@ class T5Attention(nn.Module):
 
         self.gradient_checkpointing = False
 
-
     def forward(
         self,
         hidden_states: torch.FloatTensor,
+        mask: Optional[torch.FloatTensor] = None,
         key_value_states: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
         position_bias: Optional[torch.FloatTensor] = None,
         query_length: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -345,7 +341,6 @@ class T5Attention(nn.Module):
         if self.has_relative_attention_bias:
             device = query_states.device
             q_len = query_states.shape[2]
-            k_len = key_states.shape[2]
 
             # We only need the context positions column (q_len, 1). k_idx is not needed for the caller.
             q_idx = torch.arange(q_len, device=device, dtype=torch.long)
@@ -354,12 +349,11 @@ class T5Attention(nn.Module):
                     real_seq_len_t = torch.as_tensor(query_length, device=device, dtype=torch.long)
                 else:
                     real_seq_len_t = cache_position[-1].to(device=device, dtype=torch.long) + 1
-                start_q = real_seq_len_t.sub(q_len)              # tensor op only
-                context_pos = start_q.unsqueeze(0) + q_idx       # [q_len]
+                start_q = real_seq_len_t.sub(q_len)  # tensor op only
+                context_pos = start_q.unsqueeze(0) + q_idx  # [q_len]
                 relative_context_positions = context_pos.view(q_len, 1)
             else:
                 relative_context_positions = q_idx.view(q_len, 1)
-
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -373,9 +367,8 @@ class T5Attention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask=attention_mask,
+            attention_mask=mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
             # T5 relative bias params
             has_relative_attention_bias=self.has_relative_attention_bias,
             is_decoder=self.is_decoder,
@@ -394,8 +387,6 @@ class T5Attention(nn.Module):
         if output_attentions:
             outputs = outputs + (attn_weights,)
         return outputs
-
-
 
 
 class T5LayerSelfAttention(nn.Module):
