@@ -263,6 +263,7 @@ class ExpectationsUpdater:
     def update_dict_value(self, file_path: Path, key_line: int, new_value: Any) -> bool:
         """
         Update the dictionary value at the given line.
+        Handles both single-line and multi-line values.
 
         Args:
             file_path: Path to the test file
@@ -278,13 +279,6 @@ class ExpectationsUpdater:
         line_idx = key_line - 1  # Convert to 0-indexed
         original_line = lines[line_idx]
 
-        print(f"\nOriginal line {key_line}:")
-        print(f"  {original_line.rstrip()}")
-
-        # Parse the line to find the value part
-        # Pattern: ("cuda", 8): [old_value],
-        # We want to replace [old_value] with [new_value]
-
         # Find the colon that separates key from value
         colon_idx = original_line.find(':')
         if colon_idx == -1:
@@ -293,30 +287,97 @@ class ExpectationsUpdater:
 
         # Everything before colon (including leading spaces)
         before_colon = original_line[:colon_idx + 1]
+        after_colon = original_line[colon_idx + 1:].strip()
 
-        # Format the new value
-        if isinstance(new_value, str):
-            # If new_value is already a string (from captured_info), use it directly
-            # This preserves formatting like [0.2180, -0.4355, 0.2198]
-            formatted_value = new_value
-        elif isinstance(new_value, list):
-            # Format as a nice list
-            formatted_value = '[' + ', '.join(str(v) for v in new_value) + ']'
+        # Check if this is a multi-line value
+        # Multi-line if: line ends with '[' or opening bracket without closing
+        is_multiline = after_colon.rstrip().rstrip(',').endswith('[')
+
+        if is_multiline:
+            # Find the end of the multi-line value
+            end_line_idx = self._find_value_end(lines, line_idx)
+            if end_line_idx is None:
+                print("ERROR: Could not find end of multi-line value")
+                return False
+
+            print(f"\nOriginal lines {key_line}-{end_line_idx + 1} (multi-line value):")
+            for i in range(line_idx, end_line_idx + 1):
+                print(f"  {lines[i].rstrip()}")
+
+            # Format the new value
+            if isinstance(new_value, str):
+                formatted_value = new_value
+            elif isinstance(new_value, list):
+                formatted_value = '[' + ', '.join(str(v) for v in new_value) + ']'
+            else:
+                formatted_value = str(new_value)
+
+            # Check if the last line has trailing comma
+            last_line = lines[end_line_idx].rstrip()
+            has_trailing_comma = last_line.endswith(',')
+            trailing = ',' if has_trailing_comma else ''
+
+            # Detect indentation for the values
+            # Use the key line's leading indentation + 4 spaces (standard Python indentation)
+            key_indent = len(original_line) - len(original_line.lstrip())
+            value_indent = key_indent + 4
+
+            # Re-format the value with proper indentation
+            # If the new value is a multi-line string (has newlines), preserve structure
+            if '\n' in formatted_value:
+                # Parse the formatted value to add proper indentation
+                lines_in_value = formatted_value.split('\n')
+                indented_lines = []
+                for i, vline in enumerate(lines_in_value):
+                    if i == 0:
+                        # First line starts after the opening bracket
+                        indented_lines.append(vline)
+                    elif vline.strip() == ']':
+                        # Closing bracket should align with key
+                        indented_lines.append(' ' * key_indent + vline.strip())
+                    else:
+                        # Value lines: strip any existing indentation, then add proper indentation
+                        stripped_line = vline.lstrip()
+                        indented_lines.append(' ' * value_indent + stripped_line)
+                formatted_value = '\n'.join(indented_lines)
+
+            # Create the new single line (which may contain newlines in the string)
+            new_line = f"{before_colon} {formatted_value}{trailing}\n"
+
+            print(f"\nNew line {key_line}:")
+            print(f"  {new_line.rstrip()}")
+
+            # Replace the multi-line value with single line
+            # Remove lines from line_idx to end_line_idx (inclusive)
+            # Insert the new line at line_idx
+            del lines[line_idx:end_line_idx + 1]
+            lines.insert(line_idx, new_line)
+
         else:
-            formatted_value = str(new_value)
+            # Single-line value
+            print(f"\nOriginal line {key_line}:")
+            print(f"  {original_line.rstrip()}")
 
-        # Check if original line has trailing comma
-        has_trailing_comma = original_line.rstrip().endswith(',')
-        trailing = ',' if has_trailing_comma else ''
+            # Format the new value
+            if isinstance(new_value, str):
+                formatted_value = new_value
+            elif isinstance(new_value, list):
+                formatted_value = '[' + ', '.join(str(v) for v in new_value) + ']'
+            else:
+                formatted_value = str(new_value)
 
-        # Reconstruct the line
-        new_line = f"{before_colon} {formatted_value}{trailing}\n"
+            # Check if original line has trailing comma
+            has_trailing_comma = original_line.rstrip().endswith(',')
+            trailing = ',' if has_trailing_comma else ''
 
-        print(f"New line {key_line}:")
-        print(f"  {new_line.rstrip()}")
+            # Reconstruct the line
+            new_line = f"{before_colon} {formatted_value}{trailing}\n"
 
-        # Update the line
-        lines[line_idx] = new_line
+            print(f"New line {key_line}:")
+            print(f"  {new_line.rstrip()}")
+
+            # Update the line
+            lines[line_idx] = new_line
 
         # Write back
         with open(file_path, 'w') as f:
@@ -324,6 +385,39 @@ class ExpectationsUpdater:
 
         print(f"\n✅ Successfully updated line {key_line}")
         return True
+
+    def _find_value_end(self, lines: list, start_idx: int) -> Optional[int]:
+        """
+        Find the end line of a multi-line value.
+
+        Looks for the closing bracket ']' that matches the opening bracket.
+        Handles nested brackets.
+
+        Args:
+            lines: List of file lines
+            start_idx: 0-indexed line where the key is
+
+        Returns:
+            0-indexed line number where the value ends, or None
+        """
+        bracket_depth = 0
+        in_value = False
+
+        for i in range(start_idx, len(lines)):
+            line = lines[i]
+
+            # Count opening and closing brackets
+            for char in line:
+                if char == '[':
+                    bracket_depth += 1
+                    in_value = True
+                elif char == ']':
+                    bracket_depth -= 1
+                    if bracket_depth == 0 and in_value:
+                        # Found the matching closing bracket
+                        return i
+
+        return None
 
     def process(self, captured_file: Path, apply: bool = False) -> bool:
         """
