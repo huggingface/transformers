@@ -1797,7 +1797,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             init_kwargs = init_configuration
 
-        if resolved_vocab_files["tokenizer_file"] is not None:
+        if resolved_vocab_files.get("tokenizer_file", None) is not None:
             init_kwargs.pop("add_bos_token", None)
             init_kwargs.pop("add_eos_token", None)
 
