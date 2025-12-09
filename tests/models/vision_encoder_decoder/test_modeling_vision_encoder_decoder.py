@@ -994,6 +994,7 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
@@ -1107,6 +1108,7 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
