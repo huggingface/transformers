@@ -241,11 +241,6 @@ class LwDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr"
-    attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "decoder_self_attention_heads",
-        "num_key_value_heads": "decoder_self_attention_heads",
-    }
     sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
@@ -529,6 +524,20 @@ class LwDetrConvEncoder(ConditionalDetrConvEncoder):
 class LwDetrAttention(LlamaAttention):
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.head_dim = getattr(config, "head_dim", config.d_model // config.decoder_self_attention_heads)
+        self.num_key_value_groups = 1
+        self.q_proj = nn.Linear(
+            config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.decoder_self_attention_heads * self.head_dim, config.d_model, bias=config.attention_bias
+        )
         self.is_causal = False
         del self.rotary_fn
 

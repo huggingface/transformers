@@ -118,11 +118,6 @@ class LwDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr"
-    attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "decoder_self_attention_heads",
-        "num_key_value_heads": "decoder_self_attention_heads",
-    }
     sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
