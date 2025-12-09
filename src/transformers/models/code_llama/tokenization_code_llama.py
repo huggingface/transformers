@@ -128,6 +128,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
         additional_special_tokens=None,
         use_default_system_prompt: bool = False,
         add_prefix_space: Optional[bool] = True,
+        add_bos_token: bool = True,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
@@ -178,6 +179,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
             suffix_token=suffix_token,
             eot_token=eot_token,
             fill_token=fill_token,
+            add_bos_token=add_bos_token,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
