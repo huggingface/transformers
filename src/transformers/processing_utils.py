@@ -1476,6 +1476,24 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+        is_primary = sub_processor_type == "tokenizer"
+
+        if is_primary:
+            # Primary tokenizer: load from root
+            tokenizer = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        else:
+            # Additional tokenizer: load from subfolder (e.g., "decoder_tokenizer")
+            tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
+            tokenizer = auto_processor_class.from_pretrained(
+                pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
+            )
+        return tokenizer
+
+    @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
         """
         Identify and instantiate the subcomponents of Processor classes, such as image processors, tokenizers,
@@ -1505,21 +1523,10 @@ class ProcessorMixin(PushToHubMixin):
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
-            if "FuyuProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
-                from .tokenization_utils_tokenizers import TokenizersBackend
 
-                tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
-                if "token_type_ids" in tokenizer.model_input_names:
-                    tokenizer.model_input_names.remove("token_type_ids")
-                args.append(tokenizer)
-            elif "PixtralProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
-                from tokenizers import pre_tokenizers
-
-                from .models.llama import LlamaTokenizer
-
-                tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-                tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-                    [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
+            if "tokenizer" in sub_processor_type:
+                tokenizer = cls._load_tokenizer_from_pretrained(
+                    sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
                 )
                 args.append(tokenizer)
             elif is_primary:
@@ -1527,15 +1534,6 @@ class ProcessorMixin(PushToHubMixin):
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
                 sub_processor = auto_processor_class.from_pretrained(
                     pretrained_model_name_or_path, subfolder=subfolder, **kwargs
-                )
-                args.append(sub_processor)
-            elif "tokenizer" in sub_processor_type:
-                # Special case: tokenizer-like parameters not in the mapping (e.g., "protein_tokenizer")
-                # Load using AutoTokenizer with subfolder
-                auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
-                tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
-                sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=tokenizer_subfolder, **kwargs
                 )
                 args.append(sub_processor)
 
