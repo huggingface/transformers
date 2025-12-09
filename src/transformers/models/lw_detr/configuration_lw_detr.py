@@ -45,6 +45,8 @@ class LwDetrConfig(PreTrainedConfig):
             at different levels. Supported values are 0.5, 1.0, and 2.0.
         hidden_expansion (`float`, *optional*, defaults to 0.5):
             Expansion factor for hidden dimensions in the projector layers.
+        c2f_num_blocks (`int`, *optional*, defaults to 3):
+            Number of blocks in the C2F layer.
         activation_function (`str`, *optional*, defaults to `"silu"`):
             The non-linear activation function in the projector. Supported values are `"silu"`, `"relu"`, `"gelu"`.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -131,6 +133,7 @@ class LwDetrConfig(PreTrainedConfig):
         # projector
         projector_scale_factors: list[float] = [],
         hidden_expansion=0.5,
+        c2f_num_blocks=3,
         activation_function="silu",
         batch_norm_eps=1e-5,
         # decoder
@@ -206,6 +209,7 @@ class LwDetrConfig(PreTrainedConfig):
         self.projector_out_channels = d_model
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
+        self.c2f_num_blocks = c2f_num_blocks
         # decoder
         self.d_model = d_model
         self.dropout = dropout

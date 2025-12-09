@@ -185,8 +185,12 @@ class LwDetrConvNormLayer(nn.Module):
 class LwDetrRepVggBlock(nn.Module):
     def __init__(self, config: LwDetrConfig, hidden_channels: int):
         super().__init__()
-        self.conv1 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, activation="silu")
-        self.conv2 = LwDetrConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, activation="silu")
+        self.conv1 = LwDetrConvNormLayer(
+            config, hidden_channels, hidden_channels, 3, 1, activation=config.activation_function
+        )
+        self.conv2 = LwDetrConvNormLayer(
+            config, hidden_channels, hidden_channels, 3, 1, activation=config.activation_function
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.conv1(x)
@@ -198,7 +202,7 @@ class LwDetrC2FLayer(nn.Module):
     # Inspired by RTDetrCSPRepLayer
     def __init__(self, config: LwDetrConfig, in_channels: int, out_channels: int):
         super().__init__()
-        num_blocks = 3
+        num_blocks = config.c2f_num_blocks
         activation = config.activation_function
 
         self.hidden_channels = int(out_channels * config.hidden_expansion)
