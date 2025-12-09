@@ -386,14 +386,17 @@ class GptOssModel(MixtralModel):
     def __init__(self, config: GptOssConfig):
         super().__init__(config)
 
-        if config._attn_implementation in ["flash_attention_2", "flash_attention_3"]:
+        if (
+            "flash" in config._attn_implementation 
+            and config._attn_implementation != "kernels-community/vllm-flash-attn3"
+        ):
             raise ValueError(
-                f"GPT-OSS models do not support {config._attn_implementation} because they utilize "
-                "attention sinks, which are not currently supported by the standard Flash Attention kernels. "
-                "Please use 'eager' implementation (attn_implementation='eager') or a custom kernel if available."
+                f"GPT-OSS model does not support the specified "
+                f"flash attention implementation: {config._attn_implementation}. "
+                f"Only '{vllm_fa3_kernel}' is supported."
             )
 
-            
+
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -409,6 +412,17 @@ class GptOssModel(MixtralModel):
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        
+        if (
+            "flash" in config._attn_implementation 
+            and config._attn_implementation != "kernels-community/vllm-flash-attn3"
+        ):
+            raise ValueError(
+                f"GPT-OSS model does not support the specified "
+                f"flash attention implementation: {config._attn_implementation}. "
+                f"Only '{vllm_fa3_kernel}' is supported."
+            )
+
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
