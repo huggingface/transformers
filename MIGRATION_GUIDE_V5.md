@@ -105,7 +105,7 @@ class Llama5Tokenizer(TokenizersBackend):
             self._vocab = vocab
 
         if merges is not None:
-            self._merges = merges
+            self._merges = merges or []
         else:
             self._merges = generate_merges(filtered_vocab)
 
@@ -339,7 +339,7 @@ _We aim for this to be fixed and released in a following release candidate in th
 ### Remote code incompatibility
 
 A lot of paths were removed and reworked; paths like `transformers.tokenization_utils` and `transformers.tokenization_utils_fast`, which no longer exist.
-We'll be working on backwards compatibility for these before version 5 is fully released.
+These now redirect to `transformers.tokenization_utils_sentencepiece` and `transformers.tokenization_utils_tokenizers` respectively; please update imports accordingly.
 
 _We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
 
