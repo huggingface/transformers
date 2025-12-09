@@ -316,6 +316,10 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video.
+        backend (`str`,  *optional*):
+            The backend to use for processing videos (e.g. "torchcodec", "torchvision").
+        torchcodec_device (`str`,  *optional*):
+            The device to use for processing videos with `TorchCodec`.
         device (`Union[str, torch.Tensor]`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
         return_metadata (`bool`, *optional*):
@@ -341,6 +345,8 @@ class VideosKwargs(TypedDict, total=False):
     crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
+    backend: Optional[str]
+    torchcodec_device: Optional[str]
     device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
     do_sample_frames: Optional[bool]
     video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
