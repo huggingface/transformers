@@ -864,13 +864,16 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        backend = "torchcodec"
-        if not is_torchcodec_available():
+        backend = sample_indices_fn.keywords.get("backend", "torchcodec")
+        if backend == "torchcodec" and not is_torchcodec_available():
             warnings.warn(
                 "`torchcodec` is not installed and cannot be used to decode the video by default. "
-                "Falling back to `torchvision`. Note that `torchvision` decoding is deprecated and will be removed in future versions. "
+                "Falling back to `torchvision`."
             )
             backend = "torchvision"
+
+        if backend == "torchvision":
+            warnings.warn("`torchvision` decoding is deprecated and will be removed in future versions.")
 
         if isinstance(video_url_or_urls, list):
             return list(zip(*[self.fetch_videos(x, sample_indices_fn=sample_indices_fn) for x in video_url_or_urls]))
