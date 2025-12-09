@@ -351,9 +351,6 @@ class TrainingArguments:
             SIGTERM with adequate time before the job time limit. Calculate the required grace period as: longest
             possible iteration time + checkpoint saving time. For example, if an iteration takes 2 minutes and
             checkpoint saving takes 2 minutes, set at least 4 minutes (240 seconds) of grace time.
-        save_safetensors (`bool`, *optional*, defaults to `True`):
-            Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
-            default `torch.load` and `torch.save`.
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
             the main one.
@@ -960,12 +957,6 @@ class TrainingArguments:
             )
         },
     )
-    save_safetensors: bool = field(
-        default=True,
-        metadata={
-            "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
-        },
-    )
     save_on_each_node: bool = field(
         default=False,
         metadata={
@@ -1530,14 +1521,6 @@ class TrainingArguments:
                         "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
                         f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
                     )
-
-        if not self.save_safetensors:
-            logger.info(
-                f"Found safetensors installation, but --save_safetensors={self.save_safetensors}. "
-                f"Safetensors should be a preferred weights saving format due to security and performance reasons. "
-                f"If your model cannot be saved by safetensors please feel free to open an issue at "
-                f"https://github.com/huggingface/safetensors!"
-            )
 
         if (
             self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU

@@ -185,7 +185,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         model.is_4bit_serializable = self.is_serializable()
         return model
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
 
     @property

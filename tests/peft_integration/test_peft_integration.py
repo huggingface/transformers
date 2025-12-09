@@ -140,13 +140,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(peft_model))
 
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
-                    self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
-
-                    peft_model = transformers_class.from_pretrained(tmpdirname).to(torch_device)
-                    self.assertTrue(self._check_lora_correctly_converted(peft_model))
-
     def test_peft_enable_disable_adapters(self):
         """
         A test that checks if `enable_adapters` and `disable_adapters` methods work as expected.
@@ -521,7 +514,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     def test_peft_save_quantized_regression(self):
         """
         Simple test that tests the basic usage of PEFT model save_pretrained with quantized base models
-        Regression test to make sure everything works as expected before the safetensors integration.
         """
         # 4bit
         for model_id in self.peft_test_model_ids:
@@ -536,10 +528,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    peft_model.save_pretrained(tmpdirname)
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
-                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
         # 8-bit
@@ -555,11 +546,10 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
-                    peft_model.save_pretrained(tmpdirname, safe_serialization=False)
+                    peft_model.save_pretrained(tmpdirname)
 
-                    self.assertTrue("adapter_model.bin" in os.listdir(tmpdirname))
+                    self.assertTrue("adapter_model.safetensors" in os.listdir(tmpdirname))
                     self.assertTrue("adapter_config.json" in os.listdir(tmpdirname))
-                    self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
     def test_peft_pipeline(self):

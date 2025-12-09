@@ -60,7 +60,7 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 
 ```bash
 python src/transformers/models/musicgen/convert_musicgen_transformers.py \
-    --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
+    --checkpoint small --pytorch_dump_folder /output/path
 ```
 
 ## Generation

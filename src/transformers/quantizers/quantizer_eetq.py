@@ -105,7 +105,7 @@ class EetqHfQuantizer(HfQuantizer):
             model, modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized
         )
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
 
     @property

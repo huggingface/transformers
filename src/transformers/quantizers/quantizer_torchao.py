@@ -152,20 +152,16 @@ class TorchAoHfQuantizer(HfQuantizer):
                 dtype = torch.float32
         return dtype
 
-    def get_state_dict_and_metadata(self, model, safe_serialization: bool | None = False):
+    def get_state_dict_and_metadata(self, model):
         """
-        If the model is safe serializable, we flatten the state dict of tensor subclasses so that it is compatible with
-        the safetensors format.
+        We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
-        if safe_serialization:
-            if TORCHAO_VERSION >= version.parse("0.15.0"):
-                return flatten_tensor_state_dict(model.state_dict())
-            else:
-                raise RuntimeError(
-                    f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
-                )
+        if TORCHAO_VERSION >= version.parse("0.15.0"):
+            return flatten_tensor_state_dict(model.state_dict()), {}
         else:
-            return None, {}
+            raise RuntimeError(
+                f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
+            )
 
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         from accelerate.utils import CustomDtype
@@ -289,23 +285,14 @@ class TorchAoHfQuantizer(HfQuantizer):
             return model
         return
 
-    def is_serializable(self, safe_serialization=None) -> bool:
-        if safe_serialization:
-            _is_torchao_serializable = TORCHAO_VERSION >= version.parse("0.15.0")
-            if not TORCHAO_VERSION >= version.parse("0.15.0"):
-                logger.warning(
-                    f"torchao quantized model only supports safe serialization for torchao version >= 0.15.0, please set `safe_serialization` to False for \
-                    {type(self.quantization_config.quant_type)} and {TORCHAO_VERSION}."
-                )
-            return _is_torchao_serializable
-
-        if self.offload and self.quantization_config.modules_to_not_convert is None:
+    def is_serializable(self) -> bool:
+        _is_torchao_serializable = TORCHAO_VERSION >= version.parse("0.15.0")
+        if not TORCHAO_VERSION >= version.parse("0.15.0"):
             logger.warning(
-                "The model contains offloaded modules and these modules are not quantized. We don't recommend saving the model as we won't be able to reload them."
-                "If you want to specify modules to not quantize, please specify modules_to_not_convert in the quantization_config."
+                "torchao quantized model only supports serialization for torchao version >= 0.15.0, please upgrade "
+                "your version to save the quantized model"
             )
-            return False
-        return True
+        return _is_torchao_serializable
 
     def get_accelerator_warm_up_factor(self):
         """

@@ -203,15 +203,6 @@ class QuantoQuantizationTest(unittest.TestCase):
             self.quantized_model.to(0)
         self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.weight._data.device.type, torch_device)
 
-    def test_serialization_bin(self):
-        """
-        Test the serialization, the loading and the inference of the quantized weights
-        """
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            with self.assertRaises(ValueError) as e:
-                self.quantized_model.save_pretrained(tmpdirname, safe_serialization=False)
-            self.assertIn("The model is quantized with quanto and is not serializable", str(e.exception))
-
     def test_serialization_safetensors(self):
         """
         Test the serialization, the loading and the inference of the quantized weights

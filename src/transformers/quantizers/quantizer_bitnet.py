@@ -92,7 +92,7 @@ class BitNetHfQuantizer(HfQuantizer):
         target_dtype = torch.int8
         return target_dtype
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True
 
     @property

@@ -720,16 +720,16 @@ class TorchAoSerializationTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def check_serialization_expected_output(self, device, expected_output, safe_serialization=False):
+    def check_serialization_expected_output(self, device, expected_output):
         """
         Test if we can serialize and load/infer the model again on the same device
         """
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
+            self.quantized_model.save_pretrained(tmpdirname)
 
             loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype, use_safetensors=safe_serialization
+                tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype
             )
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
@@ -791,7 +791,7 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
             device_map=device,
             quantization_config=self.quant_config,
         )
-        self.check_serialization_expected_output(device, expected_output, safe_serialization=True)
+        self.check_serialization_expected_output(device, expected_output)
 
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):

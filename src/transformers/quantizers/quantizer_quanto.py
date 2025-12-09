@@ -112,7 +112,7 @@ class QuantoHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return False
 
     def get_quantize_ops(self):

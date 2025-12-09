@@ -287,7 +287,7 @@ def convert_paligemma_checkpoint(
         dim=0,
     )
 
-    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB")
     processor.save_pretrained(pytorch_dump_folder_path)
 
 

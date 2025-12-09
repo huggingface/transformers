@@ -78,7 +78,7 @@ def rename_state_dict(state_dict):
     return model_state_dict
 
 
-def convert_persimmon_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
+def convert_persimmon_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path):
     import sys
 
     sys.path.insert(0, ada_lib_path)
@@ -89,7 +89,7 @@ def convert_persimmon_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_mode
     transformers_config = PersimmonConfig()
     model = PersimmonForCausalLM(transformers_config, eos_token_id=71013, bos_token_id=71013).to(torch.bfloat16)
     model.load_state_dict(state_dict)
-    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=safe_serialization)
+    model.save_pretrained(pytorch_dump_folder_path)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
 
 
@@ -111,14 +111,12 @@ def main():
         "--ada_lib_path",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "adept_vocab.model")
 
     convert_persimmon_checkpoint(
         pytorch_dump_folder_path=args.output_dir,
         pt_model_path=args.pt_model_path,
-        safe_serialization=args.safe_serialization,
         ada_lib_path=args.ada_lib_path,
     )
     tokenizer = tokenizer_class(spm_path, bos_token="|ENDOFTEXT|", eos_token="|ENDOFTEXT|")

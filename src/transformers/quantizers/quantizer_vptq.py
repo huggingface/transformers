@@ -78,5 +78,5 @@ class VptqHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True

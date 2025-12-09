@@ -193,7 +193,6 @@ def convert_model(
     local_dir=None,
     output_dir=None,
     output_hub_path=None,
-    safe_serialization=True,
     revision=None,
 ):
     """Convert and save the model weights, processor, and configuration."""
@@ -271,10 +270,10 @@ def convert_model(
     # Save the model
     if output_dir:
         print(f"Saving model to {output_dir}...")
-        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+        model.save_pretrained(output_dir)
     if output_hub_path:
         print(f"Pushing model to hub at {output_hub_path}...")
-        model.push_to_hub(output_hub_path, safe_serialization=safe_serialization)
+        model.push_to_hub(output_hub_path)
 
     del state_dict, model
     gc.collect()
@@ -313,11 +312,6 @@ def main():
         help="Repository ID to push model to hub (e.g. 'username/model-name')",
         default=None,
     )
-    parser.add_argument(
-        "--safe_serialization",
-        action="store_true",
-        help="Whether to save using safetensors",
-    )
     args = parser.parse_args()
 
     if args.output_dir is None and args.output_hub_path is None:
@@ -331,7 +325,6 @@ def main():
         local_dir=args.local_dir,
         output_dir=args.output_dir,
         output_hub_path=args.output_hub_path,
-        safe_serialization=args.safe_serialization,
         revision=args.revision,
     )
 

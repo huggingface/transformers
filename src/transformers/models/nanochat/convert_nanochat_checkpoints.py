@@ -128,7 +128,7 @@ def load_config_from_checkpoint(input_path: Path) -> NanoChatConfig:
     return config
 
 
-def write_model(input_dir, output_dir, safe_serialization=True):
+def write_model(input_dir, output_dir):
     """Convert NanoChat model from original checkpoint format to HuggingFace format."""
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
@@ -212,7 +212,7 @@ def write_model(input_dir, output_dir, safe_serialization=True):
         del model.config._name_or_path
 
     print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    model.save_pretrained(output_dir)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -285,12 +285,6 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization",
-        action="store_true",
-        default=True,
-        help="Whether or not to save using `safetensors`.",
-    )
-    parser.add_argument(
         "--test_prompt",
         type=str,
         default=None,
@@ -301,7 +295,6 @@ def main():
     write_model(
         args.input_dir,
         args.output_dir,
-        safe_serialization=args.safe_serialization,
     )
 
     write_tokenizer(args.input_dir, args.output_dir)
