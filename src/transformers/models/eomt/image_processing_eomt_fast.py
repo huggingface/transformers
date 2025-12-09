@@ -385,7 +385,19 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
 
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
+        if patch_offsets:
+            output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
+        else:
+            output_logits = []
+
+            for idx in range(len(segmentation_logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation_logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+                output_logits.append(resized_logits[0])
 
         preds = [logit.argmax(dim=0) for logit in output_logits]
         return preds
