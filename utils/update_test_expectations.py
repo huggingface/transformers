@@ -786,11 +786,65 @@ def update_expected_value_in_file(
 
     # Extract any method chaining at the end (e.g., ".to(torch_device)")
     method_chain_suffix = ''
+    tensor_params = ''  # For parameters inside torch.tensor(..., device=..., dtype=...)
     if value_type == 'torch_tensor':
         # Look for patterns like ).to(...) or ).cuda() etc.
         chain_match = re.search(r'\)\s*(\.\s*\w+\([^)]*\))', original_text)
         if chain_match:
             method_chain_suffix = chain_match.group(1)
+
+        # Extract parameters inside torch.tensor() like device=, dtype=, requires_grad=
+        # We need to properly count brackets to find where the tensor array ends
+        if 'torch.tensor(' in original_text:
+            tensor_start = original_text.find('torch.tensor(')
+            if tensor_start >= 0:
+                # Start counting from after torch.tensor(
+                pos = tensor_start + len('torch.tensor(')
+
+                bracket_count = 0
+                paren_count = 0
+                in_string = False
+                string_char = None
+
+                # Find where the tensor values end (when brackets go back to 0)
+                tensor_end = -1
+                for i in range(pos, len(original_text)):
+                    char = original_text[i]
+
+                    if char in ('"', "'") and not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char and in_string:
+                        in_string = False
+                        string_char = None
+                    elif not in_string:
+                        if char == '[':
+                            bracket_count += 1
+                        elif char == ']':
+                            bracket_count -= 1
+                            if bracket_count == 0:
+                                # Found the end of the tensor array
+                                tensor_end = i
+                                break
+                        elif char == '(':
+                            paren_count += 1
+                        elif char == ')':
+                            paren_count -= 1
+
+                if tensor_end > 0:
+                    # Now check if there's anything between tensor_end and the closing )
+                    # Remove the method chain part first if it exists
+                    text_to_check = original_text[tensor_end + 1:]
+                    if method_chain_suffix:
+                        # Remove method chain from the end
+                        text_to_check = text_to_check[:text_to_check.rfind(')' + method_chain_suffix)]
+
+                    # Find parameters: should be comma followed by params, then closing )
+                    params_match = re.search(r'\s*,\s*(.+?)\s*\)$', text_to_check, re.DOTALL)
+                    if params_match:
+                        params = params_match.group(1).strip()
+                        if '=' in params:
+                            tensor_params = ',\n' + params
 
     # Format the new value appropriately
     if value_type == 'torch_tensor':
@@ -830,13 +884,31 @@ def update_expected_value_in_file(
         # Check if original was torch.tensor(...) or just [...]
         if 'torch.tensor' in original_text:
             if is_single_line:
-                # Single-line format: torch.tensor([...]).to(...)
-                formatted_value = f"{base_indent}{assignment_prefix}torch.tensor({new_value.strip()}){method_chain_suffix}"
+                # Single-line format: torch.tensor([...], device=...).to(...)
+                formatted_value = f"{base_indent}{assignment_prefix}torch.tensor({new_value.strip()}{tensor_params}){method_chain_suffix}"
             else:
                 # Multi-line format with proper indentation
                 formatted_tensor = '\n'.join(indented_tensor_lines)
                 formatted_value = f"{base_indent}{assignment_prefix}torch.tensor(\n"
-                formatted_value += formatted_tensor + '\n'
+                formatted_value += formatted_tensor
+                # Add tensor_params with proper indentation if present
+                if tensor_params:
+                    # tensor_params starts with ',\n' so we need to add indentation after the newline
+                    # Split on newline, indent each non-empty line, then rejoin
+                    params_lines = tensor_params.split('\n')
+                    indented_params = []
+                    for i, line in enumerate(params_lines):
+                        if i == 0:
+                            # First part is just the comma
+                            indented_params.append(line)
+                        elif line.strip():
+                            # Add base indentation + content indentation (match original style)
+                            indented_params.append(content_base_indent + line.lstrip())
+                        else:
+                            indented_params.append(line)
+                    formatted_value += '\n'.join(indented_params) + '\n'
+                else:
+                    formatted_value += '\n'
                 formatted_value += f"{base_indent}){method_chain_suffix}"
         else:
             # Just update the tensor values directly
