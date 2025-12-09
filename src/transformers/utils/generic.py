@@ -163,8 +163,8 @@ def maybe_autocast(
     ):
     """
     Context manager that only autocasts if:
-    
-    - `autocast` is already enabled in this context 
+
+    - `autocast` is already enabled in this context
     - Or this call to `maybe_autocast` has `enabled=True`
 
     This prevents `autocast` being added to the graph when it is effectively a no-op.
