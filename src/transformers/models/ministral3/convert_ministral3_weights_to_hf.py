@@ -137,7 +137,7 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
 
 def convert_config(original_config: dict, max_position_embeddings: int = 262144, is_vision: bool = True):
     original_vision_config = original_config.pop("vision_encoder", None)
-    assert is_vision == original_vision_config, (
+    assert is_vision == (original_vision_config is not None), (
         f"is_vision={is_vision} but original_vision_config={original_vision_config}"
     )
     original_text_config = original_config
@@ -198,6 +198,8 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144,
     if original_vision_config is None:
         new_text_config = Ministral3Config(**new_text_config_kwargs, **get_maybe_quant_config())
         return new_text_config
+    else:
+        new_text_config = Ministral3Config(**new_text_config_kwargs)
 
     # Vision config
     new_vision_config = original_vision_config
@@ -227,7 +229,7 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     """Convert the model and save it (this implicitly save the config as well)."""
     params = read_json(os.path.join(input_dir, "params.json"))
 
-    is_vision = params.pop("vision_encoder", None) is not None
+    is_vision = params.get("vision_encoder") is not None
     config = convert_config(params, max_position_embeddings, is_vision)
 
     full_state_dict = {}
@@ -240,7 +242,8 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
 
     text_config = config.text_config if is_vision else config
     if text_config.tie_word_embeddings:
-        full_state_dict["lm_head.weight"] = full_state_dict["model.embed_tokens.weight"]
+        model_key = "model.language_model" if is_vision else "model"
+        full_state_dict["lm_head.weight"] = full_state_dict[f"{model_key}.embed_tokens.weight"]
 
     # Load weights into model and resave them
     with torch.device("meta"):
