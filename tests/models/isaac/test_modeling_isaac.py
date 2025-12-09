@@ -200,12 +200,6 @@ def test_isaac_sdpa_attention_backend():
     assert attn_weights is None
 
 
-def _hash_tensor(tensor):
-    hasher = hashlib.sha256()
-    hasher.update(_tensor_to_bytes(tensor))
-    return hasher.hexdigest()
-
-
 @lru_cache(maxsize=1)
 def _load_expected_hashes():
     if not HASH_FILE.exists():
