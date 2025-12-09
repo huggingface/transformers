@@ -458,11 +458,7 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
 
     def test_single_tile_image_with_thumbnail_disabled(self):
-        """Test that single-tile images work correctly when use_thumbnail=False.
-
-        This is a regression test for a bug where single-tile images with use_thumbnail=False
-        would generate 0 image tokens, causing a mismatch with the image features.
-        """
+        """Test that single-tile images work correctly when use_thumbnail=False."""
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
         processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=False)
