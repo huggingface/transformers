@@ -20,6 +20,9 @@
 
 __version__ = "5.0.0.dev0"
 
+import importlib
+import sys
+import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -174,6 +177,8 @@ _import_structure = {
     "quantizers": [],
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
+    "tokenization_utils": [],
+    "tokenization_utils_fast": [],
     "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -768,8 +773,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
 else:
-    import sys
-
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
@@ -782,6 +785,26 @@ else:
         module_spec=__spec__,
         extra_objects={"__version__": __version__},
     )
+
+    def _create_tokenization_alias(alias: str, target: str) -> None:
+        """
+        Lazily redirect legacy tokenization module paths to their replacements without importing heavy deps.
+        """
+
+        module = types.ModuleType(alias)
+        module.__doc__ = f"Alias module for backward compatibility with `{target}`."
+
+        def _get_target():
+            return importlib.import_module(target, __name__)
+
+        module.__getattr__ = lambda name: getattr(_get_target(), name)
+        module.__dir__ = lambda: dir(_get_target())
+
+        sys.modules[alias] = module
+        setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
+
+    _create_tokenization_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
+    _create_tokenization_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
 
 
 if not is_torch_available():

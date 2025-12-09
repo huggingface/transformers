@@ -15,9 +15,7 @@
 """Tokenization class for CLVP."""
 
 import json
-import os
 from functools import lru_cache
-from typing import Optional
 
 import regex as re
 
@@ -123,10 +121,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CLVP tokenizer detect beginning of words by the preceding space).
-        add_bos_token (`bool`, *optional*, defaults to `False`):
-            Whether to add `bos_token` in front of the sequence when add_special_tokens=True.
-        add_eos_token (`bool`, *optional*, defaults to `False`):
-            Whether to add `eos_token` in end of the sequence when add_special_tokens=True.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -145,8 +139,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         eos_token="[STOP]",
         pad_token="[STOP]",
         add_prefix_space=False,
-        add_bos_token=False,
-        add_eos_token=False,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
@@ -154,20 +146,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
 
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
         self._normalizer = None
-
-        # Set special_tokens_pattern based on add_bos_token and add_eos_token flags
-        if add_bos_token and add_eos_token:
-            kwargs["special_tokens_pattern"] = "bos_eos"
-        elif add_bos_token:
-            kwargs["special_tokens_pattern"] = "bos"
-        elif add_eos_token:
-            kwargs["special_tokens_pattern"] = "eos"
-        else:
-            kwargs["special_tokens_pattern"] = "none"
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -191,8 +170,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
@@ -251,17 +229,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        output = bos_token_id + token_ids_0 + eos_token_id
-
-        if token_ids_1 is not None:
-            output = output + bos_token_id + token_ids_1 + eos_token_id
-
-        return output
-
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -302,35 +269,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
         text = text.replace(self.unk_token, "").replace("   ", " ").replace("  ", " ")
         return text
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-        merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
-
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
-
-        index = 0
-        with open(merge_file, "w", encoding="utf-8") as writer:
-            writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning(
-                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!"
-                    )
-                    index = token_index
-                writer.write(" ".join(bpe_tokens) + "\n")
-                index += 1
-
-        return vocab_file, merge_file
 
 
 __all__ = ["ClvpTokenizer"]

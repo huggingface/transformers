@@ -129,13 +129,6 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         predicted_text = [tokenizer.decode(x, clean_up_tokenization_spaces=False) for x in output_tokens]
         self.assertListEqual(predicted_text, input_text)
 
-    def test_add_prefix_space_fast(self):
-        tokenizer_w_prefix = self.get_tokenizer(add_prefix_space=True)
-        tokenizer_wo_prefix = self.get_tokenizer(add_prefix_space=False)
-        tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
-        tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
-        self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
-
     @slow
     def test_save_and_load_tokenizer(self):
         return super().test_save_and_load_tokenizer()

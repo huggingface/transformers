@@ -136,9 +136,14 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             extractor = TokenizersExtractor(tokenizer_json_path)
             vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
+            if _type := getattr(self.tokenizer_class, "model", None):
+                if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
+                    vocab = vocab_ids
+                else:
+                    vocab = vocab_scores
 
             init_kwargs = {
-                "vocab": vocab_scores,
+                "vocab": vocab,
                 "merges": merges,
                 "do_lower_case": False,
                 "keep_accents": True,
@@ -859,14 +864,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         max_length=12,
                         pad_to_multiple_of=8,
                     )
-
-    def test_tokenizer_slow_store_full_signature(self):
-        signature = inspect.signature(self.tokenizer_class.__init__)
-        tokenizer = self.get_tokenizer()
-
-        for parameter_name, parameter in signature.parameters.items():
-            if parameter.default != inspect.Parameter.empty:
-                self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_special_tokens_mask_input_pairs(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

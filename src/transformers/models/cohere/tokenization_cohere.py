@@ -100,21 +100,23 @@ class CohereTokenizer(TokenizersBackend):
             Whether or not the default system prompt for Cohere tokenizer should be used.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not the tokenizer should automatically add a prefix space
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
     # No `max_model_input_sizes`
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors: str = "replace",
         unk_token: str = "<UNK>",
         bos_token: str = "<BOS_TOKEN>",
@@ -123,27 +125,19 @@ class CohereTokenizer(TokenizersBackend):
         cls_token: str = "<CLS>",
         sep_token: str = "<SEP>",
         mask_token: str = "<MASK_TOKEN>",
-        add_bos_token: bool = True,
-        add_eos_token: bool = False,
         use_default_system_prompt: bool = False,
         add_prefix_space: bool = False,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         **kwargs,
     ):
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
         self.add_prefix_space = add_prefix_space
         self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
@@ -151,12 +145,9 @@ class CohereTokenizer(TokenizersBackend):
                 str(mask_token): 4,
                 str(bos_token): 5,
             }
+        )
 
-        if merges is not None:
-            self._merges = merges
-        else:
-            self._merges = []
-
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -177,10 +168,7 @@ class CohereTokenizer(TokenizersBackend):
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=add_prefix_space, trim_offsets=True)
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -189,30 +177,12 @@ class CohereTokenizer(TokenizersBackend):
             cls_token=cls_token,
             sep_token=sep_token,
             mask_token=mask_token,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
         self._post_init()
-
-    def _post_init(self):
-        """Post-initialization to ensure add_prefix_space is applied correctly."""
-        # Re-apply add_prefix_space setting to pre_tokenizer and decoder
-        # This is needed because when loading from pretrained, the tokenizer.json
-        # has these settings baked in and we need to override them
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.Digits(individual_digits=True),
-                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, trim_offsets=True),
-            ]
-        )
-        self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=self.add_prefix_space, trim_offsets=True)
-
-        # Call parent to handle AddedToken properties
-        super()._post_init()
 
     def apply_tool_use_template(
         self,

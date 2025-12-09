@@ -19,7 +19,7 @@ import os
 import re
 import warnings
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
@@ -204,10 +204,11 @@ class WhisperTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
-        vocab=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
         merges=None,
         normalizer_file=None,
         unk_token="<|endoftext|>",
@@ -253,7 +254,6 @@ class WhisperTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.ByteLevel()
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -276,18 +276,7 @@ class WhisperTokenizer(TokenizersBackend):
         self.language = language
         self.task = task
         self.predict_timestamps = predict_timestamps
-
-        self._post_init()
-
-    def _post_init(self):
-        """Post-initialization hook to set up prefix tokens after the tokenizer is fully loaded."""
-        super()._post_init()
-        # Set up prefix tokens if language or task is specified (may be set from config in from_pretrained)
-        if hasattr(self, "language") and hasattr(self, "task") and hasattr(self, "predict_timestamps"):
-            if self.language is not None or self.task is not None:
-                self.set_prefix_tokens(
-                    language=self.language, task=self.task, predict_timestamps=self.predict_timestamps
-                )
+        self.set_prefix_tokens()
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
     def _decode_with_timestamps(

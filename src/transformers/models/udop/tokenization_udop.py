@@ -183,10 +183,11 @@ class UdopTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         eos_token="</s>",
         sep_token="</s>",
         unk_token="<unk>",
@@ -196,7 +197,6 @@ class UdopTokenizer(TokenizersBackend):
         pad_token_label=-100,
         only_label_first_subword=True,
         extra_special_tokens=None,
-        vocab=None,
         **kwargs,
     ):
         if "additional_special_tokens" in kwargs and "extra_special_tokens" not in kwargs:
@@ -205,24 +205,17 @@ class UdopTokenizer(TokenizersBackend):
             kwargs["extra_special_tokens"] = extra_special_tokens
 
         if vocab is None:
-            vocab_scores = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(unk_token), 0.0), ("▁", -2.0)]
-        elif isinstance(vocab, dict):
-            vocab_scores = [(str(token), float(score)) for token, score in vocab.items()]
-        elif isinstance(vocab, list) and len(vocab) > 0:
-            if isinstance(vocab[0], (tuple, list)):
-                vocab_scores = [(str(token), float(score)) for token, score in vocab]
-            else:
-                vocab_scores = [(str(token), 0.0) for token in vocab]
+            vocab = [(str(pad_token), 0.0), (str(eos_token), 0.0), (str(unk_token), 0.0), ("▁", -2.0)]
 
         unk_id = 2
-        for idx, (token, _) in enumerate(vocab_scores):
+        for idx, (token, _) in enumerate(vocab):
             if token == str(unk_token):
                 unk_id = idx
                 break
 
         self._tokenizer = Tokenizer(
             Unigram(
-                vocab_scores,
+                vocab,
                 unk_id=unk_id,
                 byte_fallback=False,
             )
@@ -240,7 +233,6 @@ class UdopTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             eos_token=eos_token,
             sep_token=sep_token,
             unk_token=unk_token,

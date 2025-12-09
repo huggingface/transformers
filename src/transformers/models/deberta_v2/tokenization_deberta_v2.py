@@ -14,6 +14,8 @@
 # limitations under the License.
 """Tokenization class for model DeBERTa-v2."""
 
+from typing import Optional, Union
+
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
@@ -26,13 +28,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model", "tokenizer_file": "tokenizer.json"}
 
 
-def _get_prepend_scheme(add_prefix_space: bool) -> str:
-    if add_prefix_space:
-        return "always"
-    else:
-        return "first"
-
-
 class DebertaV2Tokenizer(TokenizersBackend):
     """
     Construct a DeBERTa-v2 tokenizer (backed by HuggingFace's *tokenizers* library). Based on Unigram tokenization.
@@ -43,7 +38,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
     Args:
         vocab_file (`str`, *optional*):
             Path to the vocabulary file (SentencePiece model file). Not used directly but kept for compatibility.
-        vocab (`list`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             List of tuples (piece, score) for the vocabulary.
         precompiled_charsmap (`bytes`, *optional*):
             Precompiled character map for normalization.
@@ -79,11 +74,11 @@ class DebertaV2Tokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
+    model = Unigram
 
     def __init__(
         self,
-        vocab_file=None,
-        vocab=None,
+        vocab: Optional[Union[str, dict, list]] = None,
         do_lower_case=False,
         split_by_punct=False,
         bos_token="[CLS]",
@@ -94,16 +89,15 @@ class DebertaV2Tokenizer(TokenizersBackend):
         cls_token="[CLS]",
         mask_token="[MASK]",
         add_prefix_space=True,
-        unk_id=3,
+        unk_id=1,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
         self.add_prefix_space = add_prefix_space
 
         if vocab is None:
-            self._vocab = [
+            vocab = [
                 (str(pad_token), 0.0),
                 (str(unk_token), 0.0),
                 (str(bos_token), 0.0),
@@ -112,12 +106,11 @@ class DebertaV2Tokenizer(TokenizersBackend):
                 (str(cls_token), 0.0),
                 (str(mask_token), 0.0),
             ]
+            unk_id = 1
+        elif isinstance(vocab, list):
+            unk_id = vocab.index((str(unk_token), 0.0)) if (str(unk_token), 0.0) in vocab else unk_id
 
-        else:
-            self._vocab = [tuple(item) if not isinstance(item, tuple) else item for item in vocab]
-            computed_unk_id = {piece: i for i, (piece, _score) in enumerate(self._vocab)}
-            unk_id = computed_unk_id.get(str(unk_token))
-
+        self._vocab = vocab
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab,
@@ -132,10 +125,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
 
         list_normalizers.extend(
             [
-                normalizers.Replace("\n", " "),
-                normalizers.Replace("\r", " "),
-                normalizers.Replace("\t", " "),
-                normalizers.Replace(Regex(r" {2,}"), " "),
+                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
                 normalizers.NFC(),
                 normalizers.Strip(left=False, right=True),
             ]
@@ -146,17 +136,12 @@ class DebertaV2Tokenizer(TokenizersBackend):
         if split_by_punct:
             list_pretokenizers.append(pre_tokenizers.Punctuation(behavior="isolated"))
 
-        prepend_scheme = _get_prepend_scheme(add_prefix_space)
+        prepend_scheme = "always" if add_prefix_space else "first"
         list_pretokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme))
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(list_pretokenizers)
-
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

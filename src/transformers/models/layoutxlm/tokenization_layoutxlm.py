@@ -150,8 +150,8 @@ class LayoutXLMTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab (`list[tuple[str, float]]`, *optional*):
-            Vocabulary for the tokenizer as a list of (token, score) tuples.
+        vocab (`str`, `dict` or `list`, *optional*):
+            Vocabulary for the tokenizer as a path, a dictionary or a list of `(token, score)` tuples.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -206,12 +206,11 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
-        vocab_file=None,
-        vocab=None,
+        vocab: Optional[Union[str, list]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -229,17 +228,10 @@ class LayoutXLMTokenizer(TokenizersBackend):
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
         self.add_prefix_space = add_prefix_space
 
-        # Build vocab from list of tuples if provided, else use default
-        # Handle both list of tuples (when creating) and dict (when loading)
         if vocab is not None:
-            if isinstance(vocab, dict):
-                # Convert dict to list of tuples
-                self._vocab = [(token, score) for token, score in vocab.items()]
-            else:
-                self._vocab = vocab
+            self._vocab = vocab
         else:
             self._vocab = [
                 ("<s>", 0.0),
@@ -250,10 +242,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
             if mask_token not in [v[0] for v in self._vocab]:
                 self._vocab.append((str(mask_token), 0.0))
 
-        # Create the Unigram tokenizer
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
-
-        # Set up normalizer (strip right, replace multiple spaces)
         self._tokenizer.normalizer = normalizers.Sequence(
             [
                 normalizers.Strip(left=False, right=True),
@@ -261,30 +250,11 @@ class LayoutXLMTokenizer(TokenizersBackend):
             ]
         )
 
-        # Set up pre_tokenizer (Metaspace)
         prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
-        # Set up decoder
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
-        # Set up post_processor for XLM-RoBERTa style
-        # Get token IDs
-        cls_token_id = self._get_token_id(str(cls_token))
-        sep_token_id = self._get_token_id(str(sep_token))
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single="<s> $A </s>",
-            pair="<s> $A </s> </s> $B </s>",
-            special_tokens=[
-                ("<s>", cls_token_id),
-                ("</s>", sep_token_id),
-            ],
-        )
-
-        tokenizer_object = self._tokenizer
-
-        # additional properties
         self.cls_token_box = cls_token_box
         self.sep_token_box = sep_token_box
         self.pad_token_box = pad_token_box
@@ -292,7 +262,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
         self.only_label_first_subword = only_label_first_subword
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
@@ -300,7 +269,6 @@ class LayoutXLMTokenizer(TokenizersBackend):
             unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            vocab_file=vocab_file,
             vocab=vocab,
             add_prefix_space=add_prefix_space,
             cls_token_box=cls_token_box,
@@ -311,7 +279,14 @@ class LayoutXLMTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        self.vocab_file = vocab_file
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0",
+            pair=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0 {str(self.sep_token)}:0 $B:0 {str(self.sep_token)}:0",
+            special_tokens=[
+                (str(self.cls_token), self.cls_token_id),
+                (str(self.sep_token), self.sep_token_id),
+            ],
+        )
 
     def _get_token_id(self, token: str) -> int:
         """Helper to get token ID from vocab."""

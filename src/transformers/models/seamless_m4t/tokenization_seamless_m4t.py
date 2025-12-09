@@ -60,7 +60,7 @@ class SeamlessM4TTokenizer(TokenizersBackend):
     Args:
         vocab (`list` or `dict`, *optional*):
             List of (token, score) tuples or dict mapping tokens to indices. If not provided, uses default vocab.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             List of merge rules for BPE model. If not provided, uses empty list.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
@@ -104,15 +104,15 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
-    prefix_tokens: list[int] = []
-    suffix_tokens: list[int] = []
+    prefix_tokens: list[int] = None
+    suffix_tokens: list[int] = None
 
     def __init__(
         self,
-        vocab: Optional[list] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -126,59 +126,14 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         vocab_file=None,
         **kwargs,
     ):
-        if vocab is None:
-            vocab = {
-                str(pad_token): 0,
-                str(unk_token): 1,
-                str(bos_token): 2,
-                str(eos_token): 3,
-            }
+        self._vocab = vocab or {
+            str(pad_token): 0,
+            str(unk_token): 1,
+            str(bos_token): 2,
+            str(eos_token): 3,
+        }
 
-        # Process vocab - SeamlessM4T uses fairseq vocab alignment: <pad>=0, <unk>=1, <s>=2, </s>=3, then SPM pieces[3:]
-        if isinstance(vocab, list):
-            # Convert list of (token, score) tuples to dict {token: idx}
-            # Check if vocab is already in SeamlessM4T order (pad, unk, s, /s) or tokenizer.json order (unk, s, /s, ...)
-            first_tokens = [str(item[0]) if isinstance(item, (list, tuple)) else str(item) for item in vocab[:4]]
-            is_seamless_order = (
-                len(first_tokens) >= 4
-                and first_tokens[0] == str(pad_token)
-                and first_tokens[1] == str(unk_token)
-                and first_tokens[2] == str(bos_token)
-                and first_tokens[3] == str(eos_token)
-            )
-
-            if is_seamless_order:
-                # Already in correct order, use list index directly as token ID
-                vocab_dict = {}
-                for idx, item in enumerate(vocab):
-                    token = str(item[0]) if isinstance(item, (list, tuple)) else str(item)
-                    vocab_dict[token] = idx
-                self._vocab = vocab_dict
-            else:
-                # Reorder to fairseq: <pad>, <unk>, <s>, </s>, ... (rest of vocab)
-                vocab_dict = {}
-                vocab_dict[str(pad_token)] = 0
-                vocab_dict[str(unk_token)] = 1
-                vocab_dict[str(bos_token)] = 2
-                vocab_dict[str(eos_token)] = 3
-
-                # Add rest of vocab starting from index 4, skipping tokens we already added
-                idx = 4
-                for item in vocab:
-                    token = str(item[0]) if isinstance(item, (list, tuple)) else str(item)
-                    if token not in vocab_dict:
-                        vocab_dict[token] = idx
-                        idx += 1
-
-                self._vocab = vocab_dict
-        else:
-            self._vocab = vocab
-
-        if merges is None:
-            self._merges = []
-        else:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -216,7 +171,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
             kwargs.setdefault("additional_special_tokens", additional_special_tokens)
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
@@ -244,6 +198,20 @@ class SeamlessM4TTokenizer(TokenizersBackend):
         self._tgt_lang = tgt_lang
 
         self.set_tgt_lang_special_tokens(self._tgt_lang)
+
+    @classmethod
+    def convert_from_spm_model(cls, vocab, **kwargs):
+        """When converting from spm, offset is needed to account for special tokens."""
+        _vocab = {
+            "<pad>": 0,
+            "<unk>": 1,
+            "<s>": 2,
+            "</s>": 3,
+        }
+        for i, token in enumerate(list(vocab.keys())):
+            _vocab[token] = i + 1  # offset by 1 to account for special tokens
+        kwargs["vocab"] = _vocab
+        return kwargs
 
     @property
     def src_lang(self) -> str:

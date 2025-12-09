@@ -36,7 +36,7 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_tokenizer(cls):
-        return GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        return GemmaTokenizer.from_pretrained(SAMPLE_VOCAB, keep_accents=True)
 
     @classmethod
     def _setup_image_processor(cls):

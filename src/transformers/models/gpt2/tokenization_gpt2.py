@@ -14,12 +14,12 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import AddedToken, TokenizersBackend
 from ...utils import logging
 
 
@@ -84,45 +84,31 @@ class GPT2Tokenizer(TokenizersBackend):
         add_bos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial beginning of sentence token to the input. This allows to treat the leading
             word just as any other word.
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from merges_file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
-        errors="replace",
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        pad_token=None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
+        errors: str = "replace",
+        unk_token: Union[AddedToken, str] = "<|endoftext|>",
+        bos_token: Union[AddedToken, str] = "<|endoftext|>",
+        eos_token: Union[AddedToken, str] = "<|endoftext|>",
+        pad_token: Optional[Union[AddedToken, str]] = None,
         add_prefix_space=False,
-        add_bos_token=False,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         **kwargs,
     ):
-        #  self.add_bos_token = add_bos_token
-
         self.add_prefix_space = add_prefix_space
-
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
-
+        self._vocab = vocab if vocab is not None else {}
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -133,31 +119,17 @@ class GPT2Tokenizer(TokenizersBackend):
                 fuse_unk=False,
             )
         )
-
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-
-        tokenizer_object = self._tokenizer
-
-        # Set these before calling super().__init__() so the base class _post_init() can use them
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = False
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
             **kwargs,
         )
-
-        # Call _post_init for tokenizers created directly (not from_pretrained)
-        # For from_pretrained, this will be called again after loading the tokenizer from file
-        self._post_init()
 
 
 __all__ = ["GPT2Tokenizer"]
