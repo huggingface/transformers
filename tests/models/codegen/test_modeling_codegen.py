@@ -405,7 +405,6 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             'def greetings(name):\n    print(f"Hello {name}")\n\n',
             'def hello_world():\n    print("Hello World")\n\nhello_world()',
         ]
-        breakpoint()
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
