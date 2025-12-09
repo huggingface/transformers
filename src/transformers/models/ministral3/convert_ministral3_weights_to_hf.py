@@ -135,7 +135,7 @@ def convert_state_dict(original_state_dict: dict, config: Mistral3Config):
     return new_dict
 
 
-def convert_config(original_config: dict, max_position_embeddings: int = 262144):
+def convert_config(original_config: dict, max_position_embeddings: int = 262144, is_vision: bool = True):
     original_vision_config = original_config.pop("vision_encoder", None)
     original_text_config = original_config
 
@@ -164,7 +164,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 262144)
         "original_max_position_embeddings": original_config["yarn"]["original_max_position_embeddings"],
         "beta_fast": float(original_config["yarn"]["beta"]),
         "beta_slow": float(original_config["yarn"]["alpha"]),
-        "mscale_all_dim": 1.0,
+        "mscale_all_dim": 1.0 if is_vision else 0.0,
         "mscale": 1.0,
         "llama_4_scaling_beta": original_config.get("llama_4_scaling", {}).get("beta", 0),
     }
@@ -224,7 +224,8 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
     """Convert the model and save it (this implicitly save the config as well)."""
     params = read_json(os.path.join(input_dir, "params.json"))
 
-    config = convert_config(params, max_position_embeddings)
+    is_vision = isinstance(config, Mistral3Config)
+    config = convert_config(params, max_position_embeddings, is_vision)
 
     full_state_dict = {}
     # The model may be split between different files, but a single nn.Module is always fully present in a single file
@@ -234,7 +235,7 @@ def convert_and_write_model(input_dir: str, output_dir: str, max_position_embedd
         new_dict = convert_state_dict(original_state_dict, config)
         full_state_dict.update(new_dict)
 
-    text_config = config.text_config if isinstance(config, Mistral3Config) else config
+    text_config = config.text_config if is_vision else config
     if text_config.tie_word_embeddings:
         full_state_dict["lm_head.weight"] = full_state_dict["model.embed_tokens.weight"]
 
