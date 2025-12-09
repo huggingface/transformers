@@ -2801,7 +2801,11 @@ class Trainer:
                 )
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
+                if os.path.isfile(safe_weights_file):
+                    state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
+                else:
+                    check_torch_load_is_safe()
+                    state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -2837,9 +2841,7 @@ class Trainer:
                 logger.warning(f"Could not load adapter model, make sure to have PEFT >= {MIN_PEFT_VERSION} installed")
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(
-                model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled(), prefer_safe=True
-            )
+            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled())
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
 
