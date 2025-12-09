@@ -996,6 +996,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
 
         self.init_kwargs = copy.deepcopy(kwargs)
+        self.init_kwargs.pop("add_bos_token", None)
+        self.init_kwargs.pop("add_eos_token", None)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
         # Store additional_special_tokens in init_kwargs before conversion for backward compatibility
@@ -2110,9 +2112,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
+        tokenizer_config.pop("add_bos_token", None)
+        tokenizer_config.pop("add_eos_token", None)
 
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
+        target_keys.discard("add_bos_token")
+        target_keys.discard("add_eos_token")
         # Let's save the special tokens map (only the strings)
         target_keys.update(["model_max_length"])
 
