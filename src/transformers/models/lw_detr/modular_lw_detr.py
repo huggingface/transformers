@@ -1576,7 +1576,7 @@ class LwDetrViTBackbone(VitDetBackbone):
 
         window_height = height // self.config.num_windows_side
         window_width = width // self.config.num_windows_side
-        # (batch_size, height, width, channels) -> (batch_size*16, window_height*window_width, channels)
+        # (batch_size, height, width, channels) -> (batch_size*num_windows_side**2, window_height*window_width, channels)
         hidden_states = (
             hidden_states.reshape(
                 batch_size,
@@ -1587,7 +1587,7 @@ class LwDetrViTBackbone(VitDetBackbone):
                 channels,
             )
             .permute(0, 1, 3, 2, 4, 5)
-            .reshape(batch_size * 16, window_height * window_width, channels)
+            .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
         )
 
         hidden_states = self.encoder(hidden_states, **kwargs)
