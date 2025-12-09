@@ -307,16 +307,32 @@ class IsaacVisionAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self._variable_length_metadata = None
 
-    def forward(self, hidden_states, attention_mask=None, **kwargs) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        past_key_value: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        is_causal: bool = False,
+        attn_implementation: Optional[str] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
-        cu_seqlens = kwargs.pop("cu_seqlens", None)
-        max_seqlen = kwargs.pop("max_seqlen", None)
-        kwargs.pop("output_attentions", None)
+        # Unused arguments are accepted for interface compatibility
+        _ = position_ids
+        _ = past_key_value
+        _ = is_causal
+        _ = output_attentions
+
         kwargs.pop("output_hidden_states", None)
         kwargs.pop("return_dict", None)
         if kwargs:
             unexpected = ", ".join(sorted(kwargs))
             raise TypeError(f"Unexpected kwargs for IsaacVisionAttention.forward: {unexpected}")
+
         cached_cu, cached_max = self._consume_variable_length_metadata()
         if cu_seqlens is None:
             cu_seqlens = cached_cu
@@ -338,7 +354,7 @@ class IsaacVisionAttention(nn.Module):
         k = self.k_proj(x).view(L, H, D)
         v = self.v_proj(x).view(L, H, D)
 
-        attn_impl = getattr(self.config, "_attn_implementation", "flash_attention_3")
+        attn_impl = attn_implementation or getattr(self.config, "_attn_implementation", "flash_attention_3")
 
         attn_mask = ensure_document_attention_mask(
             attention_mask,
