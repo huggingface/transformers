@@ -160,10 +160,6 @@ class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class LightOnOCRProcessor(ProcessorMixin):
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
@@ -387,7 +383,7 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LightOnOCRVisionProjector", "LightOnOCRPatchMerger"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
     _supports_flex_attn = True
@@ -552,7 +548,6 @@ class LightOnOCRTextModel(Qwen3Model):
 
 class LightOnOCRModel(LightOnOCRPreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: LightOnOCRConfig
@@ -567,6 +562,11 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         self.language_model = LightOnOCRTextModel._from_config(config.text_config)
 
         self.post_init()
+
+    @property
+    def vision_model(self):
+        """Alias for vision_encoder to match standard composite model naming."""
+        return self.vision_encoder
 
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
@@ -596,17 +596,6 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 
         return image_features
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
-    @property
-    def vision_model(self):
-        """Alias for vision_encoder to match standard composite model naming."""
-        return self.vision_encoder
-
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
@@ -631,7 +620,7 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
             )
         return special_image_mask
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -671,7 +660,6 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
 
 
 class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     config_class = LightOnOCRConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
@@ -690,10 +678,7 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def get_decoder(self):
-        return self.model.language_model
-
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -763,19 +748,6 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
             model_inputs["image_sizes"] = kwargs.get("image_sizes")
 
         return model_inputs
-
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_encoder(self):
-        return self.model.vision_encoder
-
-    @property
-    def vision_model(self):
-        """Alias for vision_encoder to match standard composite model naming."""
-        return self.model.vision_encoder
 
 
 __all__ = [
