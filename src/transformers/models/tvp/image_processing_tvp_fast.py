@@ -84,6 +84,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
+        images = self.fetch_images(images)
         return make_nested_list_of_images(images, **kwargs)
 
     def resize(

@@ -22,8 +22,13 @@ import numpy as np
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torchvision,
+    require_vision,
+)
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import prepare_image_inputs
 
@@ -35,6 +40,9 @@ if is_torch_available():
         from transformers import CLIPTokenizer, OneFormerImageProcessor, OneFormerProcessor
         from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle
         from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
+
+    if is_torchvision_available():
+        from transformers.models.oneformer.image_processing_oneformer_fast import OneFormerImageProcessorFast
 
 if is_vision_available():
     from PIL import Image
@@ -122,7 +130,7 @@ class OneFormerProcessorTester:
             "num_text": self.num_text,
         }
 
-        image_processor = OneFormerImageProcessor(**image_processor_dict)
+        image_processor = OneFormerImageProcessorFast(**image_processor_dict)
         tokenizer = CLIPTokenizer.from_pretrained(self.model_repo)
 
         return {
@@ -392,7 +400,6 @@ class OneFormerProcessingTest(unittest.TestCase):
             annotations,
             return_tensors="pt",
             instance_id_to_semantic_id=instance_id_to_semantic_id,
-            pad_and_return_pixel_mask=True,
         )
 
         return inputs
@@ -401,6 +408,7 @@ class OneFormerProcessingTest(unittest.TestCase):
     def test_init_without_params(self):
         pass
 
+    @require_torchvision
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.processor_dict)
 
@@ -410,7 +418,7 @@ class OneFormerProcessingTest(unittest.TestCase):
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
         self.assertEqual(feat_extract_second.image_processor.to_dict(), feat_extract_first.image_processor.to_dict())
-        self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessor)
+        self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessorFast)
         self.assertIsInstance(feat_extract_first.tokenizer, CLIPTokenizer)
 
     def test_call_with_segmentation_maps(self):
