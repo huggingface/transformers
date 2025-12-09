@@ -294,7 +294,9 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
-    model = None
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
 
     @classmethod
     def get_model(cls):

@@ -48,7 +48,7 @@ model_id = "mistralai/Ministral-3-3B-Instruct-2512"
 
 tokenizer = MistralCommonBackend.from_pretrained(model_id)
 model = Mistral3ForConditionalGeneration.from_pretrained(
-    model_id, torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, device_map="auto"
 )
 
 image_url = "https://static.wikia.nocookie.net/essentialsdocs/images/7/70/Battle.png/revision/latest?cb=20220523172438"
