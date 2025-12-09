@@ -341,6 +341,12 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             mapping[kernel_name] = kernel
         except FileNotFoundError:
             mapping[kernel_name] = None
+        except AssertionError as error:
+            logger.warning_once(
+                f"Failed to load the '{kernel_name}' kernel from '{repo_id}' because the current environment does not "
+                f"support the required backend: {error}"
+            )
+            mapping[kernel_name] = None
 
     else:
         # Try to import is_{kernel_name}_available from ..utils

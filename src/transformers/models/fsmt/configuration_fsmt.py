@@ -194,6 +194,7 @@ class FSMTConfig(PreTrainedConfig):
             bos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             num_hidden_layers=encoder_layers,
+            tie_word_embeddings=tie_word_embeddings,
         )
         if "decoder" in common_kwargs:
             del common_kwargs["decoder"]
