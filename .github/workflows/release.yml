@@ -23,6 +23,7 @@ jobs:
           python-version: "3.13"
 
       - run: pip install -U twine
+      - run: pip install -e .
       - run: make build-release
 
   test_release:
