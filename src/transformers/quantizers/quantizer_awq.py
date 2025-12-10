@@ -18,11 +18,10 @@ from packaging import version
 
 from .base import HfQuantizer
 
-
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_gptqmodel_available, is_llm_awq_available , is_torch_available, logging
 from ..utils.quantization_config import AwqBackend
 
 
@@ -43,9 +42,9 @@ class AwqQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
-    def validate_environment(self, device_map, **kwargs):
-        if not is_gptqmodel_available():
-            raise ImportError("Loading an AWQ quantized model requires gptqmodel library (`pip install gptqmodel`)")
+    def validate_environment(self, **kwargs):
+        if not is_gptqmodel_available() or is_llm_awq_available():
+            raise ImportError("Loading an AWQ quantized model requires either gptqmodel or llmawq library. Please install it with `pip install gptqmodel` or check out the installation guide in https://github.com/mit-han-lab/llm-awq")
 
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
@@ -72,7 +71,7 @@ class AwqQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules, add_default_skips=True
         )
 
-        model, has_been_replaced = replace_with_awq_linear(
+        model = replace_with_awq_linear(
             model,
             quantization_config=self.quantization_config,
             modules_to_not_convert=self.modules_to_not_convert,
@@ -81,18 +80,12 @@ class AwqQuantizer(HfQuantizer):
 
         model = replace_quantization_scales(model, model.config.model_type)
 
-        if not has_been_replaced:
-            logger.warning(
-                "You are loading an AWQ model but no linear modules were found in your model."
-                " Please double check your model architecture, or submit an issue on github if you think this is a bug."
-            )
-
     def _process_model_after_weight_loading(self, model, **kwargs):
         from gptqmodel.utils.model import hf_gptqmodel_post_init
 
         hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False
