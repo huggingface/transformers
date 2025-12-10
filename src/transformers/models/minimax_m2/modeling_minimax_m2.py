@@ -30,14 +30,9 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GenericForQuestionAnswering,
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -45,6 +40,26 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_minimax_m2 import MiniMaxM2Config
+
+
+class MiniMaxM2TopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states, e_score_correction_bias):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = nn.functional.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        routing_weights = nn.functional.sigmoid(router_logits.float())
+        scores_for_choice = routing_weights + e_score_correction_bias
+        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
+        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        router_scores = torch.zeros_like(routing_weights).scatter_(1, top_k_index, top_k_weights)
+        return router_logits, router_scores, top_k_index
 
 
 class MiniMaxM2Experts(nn.Module):
@@ -84,26 +99,6 @@ class MiniMaxM2Experts(nn.Module):
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
-
-
-class MiniMaxM2TopKRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-
-    def forward(self, hidden_states, e_score_correction_bias):
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = nn.functional.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        routing_weights = nn.functional.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + e_score_correction_bias
-        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        router_scores = torch.zeros_like(routing_weights).scatter_(1, top_k_index, top_k_weights)
-        return router_logits, router_scores, top_k_index
 
 
 class MiniMaxM2SparseMoeBlock(nn.Module):
@@ -491,8 +486,8 @@ class MiniMaxM2Model(MiniMaxM2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
+        # No sliding window opposed to mixtral
+        causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -711,23 +706,4 @@ class MiniMaxM2ForCausalLM(MiniMaxM2PreTrainedModel, GenerationMixin):
         )
 
 
-class MiniMaxM2ForSequenceClassification(GenericForSequenceClassification, MiniMaxM2PreTrainedModel):
-    pass
-
-
-class MiniMaxM2ForTokenClassification(GenericForTokenClassification, MiniMaxM2PreTrainedModel):
-    pass
-
-
-class MiniMaxM2ForQuestionAnswering(GenericForQuestionAnswering, MiniMaxM2PreTrainedModel):
-    pass
-
-
-__all__ = [
-    "MiniMaxM2ForCausalLM",
-    "MiniMaxM2ForQuestionAnswering",
-    "MiniMaxM2Model",
-    "MiniMaxM2PreTrainedModel",
-    "MiniMaxM2ForSequenceClassification",
-    "MiniMaxM2ForTokenClassification",
-]
+__all__ = ["MiniMaxM2ForCausalLM", "MiniMaxM2Model", "MiniMaxM2PreTrainedModel"]
