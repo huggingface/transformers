@@ -346,6 +346,8 @@ class MossTTSDPretrainedModel(PreTrainedModel):
 class MossTTSDModel(MossTTSDPretrainedModel):
     """MOSS-TTSD model for text-to-speech synthesis."""
 
+    base_model_prefix = "language_model"
+
     def __init__(self, config: MossTTSDConfig):
         super().__init__(config)
         self.text_pad_idx = config.pad_token_id if config.pad_token_id is not None else 0
@@ -434,8 +436,8 @@ class MossTTSDForCausalLM(MossTTSDPretrainedModel, MossTTSDGenerationMixin):
     """MOSS-TTSD model for causal language modeling with multi-channel support."""
 
     _tied_weights_keys = {}
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _tp_plan = {"lm_heads.*": "colwise_rep"}
+    _pp_plan = {"lm_heads.*": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: MossTTSDConfig):
         super().__init__(config)
