@@ -104,18 +104,18 @@ class GenerationConfig(PushToHubMixin):
     Arg:
         > Parameters that control the length of the output
 
-        max_length (`int`, *optional*, defaults to 20):
+        max_length (`int`, *optional*):
             `max_new_tokens` is recommended for controlling how many tokens the model generates.
             `max_length` remains for backward compatibility.
 
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-        min_length (`int`, *optional*, defaults to 0):
+        min_length (`int`, *optional*):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
             `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
         min_new_tokens (`int`, *optional*):
             The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-        early_stopping (`bool` or `str`, *optional*, defaults to `False`):
+        early_stopping (`bool` or `str`, *optional*):
             Controls the stopping condition for beam-based methods, like beam-search. It accepts the following values:
             `True`, where the generation stops as soon as there are `num_beams` complete candidates; `False`, where an
             heuristic is applied and the generation stops when is it very unlikely to find better candidates;
@@ -131,7 +131,7 @@ class GenerationConfig(PushToHubMixin):
 
         do_sample (`bool`, *optional*, defaults to `False`):
             Whether or not to use sampling ; use greedy decoding otherwise.
-        num_beams (`int`, *optional*, defaults to 1):
+        num_beams (`int`, *optional*):
             Number of beams for beam search. 1 means no beam search.
 
         > Parameters that control the cache
@@ -139,7 +139,7 @@ class GenerationConfig(PushToHubMixin):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
-        cache_implementation (`str`, *optional*, default to `None`):
+        cache_implementation (`str`, *optional*):
             Name of the cache class that will be instantiated in `generate`, for faster decoding. Possible values are:
 
             - `"dynamic"`: [`DynamicCache`]
@@ -155,11 +155,11 @@ class GenerationConfig(PushToHubMixin):
 
         > Parameters for manipulation of the model output logits
 
-        temperature (`float`, *optional*, defaults to 1.0):
+        temperature (`float`, *optional*):
             The value used to module the next token probabilities. This value is set in a model's `generation_config.json` file. If it isn't set, the default value is 1.0
-        top_k (`int`, *optional*, defaults to 50):
+        top_k (`int`, *optional*):
             The number of highest probability vocabulary tokens to keep for top-k-filtering. This value is set in a model's `generation_config.json` file. If it isn't set, the default value is 50.
-        top_p (`float`, *optional*, defaults to 1.0):
+        top_p (`float`, *optional*):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation. This value is set in a model's `generation_config.json` file. If it isn't set, the default value is 1.0
         min_p (`float`, *optional*):
@@ -172,36 +172,36 @@ class GenerationConfig(PushToHubMixin):
             is kept whose *renormalized* entropy is less than or equal to `top_h` times the entropy of the full distribution.
             Smaller values (e.g., 0.2–0.5) lead to more focused, deterministic outputs, while values closer to 1.0 allow more
             randomness and diversity. Typical values are in the 0.3–0.6 range.
-        typical_p (`float`, *optional*, defaults to 1.0):
+        typical_p (`float`, *optional*):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
             generated. If set to float < 1, the smallest set of the most locally typical tokens with probabilities that
             add up to `typical_p` or higher are kept for generation. See [this
             paper](https://huggingface.co/papers/2202.00666) for more details.
-        epsilon_cutoff (`float`, *optional*, defaults to 0.0):
+        epsilon_cutoff (`float`, *optional*):
             If set to float strictly between 0 and 1, only tokens with a conditional probability greater than
             `epsilon_cutoff` will be sampled. In the paper, suggested values range from 3e-4 to 9e-4, depending on the
             size of the model. See [Truncation Sampling as Language Model
             Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
-        eta_cutoff (`float`, *optional*, defaults to 0.0):
+        eta_cutoff (`float`, *optional*):
             Eta sampling is a hybrid of locally typical sampling and epsilon sampling. If set to float strictly between
             0 and 1, a token is only considered if it is greater than either `eta_cutoff` or `sqrt(eta_cutoff) *
             exp(-entropy(softmax(next_token_logits)))`. The latter term is intuitively the expected next token
             probability, scaled by `sqrt(eta_cutoff)`. In the paper, suggested values range from 3e-4 to 2e-3,
             depending on the size of the model. See [Truncation Sampling as Language Model
             Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
-        repetition_penalty (`float`, *optional*, defaults to 1.0):
+        repetition_penalty (`float`, *optional*):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://huggingface.co/papers/1909.05858) for more details.
-        encoder_repetition_penalty (`float`, *optional*, defaults to 1.0):
+        encoder_repetition_penalty (`float`, *optional*):
             The parameter for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
             original input. 1.0 means no penalty.
-        length_penalty (`float`, *optional*, defaults to 1.0):
+        length_penalty (`float`, *optional*):
             Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
             the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
             likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
             `length_penalty` < 0.0 encourages shorter sequences.
-        no_repeat_ngram_size (`int`, *optional*, defaults to 0):
+        no_repeat_ngram_size (`int`, *optional*):
             If set to int > 0, all ngrams of that size can only occur once.
         bad_words_ids (`list[list[int]]`, *optional*):
             List of list of token ids that are not allowed to be generated. Check
@@ -277,7 +277,7 @@ class GenerationConfig(PushToHubMixin):
 
         > Generation parameters exclusive to encoder-decoder models
 
-        encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
+        encoder_no_repeat_ngram_size (`int`, *optional*):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
         decoder_start_token_id (`int` or `list[int]`, *optional*):
@@ -288,18 +288,18 @@ class GenerationConfig(PushToHubMixin):
         > Generation parameters exclusive to assistant generation
         is_assistant (`bool`, *optional*, defaults to `False`):
             Whether the model is an assistant (draft) model.
-        num_assistant_tokens (`int`, *optional*, defaults to 20):
+        num_assistant_tokens (`int`, *optional*):
             Defines the number of _speculative tokens_ that shall be generated by the assistant model before being
             checked by the target model at each iteration. Higher values for `num_assistant_tokens` make the generation
             more _speculative_ : If the assistant model is performant larger speed-ups can be reached, if the assistant
             model requires lots of corrections, lower speed-ups are reached.
-        num_assistant_tokens_schedule (`str`, *optional*, defaults to `"constant"`):
+        num_assistant_tokens_schedule (`str`, *optional*):
             Defines the schedule at which max assistant tokens shall be changed during inference.
             - `"heuristic"`: When all speculative tokens are correct, increase `num_assistant_tokens` by 2 else
               reduce by 1. `num_assistant_tokens` value is persistent over multiple generation calls with the same assistant model.
             - `"heuristic_transient"`: Same as `"heuristic"` but `num_assistant_tokens` is reset to its initial value after each generation call.
             - `"constant"`: `num_assistant_tokens` stays unchanged during generation
-        assistant_confidence_threshold (`float`, *optional*, defaults to 0.4):
+        assistant_confidence_threshold (`float`, *optional*):
             The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower
             than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
             (defined by `num_assistant_tokens`) is not yet reached. The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes, biased towards avoiding false negatives.
@@ -313,11 +313,11 @@ class GenerationConfig(PushToHubMixin):
         assistant_early_exit(`int`, *optional*):
             If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
             models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
-        assistant_lookbehind(`int`, *optional*, defaults to 10):
+        assistant_lookbehind(`int`, *optional*):
             If set to a positive integer, the re-encodeing process will additionally consider the last `assistant_lookbehind` assistant tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
-        target_lookbehind(`int`, *optional*, defaults to 10):
+        target_lookbehind(`int`, *optional*):
             If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
@@ -380,7 +380,7 @@ class GenerationConfig(PushToHubMixin):
         self.guidance_scale = kwargs.pop("guidance_scale", None)
 
         # Parameters that define the output variables of `generate`
-        self.num_return_sequences = kwargs.pop("num_return_sequences", None)
+        self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_scores = kwargs.pop("output_scores", False)
@@ -577,7 +577,7 @@ class GenerationConfig(PushToHubMixin):
 
         # 2. Validation of attribute combinations
         # 2.1. detect sampling-only parameterization when not in sampling mode
-        if self.do_sample is not True:
+        if self.do_sample is False:
             greedy_wrong_parameter_msg = (
                 "`do_sample` is set to not set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
                 "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
@@ -610,22 +610,22 @@ class GenerationConfig(PushToHubMixin):
         # 2.2. detect beam-only parameterization when not in beam mode
         if self.num_beams is None or self.num_beams == 1:
             single_beam_wrong_parameter_msg = (
-                "`num_beams` is set to 1. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
+                "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
                 "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
             )
             if self.early_stopping is not None and self.early_stopping is not False:
                 minor_issues["early_stopping"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="early_stopping", flag_value=self.early_stopping
+                    num_beams=self.num_beams, flag_name="early_stopping", flag_value=self.early_stopping
                 )
             if self.length_penalty is not None and self.length_penalty != 1.0:
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
-                    flag_name="length_penalty", flag_value=self.length_penalty
+                    num_beams=self.num_beams, flag_name="length_penalty", flag_value=self.length_penalty
                 )
 
         # 2.4. check `num_return_sequences`
-        if self.num_return_sequences is not None and self.num_return_sequences > 1:
+        if self.num_return_sequences > 1:
             if self.num_beams is None or self.num_beams == 1:
-                if self.do_sample is not True:
+                if self.do_sample is False:
                     raise ValueError(
                         "Greedy methods without beam search do not support `num_return_sequences` different than 1 "
                         f"(got {self.num_return_sequences})."
@@ -652,7 +652,7 @@ class GenerationConfig(PushToHubMixin):
                     )
 
         # 2.6. other incorrect combinations
-        if self.return_dict_in_generate is not True:
+        if self.return_dict_in_generate is False:
             for extra_output_flag in self.extra_output_flags:
                 if getattr(self, extra_output_flag) is True:
                     minor_issues[extra_output_flag] = (
@@ -1144,6 +1144,8 @@ class GenerationConfig(PushToHubMixin):
         returning all the unused kwargs.
 
         Args:
+            defaults_only (`bool`, *optional*, defaults to `False`):
+                Whether to update all keys in config with `kwargs` or only those that are set to `None` (i.e. default value).
             kwargs (`dict[str, Any]`):
                 Dictionary of attributes to tentatively update this class.
 
