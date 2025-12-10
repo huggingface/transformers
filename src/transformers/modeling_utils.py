@@ -481,6 +481,32 @@ def remove_tied_weights_from_state_dict(
     return state_dict
 
 
+def load_offloaded_parameter(model: "PreTrainedModel", param_name: str) -> torch.Tensor:
+    """Load `param_name` from disk, if it was offloaded due to the device_map, and thus lives as a meta parameter
+    inside `model`.
+    This is needed when resaving a model, when some parameters were offloaded (we need to load them from disk, to
+    then resave them to disk in the correct shard...)."""
+    # Start from the most inner module, and try to find the hook that was used for offloading the param
+    module_parts = param_name.split(".")
+    modules_to_check = [".".join(module_parts[:-idx]) for idx in range(1, len(module_parts))] + [""]
+    for parent_name in modules_to_check:
+        parent = model.get_submodule(parent_name)
+        if hasattr(parent, "_hf_hook"):
+            weights_map = parent._hf_hook.weights_map
+            truncated_param_name = param_name.replace(f"{parent_name}." if parent_name != "" else parent_name, "")
+            break
+    # If we did not break the loop, something is wrong
+    else:
+        raise ValueError(
+            f"{param_name} is on the meta device because it was offloaded, but we could not find "
+            "the corresponding hook for it"
+        )
+
+    # This call loads it from disk
+    tensor = weights_map[truncated_param_name]
+    return tensor
+
+
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
@@ -3332,29 +3358,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         tensor = repack_weights(tensor, -1, self._tp_size, 2)
 
                 # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
-                # but it would otherwise not be contained in the correct shard if we were to simply move the file
+                # but it would otherwise not be contained in the saved shard if we were to simply move the file
                 # or something
                 if is_offloaded and tensor.device.type == "meta":
-                    # Start from the most inner module, and try to find the hook that was used for offloading the param
-                    module_parts = tensor_name.split(".")
-                    modules_to_check = [".".join(module_parts[:-idx]) for idx in range(1, len(module_parts))] + [""]
-                    for parent_name in modules_to_check:
-                        parent = model_to_save.get_submodule(parent_name)
-                        if hasattr(parent, "_hf_hook"):
-                            truncated_tensor_name = tensor_name.replace(
-                                f"{parent_name}." if parent_name != "" else parent_name, ""
-                            )
-                            break
-                    # If we did not break the loop, something is wrong
-                    else:
-                        raise ValueError(
-                            f"{tensor_name} is on the meta device because it was offloaded, but we could not find "
-                            "the corresponding hook for it"
-                        )
-                    # Load the offloaded tensor
-                    weights_map = parent._hf_hook.weights_map
-                    # This call loads it from disk
-                    tensor = weights_map[truncated_tensor_name]
+                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
                 # only do contiguous after it's permuted correctly in case of TP
                 shard_state_dict[tensor_name] = tensor.contiguous()
