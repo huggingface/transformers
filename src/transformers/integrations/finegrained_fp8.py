@@ -760,11 +760,3 @@ class Fp8Dequantize(ConversionOps):
         return {
             full_layer_name: dequantized.reshape(quantized.shape),
         }
-
-
-"""
-scale: tensor(0.5391, device='cuda:0')
-NaN detected in qinput at indices: (tensor([0, 0, 0], device='cuda:0'), tensor([0, 0, 0], device='cuda:0'), tensor([18154, 20734, 24657], device='cuda:0'))
-Corresponding input values: tensor([-266., -256.,  260.], device='cuda:0', dtype=torch.bfloat16)
-Corresponding qinput values: tensor([nan, nan, nan], device='cuda:0', dtype=torch.float8_e4m3fn)
-"""
