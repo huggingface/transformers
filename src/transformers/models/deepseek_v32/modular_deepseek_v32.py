@@ -562,8 +562,116 @@ class DeepseekV32TopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class DeepseekV32MoE(DeepseekV3MoE):
-    pass
+class DeepseekV32NaiveMoe(nn.Module):
+    """Collection of expert weights stored as 3D tensors.
+
+    This overrides the parent MixtralExperts forward method to use consistent device
+    placement for gradient checkpointing compatibility with use_reentrant=True.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+
+        # Use consistent device from input tensor for gradient checkpointing compatibility.
+        # During recomputation, per-token device placement may vary, but the input tensor's
+        # device remains stable. This ensures deterministic tensor metadata for use_reentrant=True.
+        target_device = hidden_states.device
+
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            # Use target_device (input device) instead of current_state.device for
+            # deterministic device placement during gradient checkpointing recomputation
+            gate_up_weight = self.gate_up_proj[expert_idx].to(target_device)
+            down_weight = self.down_proj[expert_idx].to(target_device)
+            current_state = current_state.to(target_device)
+            gate, up = nn.functional.linear(current_state, gate_up_weight).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, down_weight)
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None].to(target_device)
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
+
+class DeepseekV32MoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+
+    Overrides DeepseekV3MoE to use DeepseekV32NaiveMoe with gradient checkpointing fixes.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.experts = DeepseekV32NaiveMoe(config)
+        self.gate = DeepseekV32TopkRouter(config)
+        self.shared_experts = DeepseekV32MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
+        self.n_routed_experts = config.n_routed_experts
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.top_k = config.num_experts_per_tok
+
+    def route_tokens_to_experts(self, router_logits):
+        router_logits = router_logits.sigmoid()
+        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
+        group_scores = (
+            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .reshape(-1, self.n_routed_experts)
+        )
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = router_logits.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights
+
+    def forward(self, hidden_states):
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 class DeepseekV32Indexer(nn.Module):
@@ -1050,6 +1158,9 @@ class DeepseekV32DecoderLayer(DeepseekV3DecoderLayer):
             - indexer_scores: Raw indexer scores I_{t,s} (optional, for KL loss)
             - indexer_kl_target: KL target distribution p_{t,:} (optional, for KL loss)
         """
+        # Cache input device for deterministic placement during gradient checkpointing
+        target_device = hidden_states.device
+
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -1066,15 +1177,15 @@ class DeepseekV32DecoderLayer(DeepseekV3DecoderLayer):
             output_indexer_kl_target=output_indexer_kl_target,
             **kwargs,
         )
-        # Ensure residual is on the same device as hidden_states (for multi-GPU)
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        # Use target_device for deterministic placement during gradient checkpointing
+        hidden_states = residual.to(target_device) + hidden_states.to(target_device)
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        # Ensure residual is on the same device as hidden_states (for multi-GPU MoE sharding)
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        # Use target_device for deterministic placement during gradient checkpointing
+        hidden_states = residual.to(target_device) + hidden_states.to(target_device)
 
         return hidden_states, attn_weights, indexer_scores, indexer_kl_target
 

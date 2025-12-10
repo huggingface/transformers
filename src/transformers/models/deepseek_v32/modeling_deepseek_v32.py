@@ -236,7 +236,11 @@ class DeepseekV32TopkRouter(nn.Module):
 
 
 class DeepseekV32NaiveMoe(nn.Module):
-    """Collection of expert weights stored as 3D tensors."""
+    """Collection of expert weights stored as 3D tensors.
+
+    This overrides the parent MixtralExperts forward method to use consistent device
+    placement for gradient checkpointing compatibility with use_reentrant=True.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -254,6 +258,12 @@ class DeepseekV32NaiveMoe(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
+
+        # Use consistent device from input tensor for gradient checkpointing compatibility.
+        # During recomputation, per-token device placement may vary, but the input tensor's
+        # device remains stable. This ensures deterministic tensor metadata for use_reentrant=True.
+        target_device = hidden_states.device
+
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
@@ -265,13 +275,15 @@ class DeepseekV32NaiveMoe(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            # Ensure weights are on the same device as hidden_states (for multi-GPU dispatch)
-            gate_up_weight = self.gate_up_proj[expert_idx].to(current_state.device)
-            down_weight = self.down_proj[expert_idx].to(current_state.device)
+            # Use target_device (input device) instead of current_state.device for
+            # deterministic device placement during gradient checkpointing recomputation
+            gate_up_weight = self.gate_up_proj[expert_idx].to(target_device)
+            down_weight = self.down_proj[expert_idx].to(target_device)
+            current_state = current_state.to(target_device)
             gate, up = nn.functional.linear(current_state, gate_up_weight).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, down_weight)
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None].to(target_device)
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
@@ -280,6 +292,8 @@ class DeepseekV32NaiveMoe(nn.Module):
 class DeepseekV32MoE(nn.Module):
     """
     A mixed expert module containing shared experts.
+
+    Overrides DeepseekV3MoE to use DeepseekV32NaiveMoe with gradient checkpointing fixes.
     """
 
     def __init__(self, config):
@@ -1043,6 +1057,9 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
             - indexer_scores: Raw indexer scores I_{t,s} (optional, for KL loss)
             - indexer_kl_target: KL target distribution p_{t,:} (optional, for KL loss)
         """
+        # Cache input device for deterministic placement during gradient checkpointing
+        target_device = hidden_states.device
+
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -1059,15 +1076,15 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
             output_indexer_kl_target=output_indexer_kl_target,
             **kwargs,
         )
-        # Ensure residual is on the same device as hidden_states (for multi-GPU)
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        # Use target_device for deterministic placement during gradient checkpointing
+        hidden_states = residual.to(target_device) + hidden_states.to(target_device)
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        # Ensure residual is on the same device as hidden_states (for multi-GPU MoE sharding)
-        hidden_states = residual.to(hidden_states.device) + hidden_states
+        # Use target_device for deterministic placement during gradient checkpointing
+        hidden_states = residual.to(target_device) + hidden_states.to(target_device)
 
         return hidden_states, attn_weights, indexer_scores, indexer_kl_target
 
