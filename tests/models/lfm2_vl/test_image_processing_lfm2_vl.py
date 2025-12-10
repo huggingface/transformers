@@ -34,9 +34,7 @@ if is_torch_available():
     if is_torchvision_available():
         from transformers import Lfm2VlImageProcessorFast
         from transformers.models.lfm2_vl.image_processing_lfm2_vl_fast import (
-            convert_image_to_patches,
             find_closest_aspect_ratio,
-            pad_along_first_dim,
             round_by_factor,
         )
 
