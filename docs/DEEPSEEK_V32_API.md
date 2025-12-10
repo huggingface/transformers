@@ -399,11 +399,30 @@ The indexer uses **non-interleaved** RoPE (different from MLA which uses interle
 
 Both indexer scores and KL targets (computed internally) are causally masked - position `t` can only attend to positions `s <= t`.
 
-### Gradient Flow
+### Gradient Flow (Independent Paths)
 
-- `indexer_kl_loss`: Gradients flow back to indexer parameters only
-- KL target (attention distribution): **Detached** - serves as target, no gradient flow
-- Internal computation: Indexer scores and attention targets are computed during forward pass but not exposed in outputs
+The implementation provides **two independent gradient paths** for flexible training:
+
+| Loss | Gradient Path | Parameters Updated |
+|------|---------------|-------------------|
+| `lm_loss` | `logits` → `lm_head` → `hidden_states` → all layers | All model parameters (attention, MLP, embeddings, lm_head) |
+| `indexer_kl_loss` | `indexer_scores` → `LightningIndexer` | **Only** indexer parameters (`indexer.wq_b`, `indexer.wk`, `indexer.weights_proj`) |
+
+**Why are they independent?**
+- The KL target (`indexer_kl_target`) is **detached** (line 724 in modular_deepseek_v32.py) - it receives no gradients
+- `indexer_kl_loss = KL(softmax(indexer_scores) || detached_attention_target)`
+- Gradients from `indexer_kl_loss` only flow through `indexer_scores` → indexer parameters
+
+**Dual backward example:**
+```python
+outputs = model(input_ids, labels=labels)
+
+# These backward passes update DIFFERENT parameters:
+outputs.lm_loss.backward(retain_graph=True)  # Updates: attention, MLP, lm_head, embeddings
+outputs.indexer_kl_loss.backward()            # Updates: ONLY indexer params
+```
+
+This enables dual-LoRA training where LM and indexer have separate optimizers/learning rates.
 
 ### Memory Efficiency
 
