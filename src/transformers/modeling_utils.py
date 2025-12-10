@@ -131,7 +131,6 @@ from .utils.quantization_config import QuantizationMethod
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import extract_model_from_parallel
-    from accelerate.utils.modeling import get_state_dict_from_offload
 
 
 _torch_distributed_available = torch.distributed.is_available()
@@ -3238,32 +3237,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
-        # for offloaded modules
-        module_map = None
-
-        # Save the model
+        # Get the model state_dict
         if state_dict is None:
-            # Get the model state_dict
             state_dict = model_to_save.state_dict()
 
-            # if any model parameters are offloaded, make module map
-            if (
-                hasattr(self, "hf_device_map")
-                and len(set(self.hf_device_map.values())) > 1
-                and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
-            ):
-                warnings.warn(
-                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory "
-                    "exceeds the `shard_size` (50GB default)"
-                )
-                module_map = {}
-                for name, module in model_to_save.named_modules():
-                    if name == "":
-                        continue
-                    module_state_dict = module.state_dict()
-
-                    for key in module_state_dict:
-                        module_map[name + f".{key}"] = module
+        # if any model parameters are offloaded, we need to know it for later
+        is_offloaded = False
+        if (
+            hasattr(self, "hf_device_map")
+            and len(set(self.hf_device_map.values())) > 1
+            and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
+        ):
+            is_offloaded = True
+            warnings.warn(
+                "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory "
+                "exceeds the `shard_size` (50GB default)"
+            )
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -3330,44 +3319,54 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # We use threading to write the different shards, but only if we have more than 1 and no offloading
         num_shards = len(state_dict_split.filename_to_tensors)
         thread_pool = None
-        if num_shards > 1 and module_map is None:
+        if num_shards > 1 and not is_offloaded:
             thread_pool = ThreadPoolExecutor(max_workers=min(GLOBAL_WORKERS, num_shards))
 
         # Save the model
         for shard_file, tensor_names in state_dict_split.filename_to_tensors.items():
             filename = os.path.join(save_directory, shard_file)
-            shard = {}
+            shard_state_dict = {}
             for tensor_name in tensor_names:
+                # Get the tensor, and remove it from state_dict to avoid keeping the ref
                 tensor = state_dict.pop(tensor_name)
+
+                # In case of TP, get the full parameter back
                 if _is_dtensor_available and isinstance(tensor, DTensor):
                     tensor = tensor.full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
                     if _get_parameter_tp_plan(tensor_name, self._tp_plan) == "local_packed_rowwise":
                         tensor = repack_weights(tensor, -1, self._tp_size, 2)
+
+                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                # but it would otherwise not be contained in the correct shard if we were to simply move the file
+                # or something
+                if is_offloaded and tensor.device.type == "meta":
+                    # Start from the most inner module, and try to find the hook that was used for offloading the param
+                    module_parts = tensor_name.split(".")
+                    modules_to_check = [".".join(module_parts[:-idx]) for idx in range(1, len(module_parts))] + [""]
+                    for parent_name in modules_to_check:
+                        parent = model_to_save.get_submodule(parent_name)
+                        if hasattr(parent, "_hf_hook"):
+                            break
+                    # If we did not break the loop, something is wrong
+                    else:
+                        raise ValueError(
+                            f"{tensor_name} is on the meta device because it was offloaded, but we could not find "
+                            "the corresponding hook for it"
+                        )
+                    # Load the offloaded tensor
+                    weights_map = parent._hf_hook.weights_map
+                    # This call loads it from disk
+                    tensor = weights_map[tensor_name]
+
                 # only do contiguous after it's permuted correctly in case of TP
-                shard[tensor_name] = tensor.contiguous()
-
-            # remake shard with onloaded parameters if necessary
-            if module_map:
-                # init state_dict for this shard
-                shard_state_dict = dict.fromkeys(shard, "")
-                for module_name in shard:
-                    # note that get_state_dict_from_offload can update with meta tensors
-                    # if both a parent module and its descendant are offloaded
-                    tensor = shard_state_dict[module_name]
-                    if tensor == "" or (isinstance(tensor, torch.Tensor) and tensor.device.type == "meta"):
-                        # update state dict with onloaded parameters
-                        module = module_map[module_name]
-                        shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
-
-                # assign shard to be the completed state dict
-                shard = shard_state_dict
+                shard_state_dict[tensor_name] = tensor.contiguous()
 
             # Schedule the write and move on to the next shard to write
             if thread_pool is not None:
-                thread_pool.submit(safe_save_file, shard, filename, metadata=metadata)
+                thread_pool.submit(safe_save_file, shard_state_dict, filename, metadata=metadata)
             else:
-                safe_save_file(shard, filename, metadata=metadata)
+                safe_save_file(shard_state_dict, filename, metadata=metadata)
 
         # Wait for all writes to be done
         if thread_pool is not None:
