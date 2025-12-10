@@ -33,27 +33,27 @@ from ...modeling_rope_utils import RopeParameters
 class PaddleOCRVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PaddleOCRVisionModel`]. It is used to instantiate a
-    PaddleOCR vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the PaddleOCR
-    [google/paddle_o_c_r-base-patch16-224](https://huggingface.co/google/paddle_o_c_r-base-patch16-224) architecture.
+    PaddleOCRVL vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the PaddleOCRVL
+    [PaddlePaddle/PaddleOCRVL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1152):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 4304):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 27):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -68,28 +68,29 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     ```python
     >>> from transformers import PaddleOCRVisionConfig, PaddleOCRVisionModel
 
-    >>> # Initializing a PaddleOCRVisionConfig with google/paddle_o_c_r-base-patch16-224 style configuration
+    >>> # Initializing a PaddleOCRVisionConfig with PaddlePaddle/PaddleOCR-VL style configuration
     >>> configuration = PaddleOCRVisionConfig()
 
-    >>> # Initializing a PaddleOCRVisionModel (with random weights) from the google/paddle_o_c_r-base-patch16-224 style configuration
+    >>> # Initializing a PaddleOCRVisionModel (with random weights) from the PaddlePaddle/PaddleOCR-VL style configuration
     >>> model = PaddleOCRVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=1152,
+        intermediate_size=4304,
+        num_hidden_layers=27,
+        num_attention_heads=16,
         num_channels=3,
-        image_size=224,
-        patch_size=16,
+        image_size=384,
+        patch_size=14,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
