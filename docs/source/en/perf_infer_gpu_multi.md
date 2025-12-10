@@ -306,3 +306,7 @@ The most important part of DTensor is the `placement` attribute because it tells
     ```
 
 - `Partial()` - Indicates a tensor is pending a reduction operation (not typically relevant for usage in Transformers).
+
+## Resources
+
+Read the [Tensor Parallelism (TP) in Transformers: 5 Minutes to Understand](https://huggingface.co/blog/qgallouedec/tp) blog post for a quick overview of tensor parallelism and learn how column and row parallel setups differ.

@@ -36,7 +36,6 @@ class AutoRoundQuantizer(HfQuantizer):
 
     # AutoRound requires data calibration - we support only inference
     requires_calibration = True
-    required_packages = ["auto_round"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -76,6 +75,6 @@ class AutoRoundQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         ## for gptq/awq models, the quantization config will be changed
         return True
