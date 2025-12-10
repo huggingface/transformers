@@ -1661,4 +1661,11 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         return input_ids, model_kwargs
 
 
-__all__ = ["PaddleOCRVLForConditionalGeneration", "PaddleOCRTextModel", "PaddleOCRVisionModel"]
+__all__ = [
+    "PaddleOCRVLForConditionalGeneration",
+    "PaddleOCRVLModel",
+    "PaddleOCRVLPreTrainedModel",
+    "PaddleOCRVisionTransformer",
+    "PaddleOCRTextModel",
+    "PaddleOCRVisionModel",
+]

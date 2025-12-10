@@ -1340,6 +1340,9 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 __all__ = [
     "PaddleOCRVLForConditionalGeneration",
+    "PaddleOCRVLModel",
+    "PaddleOCRVLPreTrainedModel",
+    "PaddleOCRVisionTransformer",
     "PaddleOCRVLConfig",
     "PaddleOCRTextModel",
     "PaddleOCRVisionModel",
