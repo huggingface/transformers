@@ -326,7 +326,7 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
             inputs.input_ids, [256047, 16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2]
         )
 
-    def test_add_language_codes_appends_and_deduplicates():
+    def test_add_language_codes_appends_and_deduplicates(self):
         tok = NllbTokenizer.from_pretrained(
             "facebook/nllb-200-distilled-600M",
             src_lang="eng_Latn",
