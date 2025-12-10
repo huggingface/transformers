@@ -147,6 +147,45 @@ visualizer("UN Chief says there is no military solution in Syria")
     >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
     Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
     ```
+- When extending NLLB to new language codes that are not part of the built-in `FAIRSEQ_LANGUAGE_CODES` list, you can register them as extra special tokens with [`NllbTokenizer.add_language_codes`]:
+
+    ```python
+    >>> from transformers import NllbTokenizer
+    >>> tokenizer = NllbTokenizer.from_pretrained(
+    ...     "facebook/nllb-200-distilled-600M",
+    ...     src_lang="eng_Latn",
+    ...     use_fast=False,
+    ... )
+    >>> # Register a new language code such as "ami_Latn"
+    >>> token_ids = tokenizer.add_language_codes(["ami_Latn"])
+    ```
+
+  This appends new codes to `extra_special_tokens` (without removing
+  the default FAIRSEQ codes) and returns the token ids for the provided
+  language codes.
+
+
+- NLLB stores its language codes as special tokens in the tokenizer. When you fine-tune on a new language, you can append a new code without removing any existing ones:
+
+    ```python
+    from transformers import NllbTokenizer
+
+    tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+
+    new_codes = ["ami_Latn"]
+
+    # Append new language codes without removing existing ones
+    tokenizer.add_special_tokens(
+        {"extra_special_tokens": new_codes},
+        replace_extra_special_tokens=False,
+    )
+
+    # Optional: get the token ids for the new codes
+    token_ids = [tokenizer.convert_tokens_to_ids(code) for code in new_codes]
+    ```
+
+    > [!TIP]
+    > For Transformers versions earlier than 5.0, use the `additional_special_tokens` key and the `replace_additional_special_tokens` argument instead of `extra_special_tokens` and `replace_extra_special_tokens`.
 
 ## NllbTokenizer
 
