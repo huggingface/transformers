@@ -220,6 +220,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "LlamaTokenizer" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
+        ("minicpm_v_4_5", ("MiniCPM_V_4_5Tokenizer", "MiniCPM_V_4_5TokenizerFast" if is_tokenizers_available() else None)),
         (
             "mistral",
             "MistralCommonBackend"
