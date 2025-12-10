@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 from functools import lru_cache
+from typing import Optional
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
@@ -258,6 +258,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
 def get_quantize_fp8_per_row():
     if _is_torch_xpu_available:
         from kernels import get_kernel
+
         return get_kernel("kernels-community/fp8-fbgemm").quantize_fp8_per_row
     return torch.ops.fbgemm.quantize_fp8_per_row
 
