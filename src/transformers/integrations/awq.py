@@ -17,9 +17,7 @@ from typing import Optional, Union
 
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_accelerate_available, is_torch_available, logging
-from ..utils.quantization_config import (
-    AwqBackend,
-)
+
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -115,7 +113,7 @@ def replace_with_awq_linear(
                 new_module.requires_grad_(False)
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
-    
+
     if not has_been_replaced:
         logger.warning(
             "You are loading your model using eetq but no linear modules were found in your model."

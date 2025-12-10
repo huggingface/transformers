@@ -18,10 +18,11 @@ from packaging import version
 
 from .base import HfQuantizer
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_gptqmodel_available, is_llm_awq_available , is_torch_available, logging
+from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
 from ..utils.quantization_config import AwqBackend
 
 
@@ -43,8 +44,10 @@ class AwqQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, **kwargs):
-        if not is_gptqmodel_available() :
-            raise ImportError("Loading an AWQ quantized model requires either gptqmodel. Please install it with `pip install gptqmodel`")
+        if not is_gptqmodel_available():
+            raise ImportError(
+                "Loading an AWQ quantized model requires either gptqmodel. Please install it with `pip install gptqmodel`"
+            )
 
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
