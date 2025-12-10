@@ -563,62 +563,36 @@ class DeepseekV32TopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class DeepseekV32Expert(nn.Module):
-    """A single MoE expert with gate_up and down projections.
-
-    This is a FSDP/ZeRO-3 friendly implementation using standard nn.Linear layers
-    instead of 3D parameter tensors, allowing distributed training frameworks to
-    shard expert parameters across GPUs automatically.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.intermediate_size
-        # Combined gate and up projection for efficiency
-        self.gate_up_proj = nn.Linear(self.hidden_dim, 2 * self.intermediate_dim, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_dim, self.hidden_dim, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Forward pass for a single expert.
-
-        Args:
-            hidden_states: Input tensor [num_tokens, hidden_dim]
-
-        Returns:
-            Output tensor [num_tokens, hidden_dim]
-        """
-        gate_up = self.gate_up_proj(hidden_states)
-        gate, up = gate_up.chunk(2, dim=-1)
-        return self.down_proj(self.act_fn(gate) * up)
-
-
 class DeepseekV32NaiveMoe(nn.Module):
-    """Collection of expert modules stored as nn.ModuleList for FSDP/ZeRO-3 compatibility.
+    """Collection of expert weights stored as 3D tensors.
 
-    This implementation uses nn.ModuleList of nn.Linear layers instead of 3D parameter
-    tensors, enabling automatic parameter sharding by FSDP, DeepSpeed ZeRO-3, and other
-    distributed training frameworks.
+    This is the standard HuggingFace MoE pattern used by Mixtral, Qwen2-MoE, DeepSeek V3,
+    and other MoE models. It is fully compatible with FSDP and DeepSpeed ZeRO-3.
 
     FSDP/ZeRO-3 Compatibility:
-        - Each expert is a separate nn.Module with standard nn.Linear layers
-        - FSDP can wrap and shard each expert independently
-        - ZeRO-3 can partition expert parameters across GPUs automatically
-        - No manual expert parallelism logic needed - let the framework handle it
+        - Expert parameters are stored as 3D tensors: [num_experts, dim1, dim2]
+        - FSDP shards the entire 3D tensor across GPUs (not individual experts)
+        - ZeRO-3 partitions the 3D tensors across GPUs automatically
+        - Indexing tensor[expert_idx] retrieves a slice without triggering AllGather
+        - This avoids the collective synchronization issues that occur with nn.ModuleList
+
+    Why 3D tensors work better than nn.ModuleList for MoE:
+        - With nn.ModuleList, each expert.forward() triggers FSDP AllGather
+        - If different ranks skip different experts (due to routing), ranks deadlock
+        - With 3D tensors, the entire tensor is sharded, and slicing is local
 
     Usage with FSDP:
         ```python
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
         model = DeepseekV32ForCausalLM(config)
-        model = FSDP(model, ...)  # FSDP will shard expert parameters
+        model = FSDP(model)  # FSDP shards the 3D expert tensors
         ```
 
     Usage with DeepSpeed ZeRO-3:
         ```python
         model = DeepseekV32ForCausalLM(config)
         model, optimizer, _, _ = deepspeed.initialize(model=model, config=ds_config)
-        # ZeRO-3 will partition expert parameters automatically
+        # ZeRO-3 partitions the 3D expert tensors automatically
         ```
     """
 
@@ -628,9 +602,11 @@ class DeepseekV32NaiveMoe(nn.Module):
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
 
-        # Use nn.ModuleList for FSDP/ZeRO-3 compatibility
-        # Each expert can be independently wrapped/sharded by distributed frameworks
-        self.experts = nn.ModuleList([DeepseekV32Expert(config) for _ in range(self.num_experts)])
+        # 3D tensors for expert weights - standard HuggingFace MoE pattern
+        # Shape: [num_experts, output_dim, input_dim] for use with F.linear
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
         self,
@@ -651,57 +627,57 @@ class DeepseekV32NaiveMoe(nn.Module):
         # Use float32 for accumulation to match DeepSeek reference implementation
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
 
-        # Compute expert assignments
-        # This is done under no_grad for determinism during gradient checkpointing
+        # Compute expert assignments under no_grad for determinism during gradient checkpointing
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             # expert_mask: [num_tokens, top_k, num_experts] -> [num_experts, top_k, num_tokens]
             expert_mask = expert_mask.permute(2, 1, 0)
+            # Find which experts have at least one token assigned
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        # Process each expert
-        for expert_idx in range(self.num_experts):
-            expert_slice = expert_mask[expert_idx]
-            if expert_slice.sum() == 0:
+        # Process only experts that have tokens assigned
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
                 continue
 
             # Get token indices and their positions in top_k
-            top_k_pos, token_idx = torch.where(expert_slice)
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
 
             # Get hidden states for tokens assigned to this expert
             current_state = hidden_states[token_idx]
 
-            # Compute expert output
-            expert_output = self.experts[expert_idx](current_state)
+            # Compute expert output using F.linear with 3D tensor slices
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 
             # Weight by routing scores and accumulate
-            weighted_output = expert_output * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, weighted_output.float())
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.float())
 
         return final_hidden_states
 
 
 class DeepseekV32MoE(nn.Module):
     """
-    A mixed expert module containing shared experts, designed for FSDP/ZeRO-3 compatibility.
+    A mixed expert module containing shared experts.
 
-    This implementation uses nn.ModuleList-based experts that can be automatically sharded
-    by FSDP, DeepSpeed ZeRO-3, and other distributed training frameworks. No manual expert
-    parallelism logic is needed - the framework handles parameter distribution.
+    This implementation uses 3D tensor expert weights (the standard HuggingFace MoE pattern)
+    which is fully compatible with FSDP and DeepSpeed ZeRO-3.
 
     FSDP/ZeRO-3 Compatibility:
-        - Expert parameters are stored in standard nn.Linear layers within nn.ModuleList
-        - FSDP will automatically shard expert parameters across GPUs
-        - ZeRO-3 will partition and gather parameters as needed
+        - Expert parameters are stored as 3D tensors: [num_experts, dim1, dim2]
+        - FSDP shards the entire 3D tensor across GPUs
+        - ZeRO-3 partitions the 3D tensors automatically
         - No manual all_reduce calls - gradient synchronization is handled by the framework
 
     Usage with FSDP:
         ```python
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-        from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 
         model = DeepseekV32ForCausalLM(config)
-        # Optionally wrap each expert separately for fine-grained sharding
-        model = FSDP(model, auto_wrap_policy=ModuleWrapPolicy({DeepseekV32Expert}))
+        model = FSDP(model)  # FSDP shards expert tensors automatically
         ```
 
     Usage with DeepSpeed ZeRO-3:
@@ -719,7 +695,7 @@ class DeepseekV32MoE(nn.Module):
         super().__init__()
         self.config = config
 
-        # Experts - using FSDP/ZeRO-3 compatible ModuleList-based implementation
+        # Experts - using 3D tensor weights (standard HuggingFace MoE pattern)
         self.experts = DeepseekV32NaiveMoe(config)
         self.gate = DeepseekV32TopkRouter(config)
         self.shared_experts = DeepseekV32MLP(
@@ -765,8 +741,7 @@ class DeepseekV32MoE(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         # Compute expert outputs
-        # With FSDP/ZeRO-3, parameters are gathered automatically before forward
-        # and gradients are synchronized during backward
+        # With FSDP/ZeRO-3, the 3D expert tensors are sharded and gradients are synchronized
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
 
         # Add shared experts
@@ -1304,10 +1279,10 @@ class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
 
         if isinstance(module, DeepseekV32TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, DeepseekV32Expert):
-            # Initialize individual expert's Linear layers
-            init.normal_(module.gate_up_proj.weight, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, DeepseekV32NaiveMoe):
+            # Initialize 3D expert tensors
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV32Model(DeepseekV3Model):
@@ -1555,5 +1530,4 @@ __all__ = [
     "DeepseekV32ForCausalLM",
     "DeepseekV32ForSequenceClassification",
     "DeepseekV32ForTokenClassification",
-    "DeepseekV32Expert",  # Exported for FSDP auto_wrap_policy
 ]

@@ -424,22 +424,26 @@ For 128K context with 128 heads, returning full attention would require ~8TB per
 
 ### FSDP / DeepSpeed ZeRO-3
 
-DeepSeek V3.2 uses an FSDP/ZeRO-3 compatible MoE implementation. Expert parameters are stored as `nn.ModuleList` of `nn.Linear` layers, enabling automatic parameter sharding by distributed training frameworks.
+DeepSeek V3.2 uses the **standard HuggingFace MoE pattern** with 3D tensor expert weights (same as Mixtral, Qwen2-MoE, DeepSeek V3). This is fully compatible with FSDP and DeepSpeed ZeRO-3.
+
+#### How It Works
+
+Expert parameters are stored as 3D tensors with shape `[num_experts, output_dim, input_dim]`:
+- FSDP shards the **entire 3D tensor** across GPUs (not individual experts)
+- ZeRO-3 partitions the 3D tensors automatically
+- Indexing `tensor[expert_idx]` retrieves a local slice without triggering collective operations
+- This avoids synchronization issues that can occur with `nn.ModuleList`-based implementations
 
 #### Usage with FSDP
 
 ```python
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp.wrap import ModuleWrapPolicy
-from transformers import DeepseekV32ForCausalLM, DeepseekV32Expert
+from transformers import DeepseekV32ForCausalLM
 
 model = DeepseekV32ForCausalLM(config)
 
-# Option 1: Wrap entire model (parameters sharded across all GPUs)
+# Wrap the model - FSDP shards the 3D expert tensors automatically
 model = FSDP(model)
-
-# Option 2: Fine-grained wrapping - each expert wrapped separately
-model = FSDP(model, auto_wrap_policy=ModuleWrapPolicy({DeepseekV32Expert}))
 ```
 
 #### Usage with DeepSpeed ZeRO-3
@@ -460,7 +464,7 @@ ds_config = {
 
 model = DeepseekV32ForCausalLM(config)
 model, optimizer, _, _ = deepspeed.initialize(model=model, config=ds_config)
-# ZeRO-3 will partition expert parameters automatically
+# ZeRO-3 partitions expert tensors automatically
 ```
 
 #### Usage with HuggingFace Trainer
@@ -470,11 +474,12 @@ from transformers import TrainingArguments, Trainer
 
 training_args = TrainingArguments(
     output_dir="./output",
-    fsdp="full_shard",  # or use DeepSpeed config
+    fsdp="full_shard",  # Enable FSDP
     fsdp_config={
         "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
     },
     bf16=True,
+    gradient_checkpointing=True,
 )
 
 trainer = Trainer(
@@ -485,52 +490,65 @@ trainer = Trainer(
 trainer.train()
 ```
 
+Or with DeepSpeed:
+
+```python
+training_args = TrainingArguments(
+    output_dir="./output",
+    deepspeed="ds_config.json",  # Your DeepSpeed config with stage 3
+    bf16=True,
+    gradient_checkpointing=True,
+)
+```
+
+#### Why 3D Tensors (Not nn.ModuleList)
+
+The MoE implementation uses 3D parameter tensors instead of `nn.ModuleList[nn.Linear]`:
+
+| Aspect | 3D Tensors (Used) | nn.ModuleList (Not Used) |
+|--------|-------------------|--------------------------|
+| **FSDP behavior** | Shards entire tensor | Wraps each expert module |
+| **Indexing** | Local slice, no collective | Each `.forward()` triggers AllGather |
+| **Conditional routing** | Safe - all ranks process same tensor | **Dangerous** - ranks may skip different experts |
+| **Collective sync** | Implicit via tensor sharding | Explicit per-expert AllGather |
+
+With `nn.ModuleList`, if different ranks skip different experts due to routing, you get NCCL deadlocks (ranks waiting forever for AllGather). The 3D tensor approach avoids this entirely.
+
 #### Key Design Decisions
 
 | Aspect | Implementation | Benefit |
 |--------|---------------|---------|
-| Expert storage | `nn.ModuleList[DeepseekV32Expert]` | FSDP can wrap/shard each expert |
-| Expert layers | Standard `nn.Linear` | ZeRO-3 can partition parameters |
+| Expert storage | 3D `nn.Parameter` tensors | FSDP shards entire tensor, no per-expert AllGather |
+| Expert computation | `F.linear(input, tensor[idx])` | Local slice from sharded tensor |
 | Device management | No explicit `.to()` calls | Frameworks handle placement |
 | Gradient sync | Automatic via framework | No manual `all_reduce` needed |
 
-**Note:** The `DeepseekV32Expert` class is exported for use with FSDP's `ModuleWrapPolicy`.
-
 ### Gradient Checkpointing
 
-Gradient checkpointing is fully supported with `use_reentrant=True` (the default):
+Gradient checkpointing is fully supported:
 
 ```python
 from transformers import TrainingArguments
 
 args = TrainingArguments(
     gradient_checkpointing=True,
-    # Default is use_reentrant=True, which saves ~10-15% memory
 )
 ```
 
 **Implementation details:**
-- Uses consistent device placement (`target_device = hidden_states.device`) for deterministic tensor metadata during recomputation
-- Expert routing decisions are computed under `torch.no_grad()` ensuring determinism
-- Residual connections use the same target device for all operations
+- Expert routing decisions are computed under `torch.no_grad()` ensuring determinism during recomputation
+- Works correctly with both FSDP and ZeRO-3
 
 ### Multi-GPU Deployment Modes
 
-| Mode | Config | Description |
-|------|--------|-------------|
-| **Single GPU** | Default | All experts on one GPU |
-| **Expert Parallelism (EP)** | `ep_size=N` | Experts sharded across N GPUs, `all_reduce` for outputs |
-| **Pipeline Parallelism** | `dispatch_model` | Layers distributed across GPUs |
-| **Data Parallelism (DDP)** | Standard PyTorch DDP | Full model replicated on each GPU |
-| **FSDP** | HuggingFace Trainer | Sharded parameters across GPUs |
+| Mode | Use Case | How to Enable |
+|------|----------|---------------|
+| **FSDP** | Training with parameter sharding | `fsdp="full_shard"` in TrainingArguments |
+| **DeepSpeed ZeRO-3** | Training with parameter partitioning | `deepspeed="ds_config.json"` |
+| **DDP** | Training with full model replication | Standard PyTorch DDP |
+| **Single GPU** | Development/testing | Default (no distributed setup) |
 
-**Example: EP + DDP hybrid:**
-```python
-# 8 nodes × 8 GPUs = 64 GPUs total
-# EP across 8 GPUs per node, DDP across 8 nodes
-config = DeepseekV32Config(..., ep_size=8)
-# Use standard DDP wrapper or HuggingFace Trainer
-```
+**Note:** `dispatch_model` (Accelerate's device_map) is for **inference only**, not training. For training, use FSDP or ZeRO-3.
 
 ---
 
@@ -539,8 +557,8 @@ config = DeepseekV32Config(..., ep_size=8)
 - **PyTorch**: >= 2.4.0
 - **CUDA**: Tested on H100/H200
 - **PEFT**: Compatible (target indexer modules for LoRA)
-- **DeepSpeed ZeRO**: Compatible
-- **Expert Parallelism**: Supported via `config.ep_size`
+- **DeepSpeed ZeRO-3**: Compatible
+- **FSDP**: Compatible
 
 ### Attention Backend Support
 

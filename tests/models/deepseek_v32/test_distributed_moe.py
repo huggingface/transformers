@@ -58,8 +58,9 @@ class DeepseekV32MoEBasicTest(unittest.TestCase):
 
         moe_layer = model.layers[1].mlp
         self.assertEqual(moe_layer.experts.num_experts, 16)
-        # With ModuleList, we should have 16 expert modules
-        self.assertEqual(len(moe_layer.experts.experts), 16)
+        # With 3D tensors, check the first dimension equals num_experts
+        self.assertEqual(moe_layer.experts.gate_up_proj.shape[0], 16)
+        self.assertEqual(moe_layer.experts.down_proj.shape[0], 16)
 
     def test_moe_forward_pass(self):
         """Test MoE forward pass produces valid output."""
@@ -90,11 +91,10 @@ class DeepseekV32MoEBasicTest(unittest.TestCase):
 
         # Check that MoE expert weights have gradients
         moe_layer = model.model.layers[1].mlp
-        # With ModuleList, check individual expert gradients
-        expert = moe_layer.experts.experts[0]
-        self.assertIsNotNone(expert.gate_up_proj.weight.grad)
-        self.assertIsNotNone(expert.down_proj.weight.grad)
-        self.assertTrue(expert.gate_up_proj.weight.grad.abs().sum() > 0)
+        # With 3D tensors, check gradients on the parameter tensors
+        self.assertIsNotNone(moe_layer.experts.gate_up_proj.grad)
+        self.assertIsNotNone(moe_layer.experts.down_proj.grad)
+        self.assertTrue(moe_layer.experts.gate_up_proj.grad.abs().sum() > 0)
 
 
 class DeepseekV32MoEGradientCheckpointingTest(unittest.TestCase):
@@ -150,69 +150,73 @@ class DeepseekV32MoEGradientCheckpointingTest(unittest.TestCase):
 class DeepseekV32FSDPCompatibilityTest(unittest.TestCase):
     """Test FSDP/ZeRO-3 compatibility features."""
 
-    def test_expert_is_module_list(self):
-        """Test that experts are stored in nn.ModuleList (FSDP friendly)."""
-        config = get_moe_test_config()
-        model = DeepseekV32Model(config)
-
-        moe_layer = model.layers[1].mlp
-        self.assertIsInstance(moe_layer.experts.experts, nn.ModuleList)
-
-    def test_expert_uses_linear_layers(self):
-        """Test that experts use nn.Linear (FSDP can shard these)."""
-        config = get_moe_test_config()
-        model = DeepseekV32Model(config)
-
-        moe_layer = model.layers[1].mlp
-        expert = moe_layer.experts.experts[0]
-
-        self.assertIsInstance(expert.gate_up_proj, nn.Linear)
-        self.assertIsInstance(expert.down_proj, nn.Linear)
-
-    def test_no_3d_parameter_tensors(self):
-        """Test that we don't have 3D parameter tensors (ZeRO-3 unfriendly)."""
+    def test_expert_uses_3d_tensors(self):
+        """Test that experts are stored as 3D tensors (standard HuggingFace MoE pattern)."""
         config = get_moe_test_config()
         model = DeepseekV32Model(config)
 
         moe_layer = model.layers[1].mlp
         experts = moe_layer.experts
 
-        # Should NOT have 3D gate_up_proj or down_proj parameters
-        self.assertFalse(hasattr(experts, 'gate_up_proj') and isinstance(experts.gate_up_proj, nn.Parameter))
-        self.assertFalse(hasattr(experts, 'down_proj') and isinstance(experts.down_proj, nn.Parameter))
+        # Should have 3D parameter tensors (FSDP shards these)
+        self.assertIsInstance(experts.gate_up_proj, nn.Parameter)
+        self.assertIsInstance(experts.down_proj, nn.Parameter)
+        self.assertEqual(len(experts.gate_up_proj.shape), 3)
+        self.assertEqual(len(experts.down_proj.shape), 3)
+
+    def test_no_module_list(self):
+        """Test that experts don't use nn.ModuleList (avoids FSDP AllGather issues)."""
+        config = get_moe_test_config()
+        model = DeepseekV32Model(config)
+
+        moe_layer = model.layers[1].mlp
+        experts = moe_layer.experts
+
+        # Should NOT have an 'experts' ModuleList attribute
+        self.assertFalse(
+            hasattr(experts, 'experts') and isinstance(getattr(experts, 'experts', None), nn.ModuleList)
+        )
 
     def test_expert_parameter_shapes(self):
-        """Test that expert parameters have correct shapes."""
-        config = get_moe_test_config()
+        """Test that expert parameters have correct 3D shapes."""
+        config = get_moe_test_config(n_routed_experts=8)
         model = DeepseekV32Model(config)
 
         moe_layer = model.layers[1].mlp
-        expert = moe_layer.experts.experts[0]
+        experts = moe_layer.experts
 
-        # gate_up_proj should be (2 * intermediate_size, hidden_size)
+        # gate_up_proj should be (num_experts, 2 * intermediate_size, hidden_size)
         self.assertEqual(
-            expert.gate_up_proj.weight.shape,
+            experts.gate_up_proj.shape,
+            (8, 2 * config.intermediate_size, config.hidden_size)
+        )
+        # down_proj should be (num_experts, hidden_size, intermediate_size)
+        self.assertEqual(
+            experts.down_proj.shape,
+            (8, config.hidden_size, config.intermediate_size)
+        )
+
+    def test_expert_slicing_produces_correct_shape(self):
+        """Test that slicing expert tensor produces correct 2D shape for F.linear."""
+        config = get_moe_test_config(n_routed_experts=8)
+        model = DeepseekV32Model(config)
+
+        moe_layer = model.layers[1].mlp
+        experts = moe_layer.experts
+
+        # Slicing gate_up_proj[0] should give (2 * intermediate_size, hidden_size)
+        expert_0_gate_up = experts.gate_up_proj[0]
+        self.assertEqual(
+            expert_0_gate_up.shape,
             (2 * config.intermediate_size, config.hidden_size)
         )
-        # down_proj should be (hidden_size, intermediate_size)
+
+        # Slicing down_proj[0] should give (hidden_size, intermediate_size)
+        expert_0_down = experts.down_proj[0]
         self.assertEqual(
-            expert.down_proj.weight.shape,
+            expert_0_down.shape,
             (config.hidden_size, config.intermediate_size)
         )
-
-    def test_expert_forward_produces_correct_shape(self):
-        """Test that expert forward produces correct output shape."""
-        config = get_moe_test_config()
-        model = DeepseekV32Model(config)
-
-        moe_layer = model.layers[1].mlp
-        expert = moe_layer.experts.experts[0]
-
-        # Test forward on a single token
-        hidden_states = torch.randn(3, config.hidden_size)  # 3 tokens
-        output = expert(hidden_states)
-
-        self.assertEqual(output.shape, (3, config.hidden_size))
 
     def test_moe_layer_no_ep_attributes(self):
         """Test that MoE layer doesn't have old EP-specific attributes."""
