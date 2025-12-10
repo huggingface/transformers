@@ -26,7 +26,6 @@ import warnings
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
@@ -48,7 +47,6 @@ from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
-    GLOBAL_WORKERS,
     WeightConverter,
     WeightRenaming,
     convert_and_load_state_dict_in_model,
@@ -107,7 +105,6 @@ from .utils import (
     copy_func,
     has_file,
     is_accelerate_available,
-    is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_kernels_available,
@@ -3317,14 +3314,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             ):
                 os.remove(full_filename)
 
-        # We use threading to write the different shards, but only if we have more than 1 and no offloading
-        num_shards = len(state_dict_split.filename_to_tensors)
-        thread_pool = None
-        if num_shards > 1 and not is_offloaded and not is_env_variable_true("HF_DEACTIVATE_ASYNC_SAVE"):
-            thread_pool = ThreadPoolExecutor(max_workers=min(GLOBAL_WORKERS, num_shards))
-
         # Save the model
-        for shard_file, tensor_names in state_dict_split.filename_to_tensors.items():
+        for shard_file, tensor_names in logging.tqdm(
+            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+        ):
             filename = os.path.join(save_directory, shard_file)
             shard_state_dict = {}
             for tensor_name in tensor_names:
@@ -3366,18 +3359,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # only do contiguous after it's permuted correctly in case of TP
                 shard_state_dict[tensor_name] = tensor.contiguous()
 
-            # Schedule the write and move on to the next shard to write
-            if thread_pool is not None:
-                thread_pool.submit(safe_save_file, shard_state_dict, filename, metadata=metadata)
-            else:
-                safe_save_file(shard_state_dict, filename, metadata=metadata)
-                # If we don't use threading, we can cleanup the data before next loop (important with offloading,
-                # so we don't blowup cpu RAM)
-                del shard_state_dict
-
-        # Wait for all writes to be done
-        if thread_pool is not None:
-            thread_pool.shutdown(wait=True)
+            # Write the shard to disk
+            safe_save_file(shard_state_dict, filename, metadata=metadata)
+            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+            del shard_state_dict
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
