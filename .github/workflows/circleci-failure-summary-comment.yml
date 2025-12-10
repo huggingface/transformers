@@ -173,6 +173,40 @@ jobs:
           print(f"Uploaded {folder_path} to {dataset_id}")
           EOF
 
+      - name: Delete existing CircleCI summary comments
+        if: steps.circleci.outputs.artifact_found == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER
+            });
+            
+            // Find existing bot comments that start with "View the CircleCI Test Summary for this PR:"
+            const existingComments = comments.filter(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.startsWith('View the CircleCI Test Summary for this PR:')
+            );
+
+            // Delete all matching comments
+            for (const comment of existingComments) {
+              console.log(`Deleting comment #${comment.id}`);
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id
+              });
+            }
+            
+            console.log(`Deleted ${existingComments.length} old CircleCI summary comment(s)`);
+
       - name: Post comment with helper link
         if: steps.circleci.outputs.artifact_found == 'true'
         env:

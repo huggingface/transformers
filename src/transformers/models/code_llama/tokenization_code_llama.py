@@ -14,10 +14,11 @@
 # limitations under the License.
 
 
-from tokenizers import AddedToken, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from typing import Optional, Union
+
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import _get_prepend_scheme, generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -97,9 +98,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
         add_prefix_space (`bool`, *optional*):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
+        merges (`str` or `list`, *optional*):
             Custom merges list. If not provided, merges are loaded from merges_file.
         vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
@@ -109,9 +110,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",
@@ -122,37 +126,28 @@ class CodeLlamaTokenizer(TokenizersBackend):
         eot_token="▁<EOT>",
         fill_token="<FILL_ME>",
         additional_special_tokens=None,
-        add_bos_token=True,
-        add_eos_token=False,
-        use_default_system_prompt=False,
-        add_prefix_space=None,
-        vocab=None,
-        merges=None,
-        vocab_file=None,
+        use_default_system_prompt: bool = False,
+        add_prefix_space: Optional[bool] = True,
+        add_bos_token: bool = True,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else True
         self.use_default_system_prompt = use_default_system_prompt
-
         additional_special_tokens = additional_special_tokens or []
         for token in [prefix_token, middle_token, suffix_token, eot_token, fill_token]:
             additional_special_tokens += [token] if token is not None else []
 
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(unk_token): 0,
                 str(bos_token): 1,
                 str(eos_token): 2,
             }
+        )
 
-        filtered_vocab = {
-            t: i for t, i in self._vocab.items() if t not in {str(eos_token), str(bos_token), str(unk_token)}
-        }
-        self._merges = merges if merges is not None else generate_merges(filtered_vocab)
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -163,8 +158,9 @@ class CodeLlamaTokenizer(TokenizersBackend):
                 unk_token=str(unk_token),
             )
         )
+        prepend_scheme = "first" if self.add_prefix_space else "none"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
+            replacement="▁", prepend_scheme=prepend_scheme, split=False
         )
 
         self._tokenizer.decoder = decoders.Sequence(
@@ -172,13 +168,10 @@ class CodeLlamaTokenizer(TokenizersBackend):
         )
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             add_prefix_space=add_prefix_space,
             prefix_token=prefix_token,
@@ -186,31 +179,15 @@ class CodeLlamaTokenizer(TokenizersBackend):
             suffix_token=suffix_token,
             eot_token=eot_token,
             fill_token=fill_token,
+            add_bos_token=add_bos_token,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
-        self.vocab_file = vocab_file
-
         self._prefix_token = prefix_token
         self._middle_token = middle_token
         self._suffix_token = suffix_token
         self._eot_token = eot_token
         self.fill_token = fill_token
-
-        self._post_init()
-
-    def _post_init(self):
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False)
-        self._tokenizer.normalizer = None
-
-        # This matches LlamaTokenizer's behavior and is needed when loading from vocab/merges
-        self.add_tokens([AddedToken(token, special=True) for token in self.all_special_tokens])
-
-        self.update_post_processor()
-        super()._post_init()
 
     @property
     def prefix_token(self):

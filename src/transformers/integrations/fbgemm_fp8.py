@@ -216,26 +216,21 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
 
 
 def replace_with_fbgemm_fp8_linear(
-    model,
-    modules_to_not_convert=None,
-    quantization_config=None,
-    pre_quantized=False,
-    tp_plan=None,
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False, tp_plan=None
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
     This will enable running your models using high performance fp8 kernel from FBGEMM library.
 
-    The function will be run recursively and replace all `torch.nn.Linear` modules except for the `lm_head` that should
-    be kept as a `torch.nn.Linear` module. The replacement is done under `init_empty_weights` context manager so no
-    CPU/GPU memory is required to run this function. Each weight will be quantized along the channel.
-
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
-            Names of the modules to not convert in `FP8Linear`. In practice we keep the `lm_head` in full precision
-            for numerical stability reasons.
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
+            Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
+        quantization_config (`FbgemmFp8Config`):
+            The quantization config object that contains the quantization parameters.
+        pre_quantized (`book`, defaults to `False`):
+            Whether the model is pre-quantized or not
     """
 
     has_been_replaced = False

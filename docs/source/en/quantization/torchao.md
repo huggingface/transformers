@@ -639,28 +639,33 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Serialization
 
-torchao implements [torch.Tensor subclasses](https://pytorch.org/docs/stable/notes/extending.html#subclassing-torch-tensor) for maximum flexibility in supporting new quantized torch.Tensor formats. [Safetensors](https://huggingface.co/docs/safetensors/en/index) serialization and deserialization does not work with torchao.
-
-To avoid arbitrary user code execution, torchao sets `weights_only=True` in [torch.load](https://pytorch.org/docs/stable/generated/torch.load.html) to ensure only tensors are loaded. Any known user functions can be whitelisted with [add_safe_globals](https://pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals).
+Saving the quantized model with `save_pretrained` (in [safetensors](https://huggingface.co/docs/safetensors/en/index) format) is only supported for torchao >= v0.15. For any version below, it is only possible to manually save as unsafe `.bin` checkpoints with [torch.save](https://docs.pytorch.org/docs/stable/generated/torch.save.html).
 
 <hfoptions id="serialization-examples">
 <hfoption id="save-locally">
 
 ```py
-# don't serialize model with Safetensors
+# torchao >= 0.15
 output_dir = "llama3-8b-int4wo-128"
-quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False)
+quantized_model.save_pretrained("llama3-8b-int4wo-128")
 ```
 
 </hfoption>
 <hfoption id="push-to-huggingface-hub">
 
 ```py
-# don't serialize model with Safetensors
+# torchao >= 0.15
 USER_ID = "your_huggingface_user_id"
 REPO_ID = "llama3-8b-int4wo-128"
-quantized_model.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128", safe_serialization=False)
+quantized_model.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
+```
+
+
+```py
+# torchao < 0.15 -> unsafe serialization
+filename = "llama3-8b-int4wo-128/pytorch_model.bin"
+torch.save(quantized_model.state_dict(), filename)
 ```
 
 </hfoption>
@@ -687,7 +692,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 )
 # save the quantized model
 output_dir = "llama-3.1-8b-torchao-int8"
-quantized_model.save_pretrained(output_dir, safe_serialization=False)
+quantized_model.save_pretrained(output_dir)
 
 # reload the quantized model
 reloaded_model = AutoModelForCausalLM.from_pretrained(
@@ -724,7 +729,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 )
 # save the quantized model
 output_dir = "llama-3.1-8b-torchao-int4-cpu"
-quantized_model.save_pretrained(output_dir, safe_serialization=False)
+quantized_model.save_pretrained(output_dir)
 
 # reload the quantized model
 reloaded_model = AutoModelForCausalLM.from_pretrained(
