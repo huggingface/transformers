@@ -3347,6 +3347,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     for parent_name in modules_to_check:
                         parent = model_to_save.get_submodule(parent_name)
                         if hasattr(parent, "_hf_hook"):
+                            truncated_tensor_name = tensor_name.replace(parent_name, "")
                             break
                     # If we did not break the loop, something is wrong
                     else:
@@ -3357,7 +3358,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     # Load the offloaded tensor
                     weights_map = parent._hf_hook.weights_map
                     # This call loads it from disk
-                    tensor = weights_map[tensor_name]
+                    tensor = weights_map[truncated_tensor_name]
 
                 # only do contiguous after it's permuted correctly in case of TP
                 shard_state_dict[tensor_name] = tensor.contiguous()
