@@ -33,7 +33,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -117,14 +117,19 @@ class BaseModelOutputWithIndexer(ModelOutput):
     indexer_kl_targets: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class DeepseekV32RMSNorm(nn.Module):
+    """RMSNorm with meta device support for large model initialization.
+
+    Uses torch.empty() instead of torch.ones() to respect ambient device context,
+    allowing initialization on meta device for memory-efficient model loading.
+    The weight is initialized to ones in _init_weights().
+    """
+
     def __init__(self, hidden_size, eps=1e-6):
-        """
-        DeepseekV32RMSNorm is equivalent to T5LayerNorm
-        """
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
+        # Use torch.empty to respect meta device context
+        # Weight will be initialized to ones in _init_weights
+        self.weight = nn.Parameter(torch.empty(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
@@ -220,13 +225,21 @@ class DeepseekV32MLP(nn.Module):
 
 
 class DeepseekV32TopkRouter(nn.Module):
+    """Top-K router with meta device support for large model initialization.
+
+    Uses torch.empty() for both weight and buffer to respect ambient device context,
+    allowing initialization on meta device for memory-efficient model loading.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.n_routed_experts = config.n_routed_experts
 
+        # Use torch.empty to respect meta device context
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        # Buffer also uses torch.empty - will be zeroed in _init_weights
+        self.register_buffer("e_score_correction_bias", torch.empty(self.n_routed_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
@@ -1188,8 +1201,13 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
         # Call PreTrainedModel's _init_weights directly (skipping parent's MoE init)
         super()._init_weights(module)
 
-        if isinstance(module, DeepseekV32TopkRouter):
+        # Initialize RMSNorm weights to ones (they use torch.empty for meta device support)
+        if isinstance(module, DeepseekV32RMSNorm):
+            init.ones_(module.weight)
+        elif isinstance(module, DeepseekV32TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            # Initialize buffer to zeros (uses torch.empty for meta device support)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, DeepseekV32NaiveMoe):
             # Initialize 3D expert tensors
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

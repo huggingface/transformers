@@ -523,6 +523,84 @@ With `nn.ModuleList`, if different ranks skip different experts due to routing, 
 | Device management | No explicit `.to()` calls | Frameworks handle placement |
 | Gradient sync | Automatic via framework | No manual `all_reduce` needed |
 
+### Meta Device Support (Memory-Efficient Initialization)
+
+DeepSeek V3.2 supports **meta device initialization** for memory-efficient loading of large models with FSDP and DeepSpeed ZeRO-3. This allows creating a 671B parameter model without allocating any memory until the distributed framework shards it.
+
+#### The Problem
+
+Creating a 671B model on CPU before FSDP/ZeRO-3 can shard it requires ~1.3TB of RAM (671B × 2 bytes for bf16), which exceeds typical CPU memory.
+
+#### The Solution
+
+```python
+from accelerate import init_empty_weights
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from transformers import DeepseekV32ForCausalLM, DeepseekV32Config
+
+config = DeepseekV32Config.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+
+# Step 1: Create model on meta device (0 bytes memory)
+with init_empty_weights():
+    model = DeepseekV32ForCausalLM(config)
+
+# All parameters are now on meta device - just tensor metadata, no memory allocated
+for name, param in model.named_parameters():
+    assert param.device.type == "meta"
+
+# Step 2: Wrap with FSDP - parameters are materialized shard-by-shard
+model = FSDP(
+    model,
+    param_init_fn=lambda m: m.to_empty(device=torch.cuda.current_device(), recurse=False),
+    sync_module_states=True,  # Rank 0 broadcasts to other ranks
+    # ... other FSDP config
+)
+
+# Step 3: Load checkpoint directly to FSDP shards
+# (weights are loaded shard-by-shard, never materializing full model on one device)
+```
+
+#### How It Works
+
+The implementation uses `torch.empty()` instead of `torch.ones()` / `torch.zeros()` for all parameter and buffer initialization:
+
+| Component | Pattern | Meta-Compatible |
+|-----------|---------|----------------|
+| `DeepseekV32RMSNorm.weight` | `torch.empty(hidden_size)` | ✅ |
+| `DeepseekV32TopkRouter.weight` | `torch.empty(n_experts, hidden_size)` | ✅ |
+| `DeepseekV32TopkRouter.e_score_correction_bias` | `torch.empty(n_experts)` | ✅ |
+| `DeepseekV32NaiveMoe.gate_up_proj` | `torch.empty(n_experts, 2*intermediate, hidden)` | ✅ |
+| `DeepseekV32NaiveMoe.down_proj` | `torch.empty(n_experts, hidden, intermediate)` | ✅ |
+
+The `_init_weights()` method properly initializes these tensors:
+- RMSNorm weights → initialized to 1s
+- Router weights → initialized with normal distribution
+- Router bias buffer → initialized to 0s
+- Expert tensors → initialized with normal distribution
+
+#### Verifying Meta Device Support
+
+```python
+import torch
+from transformers import DeepseekV32ForCausalLM, DeepseekV32Config
+
+config = DeepseekV32Config(
+    hidden_size=64, num_hidden_layers=2, # ... tiny config for testing
+)
+
+# Create on meta device
+with torch.device("meta"):
+    model = DeepseekV32ForCausalLM(config)
+
+# Verify all parameters are on meta device
+for name, param in model.named_parameters():
+    assert param.device.type == "meta", f"{name} not on meta device"
+
+# Verify all buffers are on meta device
+for name, buffer in model.named_buffers():
+    assert buffer.device.type == "meta", f"{name} not on meta device"
+```
+
 ### Gradient Checkpointing
 
 Gradient checkpointing is fully supported:

@@ -570,5 +570,168 @@ class DeepseekV32ForwardBackwardTest(unittest.TestCase):
         self.assertFalse(torch.isnan(outputs_sparse.logits).any())
 
 
+@require_torch
+class DeepseekV32MetaDeviceTest(unittest.TestCase):
+    """Test meta device initialization support for memory-efficient large model loading.
+
+    These tests verify that the model can be created on meta device (0 bytes memory)
+    and then properly initialized for use with FSDP/DeepSpeed.
+    """
+
+    def get_tiny_config(self):
+        """Get a tiny config for fast testing."""
+        return DeepseekV32Config(
+            vocab_size=100,
+            hidden_size=64,
+            intermediate_size=128,
+            moe_intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            n_shared_experts=1,
+            n_routed_experts=4,
+            routed_scaling_factor=2.5,
+            kv_lora_rank=16,
+            q_lora_rank=32,
+            qk_rope_head_dim=16,
+            v_head_dim=16,
+            qk_nope_head_dim=16,
+            n_group=2,
+            topk_group=1,
+            num_experts_per_tok=2,
+            first_k_dense_replace=1,
+            max_position_embeddings=128,
+            # V3.2 specific
+            index_n_heads=4,
+            index_head_dim=32,
+            index_topk=8,
+            use_sparse_attention=True,
+        )
+
+    def test_meta_device_initialization(self):
+        """Test that model can be created on meta device with zero memory."""
+        config = self.get_tiny_config()
+
+        # Create model on meta device
+        with torch.device("meta"):
+            model = DeepseekV32ForCausalLM(config)
+
+        # Verify all parameters are on meta device
+        for name, param in model.named_parameters():
+            self.assertEqual(
+                param.device.type,
+                "meta",
+                f"Parameter {name} is on {param.device}, expected meta device",
+            )
+
+        # Verify all buffers are on meta device
+        for name, buffer in model.named_buffers():
+            self.assertEqual(
+                buffer.device.type,
+                "meta",
+                f"Buffer {name} is on {buffer.device}, expected meta device",
+            )
+
+    def test_meta_to_empty_to_device(self):
+        """Test the full meta device workflow: meta -> empty -> device."""
+        config = self.get_tiny_config()
+
+        # Step 1: Create on meta device
+        with torch.device("meta"):
+            model = DeepseekV32ForCausalLM(config)
+
+        # Step 2: Convert to empty (allocate memory but don't initialize)
+        model = model.to_empty(device="cpu")
+
+        # Verify parameters are now on CPU
+        for name, param in model.named_parameters():
+            self.assertEqual(
+                param.device.type,
+                "cpu",
+                f"Parameter {name} is on {param.device}, expected cpu",
+            )
+
+        # Step 3: Initialize weights (simulating what post_init/FSDP would do)
+        # Must apply _init_weights to each submodule, as transformers does
+        for module in model.modules():
+            model._init_weights(module)
+
+        # Step 4: Verify model can do forward pass
+        model.eval()
+        batch_size, seq_len = 2, 8
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len))
+
+        with torch.no_grad():
+            outputs = model(input_ids)
+
+        self.assertEqual(outputs.logits.shape, (batch_size, seq_len, config.vocab_size))
+        self.assertFalse(torch.isnan(outputs.logits).any())
+
+    def test_rmsnorm_meta_device(self):
+        """Test RMSNorm respects meta device context."""
+        from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32RMSNorm
+
+        hidden_size = 64
+
+        # Create on meta device
+        with torch.device("meta"):
+            norm = DeepseekV32RMSNorm(hidden_size)
+
+        self.assertEqual(norm.weight.device.type, "meta")
+
+        # Convert to CPU and initialize
+        norm = norm.to_empty(device="cpu")
+        torch.nn.init.ones_(norm.weight)
+
+        # Test forward pass
+        x = torch.randn(2, 8, hidden_size)
+        output = norm(x)
+        self.assertEqual(output.shape, x.shape)
+        self.assertFalse(torch.isnan(output).any())
+
+    def test_topk_router_meta_device(self):
+        """Test TopkRouter respects meta device context."""
+        from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32TopkRouter
+
+        config = self.get_tiny_config()
+
+        # Create on meta device
+        with torch.device("meta"):
+            router = DeepseekV32TopkRouter(config)
+
+        self.assertEqual(router.weight.device.type, "meta")
+        self.assertEqual(router.e_score_correction_bias.device.type, "meta")
+
+        # Convert to CPU and initialize
+        router = router.to_empty(device="cpu")
+        torch.nn.init.normal_(router.weight, mean=0.0, std=0.02)
+        torch.nn.init.zeros_(router.e_score_correction_bias)
+
+        # Test forward pass
+        x = torch.randn(2, 8, config.hidden_size)
+        output = router(x)
+        self.assertEqual(output.shape[1], config.n_routed_experts)
+        self.assertFalse(torch.isnan(output).any())
+
+    def test_naive_moe_meta_device(self):
+        """Test NaiveMoe (3D expert tensors) respects meta device context."""
+        from transformers.models.deepseek_v32.modeling_deepseek_v32 import DeepseekV32NaiveMoe
+
+        config = self.get_tiny_config()
+
+        # Create on meta device
+        with torch.device("meta"):
+            moe = DeepseekV32NaiveMoe(config)
+
+        self.assertEqual(moe.gate_up_proj.device.type, "meta")
+        self.assertEqual(moe.down_proj.device.type, "meta")
+
+        # Verify shapes are correct even on meta device
+        expected_gate_up_shape = (config.n_routed_experts, 2 * config.intermediate_size, config.hidden_size)
+        expected_down_shape = (config.n_routed_experts, config.hidden_size, config.intermediate_size)
+        self.assertEqual(moe.gate_up_proj.shape, expected_gate_up_shape)
+        self.assertEqual(moe.down_proj.shape, expected_down_shape)
+
+
 if __name__ == "__main__":
     unittest.main()
