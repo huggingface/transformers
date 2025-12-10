@@ -4873,7 +4873,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)
             self.assertEqual(
-                self.assistant_model.generation_config.assistant_confidence_threshold, self.original_threshold
+                self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, self.original_threshold
             )
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
@@ -4886,7 +4886,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [0])
             self.assertEqual(self.candidate_generator.probs, [0.9])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4899,7 +4899,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 0, 1, 0, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4912,7 +4912,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 1])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4925,7 +4925,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4938,7 +4938,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.3)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.3)
         else:
             self.assert_no_sklearn()
 
@@ -4951,7 +4951,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
